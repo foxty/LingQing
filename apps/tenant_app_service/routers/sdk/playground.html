@@ -1,0 +1,515 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>LQ SDK Playground</title>
+  <script src="./vendor/tailwind-3.4.17.js"></script>
+  <script defer src="./vendor/alpine-3.14.9.js"></script>
+  <script src="./lq-sdk.v1.0.js"></script>
+  <script>
+    // Mock SDK client — intercepts all data calls with sample data
+    window.LQ = window.LQ || {};
+    const MOCK_EMPLOYEES = [
+      [1, "Alice Chen", "alice@example.com", "Engineering", "2024-01-15"],
+      [2, "Bob Smith", "bob@example.com", "Marketing", "2024-02-20"],
+      [3, "Carol Davis", "carol@example.com", "Engineering", "2024-03-10"],
+      [4, "Dan Wilson", "dan@example.com", "Sales", "2024-04-05"],
+      [5, "Eve Johnson", "eve@example.com", "Design", "2024-05-12"],
+      [6, "Frank Lee", "frank@example.com", "Engineering", "2024-06-01"],
+      [7, "Grace Kim", "grace@example.com", "Marketing", "2024-07-18"],
+      [8, "Hank Brown", "hank@example.com", "Sales", "2024-08-22"],
+    ];
+    const MOCK_COLUMNS = ["id", "name", "email", "department", "hire_date"];
+
+    window.LQ.liveApp = {
+      setAppId() {},
+      setEnvironment() {},
+      async query() {
+        await new Promise(r => setTimeout(r, 300));
+        return { rows: MOCK_EMPLOYEES, columns: MOCK_COLUMNS, row_count: MOCK_EMPLOYEES.length };
+      },
+      async mutateInsert(_table, data) {
+        await new Promise(r => setTimeout(r, 200));
+        const id = MOCK_EMPLOYEES.length + 1;
+        MOCK_EMPLOYEES.push([id, data.name || "", data.email || "", data.department || "", data.hire_date || ""]);
+        return { app_id: 0, operation: "insert", table: _table, affected_rows: 1 };
+      },
+      async mutateUpdateById(_table, id, data) {
+        await new Promise(r => setTimeout(r, 200));
+        const row = MOCK_EMPLOYEES.find(r => r[0] === Number(id));
+        if (row) { Object.keys(data).forEach(k => { const i = MOCK_COLUMNS.indexOf(k); if (i > 0) row[i] = data[k]; }); }
+        return { app_id: 0, operation: "update_by_id", table: _table, affected_rows: 1 };
+      },
+      async mutateDeleteById(_table, id) {
+        await new Promise(r => setTimeout(r, 200));
+        const idx = MOCK_EMPLOYEES.findIndex(r => r[0] === Number(id));
+        if (idx >= 0) MOCK_EMPLOYEES.splice(idx, 1);
+        return { app_id: 0, operation: "delete_by_id", table: _table, affected_rows: 1 };
+      },
+      async importCsv() {
+        return { app_id: 0, table: "employees", file_name: "test.csv", mode: "append", imported_rows: 0 };
+      },
+    };
+  </script>
+  <style>
+    [x-cloak] { display: none !important; }
+  </style>
+</head>
+<body class="bg-gray-50 text-gray-900">
+
+  <lq-page-shell
+    app-name="SDK Playground"
+    nav-items='[
+      {"route":"overview","label":"Overview","icon":"home","default":true},
+      {"route":"data-table","label":"Data Table","icon":"table"},
+      {"route":"form","label":"Form","icon":"document"},
+      {"route":"stat-cards","label":"Stat Cards","icon":"chart-bar"},
+      {"route":"import","label":"Import","icon":"upload"},
+      {"route":"toasts","label":"Toasts","icon":"package"},
+      {"route":"alpine","label":"Alpine + Tailwind","icon":"cog"}
+    ]'
+  >
+
+    <!-- ==================== Overview ==================== -->
+    <div data-route="overview">
+      <div class="max-w-4xl">
+        <h1 class="text-2xl font-bold text-gray-900 mb-2">LQ SDK Playground</h1>
+        <p class="text-gray-600 mb-6">Interactive verification page for all SDK features and built-in components.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <h3 class="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Runtime Checks</h3>
+            <div id="runtime-checks" class="space-y-2 text-sm"></div>
+          </div>
+          <div class="bg-white rounded-lg border border-gray-200 p-5">
+            <h3 class="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Component Registration</h3>
+            <div id="component-checks" class="space-y-2 text-sm"></div>
+          </div>
+        </div>
+
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+          <h3 class="font-semibold text-sm text-gray-500 uppercase tracking-wide mb-3">Quick Test: SDK Query</h3>
+          <button id="btn-test-query"
+            class="px-4 py-2 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700">
+            Run Mock Query
+          </button>
+          <pre id="query-result" class="mt-3 bg-gray-50 rounded-md p-3 text-xs font-mono overflow-auto max-h-48 hidden"></pre>
+        </div>
+      </div>
+
+      <script>
+        document.addEventListener("DOMContentLoaded", () => {
+          const checks = [
+            ["window.LQ exists", !!window.LQ],
+            ["LQ.createLiveAppClient", typeof window.LQ?.createLiveAppClient === "function"],
+            ["LQ.liveApp (client)", !!window.LQ?.liveApp],
+            ["LQ.liveApp.query", typeof window.LQ?.liveApp?.query === "function"],
+            ["LQ.liveApp.mutateInsert", typeof window.LQ?.liveApp?.mutateInsert === "function"],
+            ["LQ.liveApp.mutateUpdateById", typeof window.LQ?.liveApp?.mutateUpdateById === "function"],
+            ["LQ.liveApp.mutateDeleteById", typeof window.LQ?.liveApp?.mutateDeleteById === "function"],
+            ["LQ.liveApp.importCsv", typeof window.LQ?.liveApp?.importCsv === "function"],
+            ["LQ.toast", typeof window.LQ?.toast === "function"],
+          ];
+          const el = document.getElementById("runtime-checks");
+          checks.forEach(([label, ok]) => {
+            el.innerHTML += `<div class="flex items-center gap-2">
+              <span class="${ok ? "text-green-600" : "text-red-600"}">${ok ? "✓" : "✗"}</span>
+              <span class="${ok ? "text-gray-700" : "text-red-700"}">${label}</span>
+            </div>`;
+          });
+
+          const components = [
+            ["lq-page-shell", !!customElements.get("lq-page-shell")],
+            ["lq-data-table", !!customElements.get("lq-data-table")],
+            ["lq-form", !!customElements.get("lq-form")],
+            ["lq-stat-card", !!customElements.get("lq-stat-card")],
+            ["lq-import", !!customElements.get("lq-import")],
+          ];
+          const compEl = document.getElementById("component-checks");
+          components.forEach(([label, ok]) => {
+            compEl.innerHTML += `<div class="flex items-center gap-2">
+              <span class="${ok ? "text-green-600" : "text-red-600"}">${ok ? "✓" : "✗"}</span>
+              <span class="${ok ? "text-gray-700" : "text-red-700"}">&lt;${label}&gt;</span>
+            </div>`;
+          });
+
+          document.getElementById("btn-test-query").addEventListener("click", async () => {
+            const pre = document.getElementById("query-result");
+            pre.classList.remove("hidden");
+            pre.textContent = "Running query...";
+            try {
+              const result = await window.LQ.liveApp.query("SELECT * FROM employees");
+              pre.textContent = JSON.stringify(result, null, 2);
+            } catch (err) {
+              pre.textContent = "Error: " + err.message;
+            }
+          });
+        });
+      </script>
+    </div>
+
+    <!-- ==================== Data Table ==================== -->
+    <div data-route="data-table">
+      <div class="max-w-5xl">
+        <h2 class="text-xl font-bold text-gray-900 mb-1">lq-data-table</h2>
+        <p class="text-gray-600 text-sm mb-6">Full CRUD data table with search, sort, pagination, and inline editing. Uses mock data.</p>
+
+        <lq-data-table
+          id="playground-table"
+          source="SELECT id, name, email, department, hire_date FROM employees"
+          table="employees"
+          columns='[
+            {"key":"id","label":"ID"},
+            {"key":"name","label":"Name","sortable":true},
+            {"key":"email","label":"Email"},
+            {"key":"department","label":"Department","sortable":true},
+            {"key":"hire_date","label":"Hire Date","format":"date","sortable":true}
+          ]'
+          page-size="5"
+          searchable
+          actions='["create","edit","delete"]'
+        ></lq-data-table>
+
+        <div class="mt-4 flex gap-2">
+          <button onclick="document.getElementById('playground-table').dispatchEvent(new Event('lq-refresh'))"
+            class="px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 border border-indigo-200">
+            Trigger lq-refresh
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Form ==================== -->
+    <div data-route="form">
+      <div class="max-w-3xl">
+        <h2 class="text-xl font-bold text-gray-900 mb-1">lq-form</h2>
+        <p class="text-gray-600 text-sm mb-6">Declarative create/edit form with multiple field types, validation, and SDK mutations.</p>
+
+        <h3 class="font-medium text-gray-700 mb-3">Create Mode — All Field Types</h3>
+        <lq-form
+          id="playground-form"
+          table="employees"
+          fields='[
+            {"key":"name","label":"Full Name","type":"text","required":true,"placeholder":"e.g. Jane Doe"},
+            {"key":"email","label":"Email","type":"email","required":true,"placeholder":"jane@example.com"},
+            {"key":"department","label":"Department","type":"select",
+             "options":[{"value":"Engineering","label":"Engineering"},{"value":"Marketing","label":"Marketing"},{"value":"Sales","label":"Sales"},{"value":"Design","label":"Design"}]},
+            {"key":"salary","label":"Salary","type":"number","min":0,"max":999999,"placeholder":"50000"},
+            {"key":"hire_date","label":"Hire Date","type":"date"},
+            {"key":"onboarded_at","label":"Onboarded At","type":"datetime"},
+            {"key":"shift_start","label":"Shift Start","type":"time"},
+            {"key":"phone","label":"Phone","type":"tel","placeholder":"+1-555-0100","pattern":"[+]?[0-9\\-\\s]+"},
+            {"key":"active","label":"Active Employee","type":"checkbox","defaultValue":true},
+            {"key":"notes","label":"Notes","type":"textarea","placeholder":"Any additional notes..."}
+          ]'
+          submit-label="Create Employee"
+          on-success="lq-refresh:playground-table"
+          layout="grid-2"
+        ></lq-form>
+
+        <div class="mt-8">
+          <h3 class="font-medium text-gray-700 mb-3">Edit Mode — Pre-filled (record-id=1)</h3>
+          <lq-form
+            table="employees"
+            record-id="1"
+            fields='[
+              {"key":"name","label":"Name","type":"text","required":true},
+              {"key":"email","label":"Email","type":"email","required":true},
+              {"key":"department","label":"Department","type":"select",
+               "options":[{"value":"Engineering","label":"Engineering"},{"value":"Marketing","label":"Marketing"},{"value":"Sales","label":"Sales"},{"value":"Design","label":"Design"}]}
+            ]'
+            submit-label="Update Employee"
+          ></lq-form>
+        </div>
+
+        <div class="mt-8">
+          <h3 class="font-medium text-gray-700 mb-3">Horizontal Layout</h3>
+          <lq-form
+            table="employees"
+            fields='[
+              {"key":"name","label":"Name","type":"text","required":true},
+              {"key":"email","label":"Email","type":"email"},
+              {"key":"department","label":"Department","type":"select",
+               "options":[{"value":"Engineering","label":"Engineering"},{"value":"Sales","label":"Sales"}]}
+            ]'
+            layout="horizontal"
+          ></lq-form>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Stat Cards ==================== -->
+    <div data-route="stat-cards">
+      <div class="max-w-4xl">
+        <h2 class="text-xl font-bold text-gray-900 mb-1">lq-stat-card</h2>
+        <p class="text-gray-600 text-sm mb-6">Single KPI display cards backed by SQL queries. Supports formatting, icons, and trend comparison.</p>
+
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+          <lq-stat-card
+            label="Total Employees"
+            source="SELECT COUNT(*) FROM employees"
+            icon="users"
+            format="number"
+          ></lq-stat-card>
+
+          <lq-stat-card
+            label="Avg Salary"
+            source="SELECT 72500 FROM employees LIMIT 1"
+            icon="chart-bar"
+            format="currency"
+            prefix="$"
+          ></lq-stat-card>
+
+          <lq-stat-card
+            label="Active Rate"
+            source="SELECT 87.5 FROM employees LIMIT 1"
+            icon="cog"
+            format="percent"
+          ></lq-stat-card>
+        </div>
+
+        <h3 class="font-medium text-gray-700 mb-3">With Trend Comparison</h3>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
+          <lq-stat-card
+            label="Headcount (vs last quarter)"
+            source="SELECT COUNT(*) FROM employees"
+            trend-source="SELECT 5 FROM employees LIMIT 1"
+            icon="users"
+            format="number"
+          ></lq-stat-card>
+
+          <lq-stat-card
+            label="Revenue (vs last month)"
+            source="SELECT 125000 FROM employees LIMIT 1"
+            trend-source="SELECT 150000 FROM employees LIMIT 1"
+            icon="chart-bar"
+            format="currency"
+            prefix="$"
+          ></lq-stat-card>
+        </div>
+
+        <h3 class="font-medium text-gray-700 mb-3">With Prefix/Suffix</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <lq-stat-card
+            label="Response Time"
+            source="SELECT 245 FROM employees LIMIT 1"
+            icon="home"
+            suffix=" ms"
+          ></lq-stat-card>
+
+          <lq-stat-card
+            label="Disk Usage"
+            source="SELECT 73.2 FROM employees LIMIT 1"
+            icon="package"
+            format="number"
+            suffix=" GB"
+          ></lq-stat-card>
+
+          <lq-stat-card
+            label="Uptime"
+            source="SELECT 99.97 FROM employees LIMIT 1"
+            icon="table"
+            format="percent"
+          ></lq-stat-card>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Import ==================== -->
+    <div data-route="import">
+      <div class="max-w-2xl">
+        <h2 class="text-xl font-bold text-gray-900 mb-1">lq-import</h2>
+        <p class="text-gray-600 text-sm mb-6">CSV upload widget with drag-drop, mode selection, and progress feedback.</p>
+
+        <h3 class="font-medium text-gray-700 mb-3">Default — Append Mode</h3>
+        <lq-import
+          table="employees"
+          on-success="lq-refresh:playground-table"
+        ></lq-import>
+
+        <div class="mt-8">
+          <h3 class="font-medium text-gray-700 mb-3">Custom Label + Accept Types</h3>
+          <lq-import
+            table="employees"
+            label="Import Employee Data"
+            accept=".csv,.tsv,.txt"
+            mode="replace"
+          ></lq-import>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Toasts ==================== -->
+    <div data-route="toasts">
+      <div class="max-w-2xl">
+        <h2 class="text-xl font-bold text-gray-900 mb-1">LQ.toast()</h2>
+        <p class="text-gray-600 text-sm mb-6">Global toast notifications. Click each button to verify type, icon, and auto-dismiss.</p>
+
+        <div class="flex flex-wrap gap-3">
+          <button onclick="LQ.toast('Operation completed successfully!', 'success')"
+            class="px-4 py-2 text-sm font-medium text-white bg-green-600 rounded-md hover:bg-green-700">
+            Success Toast
+          </button>
+          <button onclick="LQ.toast('Something went wrong. Please try again.', 'error')"
+            class="px-4 py-2 text-sm font-medium text-white bg-red-600 rounded-md hover:bg-red-700">
+            Error Toast
+          </button>
+          <button onclick="LQ.toast('Please review before proceeding.', 'warning')"
+            class="px-4 py-2 text-sm font-medium text-white bg-yellow-600 rounded-md hover:bg-yellow-700">
+            Warning Toast
+          </button>
+          <button onclick="LQ.toast('New updates are available.', 'info')"
+            class="px-4 py-2 text-sm font-medium text-white bg-blue-600 rounded-md hover:bg-blue-700">
+            Info Toast
+          </button>
+          <button onclick="LQ.toast('This uses the default fallback type.', 'unknown_type')"
+            class="px-4 py-2 text-sm font-medium text-white bg-gray-600 rounded-md hover:bg-gray-700">
+            Unknown Type (→ info)
+          </button>
+        </div>
+
+        <div class="mt-6 bg-white rounded-lg border border-gray-200 p-4">
+          <h3 class="font-medium text-sm text-gray-700 mb-2">Custom duration</h3>
+          <div class="flex items-center gap-3">
+            <button onclick="LQ.toast('This stays for 10 seconds', 'info', 10000)"
+              class="px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 border border-indigo-200">
+              10s Toast
+            </button>
+            <button onclick="LQ.toast('This stays until dismissed', 'warning', 0)"
+              class="px-3 py-1.5 text-sm font-medium text-indigo-700 bg-indigo-50 rounded-md hover:bg-indigo-100 border border-indigo-200">
+              Persistent Toast (0ms)
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- ==================== Alpine + Tailwind ==================== -->
+    <div data-route="alpine">
+      <div class="max-w-3xl">
+        <h2 class="text-xl font-bold text-gray-900 mb-1">Alpine.js + Tailwind CSS</h2>
+        <p class="text-gray-600 text-sm mb-6">Demonstrates proper Alpine.js patterns that the app builder should follow.</p>
+
+        <!-- Inline x-data (simplest pattern) -->
+        <div class="bg-white rounded-lg border border-gray-200 p-5 mb-4">
+          <h3 class="font-medium text-gray-700 mb-3">Inline x-data — Counter</h3>
+          <div x-data="{ count: 0 }" class="flex items-center gap-4">
+            <button @click="count--"
+              class="px-3 py-1.5 text-sm font-medium bg-gray-100 rounded-md hover:bg-gray-200 border border-gray-300">−</button>
+            <span class="text-2xl font-bold w-12 text-center" x-text="count"></span>
+            <button @click="count++"
+              class="px-3 py-1.5 text-sm font-medium bg-gray-100 rounded-md hover:bg-gray-200 border border-gray-300">+</button>
+          </div>
+        </div>
+
+        <!-- x-data with init + async fetch pattern -->
+        <div class="bg-white rounded-lg border border-gray-200 p-5 mb-4">
+          <h3 class="font-medium text-gray-700 mb-3">x-data with x-init — Async Data Loading</h3>
+          <div x-data="asyncLoadDemo">
+            <div x-show="loading" class="flex items-center gap-2 text-sm text-gray-500">
+              <div class="animate-spin h-4 w-4 border-2 border-indigo-600 border-t-transparent rounded-full"></div>
+              Loading...
+            </div>
+            <div x-show="error" x-cloak class="text-sm text-red-600" x-text="'Error: ' + error"></div>
+            <div x-show="!loading && !error" x-cloak>
+              <div class="text-sm text-gray-500 mb-2">Loaded <span class="font-medium" x-text="items.length"></span> records</div>
+              <div class="flex flex-wrap gap-2">
+                <template x-for="item in items" :key="item.id">
+                  <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-indigo-100 text-indigo-800"
+                        x-text="item.name + ' (' + item.dept + ')'"></span>
+                </template>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Alpine.data() registered component -->
+        <div class="bg-white rounded-lg border border-gray-200 p-5 mb-4">
+          <h3 class="font-medium text-gray-700 mb-3">Alpine.data() — Registered Component</h3>
+          <div x-data="todoDemo">
+            <div class="flex gap-2 mb-3">
+              <input x-model="newItem" @keydown.enter="addItem()" placeholder="Add a to-do..."
+                class="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500" />
+              <button @click="addItem()" :disabled="!newItem.trim()"
+                class="px-3 py-1.5 text-sm font-medium text-white bg-indigo-600 rounded-md hover:bg-indigo-700 disabled:opacity-50">
+                Add
+              </button>
+            </div>
+            <ul class="space-y-1">
+              <template x-for="item in items" :key="item.id">
+                <li class="flex items-center gap-2 py-1">
+                  <input type="checkbox" :checked="item.done" @change="item.done = !item.done"
+                    class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                  <span class="text-sm" :class="item.done ? 'line-through text-gray-400' : 'text-gray-700'"
+                        x-text="item.text"></span>
+                  <button @click="items = items.filter(i => i.id !== item.id)"
+                    class="ml-auto text-xs text-red-500 hover:text-red-700">remove</button>
+                </li>
+              </template>
+            </ul>
+            <p x-show="items.length === 0" class="text-sm text-gray-400 italic">No items yet</p>
+          </div>
+        </div>
+
+        <!-- Tailwind responsive test -->
+        <div class="bg-white rounded-lg border border-gray-200 p-5">
+          <h3 class="font-medium text-gray-700 mb-3">Tailwind CSS — Responsive Grid</h3>
+          <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div class="bg-blue-50 border border-blue-200 rounded-lg p-4 text-center">
+              <div class="text-2xl font-bold text-blue-600">1</div>
+              <div class="text-xs text-blue-500 mt-1">Blue</div>
+            </div>
+            <div class="bg-green-50 border border-green-200 rounded-lg p-4 text-center">
+              <div class="text-2xl font-bold text-green-600">2</div>
+              <div class="text-xs text-green-500 mt-1">Green</div>
+            </div>
+            <div class="bg-yellow-50 border border-yellow-200 rounded-lg p-4 text-center">
+              <div class="text-2xl font-bold text-yellow-600">3</div>
+              <div class="text-xs text-yellow-500 mt-1">Yellow</div>
+            </div>
+            <div class="bg-red-50 border border-red-200 rounded-lg p-4 text-center">
+              <div class="text-2xl font-bold text-red-600">4</div>
+              <div class="text-xs text-red-500 mt-1">Red</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </lq-page-shell>
+
+  <!-- Register Alpine.data component before Alpine inits (defer ensures this runs first) -->
+  <script>
+    document.addEventListener("alpine:init", () => {
+      Alpine.data("asyncLoadDemo", () => ({
+        loading: true,
+        error: null,
+        items: [],
+        async init() {
+          try {
+            const result = await LQ.liveApp.query('SELECT * FROM employees');
+            this.items = result.rows.map((r) => ({ id: r[0], name: r[1], dept: r[3] }));
+          } catch (e) { this.error = e.message; }
+          finally { this.loading = false; }
+        },
+      }));
+
+      Alpine.data("todoDemo", () => ({
+        newItem: "",
+        items: [
+          { id: 1, text: "Verify lq-page-shell routing", done: true },
+          { id: 2, text: "Test lq-data-table CRUD", done: false },
+          { id: 3, text: "Check all toast types", done: false },
+        ],
+        addItem() {
+          if (!this.newItem.trim()) return;
+          this.items.push({ id: Date.now(), text: this.newItem.trim(), done: false });
+          this.newItem = "";
+        },
+      }));
+    });
+  </script>
+
+</body>
+</html>

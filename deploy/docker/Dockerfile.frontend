@@ -1,0 +1,63 @@
+# Multi-stage Dockerfile for shared frontend gateway (tenant app + tenant manager portals)
+
+# Stage 1: Build tenant app portal
+FROM node:24-alpine AS app-builder
+
+WORKDIR /app
+
+# Accept environment variables for Vite build
+ARG APP_VITE_BACKEND_URL=/api
+ENV VITE_BACKEND_URL=${APP_VITE_BACKEND_URL}
+
+# Copy package files
+COPY apps/tenant_app_portal/package*.json ./
+
+# Install dependencies
+RUN npm ci --verbose
+
+# Copy source code
+COPY apps/tenant_app_portal/ ./
+
+# Build for production
+RUN npm run build 2>&1
+
+# Stage 2: Build tenant manager portal
+FROM node:24-alpine AS manager-builder
+
+WORKDIR /app
+
+# Accept environment variables for Vite build
+ARG MANAGER_VITE_BACKEND_URL=/api
+ENV VITE_BACKEND_URL=${MANAGER_VITE_BACKEND_URL}
+
+# Copy package files
+COPY apps/tenant_manager_portal/package*.json ./
+
+# Install dependencies
+RUN npm ci --verbose
+
+# Copy source code
+COPY apps/tenant_manager_portal/ ./
+
+# Build for production
+RUN npm run build 2>&1
+
+# Stage 3: Serve with Nginx
+FROM nginx:1.25-alpine
+
+# Copy custom nginx config
+COPY deploy/docker/nginx.conf /etc/nginx/nginx.conf
+
+# Copy built assets from builders
+COPY --from=app-builder /app/dist /usr/share/nginx/html/app
+COPY --from=manager-builder /app/dist /usr/share/nginx/html/manager
+
+# Expose port
+EXPOSE 80
+
+# Add healthcheck
+HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
+    CMD curl -f http://localhost/health || exit 1
+
+# Start nginx
+CMD ["nginx", "-g", "daemon off;"]

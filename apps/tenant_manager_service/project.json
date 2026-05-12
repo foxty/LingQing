@@ -1,0 +1,52 @@
+{
+    "name": "tenant_manager_service",
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/tenant_manager_service",
+    "projectType": "application",
+    "targets": {
+        "dev": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run uvicorn apps.tenant_manager_service.server:app --reload --port 8010 --reload-exclude .venv --no-access-log",
+                "cwd": "."
+            }
+        },
+        "start": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run uvicorn apps.tenant_manager_service.server:app --host 0.0.0.0 --port 8010 --no-access-log",
+                "cwd": "."
+            }
+        },
+        "lint": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run ruff check apps/tenant_manager_service",
+                "cwd": "."
+            }
+        },
+        "migrate": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run alembic -c apps/tenant_manager_service/alembic.ini upgrade head",
+                "cwd": "."
+            }
+        },
+        "migration-create": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run alembic -c apps/tenant_manager_service/alembic.ini revision --autogenerate -m \"tenant manager migration\"",
+                "cwd": "."
+            }
+        }
+    },
+    "tags": [
+        "python",
+        "backend",
+        "fastapi",
+        "tenant-manager"
+    ],
+    "implicitDependencies": [
+        "shared"
+    ]
+}

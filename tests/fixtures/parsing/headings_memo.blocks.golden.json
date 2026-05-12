@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Executive Summary",
+      "page": 1
+    },
+    {
+      "type": "text",
+      "text": "The team delivered the planned milestones on schedule and under budget.",
+      "page": 1
+    },
+    {
+      "type": "heading",
+      "text": "Recommendations",
+      "page": 2
+    },
+    {
+      "type": "text",
+      "text": "Continue investing in parser quality benchmarks and vector resync tooling.",
+      "page": 2
+    }
+  ]
+}

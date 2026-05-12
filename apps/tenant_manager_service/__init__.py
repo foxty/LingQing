@@ -1,0 +1,1 @@
+"""Tenant Manager service package."""

@@ -1,0 +1,37 @@
+{
+  "name": "LingQing",
+  "version": "2.0.0",
+  "private": true,
+  "description": "LingQing - Enterprise multi-tenant AI agent platform",
+  "scripts": {
+    "prepare": "husky",
+    "dev:ta": "nx run-many --target=dev --projects=tenant_app_service,tenant_app_portal,scheduler_service,sandbox_service --parallel=4",
+    "dev:tm": "nx run-many --target=dev --projects=tenant_manager_service,tenant_manager_portal --parallel=2",
+    "migrate-db:ta": "nx migrate-db:tenant-app",
+    "migrate-db:tm": "nx migrate-db:tenant-manager",
+    "test": "nx run root:test",
+    "test:unit": "nx run root:test:unit",
+    "ci": "nx run root:ci",
+    "lint": "nx lint",
+    "tenant-cli": "nx run tenant-cli",
+    "gen-api-spec": "nx run root:agent-api-spec:generate",
+    "check-api-spec": "nx run root:agent-api-spec:check",
+    "gen-live-app-sdk": "bash scripts/build-js-sdk.sh",
+    "check-live-app-sdk": "npm run gen-live-app-sdk && git diff --exit-code -- apps/tenant_app_service/routers/sdk/lq-sdk.v1.0.js apps/tenant_app_service/routers/sdk/lq-sdk.v1.0.d.ts"
+  },
+  "keywords": ["ai", "agents", "langgraph", "multi-tenant", "rag", "enterprise"],
+  "author": "LingQing contributors",
+  "license": "Apache-2.0",
+  "engines": {
+    "node": "24.x"
+  },
+  "devDependencies": {
+    "@nx/workspace": "^22.0.4",
+    "@nxlv/python": "^22.2.2",
+    "dotenv-cli": "^7.4.2",
+    "esbuild": "^0.25.11",
+    "husky": "^9.1.7",
+    "nx": "^22.0.4",
+    "typescript": "^5.9.3"
+  }
+}

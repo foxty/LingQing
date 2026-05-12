@@ -1,0 +1,129 @@
+{
+  "docling_image": "quay.io/docling-project/docling-serve-cpu:v1.34.0",
+  "unit_fixtures": [
+    {
+      "id": "deck_4_slides",
+      "description": "Slide deck blocks should chunk into a small number of segments.",
+      "golden_blocks": "deck_4_slides.blocks.golden.json",
+      "quality": {
+        "max_blocks": 6,
+        "min_text_blocks": 4,
+        "max_chunks": 6,
+        "min_median_chunk_chars": 30,
+        "must_contain": [
+          "01",
+          "Goals",
+          "Summary",
+          "Thanks"
+        ]
+      }
+    },
+    {
+      "id": "table_report",
+      "description": "Report with a single merged table block.",
+      "golden_blocks": "table_report.blocks.golden.json",
+      "quality": {
+        "min_table_blocks": 1,
+        "max_chunks": 4,
+        "min_median_chunk_chars": 40,
+        "must_contain": [
+          "Region",
+          "Revenue"
+        ]
+      }
+    },
+    {
+      "id": "headings_memo",
+      "description": "Memo with section headings prefixed into chunk text.",
+      "golden_blocks": "headings_memo.blocks.golden.json",
+      "quality": {
+        "min_heading_blocks": 2,
+        "max_chunks": 4,
+        "min_median_chunk_chars": 50,
+        "must_contain": [
+          "Executive Summary",
+          "Recommendations"
+        ]
+      }
+    },
+    {
+      "id": "duplicate_title",
+      "description": "Document with consecutive duplicate headings removed.",
+      "golden_blocks": "duplicate_title.blocks.golden.json",
+      "quality": {
+        "max_heading_blocks": 1,
+        "max_chunks": 3,
+        "must_contain": [
+          "Same Title",
+          "meaningful"
+        ]
+      }
+    }
+  ],
+  "integration_fixtures": [
+    {
+      "id": "mortgage_pdf",
+      "source_file": "mortgage.pdf",
+      "baseline": "baselines/mortgage_pdf.blocks.golden.json",
+      "description": "Structured mortgage PDF.",
+      "quality": {
+        "min_table_blocks": 1,
+        "must_contain": [],
+        "max_chunks": 30
+      }
+    },
+    {
+      "id": "newspaper_pdf",
+      "source_file": "newspaper.pdf",
+      "baseline": "baselines/newspaper_pdf.blocks.golden.json",
+      "description": "Multi-column newspaper PDF.",
+      "quality": {
+        "must_contain": []
+      }
+    },
+    {
+      "id": "illustrated_book_pdf",
+      "source_file": "illustratedBook.pdf",
+      "baseline": "baselines/illustrated_book_pdf.blocks.golden.json",
+      "description": "Illustrated book PDF with mixed text and images.",
+      "quality": {
+        "must_contain": []
+      }
+    },
+    {
+      "id": "sample_pptx",
+      "source_file": "sample.pptx",
+      "baseline": "baselines/sample_pptx.blocks.golden.json",
+      "description": "Multi-slide deck.",
+      "quality": {
+        "must_contain": [],
+        "max_chunks": 8
+      }
+    },
+    {
+      "id": "sample_docx",
+      "source_file": "sample.docx",
+      "baseline": "baselines/sample_docx.blocks.golden.json",
+      "description": "Multi-section DOCX.",
+      "quality": {
+        "must_contain": [],
+        "max_chunks": 15,
+        "min_median_chunk_chars": 200
+      }
+    },
+    {
+      "id": "sample_md",
+      "source_file": "sample.md",
+      "baseline": "baselines/sample_md.blocks.golden.json",
+      "description": "Multi-section Markdown with table and duplicate heading.",
+      "quality": {
+        "min_table_blocks": 1,
+        "must_contain": [
+          "Quarterly Report",
+          "North",
+          "Duplicate heading"
+        ]
+      }
+    }
+  ]
+}

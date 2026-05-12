@@ -1,0 +1,545 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "International Mortgage Inc.",
+      "page": 1,
+      "bbox": {
+        "left": 126.0,
+        "top": 27.139635,
+        "right": 434.36446499999994,
+        "bottom": 51.130704870129875
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Mortgage overview",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 99.106,
+        "right": 200.91299999999998,
+        "bottom": 117.10090909090911
+      }
+    },
+    {
+      "type": "text",
+      "text": "Mortgage Summary",
+      "page": 1,
+      "bbox": {
+        "left": 59.28,
+        "top": 146.91599999999994,
+        "right": 171.228,
+        "bottom": 157.08208176795574
+      }
+    },
+    {
+      "type": "text",
+      "text": "Interest = 45.544",
+      "page": 1,
+      "bbox": {
+        "left": 61.5,
+        "top": 258.1227174999999,
+        "right": 114.16318499999994,
+        "bottom": 264.05081393093917
+      }
+    },
+    {
+      "type": "text",
+      "text": "PMI = 5.356",
+      "page": 1,
+      "bbox": {
+        "left": 141.64,
+        "top": 258.1227174999999,
+        "right": 179.52446500000005,
+        "bottom": 264.05081393093917
+      }
+    },
+    {
+      "type": "text",
+      "text": "Tax = 13.391",
+      "page": 1,
+      "bbox": {
+        "left": 61.5,
+        "top": 268.6227174999999,
+        "right": 102.50534999999995,
+        "bottom": 274.55081393093917
+      }
+    },
+    {
+      "type": "text",
+      "text": "Principal = 35.709",
+      "page": 1,
+      "bbox": {
+        "left": 126.67,
+        "top": 268.6227174999999,
+        "right": 182.8389325000001,
+        "bottom": 274.55081393093917
+      }
+    },
+    {
+      "type": "text",
+      "text": "Balance Graph",
+      "page": 1,
+      "bbox": {
+        "left": 263.69,
+        "top": 146.91599999999994,
+        "right": 348.31400000000014,
+        "bottom": 157.08208176795574
+      }
+    },
+    {
+      "type": "text",
+      "text": "Balance",
+      "page": 1,
+      "bbox": {
+        "left": 252.25,
+        "top": 275.3727174999999,
+        "right": 277.5249699999999,
+        "bottom": 281.30081393093917
+      }
+    },
+    {
+      "type": "text",
+      "text": "Interest / Principal",
+      "page": 1,
+      "bbox": {
+        "left": 444.8,
+        "top": 146.91599999999994,
+        "right": 548.7080000000002,
+        "bottom": 157.08208176795574
+      }
+    },
+    {
+      "type": "text",
+      "text": "Interest",
+      "page": 1,
+      "bbox": {
+        "left": 443.0,
+        "top": 275.3727174999999,
+        "right": 466.31566999999995,
+        "bottom": 281.30081393093917
+      }
+    },
+    {
+      "type": "text",
+      "text": "Principal",
+      "page": 1,
+      "bbox": {
+        "left": 514.0,
+        "top": 275.3727174999999,
+        "right": 540.8214175000002,
+        "bottom": 281.30081393093917
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Mortgage summary",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 310.937635,
+        "right": 161.64436500000002,
+        "bottom": 324.6458996753247
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Legal Disclaimer",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 483.052,
+        "right": 118.84800000000001,
+        "bottom": 493.3348051948052
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean id lacus. Phasellus rutrum erat eu quam. Integer vulputate sollicitudin mauris. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Mauris rutrum purus sed tellus. Proin interdum tincidunt lectus. Nulla tempus. Aenean bibendum. Integer nec purus malesuada lectus tincidunt fermentum. Duis imperdiet lacus et urna. Fusce velit nibh, facilisis et, placerat nec, aliquet at, nisl. Fusce nisi est, varius suscipit, sollicitudin in, dignissim in, urna.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 505.1222825,
+        "right": 578.223415,
+        "bottom": 547.9017882790056
+      }
+    },
+    {
+      "type": "text",
+      "text": "Quisque et mauris. Morbi urna ligula, placerat nec, blandit quis, molestie eget, nisi. Quisque porttitor felis interdum purus. Nulla feugiat nulla vel sem. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Nunc quam odio, ultrices ut, dictum sed, laoreet et, augue. Donec est. Nulla aliquet risus et urna. Fusce imperdiet convallis nisi. Etiam pharetra lectus et erat.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 558.4022825,
+        "right": 578.2239175,
+        "bottom": 589.1817882790056
+      }
+    },
+    {
+      "type": "text",
+      "text": "Fusce convallis tempor leo. Sed nec tellus. Proin venenatis. Curabitur pharetra sodales nibh. Maecenas in massa eu neque egestas ullamcorper. Vivamus erat. Pellentesque faucibus nulla a lacus. Duis tincidunt. Nunc at odio in nisi luctus porttitor. Donec suscipit, lacus congue rutrum pretium, orci dolor cursus leo, non congue lectus enim et lectus.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 599.6822824999999,
+        "right": 578.22625,
+        "bottom": 630.4617882790055
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean id lacus. Phasellus rutrum erat eu quam. Integer vulputate sollicitudin mauris. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Mauris rutrum purus sed tellus. Proin interdum tincidunt lectus. Nulla tempus. Aenean bibendum. Integer nec purus malesuada lectus tincidunt fermentum. Duis imperdiet lacus et urna. Fusce velit nibh, facilisis et, placerat nec, aliquet at, nisl. Fusce nisi est, varius suscipit, sollicitudin in, dignissim in, urna.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 640.9622824999999,
+        "right": 578.223415,
+        "bottom": 683.7417882790055
+      }
+    },
+    {
+      "type": "text",
+      "text": "Quisque et mauris. Morbi urna ligula, placerat nec, blandit quis, molestie eget, nisi. Quisque porttitor felis interdum purus. Nulla feugiat nulla vel sem. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Nunc quam odio, ultrices ut, dictum sed, laoreet et, augue. Donec est. Nulla aliquet risus et urna. Fusce imperdiet convallis nisi. Etiam pharetra lectus et erat.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 694.2422825,
+        "right": 578.2239175,
+        "bottom": 725.0217882790055
+      }
+    },
+    {
+      "type": "text",
+      "text": "Fusce convallis tempor leo. Sed nec tellus. Proin venenatis. Curabitur pharetra sodales nibh. Maecenas in massa eu neque egestas ullamcorper. Vivamus erat. Pellentesque faucibus nulla a lacus. Duis tincidunt. Nunc at odio in nisi luctus porttitor. Donec suscipit, lacus congue rutrum pretium, orci dolor cursus leo, non congue lectus enim et lectus.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 735.5222825,
+        "right": 578.22625,
+        "bottom": 766.3017882790056
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet, consectetuer adipiscing elit. Aenean id lacus. Phasellus rutrum erat eu quam. Integer vulputate sollicitudin mauris. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Mauris rutrum purus sed tellus. Proin interdum tincidunt lectus. Nulla tempus. Aenean bibendum. Integer nec purus malesuada lectus tincidunt fermentum. Duis imperdiet lacus et urna. Fusce velit nibh, facilisis et, placerat nec, aliquet at, nisl. Fusce nisi est, varius suscipit, sollicitudin in, dignissim in, urna.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 776.8022825,
+        "right": 578.223415,
+        "bottom": 819.5817882790055
+      }
+    },
+    {
+      "type": "text",
+      "text": "Quisque et mauris. Morbi urna ligula, placerat nec, blandit quis, molestie eget, nisi. Quisque porttitor felis interdum purus. Nulla feugiat nulla vel sem. Vestibulum ante ipsum primis in faucibus orci luctus et ultrices posuere cubilia Curae; Nunc quam odio, ultrices ut, dictum sed, laoreet et, augue. Donec est. Nulla aliquet risus et urna. Fusce imperdiet convallis nisi. Etiam pharetra lectus et erat.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 830.0822825,
+        "right": 578.2239175,
+        "bottom": 860.8617882790055
+      }
+    },
+    {
+      "type": "text",
+      "text": "Fusce convallis tempor leo. Sed nec tellus. Proin venenatis. Curabitur pharetra sodales nibh. Maecenas in massa eu neque egestas ullamcorper. Vivamus erat. Pellentesque faucibus nulla a lacus. Duis tincidunt. Nunc at odio in nisi luctus porttitor. Donec suscipit, lacus congue rutrum pretium, orci dolor cursus leo, non congue lectus enim et lectus.",
+      "page": 1,
+      "bbox": {
+        "left": 36.0,
+        "top": 871.3622825,
+        "right": 578.22625,
+        "bottom": 902.1417882790055
+      }
+    },
+    {
+      "type": "text",
+      "text": "1 / 5",
+      "page": 1,
+      "bbox": {
+        "left": 556.57,
+        "top": 967.1017175,
+        "right": 575.9951425,
+        "bottom": 975.5713343729282
+      }
+    },
+    {
+      "type": "heading",
+      "text": "International Mortgage Inc.",
+      "page": 2,
+      "bbox": {
+        "left": 68.76,
+        "top": 13.562365,
+        "right": 222.98353500000002,
+        "bottom": 25.56111331168836
+      }
+    },
+    {
+      "type": "text",
+      "text": "Continued on page 3",
+      "page": 2,
+      "bbox": {
+        "left": 478.56,
+        "top": 939.8265,
+        "right": 575.9999999999998,
+        "bottom": 948.7218215469613
+      }
+    },
+    {
+      "type": "text",
+      "text": "2 / 5",
+      "page": 2,
+      "bbox": {
+        "left": 556.57,
+        "top": 967.1017175,
+        "right": 575.9951425,
+        "bottom": 975.5713343729282
+      }
+    },
+    {
+      "type": "heading",
+      "text": "International Mortgage Inc.",
+      "page": 3,
+      "bbox": {
+        "left": 68.76,
+        "top": 13.562365,
+        "right": 222.98353500000002,
+        "bottom": 25.56111331168836
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Continued from page 2",
+      "page": 3,
+      "bbox": {
+        "left": 36.0,
+        "top": 51.82650000000001,
+        "right": 142.75349999999997,
+        "bottom": 60.72182154696134
+      }
+    },
+    {
+      "type": "text",
+      "text": "Continued on page 4",
+      "page": 3,
+      "bbox": {
+        "left": 478.56,
+        "top": 927.0765,
+        "right": 575.9999999999998,
+        "bottom": 935.9718215469613
+      }
+    },
+    {
+      "type": "text",
+      "text": "3 / 5",
+      "page": 3,
+      "bbox": {
+        "left": 556.57,
+        "top": 967.1017175,
+        "right": 575.9951425,
+        "bottom": 975.5713343729282
+      }
+    },
+    {
+      "type": "heading",
+      "text": "International Mortgage Inc.",
+      "page": 4,
+      "bbox": {
+        "left": 68.76,
+        "top": 13.562365,
+        "right": 222.98353500000002,
+        "bottom": 25.56111331168836
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Continued from page 3",
+      "page": 4,
+      "bbox": {
+        "left": 36.0,
+        "top": 51.82650000000001,
+        "right": 142.75349999999997,
+        "bottom": 60.72182154696134
+      }
+    },
+    {
+      "type": "text",
+      "text": "Continued on page 5",
+      "page": 4,
+      "bbox": {
+        "left": 478.56,
+        "top": 927.0765,
+        "right": 575.9999999999998,
+        "bottom": 935.9718215469613
+      }
+    },
+    {
+      "type": "text",
+      "text": "4 / 5",
+      "page": 4,
+      "bbox": {
+        "left": 556.57,
+        "top": 967.1017175,
+        "right": 575.9951425,
+        "bottom": 975.5713343729282
+      }
+    },
+    {
+      "type": "heading",
+      "text": "International Mortgage Inc.",
+      "page": 5,
+      "bbox": {
+        "left": 68.76,
+        "top": 13.562365,
+        "right": 222.98353500000002,
+        "bottom": 25.56111331168836
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Continued from page 4",
+      "page": 5,
+      "bbox": {
+        "left": 36.0,
+        "top": 51.82650000000001,
+        "right": 142.75349999999997,
+        "bottom": 60.72182154696134
+      }
+    },
+    {
+      "type": "text",
+      "text": "International Mortgage Inc. 110 N. Moore Street, New York, NY 10112 Phone: (555) 2368 E-mail: info@international-mortgage.inc",
+      "page": 5,
+      "bbox": {
+        "left": 221.03,
+        "top": 921.687,
+        "right": 393.463,
+        "bottom": 969.8115613259669
+      }
+    },
+    {
+      "type": "text",
+      "text": "5 / 5",
+      "page": 5,
+      "bbox": {
+        "left": 556.57,
+        "top": 967.1017175,
+        "right": 575.9951425,
+        "bottom": 975.5713343729282
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Loan amount: | $250,000.00 |\n| --- | --- |\n| Start date: | 2005-08-09 |\n| Loan term: | 30 years |\n| Interest Rate: | 6.5% |\n| Property tax: | 1.25% |\n| PMI rate: | 0.5% |",
+      "page": 1,
+      "bbox": {
+        "left": 34.66761016845703,
+        "top": 333.70318603515625,
+        "right": 297.290771484375,
+        "bottom": 468.3717956542969
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Monthly Payment: | $1,944.75 |\n| --- | --- |\n| Pay-off date: | July 2035 |\n| Periods: | 360 |\n| Total interest | $318,861.22 |\n| Total tax: | $93,750.00 |\n| Total PMI | $37,500.00 |",
+      "page": 1,
+      "bbox": {
+        "left": 314.2015380859375,
+        "top": 333.5417785644531,
+        "right": 576.3894653320312,
+        "bottom": 468.4394836425781
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Month | Interest | Principal | Balance |\n| --- | --- | --- | --- |\n| August 2005 | $1,354.17 | $226.00 | $249,774.00 |\n| September 2005 | $1,352.94 | $227.23 | $249,546.77 |\n| October 2005 | $1,351.71 | $228.46 | $249,318.31 |\n| November 2005 | $1,350.47 | $229.70 | $249,088.61 |\n| December 2005 | $1,349.23 | $230.94 | $248,857.67 |\n| January 2006 | $1,347.98 | $232.19 | $248,625.48 |\n| February 2006 | $1,346.72 | $233.45 | $248,392.04 |\n| March 2006 | $1,345.46 | $234.71 | $248,157.32 |\n| April 2006 | $1,344.19 | $235.98 | $247,921.34 |\n| May 2006 | $1,342.91 | $237.26 | $247,684.07 |\n| June 2006 | $1,341.62 | $238.55 | $247,445.53 |\n| July 2006 | $1,340.33 | $239.84 | $247,205.69 |\n| August 2006 | $1,339.03 | $241.14 | $246,964.55 |\n| September 2006 | $1,337.72 | $242.45 | $246,722.10 |\n| October 2006 | $1,336.41 | $243.76 | $246,478.34 |\n| November 2006 | $1,335.09 | $245.08 | $246,233.26 |\n| December 2006 | $1,333.76 | $246.41 | $245,986.86 |\n| January 2007 | $1,332.43 | $247.74 | $245,739.12 |\n| February 2007 March 2007 | $1,331.09 $1,329.74 | $249.08 $250.43 | $245,490.03 $245,239.60 |\n| April 2007 | $1,328.38 | $251.79 | $244,987.81 |\n| May 2007 | $1,327.02 | $253.15 | $244,734.66 |\n| June 2007 | $1,325.65 | $254.52 | $244,480.13 |\n| July 2007 | $1,324.27 | $255.90 | $244,224.23 |\n| August 2007 | $1,322.88 | $257.29 | $243,966.94 |\n| September 2007 | $1,321.49 | $258.68 | $243,708.26 |\n| October 2007 | $1,320.09 | $260.08 | $243,448.18 |\n| November 2007 | $1,318.68 | $261.49 | $243,186.68 |\n| December 2007 | $1,317.26 | $262.91 | $242,923.78 |\n| January 2008 | $1,315.84 | $264.33 | $242,659.44 |\n| February 2008 | $1,314.41 | $265.76 | $242,393.68 |\n| March 2008 | $1,312.97 | $267.20 | $242,126.47 |\n| April 2008 | $1,311.52 | $268.65 | $241,857.82 |\n| May 2008 | $1,310.06 | $270.11 | $241,587.72 |\n| June 2008 | $1,308.60 | $271.57 | $241,316.15 |\n| July 2008 | $1,307.13 | $273.04 | $241,043.10 |\n| August 2008 | $1,305.65 | $274.52 | $240,768.58 |\n| September 2008 | $1,304.16 | $276.01 | $240,492.58 |\n| October 2008 | $1,302.67 | $277.50 | $240,215.08 |\n| November 2008 | $1,301.16 | $279.01 | $239,936.07 |\n| December 2008 | $1,299.65 | $280.52 | $239,655.55 |\n| January 2009 | $1,298.13 | $282.04 | $239,373.52 |\n| February 2009 | $1,296.61 | $283.56 | $239,089.96 |\n| March 2009 | $1,295.07 | $285.10 | $238,804.86 |\n| April 2009 | $1,293.53 | $286.64 | $238,518.21 |\n| May 2009 | $1,291.97 | $288.20 | $238,230.02 |\n| June 2009 | $1,290.41 | $289.76 | $237,940.26 |\n| July 2009 | $1,288.84 | $291.33 | $237,648.93 |\n| August 2009 | $1,287.27 | $292.91 | $237,356.03 |\n| September 2009 | $1,285.68 | $294.49 | $237,061.53 |",
+      "page": 2,
+      "bbox": {
+        "left": 34.74913787841797,
+        "top": 46.05272674560547,
+        "right": 297.2481994628906,
+        "bottom": 928.7756958007812
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Month | Interest | Principal | Balance |\n| --- | --- | --- | --- |\n| October 2009 | $1,284.08 | $296.09 | $236,765.45 |\n| November 2009 | $1,282.48 | $297.69 | $236,467.76 |\n| December 2009 | $1,280.87 | $299.30 | $236,168.45 |\n| January 2010 | $1,279.25 | $300.92 | $235,867.53 |\n| February 2010 | $1,277.62 | $302.55 | $235,564.98 |\n| March 2010 | $1,275.98 | $304.19 | $235,260.78 |\n| April 2010 | $1,274.33 | $305.84 | $234,954.94 |\n| May 2010 | $1,272.67 | $307.50 | $234,647.44 |\n| June 2010 | $1,271.01 | $309.16 | $234,338.28 |\n| July 2010 | $1,269.33 | $310.84 | $234,027.44 |\n| August 2010 | $1,267.65 | $312.52 | $233,714.92 |\n| September 2010 | $1,265.96 | $314.21 | $233,400.71 |\n| October 2010 | $1,264.25 | $315.92 | $233,084.79 |\n| November 2010 | $1,262.54 | $317.63 | $232,767.16 |\n| December 2010 | $1,260.82 | $319.35 | $232,447.82 |\n| January 2011 | $1,259.09 | $321.08 | $232,126.74 |\n| February 2011 | $1,257.35 | $322.82 | $231,803.92 |\n| March 2011 | $1,255.60 | $324.57 | $231,479.36 |\n| April 2011 | $1,253.85 | $326.32 | $231,153.03 |\n| May 2011 | $1,252.08 | $328.09 | $230,824.94 |\n| June 2011 | $1,250.30 | $329.87 | $230,495.07 |\n| July 2011 | $1,248.51 | $331.66 | $230,163.42 |\n| August 2011 | $1,246.72 | $333.45 | $229,829.97 |\n| September 2011 | $1,244.91 | $335.26 | $229,494.71 |\n| October 2011 | $1,243.10 | $337.07 | $229,157.64 |\n| November 2011 | $1,241.27 | $338.90 | $228,818.74 |\n| December 2011 | $1,239.43 | $340.74 | $228,478.00 |\n| January 2012 | $1,237.59 | $342.58 | $228,135.42 |\n| February 2012 | $1,235.73 | $344.44 | $227,790.98 |\n| March 2012 | $1,233.87 | $346.30 | $227,444.68 |\n| April 2012 | $1,231.99 | $348.18 | $227,096.50 |\n| May 2012 | $1,230.11 | $350.06 | $226,746.44 |\n| June 2012 | $1,228.21 | $351.96 | $226,394.48 |\n| July 2012 | $1,226.30 | $353.87 | $226,040.61 |\n| August 2012 | $1,224.39 | $355.78 | $225,684.83 |\n| September 2012 | $1,222.46 | $357.71 | $225,327.12 |\n| October 2012 | $1,220.52 | $359.65 | $224,967.47 |\n| November 2012 | $1,218.57 | $361.60 | $224,605.87 |\n| December 2012 | $1,216.62 | $363.55 | $224,242.32 |\n| January 2013 | $1,214.65 | $365.52 | $223,876.79 |\n| February 2013 | $1,212.67 | $367.50 | $223,509.29 |\n| March 2013 | $1,210.68 | $369.49 | $223,139.80 |\n| April 2013 | $1,208.67 | $371.50 | $222,768.30 |\n| May 2013 | $1,206.66 | $373.51 | $222,394.79 |\n| June 2013 | $1,204.64 | $375.53 | $222,019.26 |\n| July 2013 | $1,202.60 | $377.57 | $221,641.69 |\n| August 2013 | $1,200.56 | $379.61 | $221,262.08 |\n| September 2013 October 2013 | $1,198.50 $1,196.44 | $381.67 $383.73 | $220,880.42 $220,496.68 |\n| November |  | $385.81 |  |\n| 2013 | $1,194.36 |  | $220,110.87 |",
+      "page": 2,
+      "bbox": {
+        "left": 314.18212890625,
+        "top": 45.68608093261719,
+        "right": 575.9898681640625,
+        "bottom": 928.5756225585938
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Month | Interest | Principal | Balance |\n| --- | --- | --- | --- |\n| December 2013 | $1,192.27 | $387.90 | $219,722.97 |\n| January 2014 | $1,190.17 | $390.00 | $219,332.96 |\n| February 2014 | $1,188.05 | $392.12 | $218,940.84 |\n| March 2014 | $1,185.93 | $394.24 | $218,546.60 |\n| April 2014 | $1,183.79 | $396.38 | $218,150.23 |\n| May 2014 | $1,181.65 | $398.52 | $217,751.71 |\n| June 2014 | $1,179.49 | $400.68 | $217,351.02 |\n| July 2014 | $1,177.32 | $402.85 | $216,948.17 |\n| August 2014 | $1,175.14 | $405.03 | $216,543.14 |\n| September 2014 | $1,172.94 | $407.23 | $216,135.91 |\n| October 2014 | $1,170.74 | $409.43 | $215,726.48 |\n| November 2014 | $1,168.52 | $411.65 | $215,314.82 |\n| December 2014 | $1,166.29 | $413.88 | $214,900.94 |\n| January 2015 | $1,164.05 | $416.12 | $214,484.82 |\n| February 2015 | $1,161.79 | $418.38 | $214,066.44 |\n| March 2015 | $1,159.53 | $420.64 | $213,645.80 |\n| April 2015 | $1,157.25 | $422.92 | $213,222.88 |\n| May 2015 | $1,154.96 | $425.21 | $212,797.66 |\n| June 2015 | $1,152.65 | $427.52 | $212,370.15 |\n| July 2015 | $1,150.34 | $429.83 | $211,940.32 |\n| August 2015 | $1,148.01 | $432.16 | $211,508.16 |\n| September 2015 | $1,145.67 | $434.50 | $211,073.66 |\n| October 2015 | $1,143.32 | $436.85 | $210,636.80 |\n| November 2015 | $1,140.95 | $439.22 | $210,197.58 |\n| December 2015 | $1,138.57 | $441.60 | $209,755.98 |\n| January 2016 | $1,136.18 | $443.99 | $209,311.99 |\n| February 2016 | $1,133.77 | $446.40 | $208,865.59 |\n| March 2016 | $1,131.36 | $448.81 | $208,416.78 |\n| April 2016 | $1,128.92 | $451.25 | $207,965.53 |\n| May 2016 | $1,126.48 | $453.69 | $207,511.84 |\n| June 2016 | $1,124.02 | $456.15 | $207,055.69 |\n| July 2016 | $1,121.55 | $458.62 | $206,597.07 |\n| August 2016 | $1,119.07 | $461.10 | $206,135.97 |\n| September 2016 | $1,116.57 | $463.60 | $205,672.37 |\n| October 2016 | $1,114.06 | $466.11 | $205,206.26 |\n| November 2016 | $1,111.53 | $468.64 | $204,737.62 |\n| December 2016 | $1,109.00 | $471.17 | $204,266.45 |\n| January 2017 | $1,106.44 | $473.73 | $203,792.72 |\n| February 2017 | $1,103.88 | $476.29 | $203,316.43 |\n| March 2017 | $1,101.30 | $478.87 | $202,837.56 |\n| April 2017 | $1,098.70 | $481.47 | $202,356.09 |\n| May 2017 | $1,096.10 | $484.07 | $201,872.02 |\n| June 2017 | $1,093.47 | $486.70 | $201,385.32 |\n| July 2017 | $1,090.84 | $489.33 | $200,895.99 |\n| August 2017 | $1,088.19 | $491.98 | $200,404.00 |\n| September 2017 | $1,085.52 | $494.65 | $199,909.35 |\n| October 2017 | $1,082.84 | $497.33 | $199,412.03 |\n| November 2017 | $1,080.15 | $500.02 | $198,912.01 |",
+      "page": 3,
+      "bbox": {
+        "left": 34.83656692504883,
+        "top": 68.43836212158203,
+        "right": 297.2413330078125,
+        "bottom": 916.4625244140625
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Month | Interest | Principal | Balance |\n| --- | --- | --- | --- |\n| December 2017 | $1,077.44 | $502.73 | $198,409.28 |\n| January 2018 | $1,074.72 | $505.45 | $197,903.82 |\n| February 2018 | $1,071.98 | $508.19 | $197,395.63 |\n| March 2018 | $1,069.23 | $510.94 | $196,884.69 |\n| April 2018 | $1,066.46 | $513.71 | $196,370.98 |\n| May 2018 | $1,063.68 | $516.49 | $195,854.48 |\n| June 2018 | $1,060.88 | $519.29 | $195,335.19 |\n| July 2018 | $1,058.07 | $522.10 | $194,813.09 |\n| August 2018 | $1,055.24 | $524.93 | $194,288.15 |\n| September 2018 | $1,052.39 | $527.78 | $193,760.38 |\n| October 2018 | $1,049.54 | $530.63 | $193,229.74 |\n| November 2018 | $1,046.66 | $533.51 | $192,696.23 |\n| December 2018 | $1,043.77 | $536.40 | $192,159.84 |\n| January 2019 | $1,040.87 | $539.30 | $191,620.53 |\n| February 2019 | $1,037.94 | $542.23 | $191,078.31 |\n| March 2019 | $1,035.01 | $545.16 | $190,533.14 |\n| April 2019 | $1,032.05 | $548.12 | $189,985.03 |\n| May 2019 | $1,029.09 | $551.08 | $189,433.94 |\n| June 2019 | $1,026.10 | $554.07 | $188,879.87 |\n| July 2019 | $1,023.10 | $557.07 | $188,322.80 |\n| August 2019 | $1,020.08 | $560.09 | $187,762.71 |\n| September 2019 | $1,017.05 | $563.12 | $187,199.59 |\n| October 2019 | $1,014.00 | $566.17 | $186,633.42 |\n| November 2019 | $1,010.93 | $569.24 | $186,064.18 |\n| December 2019 | $1,007.85 | $572.32 | $185,491.86 |\n| January 2020 | $1,004.75 | $575.42 | $184,916.44 |\n| February 2020 | $1,001.63 | $578.54 | $184,337.90 |\n| March 2020 | $998.50 | $581.67 | $183,756.22 |\n| April 2020 | $995.35 | $584.82 | $183,171.40 |\n| May 2020 | $992.18 | $587.99 | $182,583.41 |\n| June 2020 | $988.99 | $591.18 | $181,992.23 |\n| July 2020 | $985.79 | $594.38 | $181,397.85 |\n| August 2020 | $982.57 | $597.60 | $180,800.25 |\n| September 2020 | $979.33 | $600.84 | $180,199.42 |\n| October 2020 | $976.08 | $604.09 | $179,595.33 |\n| November 2020 | $972.81 | $607.36 | $178,987.97 |\n| December 2020 | $969.52 | $610.65 | $178,377.32 |\n| January 2021 | $966.21 | $613.96 | $177,763.36 |\n| February 2021 | $962.88 | $617.29 | $177,146.07 |\n| March 2021 | $959.54 | $620.63 | $176,525.44 |\n| April 2021 | $956.18 | $623.99 | $175,901.45 |\n| May 2021 | $952.80 | $627.37 | $175,274.08 |\n| June 2021 | $949.40 | $630.77 | $174,643.31 |\n| July 2021 | $945.98 | $634.19 | $174,009.13 |\n| August 2021 | $942.55 | $637.62 | $173,371.51 |\n| September 2021 | $939.10 | $641.07 | $172,730.43 |\n| October 2021 | $935.62 | $644.55 | $172,085.88 |\n| November 2021 | $932.13 | $648.04 | $171,437.85 |",
+      "page": 3,
+      "bbox": {
+        "left": 314.28466796875,
+        "top": 67.99048614501953,
+        "right": 576.0632934570312,
+        "bottom": 916.1758422851562
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Month | Interest | Principal | Balance |\n| --- | --- | --- | --- |\n| December 2021 | $928.62 | $651.55 | $170,786.30 |\n| January 2022 | $925.09 | $655.08 | $170,131.22 |\n| February 2022 | $921.54 | $658.63 | $169,472.59 |\n| March 2022 | $917.98 | $662.19 | $168,810.40 |\n| April 2022 | $914.39 | $665.78 | $168,144.62 |\n| May 2022 | $910.78 | $669.39 | $167,475.23 |\n| June 2022 | $907.16 | $673.01 | $166,802.22 |\n| July 2022 | $903.51 | $676.66 | $166,125.56 |\n| August 2022 | $899.85 | $680.32 | $165,445.24 |\n| September 2022 | $896.16 | $684.01 | $164,761.23 |\n| October 2022 | $892.46 | $687.71 | $164,073.52 |\n| November 2022 | $888.73 | $691.44 | $163,382.08 |\n| December 2022 | $884.99 | $695.18 | $162,686.90 |\n| January 2023 | $881.22 | $698.95 | $161,987.95 |\n| February 2023 | $877.43 | $702.74 | $161,285.21 |\n| March 2023 | $873.63 | $706.54 | $160,578.67 |\n| April 2023 | $869.80 | $710.37 | $159,868.30 |\n| May 2023 | $865.95 | $714.22 | $159,154.08 |\n| June 2023 | $862.08 | $718.09 | $158,436.00 |\n| July 2023 | $858.19 | $721.98 | $157,714.02 |\n| August 2023 | $854.28 | $725.89 | $156,988.14 |\n| September 2023 | $850.35 | $729.82 | $156,258.32 |\n| October 2023 | $846.40 | $733.77 | $155,524.55 |\n| November 2023 | $842.42 | $737.75 | $154,786.80 |\n| December 2023 | $838.43 | $741.74 | $154,045.06 |\n| January 2024 | $834.41 | $745.76 | $153,299.30 |\n| February 2024 | $830.37 | $749.80 | $152,549.50 |\n| March 2024 | $826.31 | $753.86 | $151,795.64 |\n| April 2024 | $822.23 | $757.94 | $151,037.70 |\n| May 2024 | $818.12 | $762.05 | $150,275.65 |\n| June 2024 | $813.99 | $766.18 | $149,509.47 |\n| July 2024 | $809.84 | $770.33 | $148,739.15 |\n| August 2024 | $805.67 | $774.50 | $147,964.65 |\n| September 2024 | $801.48 | $778.69 | $147,185.95 |\n| October 2024 | $797.26 | $782.91 | $146,403.04 |\n| November 2024 | $793.02 | $787.15 | $145,615.89 |\n| December 2024 | $788.75 | $791.42 | $144,824.47 |\n| January 2025 | $784.47 | $795.70 | $144,028.76 |\n| February 2025 | $780.16 | $800.01 | $143,228.75 |\n| March 2025 | $775.82 | $804.35 | $142,424.40 |\n| April 2025 | $771.47 | $808.70 | $141,615.70 |\n| May 2025 | $767.09 | $813.09 | $140,802.61 |\n| June 2025 | $762.68 | $817.49 | $139,985.12 |\n| July 2025 | $758.25 | $821.92 | $139,163.21 |\n| August 2025 | $753.80 | $826.37 | $138,336.84 |\n| September 2025 | $749.32 | $830.85 | $137,505.99 |\n| October 2025 | $744.82 | $835.35 $839.87 | $136,670.65 |\n| November 2025 | $740.30 |  | $135,830.77 |",
+      "page": 4,
+      "bbox": {
+        "left": 34.87608337402344,
+        "top": 68.33856964111328,
+        "right": 297.2749328613281,
+        "bottom": 916.5171508789062
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Month | Interest | Principal | Balance |\n| --- | --- | --- | --- |\n| December 2025 | $735.75 | $844.42 | $134,986.35 |\n| January 2026 | $731.18 | $848.99 | $134,137.36 |\n| February 2026 | $726.58 | $853.59 | $133,283.77 |\n| March 2026 | $721.95 | $858.22 | $132,425.55 |\n| April 2026 | $717.31 | $862.86 | $131,562.69 |\n| May 2026 | $712.63 | $867.54 | $130,695.15 |\n| June 2026 | $707.93 | $872.24 | $129,822.91 |\n| July 2026 | $703.21 | $876.96 | $128,945.95 |\n| August 2026 | $698.46 | $881.71 | $128,064.23 |\n| September 2026 | $693.68 | $886.49 | $127,177.75 |\n| October 2026 | $688.88 | $891.29 | $126,286.46 |\n| November 2026 | $684.05 | $896.12 | $125,390.34 |\n| December 2026 | $679.20 | $900.97 | $124,489.36 |\n| January 2027 | $674.32 | $905.85 | $123,583.51 |\n| February 2027 | $669.41 | $910.76 | $122,672.75 |\n| March 2027 | $664.48 | $915.69 | $121,757.06 |\n| April 2027 | $659.52 | $920.65 | $120,836.41 |\n| May 2027 | $654.53 | $925.64 | $119,910.77 |\n| June 2027 | $649.52 | $930.65 | $118,980.11 |\n| July 2027 | $644.48 | $935.69 | $118,044.42 |\n| August 2027 | $639.41 | $940.76 | $117,103.66 |\n| September 2027 | $634.31 | $945.86 | $116,157.80 |\n| October 2027 | $629.19 | $950.98 | $115,206.82 |\n| November 2027 | $624.04 | $956.13 | $114,250.68 |\n| December 2027 | $618.86 | $961.31 | $113,289.37 |\n| January 2028 | $613.65 | $966.52 | $112,322.85 |\n| February 2028 | $608.42 | $971.75 | $111,351.10 |\n| March 2028 | $603.15 | $977.02 | $110,374.08 |\n| April 2028 | $597.86 | $982.31 | $109,391.77 |\n| May 2028 | $592.54 | $987.63 | $108,404.14 |\n| June 2028 | $587.19 | $992.98 | $107,411.16 |\n| July 2028 | $581.81 | $998.36 | $106,412.80 |\n| August 2028 | $576.40 | $1,003.77 | $105,409.03 |\n| September 2028 | $570.97 | $1,009.20 | $104,399.82 |\n| October 2028 | $565.50 | $1,014.67 | $103,385.15 |\n| November 2028 | $560.00 | $1,020.17 | $102,364.99 |\n| December 2028 | $554.48 | $1,025.69 | $101,339.29 |\n| January 2029 | $548.92 | $1,031.25 | $100,308.04 |\n| February 2029 | $543.34 | $1,036.83 | $99,271.21 |\n| March 2029 | $537.72 | $1,042.45 | $98,228.76 |\n| April 2029 | $532.07 | $1,048.10 | $97,180.66 |\n| May 2029 | $526.40 | $1,053.77 | $96,126.89 |\n| June 2029 | $520.69 | $1,059.48 | $95,067.40 |\n| July 2029 | $514.95 | $1,065.22 | $94,002.18 |\n| August 2029 | $509.18 | $1,070.99 | $92,931.19 |\n| September 2029 | $503.38 | $1,076.79 | $91,854.40 |\n| October 2029 | $497.54 | $1,082.63 | $90,771.77 |\n| November 2029 | $491.68 | $1,088.49 | $89,683.28 |",
+      "page": 4,
+      "bbox": {
+        "left": 314.3161315917969,
+        "top": 67.85067749023438,
+        "right": 576.028564453125,
+        "bottom": 916.2042236328125
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Month | Interest | Principal | Balance |\n| --- | --- | --- | --- |\n| December 2029 | $485.78 | $1,094.39 | $88,588.90 |\n| January 2030 | $479.86 | $1,100.31 | $87,488.58 |\n| February 2030 | $473.90 | $1,106.27 | $86,382.31 |\n| March 2030 | $467.90 | $1,112.27 | $85,270.04 |\n| April 2030 | $461.88 | $1,118.29 | $84,151.75 |\n| May 2030 | $455.82 | $1,124.35 | $83,027.40 |\n| June 2030 | $449.73 | $1,130.44 | $81,896.97 |\n| July 2030 | $443.61 | $1,136.56 | $80,760.41 |\n| August 2030 | $437.45 | $1,142.72 | $79,617.69 |\n| September 2030 | $431.26 | $1,148.91 | $78,468.78 |\n| October 2030 | $425.04 | $1,155.13 | $77,313.65 |\n| November 2030 | $418.78 | $1,161.39 | $76,152.26 |\n| December 2030 | $412.49 | $1,167.68 | $74,984.58 |\n| January 2031 | $406.17 | $1,174.00 | $73,810.58 |\n| February 2031 | $399.81 | $1,180.36 | $72,630.22 |\n| March 2031 | $393.41 | $1,186.76 | $71,443.46 |\n| April 2031 | $386.99 | $1,193.18 | $70,250.28 |\n| May 2031 | $380.52 | $1,199.65 | $69,050.63 |\n| June 2031 | $374.02 | $1,206.15 | $67,844.48 |\n| July 2031 | $367.49 | $1,212.68 | $66,631.80 |\n| August 2031 | $360.92 | $1,219.25 | $65,412.55 |\n| September 2031 | $354.32 | $1,225.85 | $64,186.70 |\n| October 2031 | $347.68 | $1,232.49 | $62,954.21 |\n| November 2031 | $341.00 | $1,239.17 | $61,715.04 |\n| December 2031 | $334.29 | $1,245.88 | $60,469.16 |\n| January 2032 | $327.54 | $1,252.63 | $59,216.53 |\n| February 2032 | $320.76 | $1,259.41 | $57,957.12 |\n| March 2032 | $313.93 | $1,266.24 | $56,690.88 |\n| April 2032 | $307.08 | $1,273.09 | $55,417.79 |\n| May 2032 | $300.18 | $1,279.99 | $54,137.80 |\n| June 2032 | $293.25 | $1,286.92 | $52,850.88 |\n| July 2032 | $286.28 | $1,293.89 | $51,556.98 |\n| August 2032 | $279.27 | $1,300.90 | $50,256.08 |\n| September 2032 | $272.22 | $1,307.95 | $48,948.13 |",
+      "page": 5,
+      "bbox": {
+        "left": 35.169029235839844,
+        "top": 67.7813720703125,
+        "right": 297.0933837890625,
+        "bottom": 675.3397827148438
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Month | Interest | Principal | Balance |\n| --- | --- | --- | --- |\n| October 2032 | $265.14 | $1,315.03 | $47,633.09 |\n| November 2032 | $258.01 | $1,322.16 | $46,310.94 |\n| December 2032 | $250.85 | $1,329.32 | $44,981.62 |\n| January 2033 | $243.65 | $1,336.52 | $43,645.10 |\n| February 2033 | $236.41 | $1,343.76 | $42,301.34 |\n| March 2033 | $229.13 | $1,351.04 | $40,950.30 |\n| April 2033 | $221.81 | $1,358.36 | $39,591.94 |\n| May 2033 | $214.46 | $1,365.71 | $38,226.23 |\n| June 2033 | $207.06 | $1,373.11 | $36,853.12 |\n| July 2033 | $199.62 | $1,380.55 | $35,472.57 |\n| August 2033 | $192.14 | $1,388.03 | $34,084.54 |\n| September 2033 | $184.62 | $1,395.55 | $32,689.00 |\n| October 2033 | $177.07 | $1,403.10 | $31,285.89 |\n| November 2033 | $169.47 | $1,410.70 | $29,875.19 |\n| December 2033 | $161.82 | $1,418.35 | $28,456.84 |\n| January 2034 | $154.14 | $1,426.03 | $27,030.81 |\n| February 2034 | $146.42 | $1,433.75 | $25,597.06 |\n| March 2034 | $138.65 | $1,441.52 | $24,155.54 |\n| April 2034 | $130.84 | $1,449.33 | $22,706.21 |\n| May 2034 | $122.99 | $1,457.18 | $21,249.04 |\n| June 2034 | $115.10 | $1,465.07 | $19,783.96 |\n| July 2034 | $107.16 | $1,473.01 | $18,310.96 |\n| August 2034 | $99.18 | $1,480.99 | $16,829.97 |\n| September 2034 | $91.16 | $1,489.01 | $15,340.96 |\n| October 2034 | $83.10 | $1,497.07 | $13,843.89 |\n| November 2034 | $74.99 | $1,505.18 | $12,338.71 |\n| December 2034 | $66.83 | $1,513.34 | $10,825.37 |\n| January 2035 | $58.64 | $1,521.53 | $9,303.84 |\n| February 2035 | $50.40 | $1,529.77 | $7,774.07 |\n| March 2035 | $42.11 | $1,538.06 | $6,236.01 |\n| April 2035 | $33.78 | $1,546.39 | $4,689.61 |\n| May 2035 | $25.40 | $1,554.77 | $3,134.85 |\n| June 2035 | $16.98 | $1,563.19 | $1,571.66 |\n| July 2035 | $8.51 | $1,571.66 | $0.00 |",
+      "page": 5,
+      "bbox": {
+        "left": 314.27899169921875,
+        "top": 67.5312271118164,
+        "right": 576.0254516601562,
+        "bottom": 675.0604858398438
+      }
+    }
+  ]
+}

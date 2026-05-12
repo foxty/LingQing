@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Quarterly Report",
+      "page": 1
+    },
+    {
+      "type": "text",
+      "text": "Revenue increased across all regions during the quarter.",
+      "page": 1
+    },
+    {
+      "type": "table",
+      "text": "| Region | Revenue |\n| --- | --- |\n| North | 120 |\n| South | 95 |",
+      "page": 2
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y \
+    curl \
+    docker.io \
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+ENV PYTHONPATH=/app
+
+# Copy minimal Python package layout required by controller imports.
+COPY apps/sandbox_service /app/apps/sandbox_service
+COPY apps/shared /app/apps/shared
+COPY apps/config.py /app/apps/config.py
+
+RUN pip install --no-cache-dir \
+    fastapi \
+    uvicorn \
+    pydantic
+
+EXPOSE 8090
+
+CMD ["uvicorn", "apps.sandbox_service.server:app", "--host", "0.0.0.0", "--port", "8090"]

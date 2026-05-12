@@ -1,0 +1,1073 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Vol. 1",
+      "page": 1,
+      "bbox": {
+        "left": 869.74,
+        "top": 140.23236300000008,
+        "right": 892.91896,
+        "bottom": 154.56612300000006
+      }
+    },
+    {
+      "type": "text",
+      "text": "Monday, May 14th 3028",
+      "page": 1,
+      "bbox": {
+        "left": 28.35,
+        "top": 140.23236300000008,
+        "right": 129.32136,
+        "bottom": 154.56612300000006
+      }
+    },
+    {
+      "type": "heading",
+      "text": "World",
+      "page": 1,
+      "bbox": {
+        "left": 34.02,
+        "top": 185.20798300000024,
+        "right": 68.536125,
+        "bottom": 203.1251830000001
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Nonumy eirmod",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 206.76484300000016,
+        "right": 179.12496000000002,
+        "bottom": 235.43236300000012
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 2",
+      "page": 1,
+      "bbox": {
+        "left": 174.55,
+        "top": 277.3379830000001,
+        "right": 245.20285249999998,
+        "bottom": 295.255183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sed diam nonumy eirmod tempor Invidunt  ut  labore  et  dolore  magna  aliquyam erat.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 231.97798300000022,
+        "right": 245.201125,
+        "bottom": 278.245183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Accusam et justo",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 293.2148430000002,
+        "right": 179.30635999999998,
+        "bottom": 321.88236300000017
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 2",
+      "page": 1,
+      "bbox": {
+        "left": 174.55,
+        "top": 349.617983,
+        "right": 245.20285249999998,
+        "bottom": 367.53518299999996
+      }
+    },
+    {
+      "type": "text",
+      "text": "Diam voluptua at vero eos et accusam et justo duo dolores et ea rebum.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 318.43798300000026,
+        "right": 247.38369999999998,
+        "bottom": 350.52518299999997
+      }
+    },
+    {
+      "type": "heading",
+      "text": "National",
+      "page": 1,
+      "bbox": {
+        "left": 34.02,
+        "top": 386.467983,
+        "right": 80.48565000000002,
+        "bottom": 404.385183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Takimata sanctus",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 408.02484300000015,
+        "right": 186.15647999999996,
+        "bottom": 436.6923630000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet. consetetur sadipscing elitr, sed diam nonumy eirmod.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 433.237983,
+        "right": 247.38622499999997,
+        "bottom": 479.505183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Duo dolores",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 494.4748430000001,
+        "right": 139.66907999999998,
+        "bottom": 523.142363
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 3",
+      "page": 1,
+      "bbox": {
+        "left": 174.88,
+        "top": 478.597983,
+        "right": 245.20115750000002,
+        "bottom": 496.515183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 519.697983,
+        "right": 247.37879999999998,
+        "bottom": 551.785183
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 4",
+      "page": 1,
+      "bbox": {
+        "left": 174.32,
+        "top": 550.8779830000001,
+        "right": 245.20248750000002,
+        "bottom": 568.7951830000001
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Business",
+      "page": 1,
+      "bbox": {
+        "left": 34.02,
+        "top": 587.727983,
+        "right": 79.0398,
+        "bottom": 605.645183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Accusam et justo",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 609.2848430000001,
+        "right": 179.30635999999998,
+        "bottom": 637.9523630000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 5",
+      "page": 1,
+      "bbox": {
+        "left": 175.09,
+        "top": 665.677983,
+        "right": 245.20703749999998,
+        "bottom": 683.595183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Diam voluptua at vero eos et accusam et justo duo dolores et ea rebum.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 634.4979830000001,
+        "right": 247.38369999999998,
+        "bottom": 666.595183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Nonumy eirmod",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 681.5648430000001,
+        "right": 179.12496000000002,
+        "bottom": 710.2323630000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 6",
+      "page": 1,
+      "bbox": {
+        "left": 175.31,
+        "top": 752.1379830000001,
+        "right": 245.20015999999998,
+        "bottom": 770.055183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sed diam nonumy eirmod tempor Invidunt  ut  labore  et  dolore  magna  aliquyam erat.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 706.787983,
+        "right": 245.201125,
+        "bottom": 753.0451830000001
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Sports",
+      "page": 1,
+      "bbox": {
+        "left": 34.02,
+        "top": 788.987983,
+        "right": 66.86347500000001,
+        "bottom": 806.905183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Duo dolores",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 810.5448430000001,
+        "right": 139.66907999999998,
+        "bottom": 839.2123630000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 7",
+      "page": 1,
+      "bbox": {
+        "left": 174.88,
+        "top": 866.937983,
+        "right": 245.20115750000002,
+        "bottom": 884.8551830000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 835.7579830000001,
+        "right": 247.37879999999998,
+        "bottom": 867.8551830000001
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Takimata sanctus",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 882.8248430000001,
+        "right": 186.15647999999996,
+        "bottom": 911.4923630000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 7",
+      "page": 1,
+      "bbox": {
+        "left": 174.88,
+        "top": 953.3979830000001,
+        "right": 245.20115750000002,
+        "bottom": 971.315183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet. consetetur sadipscing elitr, sed diam nonumy eirmod.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 908.047983,
+        "right": 247.38622499999997,
+        "bottom": 954.305183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Poll",
+      "page": 1,
+      "bbox": {
+        "left": 34.02,
+        "top": 990.2479830000001,
+        "right": 54.899775000000005,
+        "bottom": 1008.1651830000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sed diam nonumy eirmod tempor Invidunt  ut  labore  et  dolore  magna  aliquyam erat.",
+      "page": 1,
+      "bbox": {
+        "left": 38.27,
+        "top": 1116.917983,
+        "right": 245.202475,
+        "bottom": 1163.175183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Subscribe:",
+      "page": 1,
+      "bbox": {
+        "left": 94.96,
+        "top": 1210.457983,
+        "right": 148.527325,
+        "bottom": 1228.375183
+      }
+    },
+    {
+      "type": "text",
+      "text": "555-0142",
+      "page": 1,
+      "bbox": {
+        "left": 199.76,
+        "top": 1210.457983,
+        "right": 245.20505000000003,
+        "bottom": 1228.375183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Advertize:",
+      "page": 1,
+      "bbox": {
+        "left": 94.96,
+        "top": 1230.297983,
+        "right": 149.81725,
+        "bottom": 1248.215183
+      }
+    },
+    {
+      "type": "text",
+      "text": "555-0143",
+      "page": 1,
+      "bbox": {
+        "left": 200.28,
+        "top": 1230.297983,
+        "right": 245.20057500000007,
+        "bottom": 1248.215183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Request Trial:",
+      "page": 1,
+      "bbox": {
+        "left": 94.96,
+        "top": 1250.137983,
+        "right": 168.102725,
+        "bottom": 1268.055183
+      }
+    },
+    {
+      "type": "text",
+      "text": "555-0144",
+      "page": 1,
+      "bbox": {
+        "left": 199.11,
+        "top": 1250.137983,
+        "right": 245.20710000000005,
+        "bottom": 1268.055183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Other",
+      "page": 1,
+      "bbox": {
+        "left": 34.02,
+        "top": 1182.107983,
+        "right": 64.97820000000002,
+        "bottom": 1200.0251830000002
+      }
+    },
+    {
+      "type": "heading",
+      "text": "The Real News",
+      "page": 1,
+      "bbox": {
+        "left": 245.69,
+        "top": 40.90517550000004,
+        "right": 675.5798374999999,
+        "bottom": 117.49739477884623
+      }
+    },
+    {
+      "type": "text",
+      "text": "DEMONSTRATING PDFREACTOR CAPABILITIES",
+      "page": 1,
+      "bbox": {
+        "left": 323.86,
+        "top": 125.67798300000004,
+        "right": 597.4374999999999,
+        "bottom": 143.5951829999999
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Lorem ipsum dolor sit amet",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 173.91999299999998,
+        "right": 567.2692175,
+        "bottom": 302.269313
+      }
+    },
+    {
+      "type": "text",
+      "text": "Consetetur  sadipscing  elitr,  sed  diam  nonumy  eirmod tempor Invidunt",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 298.2236029999999,
+        "right": 633.2286999999999,
+        "bottom": 336.734243
+      }
+    },
+    {
+      "type": "text",
+      "text": "Ut labore et dolore magna aliquyam erat, sed diam voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 603.677983,
+        "right": 589.5591999999998,
+        "bottom": 621.595183
+      }
+    },
+    {
+      "type": "text",
+      "text": "At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est.",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 624.937983,
+        "right": 387.14144999999996,
+        "bottom": 713.725183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Diam  voluptua  at vero  eos  et  accusam et  justo  duo  dolores et ea rebum.",
+      "page": 1,
+      "bbox": {
+        "left": 399.21,
+        "top": 624.937983,
+        "right": 510.064375,
+        "bottom": 685.375183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr.",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 717.067983,
+        "right": 387.23022499999996,
+        "bottom": 791.6751830000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Stet clita kasd gubergren, no sea takimata sanctus est Lorem  ipsum  dolor sit amet.",
+      "page": 1,
+      "bbox": {
+        "left": 399.21,
+        "top": 681.6379830000001,
+        "right": 510.06057500000003,
+        "bottom": 756.245183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sed  diam  nonumy eirmod tempor Invidunt ut labore et dolore magna aliquyam erat.",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 787.927983,
+        "right": 387.232475,
+        "bottom": 862.5451830000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr.",
+      "page": 1,
+      "bbox": {
+        "left": 522.05,
+        "top": 695.807983,
+        "right": 632.8993750000001,
+        "bottom": 770.4151830000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "At vero eos et accusam et justo duo dolores et ea rebum.",
+      "page": 1,
+      "bbox": {
+        "left": 399.21,
+        "top": 809.187983,
+        "right": 510.060575,
+        "bottom": 855.455183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Stet clita kasd gubergren, no sea takimata sanctus est Lorem  ipsum  dolor sit amet.",
+      "page": 1,
+      "bbox": {
+        "left": 522.05,
+        "top": 624.937983,
+        "right": 632.8987999999999,
+        "bottom": 699.555183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Invidunt  ut  labore et  dolore  magna  aliquyam erat. Sed diam voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 399.21,
+        "top": 752.4979830000001,
+        "right": 510.06267500000007,
+        "bottom": 812.935183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sed  diam  nonumy eirmod tempor Invidunt ut labore et dolore magna aliquyam erat.",
+      "page": 1,
+      "bbox": {
+        "left": 522.05,
+        "top": 766.667983,
+        "right": 632.8937,
+        "bottom": 841.285183
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 3",
+      "page": 1,
+      "bbox": {
+        "left": 560.55,
+        "top": 844.6279830000001,
+        "right": 630.7211575,
+        "bottom": 862.5451830000001
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Consetetur sadipscing",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 862.5162730000001,
+        "right": 600.109835,
+        "bottom": 912.6749530000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Elitr sed diam nonumy eirmod tempor",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 910.863603,
+        "right": 519.21966,
+        "bottom": 932.3642430000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Invidunt  ut  labore et  dolore  magna  aliquyam erat. Sed diam voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 936.7479830000001,
+        "right": 387.22885,
+        "bottom": 997.185183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit  amet,  consetetur sadipscing  elitr,  sed diam nonumy  eirmod.",
+      "page": 1,
+      "bbox": {
+        "left": 399.21,
+        "top": 936.7479830000001,
+        "right": 510.06622500000003,
+        "bottom": 1011.3651830000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Stet clita kasd gubergren, no sea takimata sanctus est.",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 1035.967983,
+        "right": 387.22880000000004,
+        "bottom": 1082.225183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Tempor Invidunt ut labore  et  dolore magna aliquyam erat, sed diam voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 399.21,
+        "top": 1007.6179830000001,
+        "right": 510.06367500000005,
+        "bottom": 1082.225183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Diam  voluptua  at vero  eos  et  accusam et  justo  duo  dolores et ea rebum.",
+      "page": 1,
+      "bbox": {
+        "left": 522.05,
+        "top": 936.7479830000001,
+        "right": 632.8964249999999,
+        "bottom": 997.185183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Stet clita kasd gubergren, no sea takimata sanctus est Lorem  ipsum  dolor sit amet.",
+      "page": 1,
+      "bbox": {
+        "left": 522.05,
+        "top": 993.447983,
+        "right": 632.8987999999999,
+        "bottom": 1068.055183
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 3",
+      "page": 1,
+      "bbox": {
+        "left": 560.55,
+        "top": 1071.397983,
+        "right": 630.7211575,
+        "bottom": 1089.3151830000002
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Tempor invidu",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 176.17627300000004,
+        "right": 874.1126350000001,
+        "bottom": 226.33495300000004
+      }
+    },
+    {
+      "type": "text",
+      "text": "Ut labore et dolore magna aliquyam",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 224.5236030000001,
+        "right": 876.22304,
+        "bottom": 246.02424300000007
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sed  diam  voluptua. At  vero  eos  et  accusam et justo duo dolores et ea rebum.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 250.40798300000006,
+        "right": 767.54555,
+        "bottom": 310.8451829999999
+      }
+    },
+    {
+      "type": "text",
+      "text": "Invidunt  ut  labore et  dolore  magna  aliquyam erat. Sed diam voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 250.40798300000006,
+        "right": 895.0988500000001,
+        "bottom": 310.8451829999999
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem  ipsum  dolor sit amet. consetetur sadipscing elitr, sed diam nonumy eirmod.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 349.617983,
+        "right": 767.5462249999999,
+        "bottom": 424.225183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sed  diam  voluptua. At  vero  eos  et  accusam et justo duo dolores et ea rebum.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 307.0979830000001,
+        "right": 895.10555,
+        "bottom": 367.53518299999996
+      }
+    },
+    {
+      "type": "text",
+      "text": "Stet clita kasd gubergren, no sea takimata sanctus est.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 307.0979830000001,
+        "right": 767.5387999999999,
+        "bottom": 353.365183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Stet clita kasd gubergren, no sea takimata sanctus est.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 363.79798300000004,
+        "right": 895.0987999999999,
+        "bottom": 410.05518300000006
+      }
+    },
+    {
+      "type": "text",
+      "text": "Tempor Invidunt ut labore et dolore magna aliquyam erat.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 420.487983,
+        "right": 767.5485749999999,
+        "bottom": 480.92518300000006
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem  ipsum  dolor sit amet. consetetur sadipscing elitr, sed diam nonumy eirmod.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 406.30798300000004,
+        "right": 895.106225,
+        "bottom": 480.92518300000006
+      }
+    },
+    {
+      "type": "text",
+      "text": "Tempor Invidunt ut labore et dolore magna aliquyam erat.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 477.17798300000004,
+        "right": 895.0985749999999,
+        "bottom": 537.615183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Magna Aliquam",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 551.7662730000001,
+        "right": 889.6681749999998,
+        "bottom": 601.924953
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem  ipsum  dolor sit amet. Lorem ipsum dolor sit amet, consetetur sadipscing elitr.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 477.17798300000004,
+        "right": 767.5427249999998,
+        "bottom": 551.785183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Accusam et justo duo dolores rebum",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 600.1136030000001,
+        "right": 878.1237699999999,
+        "bottom": 621.6142430000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem  ipsum  dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 625.9979830000001,
+        "right": 767.5462249999999,
+        "bottom": 700.605183
+      }
+    },
+    {
+      "type": "text",
+      "text": "no sea takimata sanctus  est  Lorem  ipsum dolor sit amet. Lorem ipsum dolor sit amet.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 625.9979830000001,
+        "right": 895.1007999999999,
+        "bottom": 686.435183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Tempor Invidunt ut labore et dolore magna aliquyam erat,  sed  diam  voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 696.867983,
+        "right": 767.5485749999999,
+        "bottom": 771.475183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Consetetur sadipscing  elitr,  sed  diam nonumy eirmod tempor Invidunt ut labore et.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 682.687983,
+        "right": 895.0965249999999,
+        "bottom": 757.305183
+      }
+    },
+    {
+      "type": "text",
+      "text": "At  vero  eos  et  accusam et justo duo dolores  et  ea  rebum.  Stet clita  kasd  gubergren, Invidunt  ut  labore et  dolore  magna  aliquyam erat. Sed diam voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 767.727983,
+        "right": 767.544125,
+        "bottom": 828.1651830000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet.",
+      "page": 1,
+      "bbox": {
+        "left": 660.47,
+        "top": 1079.0779830000001,
+        "right": 767.4579,
+        "bottom": 1111.175183
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 4",
+      "page": 1,
+      "bbox": {
+        "left": 822.2,
+        "top": 817.337983,
+        "right": 892.9224875,
+        "bottom": 835.255183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Sed diam voluptua",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 852.3060830000001,
+        "right": 879.0668499999998,
+        "bottom": 916.490483
+      }
+    },
+    {
+      "type": "text",
+      "text": "Tempor  Invidunt ut  labore  et  dolore magna aliquyam erat, sed diam voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 916.547983,
+        "right": 886.5985749999999,
+        "bottom": 991.1551830000001
+      }
+    },
+    {
+      "type": "text",
+      "text": "At vero eos et accusam et justo duo dolores et ea rebum. Stet clita kasd  gubergren,  no sea  takimata  sanctus est.",
+      "page": 1,
+      "bbox": {
+        "left": 779.53,
+        "top": 987.417983,
+        "right": 886.5946499999999,
+        "bottom": 1090.375183
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 5",
+      "page": 1,
+      "bbox": {
+        "left": 814.46,
+        "top": 1093.717983,
+        "right": 884.4170375,
+        "bottom": 1111.635183
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Labore et dolore magna aliquyam erat eos",
+      "page": 1,
+      "bbox": {
+        "left": 269.29,
+        "top": 1125.776273,
+        "right": 875.5195524999998,
+        "bottom": 1175.934953
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem ipsum dolor sit amet, consetetur sadipscing elitr, sed diam nonumy eirmod.",
+      "page": 1,
+      "bbox": {
+        "left": 269.29,
+        "top": 1174.123603,
+        "right": 785.69209,
+        "bottom": 1195.624243
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem  ipsum  dolor sit amet. consetetur sadipscing elitr, sed diam nonumy eirmod. Tempor Invidunt ut labore et dolore magna aliquyam erat.",
+      "page": 1,
+      "bbox": {
+        "left": 269.29,
+        "top": 1200.0179830000002,
+        "right": 384.86692500000004,
+        "bottom": 1288.795183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Invidunt  ut  labore et  dolore  magna  aliquyam erat. Sed diam voluptua. Sed diam voluptua. At vero eos et accusam  et justo duo dolores et ea rebum. Stet clita kasd gubergren, no sea takimata sanctus est.",
+      "page": 1,
+      "bbox": {
+        "left": 396.85,
+        "top": 1228.357983,
+        "right": 512.426525,
+        "bottom": 1288.795183
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lorem  ipsum  dolor sit amet. consetetur sadipscing elitr, sed diam nonumy eirmod. Tempor Invidunt ut labore et dolore magna aliquyam erat. Sed diam voluptua.",
+      "page": 1,
+      "bbox": {
+        "left": 651.97,
+        "top": 1200.0179830000002,
+        "right": 767.5462249999999,
+        "bottom": 1288.795183
+      }
+    },
+    {
+      "type": "text",
+      "text": "› more on page 6",
+      "page": 1,
+      "bbox": {
+        "left": 823.18,
+        "top": 1249.617983,
+        "right": 892.92016,
+        "bottom": 1267.535183
+      }
+    },
+    {
+      "type": "text",
+      "text": "At vero eos et accusam et justo duo dolores et ea rebum.",
+      "page": 1,
+      "bbox": {
+        "left": 276.38,
+        "top": 993.447983,
+        "right": 387.220575,
+        "bottom": 1039.705183
+      }
+    },
+    {
+      "type": "text",
+      "text": "++ BREAKING +++ LOREM IPSUM +++ DOLOR SIT AMET +++ CONSECTETUR SADIPSCING +++ ELITR, SET DIAM +++ EIRMOD TEMPOR ++",
+      "page": 1,
+      "bbox": {
+        "left": 43.41,
+        "top": 1298.9295630000001,
+        "right": 877.8531999999999,
+        "bottom": 1319.7097230000002
+      }
+    }
+  ]
+}

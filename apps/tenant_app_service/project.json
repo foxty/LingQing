@@ -1,0 +1,47 @@
+{
+    "name": "tenant_app_service",
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/tenant_app_service",
+    "projectType": "application",
+    "targets": {
+        "dev": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run uvicorn apps.tenant_app_service.server:app --reload --port 8000 --reload-exclude .venv --no-access-log",
+                "cwd": "."
+            }
+        },
+        "migrate-dev-db": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run alembic -c apps/tenant_app_service/alembic.ini upgrade head",
+                "cwd": "."
+            }
+        },
+        "start": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run uvicorn apps.tenant_app_service.server:app --host 0.0.0.0 --port 8000 --no-access-log",
+                "cwd": "."
+            }
+        },
+        "lint": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run ruff check apps/tenant_app_service",
+                "cwd": "."
+            }
+        }
+    },
+    "tags": [
+        "python",
+        "backend",
+        "fastapi",
+        "tenant",
+        "chat",
+        "admin"
+    ],
+    "implicitDependencies": [
+        "shared"
+    ]
+}

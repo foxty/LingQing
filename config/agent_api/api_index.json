@@ -1,0 +1,666 @@
+{
+  "version": "v1",
+  "generated_at": "2026-09-24T09:46:39.918094+00:00",
+  "operations": [
+    {
+      "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
+      "summary": "Revoke Resource Share",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/agents/{agent_id}",
+      "summary": "Delete Agent",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/agents/{agent_id}/integrations/slack",
+      "summary": "Delete Agent Slack Integration",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/api-connectors/operations/{operation_id}",
+      "summary": "Delete Operation",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/api-connectors/{connector_id}",
+      "summary": "Delete Connector",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/dashboards/{dashboard_id}",
+      "summary": "Delete Dashboard",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/dashboards/{dashboard_id}/filters/{filter_id}",
+      "summary": "Remove Filter",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/dashboards/{dashboard_id}/widgets/{widget_id}",
+      "summary": "Remove Widget",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/data-sources/{data_source_id}/tags/{tag_value_id}",
+      "summary": "Unbind Data Source Tag",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/document-collections/{collection_id}",
+      "summary": "Delete Document Collection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/reports/{report_id}",
+      "summary": "Delete Report",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/scheduled-tasks/{task_id}",
+      "summary": "Delete Scheduled Task",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/skills/{name}",
+      "summary": "Delete Skill",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "GET_/",
+      "summary": "Root",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/acl-shares/{resource_type}/{resource_id}/candidates",
+      "summary": "List Share Candidates",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/acl-shares/{resource_type}/{resource_id}/shares",
+      "summary": "List Resource Shares",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents",
+      "summary": "List Agents",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents/catalog/skills",
+      "summary": "List Assignable Skills",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents/{agent_id}",
+      "summary": "Get Agent",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents/{agent_id}/integrations/slack",
+      "summary": "Get Agent Slack Integration",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents/{agent_id}/integrations/slack/manifest",
+      "summary": "Download Agent Slack App Manifest",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/api-connectors",
+      "summary": "List Connectors",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/api-connectors/operations/search",
+      "summary": "Search Operations",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/api-connectors/{connector_id}",
+      "summary": "Get Connector",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/api-connectors/{connector_id}/operations",
+      "summary": "List Operations",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/api-connectors/{connector_id}/operations/stats",
+      "summary": "Get Operation Stats",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps",
+      "summary": "List Live Apps",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps/sdk/lq-sdk.v{sdk_version}.js",
+      "summary": "Get Live App Sdk",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps/sdk/playground",
+      "summary": "Get Sdk Playground",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps/sdk/vendor/{filename}",
+      "summary": "Get Sdk Vendor Asset",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps/{app_id}",
+      "summary": "Get Live App",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps/{app_id}/environments/diff",
+      "summary": "Diff Live App Environments",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps/{app_id}/{environment}/embed",
+      "summary": "Get Live App Embed",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps/{app_id}/{environment}/entry",
+      "summary": "Get Live App Entry",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/apps/{app_id}/{environment}/{asset_path}",
+      "summary": "Get Live App Asset",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/context-resources/search",
+      "summary": "Search context resources by keyword",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/dashboards",
+      "summary": "List Dashboards",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/dashboards/{dashboard_id}",
+      "summary": "Get Dashboard by ID",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/dashboards/{dashboard_id}/filters/{filter_id}/options",
+      "summary": "Get Filter Options",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/data-sources",
+      "summary": "List Data Sources",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/data-sources/{data_source_id}",
+      "summary": "Get Data Source",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/data-sources/{data_source_id}/assets",
+      "summary": "List Assets",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/data-sources/{data_source_id}/assets/{asset_name}",
+      "summary": "Get Asset Schema",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/data-sources/{data_source_id}/tags",
+      "summary": "List Data Source Tags",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/document-collections",
+      "summary": "List Document Collections",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/document-collections/{collection_id}",
+      "summary": "Get Document Collection",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/documents",
+      "summary": "List Documents",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/documents/{document_id}/images/{filename}",
+      "summary": "Get Document Image",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/documents/{document_id}/parsed",
+      "summary": "Get Parsed Document",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/hitl/approvals/{proposal_id}",
+      "summary": "Get Approval",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/llm-config/config",
+      "summary": "Get Llm Config",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/llm-config/embedding-config",
+      "summary": "Get Embedding Config",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/llm-config/models",
+      "summary": "List Models",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/llm-config/providers",
+      "summary": "List Llm Providers",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/llm-config/providers/by-category",
+      "summary": "List Providers By Category",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/notifications",
+      "summary": "List Notifications",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/notifications/preferences",
+      "summary": "Get Notification Preferences",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/observability/tenant/token-daily",
+      "summary": "Get Tenant Token Daily",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/observability/tenant/token-events",
+      "summary": "Get Tenant Token Events",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/observability/tenant/token-summary",
+      "summary": "Get Tenant Token Summary",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/reports",
+      "summary": "List My Reports",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/reports/{report_id}",
+      "summary": "Get Report",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/scheduled-tasks",
+      "summary": "List Scheduled Tasks",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/scheduled-tasks/{task_id}",
+      "summary": "Get Scheduled Task",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/scheduled-tasks/{task_id}/runs",
+      "summary": "List Scheduled Task Runs",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/scheduled-tasks/{task_id}/runs/{run_id}/logs",
+      "summary": "Get Task Run Logs",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/search",
+      "summary": "Search the knowledge base — query documents, data assets, and API operations using hybrid search",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/skills",
+      "summary": "List Skills",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/skills/{name}",
+      "summary": "Get Skill",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/skills/{scope}/{name}/env-vars",
+      "summary": "List Env Vars",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "PATCH_/agents/{agent_id}/integrations/slack",
+      "summary": "Update Agent Slack Integration",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/api-connectors/operations/{operation_id}",
+      "summary": "Update Operation",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/api-connectors/operations/{operation_id}/status",
+      "summary": "Update Operation Status",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/api-connectors/{connector_id}",
+      "summary": "Update Connector",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/dashboards/{dashboard_id}/filters/{filter_id}",
+      "summary": "Update Filter",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/dashboards/{dashboard_id}/widgets/{widget_id}",
+      "summary": "Update Widget",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/notifications/read-all",
+      "summary": "Mark All Notifications Read",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/notifications/{notification_id}/read",
+      "summary": "Mark Notification Read",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/scheduled-tasks/{task_id}/cancel",
+      "summary": "Cancel Scheduled Task",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/scheduled-tasks/{task_id}/pause",
+      "summary": "Pause Scheduled Task",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/scheduled-tasks/{task_id}/resume",
+      "summary": "Resume Scheduled Task",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/scheduled-tasks/{task_id}/run",
+      "summary": "Run Scheduled Task",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/skills/{scope}/{name}/enabled",
+      "summary": "Toggle Skill Enabled",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/acl-shares/{resource_type}/{resource_id}/shares",
+      "summary": "Share Resource",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/agents",
+      "summary": "Create Agent",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/agents/{agent_id}/integrations/slack",
+      "summary": "Create Agent Slack Integration",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/agents/{agent_id}/integrations/slack/disable",
+      "summary": "Disable Agent Slack Integration",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/agents/{agent_id}/integrations/slack/enable",
+      "summary": "Enable Agent Slack Integration",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/agents/{agent_id}/integrations/slack/prepare",
+      "summary": "Prepare Agent Slack Integration",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/agents/{agent_id}/integrations/slack/test",
+      "summary": "Test Agent Slack Connection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/api-connectors",
+      "summary": "Create Connector",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/api-connectors/operations/{operation_uid}/call",
+      "summary": "Call Operation",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/api-connectors/{connector_id}/operations",
+      "summary": "Add Manual Operation",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/api-connectors/{connector_id}/sync-schema",
+      "summary": "Sync Schema",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/apps/v1/{app_id}/{environment}/api-connectors/{operation_uid}/call",
+      "summary": "Call Api Connector V1",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/apps/v1/{app_id}/{environment}/data/import",
+      "summary": "Import Live App Data V1",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/apps/v1/{app_id}/{environment}/data/mutate",
+      "summary": "Mutate Live App Data V1",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/apps/v1/{app_id}/{environment}/data/query",
+      "summary": "Query Live App Data V1",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/charts/from-sql",
+      "summary": "Create Chart From Sql Api",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/chat",
+      "summary": "Chat with an agent",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/dashboards",
+      "summary": "Create Dashboard",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/dashboards/{dashboard_id}/filters",
+      "summary": "Add Dashboard Filter",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/dashboards/{dashboard_id}/widgets",
+      "summary": "Add Dashboard Widget",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/dashboards/{dashboard_id}/widgets/query-preview",
+      "summary": "Preview SQL with Dashboard Filter Macros",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/dashboards/{dashboard_id}/widgets/{widget_id}/query-data",
+      "summary": "Query Widget Data by Widget ID",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/dashboards/{dashboard_id}/widgets/{widget_id}/query-preview",
+      "summary": "Preview Widget Query by Widget ID",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/data-sources/test-connection",
+      "summary": "Test Connection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/data-sources/{data_source_id}/assets/upload-csv",
+      "summary": "Upload Csv",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/data-sources/{data_source_id}/query",
+      "summary": "Query Data Source",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/data-sources/{data_source_id}/tags",
+      "summary": "Bind Data Source Tag",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/document-collections",
+      "summary": "Create Document Collection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/document-collections/{collection_id}/reindex",
+      "summary": "Queue Collection Reindex",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/document-collections/{collection_id}/reparse",
+      "summary": "Queue Collection Reparse",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/documents/upload",
+      "summary": "Upload Document",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/documents/{document_id}/reindex",
+      "summary": "Queue Document Reindex",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/documents/{document_id}/reparse",
+      "summary": "Queue Document Reparse",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/hitl/approvals/{proposal_id}/approve",
+      "summary": "Approve Approval",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/hitl/approvals/{proposal_id}/reject",
+      "summary": "Reject Approval",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/llm-config/copy-agent-to-mini",
+      "summary": "Copy Agent To Mini",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/llm-config/test-connection",
+      "summary": "Test Llm Connection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/llm-config/test-embedding-connection",
+      "summary": "Test Embedding Connection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/skills",
+      "summary": "Create Skill",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/skills/import",
+      "summary": "Import Skill",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/agents/{agent_id}",
+      "summary": "Update Agent",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/dashboards/{dashboard_id}",
+      "summary": "Update Dashboard by ID",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/document-collections/{collection_id}",
+      "summary": "Update Document Collection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/llm-config/agent-config",
+      "summary": "Update Agent Config",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/llm-config/config",
+      "summary": "Update Llm Config",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/llm-config/embedding-config",
+      "summary": "Update Embedding Config",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/llm-config/mini-agent-config",
+      "summary": "Update Mini Agent Config",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/notifications/preferences",
+      "summary": "Update Notification Preferences",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/skills/{scope}/{name}/env-vars",
+      "summary": "Update Env Vars",
+      "risk_level": "write"
+    }
+  ]
+}

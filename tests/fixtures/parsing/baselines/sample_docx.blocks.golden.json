@@ -1,0 +1,279 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "text",
+      "text": "Parser Stress Test Fixture v1.0"
+    },
+    {
+      "type": "text",
+      "text": "This document is designed as a standardized test fixture for verifying document parsing engines. It includes layered heading hierarchies, identical duplicate titles for anchor disambiguation testing, data tables, code snippets, and placeholder chips."
+    },
+    {
+      "type": "heading",
+      "text": "Document Test Metadata"
+    },
+    {
+      "type": "text",
+      "text": "Layered Hierarchy Test"
+    },
+    {
+      "type": "text",
+      "text": "This section tests how deep the parser can traverse nested heading levels without losing parent-child context or breaking document trees."
+    },
+    {
+      "type": "heading",
+      "text": "System Architecture"
+    },
+    {
+      "type": "text",
+      "text": "High-level container section representing the root component layer."
+    },
+    {
+      "type": "heading",
+      "text": "Ingestion Pipeline"
+    },
+    {
+      "type": "text",
+      "text": "Data processing stage responsible for payload reception and streaming batch validation."
+    },
+    {
+      "type": "heading",
+      "text": "Document Parser Module"
+    },
+    {
+      "type": "text",
+      "text": "Core module responsible for transforming structural text into clean Abstract Syntax Trees (AST)."
+    },
+    {
+      "type": "heading",
+      "text": "Tokenizer Component"
+    },
+    {
+      "type": "text",
+      "text": "Sub-component responsible for lexical analysis and text segmentation."
+    },
+    {
+      "type": "heading",
+      "text": "Rules Engine"
+    },
+    {
+      "type": "text",
+      "text": "Deepest nested node testing parsing depth limits for H6 elements."
+    },
+    {
+      "type": "text",
+      "text": "Overview"
+    },
+    {
+      "type": "text",
+      "text": "First top-level instance of the heading Overview. Parsers should assign this node a unique anchor ID (e.g., overview or overview-1)."
+    },
+    {
+      "type": "heading",
+      "text": "Configuration"
+    },
+    {
+      "type": "text",
+      "text": "Configuration parameters scoped under the primary Overview node."
+    },
+    {
+      "type": "text",
+      "text": "parser.strict_mode: Enabled"
+    },
+    {
+      "type": "text",
+      "text": "parser.max_depth: 6"
+    },
+    {
+      "type": "text",
+      "text": "parser.deduplicate_anchors: True"
+    },
+    {
+      "type": "heading",
+      "text": "Metrics"
+    },
+    {
+      "type": "text",
+      "text": "Performance indicators associated with the initial pipeline ingestion stage."
+    },
+    {
+      "type": "text",
+      "text": "Total Node Capacity: 2,500 elements"
+    },
+    {
+      "type": "text",
+      "text": "Max Depth Traversal: 6 levels"
+    },
+    {
+      "type": "text",
+      "text": "Timeout Limit: 5000ms"
+    },
+    {
+      "type": "text",
+      "text": "Performance"
+    },
+    {
+      "type": "text",
+      "text": "Secondary top-level section containing repeated sub-heading titles to test scoped anchor disambiguation across different parent branches."
+    },
+    {
+      "type": "heading",
+      "text": "Overview"
+    },
+    {
+      "type": "text",
+      "text": "Second instance of the heading"
+    },
+    {
+      "type": "text",
+      "text": "Overview"
+    },
+    {
+      "type": "text",
+      "text": ", scoped directly under the Performance parent section. Parsers should disambiguate this from the previous top-level Overview node."
+    },
+    {
+      "type": "heading",
+      "text": "Metrics"
+    },
+    {
+      "type": "text",
+      "text": "Sub-node instance of"
+    },
+    {
+      "type": "text",
+      "text": "Metrics"
+    },
+    {
+      "type": "text",
+      "text": "under Performance > Overview."
+    },
+    {
+      "type": "text",
+      "text": "| Metric ID | Baseline Threshold | Maximum Allowed | Target Unit |\n| LAT-001 | 45ms | 120ms | Milliseconds |\n| MEM-002 | 256MB | 512MB | Megabytes |\n| CPU-003 | 12% | 45% | Percentage |"
+    },
+    {
+      "type": "heading",
+      "text": "Configuration"
+    },
+    {
+      "type": "text",
+      "text": "Second instance of the heading"
+    },
+    {
+      "type": "text",
+      "text": "Configuration"
+    },
+    {
+      "type": "text",
+      "text": ", scoped under"
+    },
+    {
+      "type": "text",
+      "text": "Performance"
+    },
+    {
+      "type": "text",
+      "text": "."
+    },
+    {
+      "type": "text",
+      "text": "Initialize thread pool prior to ingestion."
+    },
+    {
+      "type": "text",
+      "text": "Set dynamic memory ceiling to prevent heap allocation failures."
+    },
+    {
+      "type": "text",
+      "text": "Flush section AST buffer upon completion."
+    },
+    {
+      "type": "text",
+      "text": "Data Schema Specifications"
+    },
+    {
+      "type": "text",
+      "text": "Testing table data extraction, data type handling, and inline formatting parsing."
+    },
+    {
+      "type": "heading",
+      "text": "Attribute Mapping Table"
+    },
+    {
+      "type": "text",
+      "text": "| Attribute Key | Data Type | Requirement | Description & Parsing Rules |\n| parent_id | String (UUID) | Required | Unique identifier string for parent AST node |\n| node_depth | Integer | Required | Integer indicating nesting level from root (1-6) |\n| raw_text | String | Optional | Unescaped text content prior to formatting strip |\n| is_duplicate | Boolean | System Flag | Boolean set when heading title collision occurs |"
+    },
+    {
+      "type": "heading",
+      "text": "JSON Payload Fixture"
+    },
+    {
+      "type": "text",
+      "text": "{"
+    },
+    {
+      "type": "text",
+      "text": "\"test_suite\": \"Parser_Validation_Fixture\","
+    },
+    {
+      "type": "text",
+      "text": "\"depth_traverse\": true,"
+    },
+    {
+      "type": "text",
+      "text": "\"nodes\": ["
+    },
+    {
+      "type": "text",
+      "text": "{ \"id\": \"node_001\", \"type\": \"heading\", \"level\": 1, \"text\": \"Overview\" },"
+    },
+    {
+      "type": "text",
+      "text": "{ \"id\": \"node_002\", \"type\": \"heading\", \"level\": 2, \"text\": \"Overview\" }"
+    },
+    {
+      "type": "text",
+      "text": "]"
+    },
+    {
+      "type": "text",
+      "text": "}"
+    },
+    {
+      "type": "text",
+      "text": "Appendix: Edge Cases & Strings"
+    },
+    {
+      "type": "text",
+      "text": "Special character sequences and string structures to test parser sanitizer rules:"
+    },
+    {
+      "type": "text",
+      "text": "Special Character Set: !@#$%^&*()_+-=[]{}|;':\",./<>?"
+    },
+    {
+      "type": "text",
+      "text": "Escaped HTML Blocks: &lt;div class=\"test-container\"&gt;"
+    },
+    {
+      "type": "text",
+      "text": "Repeated Whitespace Sequences: System     Overview     Test"
+    },
+    {
+      "type": "text",
+      "text": "A test image"
+    },
+    {
+      "type": "table",
+      "text": "| Parameter | Target Spec | Test Purpose |\n| --- | --- | --- |\n| Target Engine | Document Parser v2.4+ | Regression testing for section mapping |\n| Assigned Tester | Person | Assigned QA Lead for execution |\n| Execution Date | Date | Timestamp of parser suite run |\n| Source Reference | File | Architecture reference file |"
+    },
+    {
+      "type": "image",
+      "uri": "1/parsed/latest/images/8998bcb514350021b28a75e039820f0a6c53a8e9c62e987a742231cea4a0cee9.png",
+      "caption": null
+    }
+  ]
+}

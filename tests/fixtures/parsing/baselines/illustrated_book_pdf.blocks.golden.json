@@ -1,0 +1,754 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "INTERESTING FACTS ABOUT MIDDLE EUROPEAN BIRDS",
+      "page": 1,
+      "bbox": {
+        "left": 110.24,
+        "top": 232.88187499999998,
+        "right": 290.975185,
+        "bottom": 284.21213440996945
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Northern Lapwing",
+      "page": 2,
+      "bbox": {
+        "left": 26.0,
+        "top": 181.57,
+        "right": 131.7236,
+        "bottom": 192.49451678535098
+      }
+    },
+    {
+      "type": "text",
+      "text": "Vanellus Vanellus",
+      "page": 2,
+      "bbox": {
+        "left": 26.0,
+        "top": 197.615435,
+        "right": 95.41658000000002,
+        "bottom": 206.10533697355032
+      }
+    },
+    {
+      "type": "text",
+      "text": "The  flight  of  the  lapwing  is  very  distinct.  Its flaps  are  gentle  and  relaxed,  with  particular wide  wings,  which  are  round  as  paddles.  As their  upper  side  is  black  while  they  are  back and white underneath, they seem to blink during flight, so they can be recognized from quiet long distances.",
+      "page": 2,
+      "bbox": {
+        "left": 26.0,
+        "top": 216.40175000000005,
+        "right": 187.4000725,
+        "bottom": 279.281222392638
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Eurasian Hoopoe",
+      "page": 2,
+      "bbox": {
+        "left": 26.0,
+        "top": 444.01,
+        "right": 124.55300000000001,
+        "bottom": 454.934516785351
+      }
+    },
+    {
+      "type": "text",
+      "text": "Upupa Epops",
+      "page": 2,
+      "bbox": {
+        "left": 26.0,
+        "top": 460.065435,
+        "right": 78.00017,
+        "bottom": 468.55533697355037
+      }
+    },
+    {
+      "type": "text",
+      "text": "To  defend  their  nest  against  predators  and deter  parasites,  the  incubating  and  brooding female  Hoopoe  and  her  nestlings,  produces  a foul-smelling  liquid,  which  reminds  of  rotting meat.  These  secretions  may  even  also  have antibacterial properties.",
+      "page": 2,
+      "bbox": {
+        "left": 26.0,
+        "top": 478.85175000000004,
+        "right": 187.39447,
+        "bottom": 532.3712223926381
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Common Raven",
+      "page": 2,
+      "bbox": {
+        "left": 210.5,
+        "top": 224.44,
+        "right": 301.7798,
+        "bottom": 235.364516785351
+      }
+    },
+    {
+      "type": "text",
+      "text": "Corvus Corax",
+      "page": 2,
+      "bbox": {
+        "left": 210.5,
+        "top": 240.485435,
+        "right": 261.52171999999996,
+        "bottom": 248.97533697355033
+      }
+    },
+    {
+      "type": "text",
+      "text": "While  they  did  not  have  the  best  reputation throughout  history,  thus  being  hunted  to  near extinction in middle Europe, up until the 1940s, they  are  actually  quiet  exceptional  birds.  For example,  they  choose  their  mate  with  great care,  which takes two to three years, and then generally  stay  with  them  for  the  rest  of  their lives.",
+      "page": 2,
+      "bbox": {
+        "left": 210.5,
+        "top": 259.28175000000005,
+        "right": 371.898355,
+        "bottom": 331.52122239263804
+      }
+    },
+    {
+      "type": "text",
+      "text": "However,  what  ravens  are  best  known  for  is their  high  intelligence,  with  brains  that  are among  the  largest  of  any  bird  species.  They make use of  tools  and  successfully  adapted  to living in human settlements. For instance, they throw nuts, which are hard to crack, on streets and wait until a car drives over them. Also, they are smart enough to evade even the fast cars on highways.",
+      "page": 2,
+      "bbox": {
+        "left": 210.5,
+        "top": 341.78175000000005,
+        "right": 371.90029000000004,
+        "bottom": 423.39122239263804
+      }
+    },
+    {
+      "type": "text",
+      "text": "Their  social  intelligence  is  stunning.  They  can often  being  seen  playing  with  each  other,  but what is truly remarkable is that they are capable  of  deception.  When  hiding  a  food  cache, they  do  so  in  secret.  Should  they  notice,  that they have been watched by a sneaky competitor, they move the food somewhere else. Sometimes  they  even  create  fake  caches  to  confuse thieves. These are strong indications, that they are  capable  of  putting  themselves  into  other's position.",
+      "page": 2,
+      "bbox": {
+        "left": 210.5,
+        "top": 433.65175,
+        "right": 371.89977500000003,
+        "bottom": 533.9812223926381
+      }
+    },
+    {
+      "type": "text",
+      "text": "- 1 -",
+      "page": 2,
+      "bbox": {
+        "left": 186.41,
+        "top": 589.94,
+        "right": 209.59400000000002,
+        "bottom": 600.5215950920245
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Common Starling",
+      "page": 3,
+      "bbox": {
+        "left": 26.0,
+        "top": 181.57,
+        "right": 127.66519999999998,
+        "bottom": 192.49451678535098
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sturnus Vulgaris",
+      "page": 3,
+      "bbox": {
+        "left": 26.0,
+        "top": 197.615435,
+        "right": 90.79118000000001,
+        "bottom": 206.10533697355032
+      }
+    },
+    {
+      "type": "text",
+      "text": "Since it has been brought to other continents by humans,  the  starling  has  become  one  of  the most common birds. For example, in their winter  grounds,  they  sleep  together  in  groups  of more than one million individuals.",
+      "page": 3,
+      "bbox": {
+        "left": 26.0,
+        "top": 216.40175000000005,
+        "right": 187.40068,
+        "bottom": 260.55122239263807
+      }
+    },
+    {
+      "type": "text",
+      "text": "Before flying to their roost, they usually gather at  other  places,  like  exposed  buildings,  high trees  or  power  lines.  From  there,  they  fly  in large  flocks  to  the  actual  sleeping  spot.  They form a cloud of several thousand birds and fly down, forming a hose, that from a distance can remind of a tornado.",
+      "page": 3,
+      "bbox": {
+        "left": 26.0,
+        "top": 270.82175,
+        "right": 187.397745,
+        "bottom": 333.70122239263804
+      }
+    },
+    {
+      "type": "text",
+      "text": "Their feathers have light tips, which give them the  distinct  speckled  look.  While  the  feathers are new in late-summer, their tips worn down until  the  breeding  season  in  the  next  spring. Then the metallic shine dominates their plumage.",
+      "page": 3,
+      "bbox": {
+        "left": 26.0,
+        "top": 343.96175,
+        "right": 187.39737,
+        "bottom": 397.481222392638
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Western Jackdaw",
+      "page": 3,
+      "bbox": {
+        "left": 210.5,
+        "top": 281.61,
+        "right": 309.9878,
+        "bottom": 292.534516785351
+      }
+    },
+    {
+      "type": "text",
+      "text": "Coloeus Monedula",
+      "page": 3,
+      "bbox": {
+        "left": 210.5,
+        "top": 297.655435,
+        "right": 283.31447,
+        "bottom": 306.14533697355034
+      }
+    },
+    {
+      "type": "text",
+      "text": "The jackdaw is a very social corvid. If there is enough space available, they often closely breed in colonies of dozens  of  pairs,  which  they defend together. They also move in large groups when searching for food, which allows them to prevail against larger crows.",
+      "page": 3,
+      "bbox": {
+        "left": 210.5,
+        "top": 316.44175,
+        "right": 371.89942999999994,
+        "bottom": 369.96122239263804
+      }
+    },
+    {
+      "type": "text",
+      "text": "When not breeding, between several hundreds and a thousand jackdaws gather at their roost to  sleep.  There  are  even  accounts  of  groups  of more than 10,000 individuals.",
+      "page": 3,
+      "bbox": {
+        "left": 210.5,
+        "top": 380.22175,
+        "right": 371.89439500000003,
+        "bottom": 415.01122239263805
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Did You Know?",
+      "page": 3,
+      "bbox": {
+        "left": 258.52089835199996,
+        "top": 455.02269104,
+        "right": 338.73825116264504,
+        "bottom": 471.8886103922848
+      }
+    },
+    {
+      "type": "text",
+      "text": "Due  to  their  high  metabolism, birds  have  the  highest  constant body temperature of all  animals alive today, at around 42 °C (107 °F).",
+      "page": 3,
+      "bbox": {
+        "left": 225.5495922849,
+        "top": 478.141558497,
+        "right": 358.7913894323442,
+        "bottom": 534.4898336091956
+      }
+    },
+    {
+      "type": "text",
+      "text": "- 2 -",
+      "page": 3,
+      "bbox": {
+        "left": 185.36,
+        "top": 589.94,
+        "right": 210.63200000000003,
+        "bottom": 600.5215950920245
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Great Spotted Woodpecker",
+      "page": 4,
+      "bbox": {
+        "left": 159.6,
+        "top": 51.03463599999998,
+        "right": 277.750375504,
+        "bottom": 59.28279183316374
+      }
+    },
+    {
+      "type": "text",
+      "text": "Dendrocopos Major",
+      "page": 4,
+      "bbox": {
+        "left": 159.6,
+        "top": 64.98543500000005,
+        "right": 236.94202500000003,
+        "bottom": 73.47533697355038
+      }
+    },
+    {
+      "type": "text",
+      "text": "Woodpeckers are famous for their drumming  and  no  other  species drums faster that the Great spotted woodpecker.  The  10  to  16  strikes per  second  in  one  or  two  second bursts, can be heard over long distances  and  are  used  to  mark  their territory. Though the forces of each strike can peak at 1200g, the bird's specialized anatomy prevents injuries.",
+      "page": 4,
+      "bbox": {
+        "left": 159.6,
+        "top": 83.78174999999999,
+        "right": 279.648275,
+        "bottom": 184.11122239263807
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Eurasian Jay",
+      "page": 4,
+      "bbox": {
+        "left": 26.0,
+        "top": 367.37,
+        "right": 97.70599999999999,
+        "bottom": 378.294516785351
+      }
+    },
+    {
+      "type": "text",
+      "text": "Garrulus Glandarius",
+      "page": 4,
+      "bbox": {
+        "left": 26.0,
+        "top": 383.415435,
+        "right": 105.52130000000002,
+        "bottom": 391.90533697355033
+      }
+    },
+    {
+      "type": "text",
+      "text": "Before  winter,  the  jay  builds  significant  stocks of food. Over the whole year, it deposits excess food. In August, it begins to gather acorns and other nuts and continues to do so until winter or  even  the  next  spring.  During  October,  the bird spends almost the entire day gathering and hiding  food.  Once  finished,  a  single  jay  has stockpiled up to 5000 acorns.",
+      "page": 4,
+      "bbox": {
+        "left": 26.0,
+        "top": 402.20175,
+        "right": 187.40068,
+        "bottom": 474.44122239263805
+      }
+    },
+    {
+      "type": "text",
+      "text": "Jays  are  able  to  accurately  remember  and  find their  caches  even  when  it  is  covered  under  a thick  layer  of  snow.  If  their  caches  last  long enough, they sometimes feed them to their offspring in the next year.",
+      "page": 4,
+      "bbox": {
+        "left": 26.0,
+        "top": 484.71175,
+        "right": 187.39826,
+        "bottom": 528.8612223926381
+      }
+    },
+    {
+      "type": "heading",
+      "text": "European Robin",
+      "page": 4,
+      "bbox": {
+        "left": 210.5,
+        "top": 300.52988200000004,
+        "right": 277.75061324,
+        "bottom": 308.45190459206515
+      }
+    },
+    {
+      "type": "text",
+      "text": "Erithacus Rubecula",
+      "page": 4,
+      "bbox": {
+        "left": 210.5,
+        "top": 314.973170048,
+        "right": 277.772804352,
+        "bottom": 322.5076750527935
+      }
+    },
+    {
+      "type": "text",
+      "text": "Robins  can  be  seen approaching wild boars or other large animals,  that  open the  ground,  where they  look  for  food, that may have been uncovered by them. They also follow gardeners for the same reason.",
+      "page": 4,
+      "bbox": {
+        "left": 210.5,
+        "top": 333.01175,
+        "right": 279.65067999999997,
+        "bottom": 433.351222392638
+      }
+    },
+    {
+      "type": "text",
+      "text": "They  even  actively seek out larger animals,  as  there  are often insects near them, keeping a distance of only one meter. It is  theorized, that they learn  this  behavior from older robins.",
+      "page": 4,
+      "bbox": {
+        "left": 210.5,
+        "top": 443.61175000000003,
+        "right": 279.65029000000004,
+        "bottom": 534.581222392638
+      }
+    },
+    {
+      "type": "heading",
+      "text": "House Sparrow",
+      "page": 4,
+      "bbox": {
+        "left": 302.75,
+        "top": 114.39415200000002,
+        "right": 369.9995186879999,
+        "bottom": 122.7451439511699
+      }
+    },
+    {
+      "type": "text",
+      "text": "Passer Domesticus",
+      "page": 4,
+      "bbox": {
+        "left": 302.75,
+        "top": 128.95062141760002,
+        "right": 370.02220471039993,
+        "bottom": 136.76948153916095
+      }
+    },
+    {
+      "type": "text",
+      "text": "Sparrows  are  quite social birds that feed  in  flocks  or  at least  small  groups, even  during  breeding.  In  grain  fields, groups  of  20  birds are  the  most  efficient ones for feeding,  being  a  tradeoff between the time required for watching for predators  and  the  conflicts between  fellow sparrows.",
+      "page": 4,
+      "bbox": {
+        "left": 302.75,
+        "top": 147.21175,
+        "right": 371.902055,
+        "bottom": 294.36122239263807
+      }
+    },
+    {
+      "type": "text",
+      "text": "If a sparrow discovers a food source, it calls  for  others  and waits  until  enough have assembled before  it  begins  to feed.",
+      "page": 4,
+      "bbox": {
+        "left": 302.75,
+        "top": 304.63175,
+        "right": 371.899825,
+        "bottom": 367.50122239263806
+      }
+    },
+    {
+      "type": "text",
+      "text": "In cities,  they  can be  watched  looking for  dead  insects  on the radiator grills of cars or on the front of trains, shortly after they have been  moved  to  the depot.",
+      "page": 4,
+      "bbox": {
+        "left": 302.75,
+        "top": 377.77175,
+        "right": 371.90067999999997,
+        "bottom": 459.37122239263806
+      }
+    },
+    {
+      "type": "text",
+      "text": "- 3 -",
+      "page": 4,
+      "bbox": {
+        "left": 185.59,
+        "top": 589.94,
+        "right": 210.41800000000003,
+        "bottom": 600.5215950920245
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Red-Backed Shrike",
+      "page": 5,
+      "bbox": {
+        "left": 26.0,
+        "top": 181.57,
+        "right": 137.3894,
+        "bottom": 192.49451678535098
+      }
+    },
+    {
+      "type": "text",
+      "text": "Lanius Collurio",
+      "page": 5,
+      "bbox": {
+        "left": 26.0,
+        "top": 197.615435,
+        "right": 84.81374000000001,
+        "bottom": 206.10533697355032
+      }
+    },
+    {
+      "type": "text",
+      "text": "As  the shrike primarily hunts insects, bad weather  can  prevent  it  from  finding  enough food.  To  survive  several  rainy  or  cold  days,  it builds a stockpile of big insects and small vertebrates, which are impaled on thorns or barbed wire. This helps it to tear off smaller bites and is an  innate  behavior,  though  they  require  some experience to improve this skill.",
+      "page": 5,
+      "bbox": {
+        "left": 26.0,
+        "top": 216.40175000000005,
+        "right": 187.399825,
+        "bottom": 288.64122239263804
+      }
+    },
+    {
+      "type": "text",
+      "text": "When  catching  insects  like  wasps  or  hornets, shrikes  are  aware  of  the  stinger.  Once  they killed the prey, they rub it on a hard surface to remove the stinger, before they proceed eating or storing it.",
+      "page": 5,
+      "bbox": {
+        "left": 26.0,
+        "top": 298.91175000000004,
+        "right": 187.39943000000002,
+        "bottom": 343.06122239263806
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Did You Know?",
+      "page": 5,
+      "bbox": {
+        "left": 72.020898352,
+        "top": 408.14269104,
+        "right": 152.23825116264496,
+        "bottom": 425.0086103922848
+      }
+    },
+    {
+      "type": "text",
+      "text": "Birds have no diaphragm and use several air sacs to pump  air through their rigid lungs instead.",
+      "page": 5,
+      "bbox": {
+        "left": 39.0495922849,
+        "top": 431.2526347775,
+        "right": 170.90515148034413,
+        "bottom": 467.74983360919555
+      }
+    },
+    {
+      "type": "text",
+      "text": "They are also important elements  in regulating the body temperature  and  can  provide  an extensive volume of air for singing.",
+      "page": 5,
+      "bbox": {
+        "left": 41.679592284900004,
+        "top": 469.1168458418,
+        "right": 174.92094327234415,
+        "bottom": 525.2998336091955
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Common Blackbird",
+      "page": 5,
+      "bbox": {
+        "left": 210.5,
+        "top": 181.57,
+        "right": 321.11420000000004,
+        "bottom": 192.49451678535098
+      }
+    },
+    {
+      "type": "text",
+      "text": "Turdus Merula",
+      "page": 5,
+      "bbox": {
+        "left": 210.5,
+        "top": 197.615435,
+        "right": 268.13070500000003,
+        "bottom": 206.10533697355032
+      }
+    },
+    {
+      "type": "text",
+      "text": "Although the blackbird was originally a bird of the  forests,  since  the  19th  century  it  settles  in parks, gardens and even towns.",
+      "page": 5,
+      "bbox": {
+        "left": 210.5,
+        "top": 216.40175000000005,
+        "right": 371.89439500000003,
+        "bottom": 241.83122239263804
+      }
+    },
+    {
+      "type": "text",
+      "text": "Blackbirds  are  valued  for  their  creative  and melodic  songs,  that  sound  pleasant  to  human ears. Often, a male knows more than 30 motifs and  even  more  variations  for  the  appendix  at the end of a call. They have two to five favorite motifs,  that  are  so  distinct,  that  a  human  can identify  an  individual  bird  via  the  songs  it prefers.",
+      "page": 5,
+      "bbox": {
+        "left": 210.5,
+        "top": 252.09175000000005,
+        "right": 371.902055,
+        "bottom": 324.33122239263804
+      }
+    },
+    {
+      "type": "text",
+      "text": "The  songs  are  only  partially  innate.  Young blackbirds learn the majority from their fathers or  other  males.  But  they  are  also  capable  to imitate songs of other species or even artificial sounds like the siren of an ambulance.",
+      "page": 5,
+      "bbox": {
+        "left": 210.5,
+        "top": 334.60175000000004,
+        "right": 371.89881,
+        "bottom": 378.75122239263806
+      }
+    },
+    {
+      "type": "text",
+      "text": "While  the  males  mostly  sing  from  March  to start  of  July  to  mark  their  territory,  they  can also be heard in winter quietly singing to themselves.",
+      "page": 5,
+      "bbox": {
+        "left": 210.5,
+        "top": 389.01175,
+        "right": 371.89881,
+        "bottom": 423.801222392638
+      }
+    },
+    {
+      "type": "text",
+      "text": "- 4 -",
+      "page": 5,
+      "bbox": {
+        "left": 185.12,
+        "top": 589.94,
+        "right": 210.87200000000004,
+        "bottom": 600.5215950920245
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Common Chaffinch",
+      "page": 6,
+      "bbox": {
+        "left": 26.0,
+        "top": 181.57,
+        "right": 137.33239999999998,
+        "bottom": 192.49451678535098
+      }
+    },
+    {
+      "type": "text",
+      "text": "Fringilla Coelebs",
+      "page": 6,
+      "bbox": {
+        "left": 26.0,
+        "top": 197.615435,
+        "right": 91.636205,
+        "bottom": 206.10533697355032
+      }
+    },
+    {
+      "type": "text",
+      "text": "The  nests  are  built  carefully  by  the  female chaffinches  using  roots,  a  layer  of  lichen  and spider silk for the outside. The inside is padded with hair and feathers. Using moss and lichen provides  very  good  camouflage  in  the  bushes and tree crotches, especially in the later months of breeding, when there is more foliage.",
+      "page": 6,
+      "bbox": {
+        "left": 26.0,
+        "top": 216.40175000000005,
+        "right": 187.39447,
+        "bottom": 279.281222392638
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Little Owl",
+      "page": 6,
+      "bbox": {
+        "left": 210.5,
+        "top": 181.57,
+        "right": 266.9984,
+        "bottom": 192.49451678535098
+      }
+    },
+    {
+      "type": "text",
+      "text": "Athene Noctua",
+      "page": 6,
+      "bbox": {
+        "left": 210.5,
+        "top": 197.615435,
+        "right": 268.860095,
+        "bottom": 206.10533697355032
+      }
+    },
+    {
+      "type": "text",
+      "text": "In contrast to other owls, that primarily hunt at night, the flight of the little owl is not soundless and can even be heard by nearby humans. They normally hunt on the ground around two hours after dusk and before dawn. By running in large steps, occasionally jumping, they are fast enough to even catch field mice.",
+      "page": 6,
+      "bbox": {
+        "left": 210.5,
+        "top": 216.40175000000005,
+        "right": 371.902055,
+        "bottom": 279.281222392638
+      }
+    },
+    {
+      "type": "heading",
+      "text": "Common Kingfisher",
+      "page": 6,
+      "bbox": {
+        "left": 159.6,
+        "top": 309.77,
+        "right": 275.367,
+        "bottom": 320.69451678535097
+      }
+    },
+    {
+      "type": "text",
+      "text": "Alcedo Atthis",
+      "page": 6,
+      "bbox": {
+        "left": 159.6,
+        "top": 325.815435,
+        "right": 211.520115,
+        "bottom": 334.3053369735503
+      }
+    },
+    {
+      "type": "text",
+      "text": "The kingfisher hunts by sitting above or near water and once, it spotted  a  suitable  fish,  it  dives  head  first  down  at  an  angle, accelerating with a few short flaps.",
+      "page": 6,
+      "bbox": {
+        "left": 159.6,
+        "top": 344.61175000000003,
+        "right": 371.899825,
+        "bottom": 370.031222392638
+      }
+    },
+    {
+      "type": "text",
+      "text": "As the refraction between air and water makes it very difficult to  catch  the  prey,  the  kingfisher  has  evolved  special  eyes. When hitting the water, they stay open, but are protected by nictitating membranes. The eye itself is truly remarkable. The lens  is  shaped  like  an  egg,  which  allows  switching  to  a  more accurate vision under water, when used together with a second fovea  on  the  retina.  The  eye  also  contains  small  oil  droplets that enhance color vision and reduce glare.",
+      "page": 6,
+      "bbox": {
+        "left": 159.6,
+        "top": 380.30174999999997,
+        "right": 371.89999500000005,
+        "bottom": 452.541222392638
+      }
+    },
+    {
+      "type": "text",
+      "text": "Image sources: piqsels.com, goodfreephotos.com and pexels.com",
+      "page": 6,
+      "bbox": {
+        "left": 114.26,
+        "top": 563.896035,
+        "right": 281.66978,
+        "bottom": 569.3780555194805
+      }
+    },
+    {
+      "type": "text",
+      "text": "- 5 -",
+      "page": 6,
+      "bbox": {
+        "left": 185.38,
+        "top": 589.94,
+        "right": 210.62800000000001,
+        "bottom": 600.5215950920245
+      }
+    }
+  ]
+}

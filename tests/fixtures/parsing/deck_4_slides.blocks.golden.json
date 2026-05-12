@@ -1,0 +1,22 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "text",
+      "text": "01\nIntro\nShort opener for the deck"
+    },
+    {
+      "type": "text",
+      "text": "02\nGoals\nGrow revenue and expand reach"
+    },
+    {
+      "type": "text",
+      "text": "03\nSummary\nKey points from the quarter"
+    },
+    {
+      "type": "text",
+      "text": "04\nThanks\nEnd slide message"
+    }
+  ]
+}

@@ -1,0 +1,51 @@
+{
+  "$schema": "./node_modules/nx/schemas/nx-schema.json",
+  "targetDefaults": {
+    "build": {
+      "cache": true,
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "test": {
+      "cache": true
+    },
+    "lint": {
+      "cache": true
+    },
+    "format": {
+      "cache": true
+    }
+  },
+  "namedInputs": {
+    "default": [
+      "{projectRoot}/**/*",
+      "sharedGlobals"
+    ],
+    "production": [
+      "default",
+      "!{projectRoot}/**/?(*.)+(spec|test).[jt]s?(x)?(.snap)",
+      "!{projectRoot}/tsconfig.spec.json",
+      "!{projectRoot}/.eslintrc.json",
+      "!{projectRoot}/tests/**/*",
+      "!{projectRoot}/**/__pycache__/**",
+      "!{projectRoot}/**/*.pyc"
+    ],
+    "sharedGlobals": []
+  },
+  "plugins": [
+    {
+      "plugin": "@nxlv/python",
+      "options": {
+        "pyenvPythonPath": ".venv/bin/python"
+      }
+    }
+  ],
+  "parallel": 3,
+  "cacheDirectory": ".nx/cache",
+  "workspaceLayout": {
+    "appsDir": "src",
+    "libsDir": "src"
+  },
+  "analytics": false
+}

@@ -1,0 +1,17 @@
+{
+  "name": "shared",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/shared",
+  "projectType": "library",
+  "targets": {
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "uv run ruff check apps/shared",
+        "cwd": "."
+      }
+    }
+  },
+  "tags": ["python", "shared", "library"]
+}
+

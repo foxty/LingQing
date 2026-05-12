@@ -1,0 +1,83 @@
+[tool.uv.workspace]
+members = ["apps/tenant_app_service", "apps/shared", "apps/scheduler_service", "apps/tenant_manager_service"]
+
+[project]
+name = "lingqing"
+version = "2.0.0"
+description = "LingQing: Enterprise-grade multi-tenant AI agent platform"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "lingqing-shared",
+    "lingqing-backend",
+    "lingqing-scheduler-service",
+    # Core web framework (required by all backend services)
+    "fastapi>=0.115.0",
+    "sqlalchemy[asyncio]>=2.0.0",
+    "uvicorn[standard]>=0.32.0",
+    "python-multipart>=0.0.27",
+    # Infrastructure (common backend utilities)
+    "apscheduler>=3.10.0",
+    "asyncpg>=0.31.0",
+    "bcrypt>=4.1.0",
+    "python-dotenv>=1.0.1",
+    "slack-sdk>=3.44.0",
+]
+
+
+[dependency-groups]
+dev = [
+    "anyio>=4.7.0",
+    "langgraph-cli[inmem]>=0.4.7",
+    "mypy>=1.13.0",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=0.24.0",
+    "ruff>=0.8.2",
+    "testcontainers[postgres]>=4.14.2",
+]
+
+[tool.uv]
+[tool.uv.sources]
+lingqing-shared = { workspace = true }
+lingqing-backend = { workspace = true }
+lingqing-scheduler-service = { workspace = true }
+
+[tool.ruff]
+line-length = 120
+fix = true        # Auto-fix issues when possible
+
+lint.select = [
+    "E",    # pycodestyle
+    "F",    # pyflakes (includes F401 for unused imports)
+    "I",    # isort
+    "D",    # pydocstyle
+    "D401", # First line should be in imperative mood
+    "T201",
+    "UP",
+]
+lint.ignore = [
+    "UP006",
+    "UP007",
+    "UP035",
+    "D417",
+    "E501",
+    "D100",  # Missing docstring in public module
+    "D101",  # Missing docstring for public class
+    "D102",  # Missing docstring in public method
+    "D103",  # Missing docstring in public function
+    "D105",  # Missing docstring in magic method
+    "D107",  # Missing docstring in `__init__`
+    "D401",  #"First line of docstring should be in imperative mood
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["D", "UP"]
+"scripts/*" = ["T201"]
+"apps/shared/sdk/py-api/test_sdk.py" = ["T201"]
+"scripts/generate_agent_api_specs.py" = ["E402"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+disable_error_code = ["import-untyped"]

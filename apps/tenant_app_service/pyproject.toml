@@ -1,0 +1,22 @@
+[project]
+name = "lingqing-backend"
+version = "2.0.0"
+description = "LingQing Tenant App Service - Application API for chat, knowledge, agents, and live apps"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = [
+    "lingqing-shared",
+    "kaleido>=1.2.0",
+    "langgraph>=1.0.0",
+    "plotly>=5.18.0",
+]
+
+[tool.uv.sources]
+lingqing-shared = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []

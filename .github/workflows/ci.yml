@@ -1,0 +1,130 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+
+jobs:
+  backend:
+    name: Backend
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install dependencies
+        run: |
+          uv sync --all-groups
+          npm ci
+
+      - name: Lint
+        run: npx nx run root:lint
+
+      - name: Test
+        run: npx nx run root:test:ci
+
+      - name: Check API specs
+        run: npm run check-api-spec
+
+      - name: Check live app SDK
+        run: npm run check-live-app-sdk
+
+  backend-docling:
+    name: Backend (Docling)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Pull Docling image
+        run: docker pull "$(cat deploy/env/docling.version)"
+
+      - name: Docling integration tests
+        run: uv run pytest tests/docling_integration/ -v -m docling
+
+  tenant-app-portal:
+    name: Tenant app portal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/tenant_app_portal/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/tenant_app_portal
+
+      - name: Lint
+        run: npx nx run tenant_app_portal:lint
+
+      - name: Build
+        run: npx nx run tenant_app_portal:build
+
+      - name: Test
+        run: npx nx run tenant_app_portal:test
+
+  tenant-manager-portal:
+    name: Tenant manager portal
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            apps/tenant_manager_portal/package-lock.json
+
+      - name: Install dependencies
+        run: |
+          npm ci
+          npm ci --prefix apps/tenant_manager_portal
+
+      - name: Lint
+        run: npx nx run tenant_manager_portal:lint
+
+      - name: Build
+        run: npx nx run tenant_manager_portal:build

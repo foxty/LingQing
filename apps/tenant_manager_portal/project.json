@@ -1,0 +1,50 @@
+{
+    "name": "tenant_manager_portal",
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/tenant_manager_portal/src",
+    "projectType": "application",
+    "targets": {
+        "dev": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "npm run dev",
+                "cwd": "apps/tenant_manager_portal"
+            }
+        },
+        "build": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "npm run build",
+                "cwd": "apps/tenant_manager_portal"
+            }
+        },
+        "lint": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "npm run lint",
+                "cwd": "apps/tenant_manager_portal"
+            }
+        },
+        "ci": {
+            "executor": "nx:run-commands",
+            "options": {
+                "commands": [
+                    "npm run lint",
+                    "npm run build"
+                ],
+                "parallel": false,
+                "cwd": "apps/tenant_manager_portal"
+            }
+        }
+    },
+    "tags": [
+        "typescript",
+        "frontend",
+        "react",
+        "portal",
+        "tenant-manager"
+    ],
+    "implicitDependencies": [
+        "tenant_manager_service"
+    ]
+}

@@ -1,0 +1,269 @@
+# LingQing local full-stack (E2E / integration) — isolated from dev infra.
+# Tier: e2e — production-like Docker stack on your laptop (includes Postgres).
+# Env: deploy/env/.env.e2e (container config — internal hostnames/ports only).
+# Usage: ./deploy/scripts/local-stack.sh stack-up
+#
+# Fixed host ports (avoid clashing with dev tier on the same laptop):
+#   Postgres 5433→5432, Gateway 127.0.0.1:18080→80
+# Internal services (chroma, docling, app, manager, sandbox) are not published to the host.
+#
+# Resource caps mirror deploy/compose/remote/stack.yml (sized for 1 tenant / ~50 users).
+# E2E adds postgres caps; prod uses external PostgreSQL with equivalent sizing.
+
+name: lingqing-e2e
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lingqing-e2e-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data_e2e:/var/lib/postgresql/data
+    ports:
+      - "5433:5432"
+    mem_limit: 2g
+    cpus: 1.0
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  chroma:
+    image: chromadb/chroma:1.4.1
+    container_name: lingqing-e2e-chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chroma_data_e2e:/chroma/chroma
+    mem_limit: 2g
+    cpus: 1.0
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  docling-serve:
+    image: ${DOCLING_IMAGE:-quay.io/docling-project/docling-serve-cpu:v1.34.0}
+    container_name: lingqing-e2e-docling-serve
+    environment:
+      - DOCLING_SERVE_ENABLE_UI=${DOCLING_SERVE_ENABLE_UI:-0}
+      - DOCLING_SERVE_MAX_NUM_PAGES=${DOCLING_SERVE_MAX_NUM_PAGES:-200}
+      # Omit DOCLING_SERVE_API_KEY when unset; empty string crashes latest docling-serve.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5001/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    mem_limit: ${DOCLING_MEM_LIMIT:-8g}
+    cpus: ${DOCLING_CPUS:-2.0}
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  backend-base:
+    image: lingqing-e2e-backend-base:local
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/Dockerfile.backend-base
+    command: "true"
+    restart: "no"
+
+  backend-app-image:
+    image: lingqing-e2e-backend-app:local
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/Dockerfile.backend-app
+      args:
+        BASE_IMAGE: lingqing-e2e-backend-base:local
+    depends_on:
+      - backend-base
+    command: "true"
+    restart: "no"
+
+  sandbox-runner-image:
+    image: lingqing-e2e-sandbox-runner:local
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/Dockerfile.sandbox-runner
+    command: "true"
+    restart: "no"
+
+  sandbox-controller:
+    image: lingqing-e2e-sandbox-controller:local
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/Dockerfile.sandbox-controller
+    container_name: lingqing-e2e-sandbox-controller
+    depends_on:
+      - sandbox-runner-image
+    env_file:
+      - ../../env/.env.e2e
+    environment:
+      - LOG_LEVEL=INFO
+      - DATA_ROOT_PATH=/app/data
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DATA_ROOT_HOST_PATH:?DATA_ROOT_HOST_PATH is required}:/app/data
+    mem_limit: 768m
+    cpus: 0.5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8090/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  scheduler-service:
+    image: lingqing-e2e-backend-app:local
+    container_name: lingqing-e2e-scheduler-service
+    depends_on:
+      - backend-app-image
+      - postgres
+      - chroma
+    env_file:
+      - ../../env/.env.e2e
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_MODULE=scheduler_service
+      - DATA_ROOT_PATH=/app/data
+      - DOCUMENT_PARSER=${DOCUMENT_PARSER:-default}
+      - DOCLING_SERVICE_URL=${DOCLING_SERVICE_URL:-http://docling-serve:5001}
+      - DOCLING_TASK_TIMEOUT_SECONDS=${DOCLING_TASK_TIMEOUT_SECONDS:-600}
+      - DOCLING_API_KEY=${DOCLING_API_KEY:-}
+      - MINERU_SERVICE_URL=${MINERU_SERVICE_URL:-}
+    volumes:
+      - ${DATA_ROOT_HOST_PATH:?DATA_ROOT_HOST_PATH is required}:/app/data
+    mem_limit: 1536m
+    cpus: 1.0
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tenant-app-service:
+    image: lingqing-e2e-backend-app:local
+    container_name: lingqing-e2e-tenant-app-service
+    depends_on:
+      - backend-app-image
+      - postgres
+      - chroma
+      - sandbox-controller
+    env_file:
+      - ../../env/.env.e2e
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_MODULE=tenant_app_service
+      - DATA_ROOT_PATH=/app/data
+      - DOCUMENT_PARSER=${DOCUMENT_PARSER:-default}
+      - DOCLING_SERVICE_URL=${DOCLING_SERVICE_URL:-http://docling-serve:5001}
+      - DOCLING_TASK_TIMEOUT_SECONDS=${DOCLING_TASK_TIMEOUT_SECONDS:-600}
+      - DOCLING_API_KEY=${DOCLING_API_KEY:-}
+      - MINERU_SERVICE_URL=${MINERU_SERVICE_URL:-}
+    volumes:
+      - ${DATA_ROOT_HOST_PATH:?DATA_ROOT_HOST_PATH is required}:/app/data
+    mem_limit: 2g
+    cpus: 1.5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  tenant-manager-service:
+    image: lingqing-e2e-backend-app:local
+    container_name: lingqing-e2e-tenant-manager-service
+    depends_on:
+      - backend-app-image
+      - postgres
+    env_file:
+      - ../../env/.env.e2e
+    environment:
+      - PYTHONUNBUFFERED=1
+      - APP_MODULE=tenant_manager_service
+      - DATA_ROOT_PATH=/app/data
+    volumes:
+      - ${DATA_ROOT_HOST_PATH:?DATA_ROOT_HOST_PATH is required}:/app/data
+    mem_limit: 512m
+    cpus: 0.5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  gateway-service:
+    image: lingqing-e2e-gateway-service:local
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/Dockerfile.frontend
+    container_name: lingqing-e2e-gateway-service
+    ports:
+      - "127.0.0.1:18080:80"
+    depends_on:
+      - tenant-app-service
+      - tenant-manager-service
+    mem_limit: 512m
+    cpus: 0.5
+    healthcheck:
+      # BusyBox wget (nginx:alpine) does not support GNU wget --spider reliably
+      test:
+        ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  postgres_data_e2e:
+    driver: local
+  chroma_data_e2e:
+    driver: local

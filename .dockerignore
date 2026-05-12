@@ -1,0 +1,89 @@
+# Reduce build context to shrink image layers and speed up builds
+
+# Python caches
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+
+# Node/Frontend artifacts
+**/node_modules/
+**/dist/
+**/build/
+apps/tenant_app_portal/node_modules/
+apps/tenant_app_portal/dist/
+apps/tenant_app_portal/build/
+
+# Tests and docs (not needed in runtime image)
+tests/
+docs/
+
+# Large static assets
+static/charts/
+
+# Egg/package metadata
+**/*.egg-info/
+
+*.egg
+
+# Virtual environments - be explicit
+**/.venv/
+**/.venv
+.venv/
+.venv
+venv/
+venv
+env/
+env
+ENV/
+virtualenv/
+.venv
+
+# Node modules - exclude all of them
+node_modules/
+**/node_modules/
+./node_modules
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Git - critical for size
+.git/
+.gitignore
+.gitattributes
+**/.git/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Project specific
+*.log
+static/charts/
+tests/
+apps/tenant_app_service/migrations/versions/__pycache__/
+
+# Documentation
+docs/
+*.md
+!README.md
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Build artifacts
+*.pyc
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+.langgraph_api/
+
+# Data directories (if using local storage)
+data/
+

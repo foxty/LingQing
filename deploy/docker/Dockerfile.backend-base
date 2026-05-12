@@ -1,0 +1,42 @@
+# Base Image for Backend Services
+# Contains: Python runtime, system dependencies, and all Python packages
+# Build trigger: When dependencies change (uv.lock modified) or manual
+# Versioning: Semantic (base-v1, base-v2, etc.)
+
+FROM python:3.11-slim
+
+# Install system dependencies (including dev tools for building packages)
+RUN apt-get update && apt-get install -y \
+    gcc \
+    g++ \
+    curl \
+    git \
+    postgresql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install uv for faster package management
+RUN pip install --no-cache-dir uv
+
+# Set working directory
+WORKDIR /app
+
+# Create non-root user and set ownership for workspace
+RUN useradd -m -u 1000 appuser && chown -R appuser:appuser /app
+
+# Copy workspace configuration and dependency files
+# These files define what packages to install (single unified backend)
+COPY --chown=appuser:appuser pyproject.toml uv.lock* ./
+COPY --chown=appuser:appuser apps/tenant_app_service/pyproject.toml ./apps/tenant_app_service/
+COPY --chown=appuser:appuser apps/scheduler_service/pyproject.toml ./apps/scheduler_service/
+COPY --chown=appuser:appuser apps/tenant_manager_service/pyproject.toml ./apps/tenant_manager_service/
+COPY --chown=appuser:appuser apps/shared/pyproject.toml ./apps/shared/
+
+# Install all workspace dependencies (excludes dev packages)
+# This is the expensive operation we want to cache
+USER appuser
+RUN uv sync --no-dev
+
+# Metadata labels
+LABEL maintainer="LingQing Team"
+LABEL description="Base image with Python dependencies for LingQing backend"
+LABEL usage="This image is intended as a base for backend-app image, not for direct use"

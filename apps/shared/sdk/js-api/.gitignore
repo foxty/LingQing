@@ -1,0 +1,12 @@
+# Build output
+build/
+*.js
+*.d.ts
+*.map
+
+# Dependencies
+node_modules/
+
+# IDE
+.vscode/
+.idea/

@@ -1,0 +1,5 @@
+#!/usr/bin/env sh
+
+npm run check-live-app-sdk || exit 1
+npm run check-api-spec || exit 1
+npm run test:unit || exit 1

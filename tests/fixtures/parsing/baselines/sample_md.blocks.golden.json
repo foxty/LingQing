@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Quarterly Report"
+    },
+    {
+      "type": "text",
+      "text": "Intro paragraph with plain text for parser integration coverage."
+    },
+    {
+      "type": "heading",
+      "text": "Revenue Overview"
+    },
+    {
+      "type": "text",
+      "text": "Duplicate heading followed by closing notes and recommendations for the next quarter."
+    },
+    {
+      "type": "table",
+      "text": "| Region | Revenue |\n| --- | --- |\n| North | 120 |\n| South | 95 |"
+    }
+  ]
+}

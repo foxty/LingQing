@@ -1,0 +1,14 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "heading",
+      "text": "Same Title"
+    },
+    {
+      "type": "text",
+      "text": "Body paragraph with enough text to be meaningful for chunking validation."
+    }
+  ]
+}

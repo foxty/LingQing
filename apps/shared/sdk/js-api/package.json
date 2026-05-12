@@ -1,0 +1,18 @@
+{
+  "name": "@lingqing/sdk",
+  "version": "1.0.0",
+  "description": "LingQing Platform SDK - Unified client for live app operations",
+  "main": "build/lq-sdk.v1.0.js",
+  "types": "build/lq-sdk.v1.0.d.ts",
+  "scripts": {
+    "build": "tsc && esbuild src/lq-sdk.v1.0.ts --bundle --format=iife --platform=browser --target=es2020 --outfile=build/lq-sdk.v1.0.js",
+    "dev": "tsc --watch"
+  },
+  "keywords": ["lingqing", "sdk", "live-app"],
+  "author": "LingQing Team",
+  "license": "Apache-2.0",
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "esbuild": "^0.25.0"
+  }
+}

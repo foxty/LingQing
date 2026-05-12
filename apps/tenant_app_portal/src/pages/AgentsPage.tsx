@@ -1,0 +1,529 @@
+import { useEffect, useMemo, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useTranslation } from 'react-i18next'
+import i18n from '@/i18n/config'
+import { Bot, MessageSquare, Plus, Share2, Slack, Trash2 } from 'lucide-react'
+import { Can } from '@/components/Can'
+import ResourceAclShareDialog from '@/components/ResourceAclShareDialog'
+import EmptyState from '@/components/EmptyState'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
+import { Checkbox } from '@/components/ui/checkbox'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { Textarea } from '@/components/ui/textarea'
+import { useAuth } from '@/hooks/useAuth'
+import {
+  useAgentSkillCatalog,
+  useAgents,
+  useCreateAgent,
+  useDeleteAgent,
+  useUpdateAgent,
+} from '@/hooks/useAgents'
+import { useDocumentCollections } from '@/hooks/useDocumentCollections'
+import { actionRules } from '@/lib/permissionRules'
+import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
+import {
+  SYSTEM_AGENT_ONE_ID,
+  agentApiErrorMessage,
+  type AgentCapabilityConfig,
+  type AgentSkillCatalogItem,
+  type CatalogAgent,
+} from '@/lib/agentsApi'
+import { listApiConnectors } from '@/lib/apiConnectorApi'
+import { listDataSources } from '@/lib/dataSourceApi'
+import { listSlackIntegrations, type SlackIntegration } from '@/lib/slackApi'
+import { PERMISSIONS } from '@/lib/permissionRules'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import AgentSlackIntegrationDialog from '@/components/agents/AgentSlackIntegrationDialog'
+import { Badge } from '@/components/ui/badge'
+
+i18n.addResourceBundle(
+  'en',
+  'translation',
+  {
+    agents: {
+      pageTitle: 'Agents',
+      description: 'Purpose-specific assistants with assigned tools, skills, and knowledge.',
+      create: 'New agent',
+      openChat: 'Open in conversation',
+      share: 'Share',
+      edit: 'Edit',
+      delete: 'Delete',
+      system: 'Built-in',
+      empty: 'No custom agents yet',
+      emptyHint: 'Create an agent for a specific job, then open it in conversation.',
+      onlyBuiltIn: 'Only the built-in assistant is available. Create one for a specific job.',
+      name: 'Name',
+      prompt: 'System prompt',
+      tools: 'Tools',
+      toolsHint: 'Tools are bound from assigned skills plus knowledge bases, data sources, and APIs.',
+      toolsEmpty: 'No tools yet. Assign a skill or a knowledge base, data source, or API.',
+      skills: 'Skills',
+      knowledge: 'Knowledge bases',
+      dataSources: 'Data sources',
+      apis: 'API connectors',
+      save: 'Save',
+      saveFailed: 'Failed to save agent',
+      cancel: 'Cancel',
+      deleteTitle: 'Delete agent',
+      deleteFailed: 'Failed to delete agent',
+      deleteDesc: 'Delete "{{name}}"? Existing conversations stay, but this agent can no longer be used.',
+      slack: 'Slack',
+      slackStatusConnected: 'Slack connected',
+      slackStatusDisabled: 'Slack disabled',
+    },
+  },
+  true,
+  true
+)
+
+i18n.addResourceBundle(
+  'zh',
+  'translation',
+  {
+    agents: {
+      pageTitle: '智能体',
+      description: '为特定任务分配工具、技能与知识库的助手。',
+      create: '新建智能体',
+      openChat: '在对话中打开',
+      share: '共享',
+      edit: '编辑',
+      delete: '删除',
+      system: '内置',
+      empty: '暂无自定义智能体',
+      emptyHint: '先创建一个面向具体任务的智能体，再到对话中使用。',
+      onlyBuiltIn: '目前只有内置助手。创建一个面向具体任务的智能体。',
+      name: '名称',
+      prompt: '系统提示词',
+      tools: '工具',
+      toolsHint: '工具由已分配的技能，以及知识库、数据源和 API 自动绑定。',
+      toolsEmpty: '暂无工具。请先分配技能，或选择知识库、数据源、API。',
+      skills: '技能',
+      knowledge: '知识库',
+      dataSources: '数据源',
+      apis: 'API 连接器',
+      save: '保存',
+      saveFailed: '保存智能体失败',
+      cancel: '取消',
+      deleteTitle: '删除智能体',
+      deleteFailed: '删除智能体失败',
+      deleteDesc: '确定删除“{{name}}”？历史对话会保留，但该智能体不可再用。',
+      slack: 'Slack',
+      slackStatusConnected: 'Slack 已连接',
+      slackStatusDisabled: 'Slack 已禁用',
+    },
+  },
+  true,
+  true
+)
+
+const emptyConfig = (): AgentCapabilityConfig => ({
+  default_tools: [],
+  skills: [],
+  knowledge_base_ids: [],
+  data_source_ids: [],
+  api_connector_ids: [],
+  model_key: null,
+})
+
+export default function AgentsPage() {
+  const { t } = useTranslation()
+  const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
+  const { hasAny } = useAuth()
+  const queryClient = useQueryClient()
+  const canManageTenantSlack = hasAny([PERMISSIONS.AUTH_PROVIDERS_MANAGE])
+  const canViewAgents = hasAny([PERMISSIONS.AGENTS_READ])
+  const { data: agents = [], isLoading } = useAgents()
+  const { data: skills = [] } = useAgentSkillCatalog()
+  const { data: collections = [] } = useDocumentCollections()
+  const { data: dataSources = [] } = useQuery({
+    queryKey: ['agent-data-sources'],
+    queryFn: async () => (await listDataSources(1, 100)).items ?? [],
+  })
+  const { data: connectors = [] } = useQuery({
+    queryKey: ['agent-api-connectors'],
+    queryFn: listApiConnectors,
+  })
+  const { data: slackIntegrations = [] } = useQuery({
+    queryKey: ['slack-integrations'],
+    queryFn: listSlackIntegrations,
+    enabled: canViewAgents,
+  })
+  const slackByAgentId = useMemo(
+    () => new Map(slackIntegrations.map((integration) => [integration.agent_id, integration])),
+    [slackIntegrations]
+  )
+  const createMutation = useCreateAgent()
+  const updateMutation = useUpdateAgent()
+  const deleteMutation = useDeleteAgent()
+  const canCreate = hasAny(actionRules.canCreateAgent())
+
+  const [editing, setEditing] = useState<CatalogAgent | 'new' | null>(null)
+  const [sharing, setSharing] = useState<CatalogAgent | null>(null)
+  const [slackAgent, setSlackAgent] = useState<CatalogAgent | null>(null)
+  const [formName, setFormName] = useState('')
+  const [formPrompt, setFormPrompt] = useState('')
+  const [formConfig, setFormConfig] = useState<AgentCapabilityConfig>(emptyConfig())
+  const [formError, setFormError] = useState<string | null>(null)
+
+  const systemAgent = agents.find((agent) => agent.id === SYSTEM_AGENT_ONE_ID)
+  const customAgents = agents.filter((agent) => !agent.is_system)
+
+  const canManageSlack = (agent: CatalogAgent) =>
+    agent.is_system ? canManageTenantSlack : agent.can_manage
+
+  const openCreate = () => {
+    setFormName('')
+    setFormPrompt(systemAgent?.system_prompt || '')
+    setFormConfig(emptyConfig())
+    setFormError(null)
+    setEditing('new')
+  }
+
+  useEffect(() => {
+    if (searchParams.get('new') !== '1' || !canCreate) {
+      return
+    }
+    openCreate()
+    const next = new URLSearchParams(searchParams)
+    next.delete('new')
+    setSearchParams(next, { replace: true })
+  }, [canCreate, searchParams, setSearchParams])
+
+  const openEdit = (agent: CatalogAgent) => {
+    setFormName(agent.name)
+    setFormPrompt(agent.system_prompt)
+    setFormConfig({ ...emptyConfig(), ...agent.config })
+    setFormError(null)
+    setEditing(agent)
+  }
+
+  const toggleListValue = <T,>(list: T[], value: T) =>
+    list.includes(value) ? list.filter((item) => item !== value) : [...list, value]
+
+  const save = async () => {
+    const payload = {
+      name: formName.trim(),
+      system_prompt: formPrompt,
+      config: formConfig,
+    }
+    try {
+      setFormError(null)
+      if (editing === 'new') {
+        await createMutation.mutateAsync(payload)
+      } else if (editing && !editing.is_system) {
+        await updateMutation.mutateAsync({ agentId: editing.id, payload })
+      }
+      setEditing(null)
+    } catch (error) {
+      setFormError(agentApiErrorMessage(error, t('agents.saveFailed')))
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold">{t('agents.pageTitle')}</h1>
+          <p className="text-sm text-muted-foreground">{t('agents.description')}</p>
+        </div>
+        <Can any={actionRules.canCreateAgent()}>
+          <Button onClick={openCreate}>
+            <Plus className="mr-2 h-4 w-4" />
+            {t('agents.create')}
+          </Button>
+        </Can>
+      </div>
+
+      {isLoading ? (
+        <div className="py-12 text-center text-muted-foreground">{t('common.loading')}</div>
+      ) : agents.length === 0 ? (
+        <EmptyState
+          title={t('agents.empty')}
+          description={t('agents.emptyHint')}
+          action={
+            canCreate ? (
+              <Button onClick={openCreate}>
+                <Plus className="mr-2 h-4 w-4" />
+                {t('agents.create')}
+              </Button>
+            ) : undefined
+          }
+        />
+      ) : (
+        <div className="grid gap-3">
+          {customAgents.length === 0 && canCreate ? (
+            <p className="text-sm text-muted-foreground">{t('agents.onlyBuiltIn')}</p>
+          ) : null}
+          {agents.map((agent) => (
+            <div key={agent.id} className="rounded-md border p-4 space-y-3">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <Bot className="h-4 w-4" />
+                    <h2 className="text-base font-medium">{agent.name}</h2>
+                    {agent.is_system ? (
+                      <span className="text-xs text-muted-foreground">{t('agents.system')}</span>
+                    ) : null}
+                  </div>
+                  <p className="text-sm text-muted-foreground line-clamp-2">{agent.description || agent.system_prompt}</p>
+                  <AgentSlackStatusBadge integration={slackByAgentId.get(agent.id)} />
+                </div>
+                <div className="flex shrink-0 flex-wrap justify-end gap-2">
+                  <Button
+                    size="sm"
+                    onClick={() => navigate(`/workbench?agent=${agent.id}`)}
+                  >
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    {t('agents.openChat')}
+                  </Button>
+                  {canManageSlack(agent) ? (
+                    <Button size="sm" variant="outline" onClick={() => setSlackAgent(agent)}>
+                      <Slack className="mr-2 h-4 w-4" />
+                      {t('agents.slack')}
+                    </Button>
+                  ) : null}
+                  {!agent.is_system && agent.can_manage ? (
+                    <Button size="sm" variant="outline" onClick={() => setSharing(agent)}>
+                      <Share2 className="mr-2 h-4 w-4" />
+                      {t('agents.share')}
+                    </Button>
+                  ) : null}
+                  {!agent.is_system && agent.can_write ? (
+                    <>
+                      <Button size="sm" variant="outline" onClick={() => openEdit(agent)}>
+                        {t('agents.edit')}
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        onClick={() => {
+                          if (window.confirm(t('agents.deleteDesc', { name: agent.name }))) {
+                            deleteMutation.mutate(agent.id)
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </>
+                  ) : null}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={editing !== null} onOpenChange={(open) => !open && setEditing(null)}>
+        <DialogContent className="max-h-[90vh] overflow-y-auto max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>{editing === 'new' ? t('agents.create') : t('agents.edit')}</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-2">
+              <Label>{t('agents.name')}</Label>
+              <Input value={formName} onChange={(event) => setFormName(event.target.value)} />
+            </div>
+            <div className="space-y-2">
+              <Label>{t('agents.prompt')}</Label>
+              <Textarea value={formPrompt} onChange={(event) => setFormPrompt(event.target.value)} rows={6} />
+            </div>
+            <CheckboxGroup
+              label={t('agents.skills')}
+              items={skills.map((skill) => ({ id: skill.name, label: `${skill.name} (${skill.scope})` }))}
+              selected={formConfig.skills}
+              onToggle={(id) =>
+                setFormConfig((current) => ({
+                  ...current,
+                  skills: toggleListValue(current.skills, id),
+                }))
+              }
+            />
+            <CheckboxGroup
+              label={t('agents.knowledge')}
+              items={collections.map((collection) => ({ id: String(collection.id), label: collection.name }))}
+              selected={formConfig.knowledge_base_ids.map(String)}
+              onToggle={(id) =>
+                setFormConfig((current) => ({
+                  ...current,
+                  knowledge_base_ids: toggleListValue(current.knowledge_base_ids, Number(id)),
+                }))
+              }
+            />
+            <CheckboxGroup
+              label={t('agents.dataSources')}
+              items={dataSources.map((source) => ({ id: String(source.id), label: source.name }))}
+              selected={formConfig.data_source_ids.map(String)}
+              onToggle={(id) =>
+                setFormConfig((current) => ({
+                  ...current,
+                  data_source_ids: toggleListValue(current.data_source_ids, Number(id)),
+                }))
+              }
+            />
+            <CheckboxGroup
+              label={t('agents.apis')}
+              items={connectors.map((connector) => ({ id: String(connector.id), label: connector.name }))}
+              selected={formConfig.api_connector_ids.map(String)}
+              onToggle={(id) =>
+                setFormConfig((current) => ({
+                  ...current,
+                  api_connector_ids: toggleListValue(current.api_connector_ids, Number(id)),
+                }))
+              }
+            />
+            <DerivedToolsPreview config={formConfig} skills={skills} />
+            {formError ? (
+              <Alert variant="destructive">
+                <AlertDescription>{formError}</AlertDescription>
+              </Alert>
+            ) : null}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setEditing(null)}>
+              {t('agents.cancel')}
+            </Button>
+            <Button onClick={save} disabled={!formName.trim() || createMutation.isPending || updateMutation.isPending}>
+              {t('agents.save')}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {sharing ? (
+        <ResourceAclShareDialog
+          open={Boolean(sharing)}
+          onOpenChange={(open) => !open && setSharing(null)}
+          resourceType={ACL_SHARE_RESOURCE_TYPES.AGENT}
+          resourceId={sharing.id}
+          resourceTitle={sharing.name}
+        />
+      ) : null}
+
+      <AgentSlackIntegrationDialog
+        agent={slackAgent}
+        canManage={slackAgent ? canManageSlack(slackAgent) : false}
+        open={slackAgent !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setSlackAgent(null)
+            queryClient.invalidateQueries({ queryKey: ['slack-integrations'] })
+          }
+        }}
+        onChanged={() => queryClient.invalidateQueries({ queryKey: ['slack-integrations'] })}
+      />
+    </div>
+  )
+}
+
+function AgentSlackStatusBadge({ integration }: { integration: SlackIntegration | undefined }) {
+  const { t } = useTranslation()
+  if (!integration) {
+    return null
+  }
+  return (
+    <Badge variant={integration.enabled ? 'default' : 'secondary'} className="mt-2">
+      {integration.enabled ? t('agents.slackStatusConnected') : t('agents.slackStatusDisabled')}
+    </Badge>
+  )
+}
+
+const CORE_SKILL_TOOLS = ['load_skill', 'unload_skill', 'read_skill_file']
+const KNOWLEDGE_TOOLS = ['search_documents', 'retrieve_resource_context']
+const DATA_SOURCE_TOOLS = ['list_data_sources', 'search_data_assets', 'retrieve_resource_context']
+const API_CONNECTOR_TOOLS = ['search_apis', 'retrieve_resource_context', 'api_connector']
+
+function deriveBoundTools(config: AgentCapabilityConfig, skills: AgentSkillCatalogItem[]): string[] {
+  const names: string[] = []
+  const add = (name: string) => {
+    if (name && !names.includes(name)) {
+      names.push(name)
+    }
+  }
+  if (config.skills.length > 0) {
+    CORE_SKILL_TOOLS.forEach(add)
+    for (const skillName of config.skills) {
+      const skill = skills.find((item) => item.name === skillName)
+      skill?.tools?.forEach(add)
+    }
+  }
+  if (config.knowledge_base_ids.length > 0) {
+    KNOWLEDGE_TOOLS.forEach(add)
+  }
+  if (config.data_source_ids.length > 0) {
+    DATA_SOURCE_TOOLS.forEach(add)
+  }
+  if (config.api_connector_ids.length > 0) {
+    API_CONNECTOR_TOOLS.forEach(add)
+  }
+  return names
+}
+
+function DerivedToolsPreview({
+  config,
+  skills,
+}: {
+  config: AgentCapabilityConfig
+  skills: AgentSkillCatalogItem[]
+}) {
+  const { t } = useTranslation()
+  const tools = deriveBoundTools(config, skills)
+  return (
+    <div className="space-y-2">
+      <Label>{t('agents.tools')}</Label>
+      <p className="text-xs text-muted-foreground">{t('agents.toolsHint')}</p>
+      <div className="rounded-md border p-3">
+        {tools.length === 0 ? (
+          <p className="text-sm text-muted-foreground">{t('agents.toolsEmpty')}</p>
+        ) : (
+          <div className="flex flex-wrap gap-1.5">
+            {tools.map((name) => (
+              <span key={name} className="rounded-md bg-muted px-2 py-0.5 font-mono text-xs">
+                {name}
+              </span>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function CheckboxGroup({
+  label,
+  items,
+  selected,
+  onToggle,
+}: {
+  label: string
+  items: { id: string; label: string }[]
+  selected: string[]
+  onToggle: (id: string) => void
+}) {
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="max-h-40 space-y-2 overflow-y-auto rounded-md border p-3">
+        {items.length === 0 ? (
+          <p className="text-sm text-muted-foreground">—</p>
+        ) : (
+          items.map((item) => (
+            <label key={item.id} className="flex items-center gap-2 text-sm">
+              <Checkbox checked={selected.includes(item.id)} onCheckedChange={() => onToggle(item.id)} />
+              <span>{item.label}</span>
+            </label>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}

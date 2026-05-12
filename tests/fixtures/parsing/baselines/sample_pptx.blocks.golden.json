@@ -1,0 +1,482 @@
+{
+  "schema_version": 1,
+  "parser": "docling",
+  "blocks": [
+    {
+      "type": "text",
+      "text": "PPTX Parser Test Environment",
+      "page": 1,
+      "bbox": {
+        "left": 381000.0,
+        "top": 4381500.0,
+        "right": 5143500.0,
+        "bottom": 4762500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Verification suite for multi-element rendering, tables, and vector shapes",
+      "page": 1,
+      "bbox": {
+        "left": 381000.0,
+        "top": 4152900.0,
+        "right": 5143500.0,
+        "bottom": 4381500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Rich Text Column",
+      "page": 1,
+      "bbox": {
+        "left": 190500.0,
+        "top": 1809600.0,
+        "right": 2381400.0,
+        "bottom": 4953000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "This column validates complex vertical flow, bold inline accents, and nested line items to test rendering engine boundaries.",
+      "page": 1,
+      "bbox": {
+        "left": 190500.0,
+        "top": 1809600.0,
+        "right": 2381400.0,
+        "bottom": 4953000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Standard list item indentation and wrap behavior.",
+      "page": 1,
+      "bbox": {
+        "left": 190500.0,
+        "top": 1809600.0,
+        "right": 2381400.0,
+        "bottom": 4953000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Secondary node validating precise vertical margins.",
+      "page": 1,
+      "bbox": {
+        "left": 190500.0,
+        "top": 1809600.0,
+        "right": 2381400.0,
+        "bottom": 4953000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Inline success tokens for state testing.",
+      "page": 1,
+      "bbox": {
+        "left": 190500.0,
+        "top": 1809600.0,
+        "right": 2381400.0,
+        "bottom": 4953000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Vector Metrics",
+      "page": 1,
+      "bbox": {
+        "left": 190500.0,
+        "top": 4667100.0,
+        "right": 2190600.0,
+        "bottom": 4953000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "99.4%",
+      "page": 1,
+      "bbox": {
+        "left": 142875.0,
+        "top": 4457700.0,
+        "right": 1857375.0,
+        "bottom": 5029200.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Parser Accuracy",
+      "page": 1,
+      "bbox": {
+        "left": 142875.0,
+        "top": 4457700.0,
+        "right": 1857375.0,
+        "bottom": 5029200.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "< 12ms",
+      "page": 1,
+      "bbox": {
+        "left": 142875.0,
+        "top": 4457700.0,
+        "right": 1857375.0,
+        "bottom": 5029200.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Render Latency",
+      "page": 1,
+      "bbox": {
+        "left": 142875.0,
+        "top": 4457700.0,
+        "right": 1857375.0,
+        "bottom": 5029200.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Coverage",
+      "page": 1,
+      "bbox": {
+        "left": 762000.0,
+        "top": 4476825.0,
+        "right": 1905000.0,
+        "bottom": 5000625.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "80% Target validation success rate",
+      "page": 1,
+      "bbox": {
+        "left": 762000.0,
+        "top": 4476825.0,
+        "right": 1905000.0,
+        "bottom": 5000625.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Interactive Element Suite",
+      "page": 2,
+      "bbox": {
+        "left": 381000.0,
+        "top": 4381500.0,
+        "right": 5143500.0,
+        "bottom": 4762500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Advanced interactive components, dynamic state transitions, and metrics",
+      "page": 2,
+      "bbox": {
+        "left": 381000.0,
+        "top": 4152900.0,
+        "right": 5143500.0,
+        "bottom": 4381500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "System Integration Checklist",
+      "page": 2,
+      "bbox": {
+        "left": 571500.0,
+        "top": 3428850.0,
+        "right": 4095900.0,
+        "bottom": 3714750.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "API Gateway connection established successfully",
+      "page": 2,
+      "bbox": {
+        "left": 228600.0,
+        "top": 4953000.0,
+        "right": 3467100.0,
+        "bottom": 5143500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Database replicas synchronized in real-time",
+      "page": 2,
+      "bbox": {
+        "left": 228600.0,
+        "top": 4953000.0,
+        "right": 3467100.0,
+        "bottom": 5143500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Websocket layer active for live client connections",
+      "page": 2,
+      "bbox": {
+        "left": 228600.0,
+        "top": 4953000.0,
+        "right": 3467100.0,
+        "bottom": 5143500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "System Performance & Bandwidth Usage",
+      "page": 2,
+      "bbox": {
+        "left": 4667250.0,
+        "top": 3428850.0,
+        "right": 8572650.0,
+        "bottom": 3714750.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "2.4 GB/s",
+      "page": 2,
+      "bbox": {
+        "left": 190500.0,
+        "top": 4552800.0,
+        "right": 1524000.0,
+        "bottom": 4953000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Peak Network Throughput",
+      "page": 2,
+      "bbox": {
+        "left": 190500.0,
+        "top": 4267200.0,
+        "right": 1524000.0,
+        "bottom": 4495800.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "0.02%",
+      "page": 2,
+      "bbox": {
+        "left": 190500.0,
+        "top": 4552800.0,
+        "right": 1524000.0,
+        "bottom": 4953000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Average Packet Loss",
+      "page": 2,
+      "bbox": {
+        "left": 190500.0,
+        "top": 4267200.0,
+        "right": 1524000.0,
+        "bottom": 4495800.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "GPU Memory Utilization",
+      "page": 2,
+      "bbox": {
+        "left": 1381125.0,
+        "top": 4562325.0,
+        "right": 3381225.0,
+        "bottom": 4810125.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "75%",
+      "page": 2,
+      "bbox": {
+        "left": 428625.0,
+        "top": 4286100.0,
+        "right": 905025.0,
+        "bottom": 4572000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Active State",
+      "page": 2,
+      "bbox": {
+        "left": 1381125.0,
+        "top": 4286100.0,
+        "right": 2238525.0,
+        "bottom": 4495800.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Displays real-time hardware memory allocation, buffer caching efficiency, and concurrent process scheduling.",
+      "page": 2,
+      "bbox": {
+        "left": 1381125.0,
+        "top": 3895800.0,
+        "right": 3381225.0,
+        "bottom": 4229100.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Microservices Latency Matrix",
+      "page": 2,
+      "bbox": {
+        "left": 571500.0,
+        "top": 1619100.0,
+        "right": 4095900.0,
+        "bottom": 1905000.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Service Node",
+      "page": 2,
+      "bbox": {
+        "left": 95250.0,
+        "top": 4876800.0,
+        "right": 1619250.0,
+        "bottom": 5143500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Uptime %",
+      "page": 2,
+      "bbox": {
+        "left": 1714500.0,
+        "top": 4876800.0,
+        "right": 2571900.0,
+        "bottom": 5143500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Avg Latency",
+      "page": 2,
+      "bbox": {
+        "left": 2667000.0,
+        "top": 4876800.0,
+        "right": 3429000.0,
+        "bottom": 5143500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Authentication Hub",
+      "page": 2,
+      "bbox": {
+        "left": 95250.0,
+        "top": 4572000.0,
+        "right": 1619250.0,
+        "bottom": 4762500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "99.99%",
+      "page": 2,
+      "bbox": {
+        "left": 1714500.0,
+        "top": 4572000.0,
+        "right": 2571900.0,
+        "bottom": 4762500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "4.2 ms",
+      "page": 2,
+      "bbox": {
+        "left": 2667000.0,
+        "top": 4572000.0,
+        "right": 3429000.0,
+        "bottom": 4762500.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "Inventory Engine",
+      "page": 2,
+      "bbox": {
+        "left": 95250.0,
+        "top": 4267200.0,
+        "right": 1619250.0,
+        "bottom": 4457700.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "99.95%",
+      "page": 2,
+      "bbox": {
+        "left": 1714500.0,
+        "top": 4267200.0,
+        "right": 2571900.0,
+        "bottom": 4457700.0
+      }
+    },
+    {
+      "type": "text",
+      "text": "11.8 ms",
+      "page": 2,
+      "bbox": {
+        "left": 2667000.0,
+        "top": 4267200.0,
+        "right": 3429000.0,
+        "bottom": 4457700.0
+      }
+    },
+    {
+      "type": "table",
+      "text": "| Component | Status | Latency | Score |\n| --- | --- | --- | --- |\n| Text Engine | Passed | 1.2ms | 10 / 10 |\n| Vector Shapes | Passed | 4.5ms | 9 / 10 |\n| Image Loader | Passed | 2.1ms | 8 / 10 |\n| Font Renderer | Passed | 0.8ms | 10 / 10 |\n| Layout Solver | Passed | 3.4ms | 9 / 10 |",
+      "page": 1,
+      "bbox": {
+        "left": 3333750.0,
+        "top": 571500.0,
+        "right": 6333750.0,
+        "bottom": 3714750.0
+      }
+    },
+    {
+      "type": "image",
+      "uri": "1/parsed/latest/images/85b06d90436a203cb763e43e71278866a2a46ba9ea2d7f1856a5cb555c42c6f2.png",
+      "caption": null,
+      "page": 1,
+      "bbox": {
+        "left": 123825.0,
+        "top": 4486125.0,
+        "right": 638325.0,
+        "bottom": 5000625.0
+      }
+    },
+    {
+      "type": "image",
+      "uri": "1/parsed/latest/images/91227c510f8cd0e1ab89294348fa9077c17cd94e13f381d4fba550de290eb0cc.png",
+      "caption": null,
+      "page": 2,
+      "bbox": {
+        "left": 190500.0,
+        "top": 3952875.0,
+        "right": 1143000.0,
+        "bottom": 4905375.0
+      }
+    },
+    {
+      "type": "image",
+      "uri": "1/parsed/latest/images/f55c6a49ae9c65fa3862114fcac2a1b1f89280d9f9166105799214ed29f66f75.png",
+      "caption": null,
+      "page": 3,
+      "bbox": {
+        "left": 512445.0,
+        "top": 1591310.0,
+        "right": 3731895.0,
+        "bottom": 4801235.0
+      }
+    }
+  ]
+}

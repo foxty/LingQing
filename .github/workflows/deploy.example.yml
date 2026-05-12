@@ -1,0 +1,86 @@
+# EXAMPLE ONLY — copy to your ops repo or rename to deploy.yml after configuring secrets.
+# Not executed by default (example suffix). See docs/deploy/byo-cicd.md.
+
+name: Deploy (example)
+
+env:
+  REGISTRY: ${{ vars.REGISTRY }}
+  REGISTRY_URL: ${{ vars.REGISTRY_URL }}
+  REGISTRY_USERNAME: ${{ vars.REGISTRY_USERNAME }}
+  DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+  DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Image tag to deploy (e.g. v2.0.0)
+        required: true
+        type: string
+      stack:
+        description: Stack to deploy
+        type: choice
+        options: [all, app, manager]
+        default: all
+      tier:
+        description: Target tier
+        type: choice
+        options: [production, staging]
+        default: production
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to registry
+        env:
+          REGISTRY_PASSWORD: ${{ secrets.REGISTRY_PASSWORD }}
+        run: echo "$REGISTRY_PASSWORD" | docker login "$REGISTRY" -u "$REGISTRY_USERNAME" --password-stdin
+
+      - name: Build and push images
+        run: |
+          chmod +x ./deploy/scripts/build-backend.sh ./deploy/scripts/build-frontend.sh
+          ./deploy/scripts/build-backend.sh "$REGISTRY_URL" "${{ inputs.version }}" --ci
+          ./deploy/scripts/build-frontend.sh "$REGISTRY_URL" "${{ inputs.version }}" --ci
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup SSH
+        env:
+          DEPLOY_SSH_KEY: ${{ secrets.DEPLOY_SSH_KEY }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$DEPLOY_SSH_KEY" > ~/.ssh/deploy_key
+          chmod 600 ~/.ssh/deploy_key
+
+      - name: Generate env file
+        env:
+          SECRET_KEY: ${{ secrets.SECRET_KEY }}
+          TENANT_APP_DB_PASSWORD: ${{ secrets.TENANT_APP_DB_PASSWORD }}
+          TENANT_MANAGER_DB_PASSWORD: ${{ secrets.TENANT_MANAGER_DB_PASSWORD }}
+        run: |
+          chmod +x ./deploy/scripts/generate-env.sh
+          ./deploy/scripts/generate-env.sh deploy/env/.env.template "/tmp/.env.${{ inputs.tier }}"
+
+      - name: Deploy
+        run: |
+          chmod +x ./deploy/scripts/remote/deploy.sh
+          ./deploy/scripts/remote/deploy.sh \
+            "${{ inputs.version }}" \
+            "$REGISTRY_URL" \
+            "$DEPLOY_HOST" \
+            "$DEPLOY_USER" \
+            "/tmp/.env.${{ inputs.tier }}" \
+            "${{ inputs.stack }}" \
+            "${{ inputs.tier }}"
+
+      - name: Cleanup SSH key
+        if: always()
+        run: rm -f ~/.ssh/deploy_key

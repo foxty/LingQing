@@ -1,0 +1,38 @@
+{
+    "name": "scheduler_service",
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/scheduler_service",
+    "projectType": "application",
+    "targets": {
+        "dev": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run python -m apps.scheduler_service.main",
+                "cwd": "."
+            }
+        },
+        "start": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run python -m apps.scheduler_service.main",
+                "cwd": "."
+            }
+        },
+        "lint": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run ruff check apps/scheduler_service",
+                "cwd": "."
+            }
+        },
+    },
+    "tags": [
+        "python",
+        "backend",
+        "scheduler",
+        "tasks"
+    ],
+    "implicitDependencies": [
+        "shared"
+    ]
+}

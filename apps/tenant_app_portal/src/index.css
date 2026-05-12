@@ -1,0 +1,193 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    /* DESIGN.md OKLch, stored as L C H for oklch(var(--token) / <alpha>) */
+    --background: 98% 0.005 250;
+    --foreground: 22% 0.02 240;
+    --card: 100% 0 0;
+    --card-foreground: 22% 0.02 240;
+    --popover: 100% 0 0;
+    --popover-foreground: 22% 0.02 240;
+    --primary: 58% 0.16 145;
+    --primary-foreground: 98% 0.01 145;
+    --secondary: 90% 0.014 250;
+    --secondary-foreground: 22% 0.02 240;
+    --muted: 96% 0.006 250;
+    --muted-foreground: 50% 0.018 240;
+    --accent: 93% 0.01 250;
+    --accent-foreground: 22% 0.02 240;
+    --destructive: 54% 0.18 25;
+    --destructive-foreground: 99% 0.01 25;
+    --border: 90% 0.008 240;
+    --input: 90% 0.008 240;
+    --ring: 58% 0.16 145;
+    --success: 48% 0.12 145;
+    --warn: 62% 0.14 75;
+    --radius: 6px;
+    --radius-pane: 10px;
+    --chart-1: 58% 0.16 145;
+    --chart-2: 52% 0.13 200;
+    --chart-3: 66% 0.15 75;
+    --chart-4: 50% 0.12 25;
+    --chart-5: 48% 0.11 285;
+    --chart-6: 56% 0.14 330;
+    --chart-7: 48% 0.10 240;
+    --chart-8: 58% 0.13 55;
+    --chart-9: 54% 0.11 190;
+    --chart-10: 46% 0.09 300;
+
+    --font-body: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', system-ui, 'PingFang SC',
+      'Hiragino Sans GB', 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+    --font-mono: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
+  }
+
+  .dark {
+    --background: 18% 0.02 250;
+    --foreground: 96% 0.01 240;
+    --card: 22% 0.015 250;
+    --card-foreground: 96% 0.01 240;
+    --popover: 22% 0.015 250;
+    --popover-foreground: 96% 0.01 240;
+    --primary: 62% 0.15 145;
+    --primary-foreground: 18% 0.02 145;
+    --secondary: 32% 0.018 250;
+    --secondary-foreground: 96% 0.01 240;
+    --muted: 28% 0.015 250;
+    --muted-foreground: 72% 0.015 240;
+    --accent: 30% 0.015 250;
+    --accent-foreground: 96% 0.01 240;
+    --destructive: 58% 0.16 25;
+    --destructive-foreground: 98% 0.01 25;
+    --border: 32% 0.015 240;
+    --input: 32% 0.015 240;
+    --ring: 62% 0.15 145;
+    --success: 58% 0.12 145;
+    --warn: 70% 0.12 75;
+    --chart-1: 62% 0.15 145;
+    --chart-2: 66% 0.12 200;
+    --chart-3: 72% 0.14 75;
+    --chart-4: 62% 0.11 25;
+    --chart-5: 60% 0.10 285;
+    --chart-6: 64% 0.13 330;
+    --chart-7: 58% 0.09 240;
+    --chart-8: 66% 0.12 55;
+    --chart-9: 62% 0.10 190;
+    --chart-10: 54% 0.08 300;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-family: var(--font-body);
+  }
+  :lang(zh) {
+    letter-spacing: 0;
+  }
+}
+
+.monaco-editor .monaco-param-key {
+  color: oklch(var(--primary));
+  font-weight: 600;
+}
+
+.monaco-editor .monaco-macro {
+  color: oklch(var(--chart-2));
+  font-weight: 600;
+}
+
+/* Document surface: 16px body, DESIGN type scale, full canvas width */
+.document-prose {
+  --tw-prose-body: oklch(var(--foreground));
+  --tw-prose-headings: oklch(var(--foreground));
+  --tw-prose-lead: oklch(var(--muted-foreground));
+  --tw-prose-links: oklch(var(--foreground));
+  --tw-prose-bold: oklch(var(--foreground));
+  --tw-prose-counters: oklch(var(--muted-foreground));
+  --tw-prose-bullets: oklch(var(--muted-foreground));
+  --tw-prose-hr: oklch(var(--border));
+  --tw-prose-quotes: oklch(var(--foreground));
+  --tw-prose-quote-borders: oklch(var(--border));
+  --tw-prose-captions: oklch(var(--muted-foreground));
+  --tw-prose-kbd: oklch(var(--foreground));
+  --tw-prose-kbd-shadows: 0 0 0;
+  --tw-prose-code: oklch(var(--foreground));
+  --tw-prose-pre-code: oklch(var(--foreground));
+  --tw-prose-pre-bg: oklch(var(--muted));
+  --tw-prose-th-borders: oklch(var(--border));
+  --tw-prose-td-borders: oklch(var(--border));
+  max-width: none;
+  font-size: 16px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+}
+
+.document-prose h1 {
+  font-size: 32px;
+  line-height: 1.15;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.document-prose h2 {
+  font-size: 24px;
+  line-height: 1.2;
+  font-weight: 600;
+}
+
+.document-prose h3 {
+  font-size: 20px;
+  line-height: 1.25;
+  font-weight: 600;
+}
+
+.document-prose :where(h4, h5, h6) {
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.document-prose :where(code, kbd, samp, pre) {
+  font-family: var(--font-mono);
+}
+
+.document-prose :where(table) {
+  display: block;
+  overflow-x: auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.document-prose :where(a) {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.document-plain {
+  max-width: none;
+  font-family: var(--font-mono);
+  font-size: 16px;
+  line-height: 1.55;
+  font-variant-numeric: tabular-nums;
+  white-space: pre-wrap;
+}
+
+:lang(zh) .document-prose,
+:lang(zh) .document-plain,
+:lang(zh) .document-title {
+  letter-spacing: 0;
+  line-height: 1.75;
+}
+
+:lang(zh) .document-prose h1,
+:lang(zh) .document-title {
+  line-height: 1.35;
+}
+
+:lang(zh) .document-prose h2 {
+  line-height: 1.35;
+}

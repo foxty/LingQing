@@ -1,0 +1,27 @@
+{
+    "name": "sandbox_service",
+    "$schema": "../../node_modules/nx/schemas/project-schema.json",
+    "sourceRoot": "apps/sandbox_service",
+    "projectType": "application",
+    "targets": {
+        "dev": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run uvicorn apps.sandbox_service.server:app --host 127.0.0.1 --port 8090 --reload",
+                "cwd": "."
+            }
+        },
+        "lint": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run ruff check apps/sandbox_service",
+                "cwd": "."
+            }
+        },
+    },
+    "tags": [
+        "python",
+        "backend",
+        "sandbox"
+    ]
+}

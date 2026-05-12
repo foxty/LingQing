@@ -1,0 +1,143 @@
+{
+    "name": "root",
+    "$schema": "./node_modules/nx/schemas/project-schema.json",
+    "projectType": "application",
+    "targets": {
+        "test": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run pytest tests/ -v",
+                "cwd": "."
+            }
+        },
+        "test:ci": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run pytest tests/ -v -m 'not docling'",
+                "cwd": "."
+            }
+        },
+        "test:docling": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run pytest tests/docling_integration/ -v -m docling",
+                "cwd": "."
+            }
+        },
+        "test:unit": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run pytest tests/unit/ -v",
+                "cwd": "."
+            }
+        },
+        "test:coverage": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run pytest tests/ --cov=apps --cov-report=html --cov-report=term",
+                "cwd": "."
+            }
+        },
+        "lint": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run ruff check apps/ scripts/",
+                "cwd": "."
+            }
+        },
+        "format": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run ruff format apps/ scripts/",
+                "cwd": "."
+            }
+        },
+        "format:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run ruff format --check apps/ scripts/",
+                "cwd": "."
+            }
+        },
+        "migrate-db:tenant-app": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run alembic -c apps/tenant_app_service/alembic.ini upgrade head",
+                "cwd": "."
+            }
+        },
+        "migrate-db:tenant-manager": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run alembic -c apps/tenant_manager_service/alembic.ini upgrade head",
+                "cwd": "."
+            }
+        },
+        "tenant-cli": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run python scripts/tenant_cli.py {args}",
+                "cwd": "."
+            }
+        },
+        "vector-sync-cli": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run python scripts/vector_sync_cli.py {args}",
+                "cwd": "."
+            }
+        },
+        "document-parse-cli": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run python scripts/document_parse_cli.py {args}",
+                "cwd": "."
+            }
+        },
+        "update-docling-goldens": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run python scripts/update_docling_golden_blocks.py {args}",
+                "cwd": "."
+            }
+        },
+        "rbac-scanner": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run python scripts/rbac_scanner.py {args}",
+                "cwd": "."
+            }
+        },
+        "agent-api-spec:generate": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "PYTHONPATH=. uv run python scripts/generate_agent_api_specs.py",
+                "cwd": "."
+            }
+        },
+        "agent-api-spec:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "PYTHONPATH=. uv run python scripts/generate_agent_api_specs.py --check",
+                "cwd": "."
+            }
+        },
+        "ci": {
+            "executor": "nx:run-commands",
+            "options": {
+                "commands": [
+                    "uv run ruff check apps/ scripts/",
+                    "uv run pytest tests/ -v -m 'not docling'",
+                    "PYTHONPATH=. uv run python scripts/generate_agent_api_specs.py --check",
+                    "npm run check-live-app-sdk"
+                ],
+                "parallel": false,
+                "cwd": "."
+            }
+        }
+    },
+    "tags": [
+        "root",
+        "util"
+    ]
+}

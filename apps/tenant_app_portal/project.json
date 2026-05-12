@@ -1,0 +1,65 @@
+{
+  "name": "tenant_app_portal",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/tenant_app_portal/src",
+  "projectType": "application",
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run dev",
+        "cwd": "apps/tenant_app_portal"
+      }
+    },
+    "lint": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run lint",
+        "cwd": "apps/tenant_app_portal"
+      }
+    },
+    "test": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run test",
+        "cwd": "apps/tenant_app_portal"
+      }
+    },
+    "ci": {
+      "executor": "nx:run-commands",
+      "options": {
+        "commands": [
+          "npm run lint",
+          "npm run build",
+          "npm run test"
+        ],
+        "parallel": false,
+        "cwd": "apps/tenant_app_portal"
+      }
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm run build",
+        "cwd": "apps/tenant_app_portal"
+      }
+    },
+    "install": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "npm install",
+        "cwd": "apps/tenant_app_portal"
+      }
+    }
+  },
+  "tags": [
+    "typescript",
+    "frontend",
+    "react",
+    "vite",
+    "portal"
+  ],
+  "implicitDependencies": [
+    "tenant_app_service"
+  ]
+}

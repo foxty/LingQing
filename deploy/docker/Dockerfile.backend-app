@@ -1,0 +1,34 @@
+# Application Image for Backend Services
+# Builds on: backend-base image
+# Contains: Application code only
+# Build trigger: On every code change (PR, push to main)
+# Supports: unified backend service
+
+ARG BASE_IMAGE
+FROM ${BASE_IMAGE}
+
+WORKDIR /app
+
+# Copy only runtime files needed by backend services.
+# This explicit allowlist prevents accidental inclusion of unrelated files.
+COPY --chown=appuser:appuser apps ./apps
+COPY --chown=appuser:appuser config ./config
+COPY --chown=appuser:appuser scripts ./scripts
+
+# Base image ends as appuser; entrypoint must be installed as root.
+USER root
+COPY deploy/docker/entrypoint.sh /entrypoint.sh
+RUN chmod 755 /entrypoint.sh && chown appuser:appuser /entrypoint.sh
+
+# Create data directory for static files and other storage
+RUN mkdir -p /app/data && chown appuser:appuser /app/data
+
+USER appuser
+
+# Expose ports
+EXPOSE 8000
+
+# Health checks are defined per service in compose (scheduler has no HTTP port).
+
+# Use entrypoint script to start the correct application
+ENTRYPOINT ["/entrypoint.sh"]

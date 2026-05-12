@@ -1,0 +1,56 @@
+# Dependencies
+node_modules/
+.venv/
+__pycache__/
+*.egg-info/
+
+# VCS / IDE metadata
+.git/
+.cursor/
+
+# Build outputs
+dist/
+build/
+.nx/
+.pytest_cache/
+.langgraph_api
+.ruff_cache/
+.mypy_cache/
+htmlcov/
+.coverage
+
+# Frontend build outputs (including nested app folders)
+**/dist/
+**/build/
+**/.next/
+**/.nuxt/
+**/.angular/
+**/.cache/
+**/.parcel-cache/
+
+
+# Data directories
+apps/agents/data/
+static/charts/
+
+# Environment files
+.env*
+!.env.template
+
+# Logs
+*.log
+
+# Large/generated files
+*.pyc
+*.pyo
+.DS_Store
+
+# package managers
+.pnpm-debug.log
+yarn-error.log
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+Pipfile.lock
+poetry.lock
+uv.lock

@@ -1,0 +1,165 @@
+# ============================================
+# Cursor Privacy Protection
+# ============================================
+# This file prevents Cursor from indexing sensitive
+# and large files, reducing telemetry data sent
+
+# ============================================
+# Git & Version Control
+# ============================================
+.git/
+.gitignore
+.gitattributes
+
+
+# ============================================
+# Environment & Secrets
+# ============================================
+*.key
+*.pem
+*.cert
+secrets/
+credentials/
+
+# ============================================
+# Databases & Vector Stores
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
+apps/agents/data/
+apps/agents/data/db.sqlite
+apps/agents/data/*.db
+apps/agents/data/ent_vector_db/
+apps/agents/data/knowledge_base/
+apps/agents/data/metadata/
+apps/agents/data/vector_stores/
+*.faiss
+*.pkl
+
+# ============================================
+# Node Modules & Dependencies
+# ============================================
+node_modules/
+.npm/
+.yarn/
+.pnp/
+.pnp.js
+
+# ============================================
+# Python Virtual Environments (IMPORTANT!)
+# ============================================
+.venv/
+venv/
+env/
+ENV/
+virtualenv/
+
+# ============================================
+# Python Caches & Build Artifacts
+# ============================================
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+*.egg-info/
+agent.egg-info/
+.installed.cfg
+*.egg
+*.whl
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+.nox/
+
+# ============================================
+# Frontend Build Artifacts
+# ============================================
+apps/admin-console/dist/
+apps/admin-console/node_modules/
+.nx/
+.angular/
+.next/
+.nuxt/
+.cache/
+.parcel-cache/
+
+# ============================================
+# Static & Generated Files
+# ============================================
+static/charts/
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.pdf
+
+# ============================================
+# Logs & Temporary Files
+# ============================================
+*.log
+logs/
+*.tmp
+*.temp
+.DS_Store
+Thumbs.db
+
+# ============================================
+# Large Documentation & Lock Files
+# ============================================
+uv.lock
+package-lock.json
+yarn.lock
+poetry.lock
+Pipfile.lock
+CHANGELOG.md
+CONTRIBUTING.md
+
+# ============================================
+# NX & Build Metadata (Can be 10+ MB!)
+# ============================================
+.nx/
+.nxcache/
+
+# ============================================
+# Workspace Metadata Files (Generated)
+# ============================================
+node_modules/.bin/
+node_modules/.cache/
+
+# ============================================
+# Test Files & Mocks
+# ============================================
+**/tests/**/__snapshots__/
+**/tests/**/fixtures/
+**/*.test.ts
+**/*.spec.ts
+**/*.test.py
+**/*.spec.py
+
+# ============================================
+# Docker & Deployment
+# ============================================
+.docker/
+.langgraph_api/
+deploy/docker-compose.yml
+
+# ============================================
+# IDE & Editor Files (except Cursor)
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+

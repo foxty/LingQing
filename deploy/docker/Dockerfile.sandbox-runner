@@ -1,0 +1,21 @@
+FROM python:3.11-slim
+
+RUN apt-get update && apt-get install -y \
+    bash \
+    coreutils \
+    git \
+    nodejs \
+    npm \
+    && rm -rf /var/lib/apt/lists/*
+
+# Pre-install platform dependencies to avoid reinstalling on every job run
+RUN pip install --no-cache-dir \
+    httpx>=0.24.0 \
+    pydantic>=2.0.0
+
+RUN useradd -m -u 1000 sandbox && \
+    mkdir -p /workspace /tmp && \
+    chown -R sandbox:sandbox /workspace /tmp
+
+USER sandbox
+WORKDIR /workspace

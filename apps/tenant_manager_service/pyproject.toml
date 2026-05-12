@@ -1,0 +1,17 @@
+[project]
+name = "lingqing-tenant-manager-service"
+version = "2.0.0"
+description = "LingQing Tenant Manager Service - Control plane for tenant lifecycle"
+license = "Apache-2.0"
+requires-python = ">=3.11"
+dependencies = ["lingqing-shared"]
+
+[tool.uv.sources]
+lingqing-shared = { workspace = true }
+
+[build-system]
+requires = ["setuptools>=73.0.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = []

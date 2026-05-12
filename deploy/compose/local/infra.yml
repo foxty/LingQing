@@ -1,0 +1,84 @@
+# LingQing local dev infra — Postgres, Chroma, optional Docling, sandbox runner image.
+# Tier: dev — pair with hot-reload on host: npm run dev:ta
+# Usage: ./deploy/scripts/local-stack.sh infra-up
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: lingqing-postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres_dev_password}
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale=C"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    ports:
+      - "${TENANT_APP_DB_PORT:-5432}:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  chroma:
+    image: chromadb/chroma:1.4.1
+    container_name: lingqing-chroma
+    environment:
+      - CHROMA_SERVER_HOST=0.0.0.0
+      - CHROMA_SERVER_HTTP_PORT=8000
+      - IS_PERSISTENT=TRUE
+      - PERSIST_DIRECTORY=/chroma/chroma
+      - CHROMA_CORS_ALLOW_ORIGINS=[*]
+      - ANONYMIZED_TELEMETRY=FALSE
+    volumes:
+      - chroma_data:/chroma/chroma
+    ports:
+      - "8002:8000"
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  docling-serve:
+    image: ${DOCLING_IMAGE:-quay.io/docling-project/docling-serve-cpu:v1.34.0}
+    container_name: lingqing-docling-serve
+    environment:
+      - DOCLING_SERVE_ENABLE_UI=${DOCLING_SERVE_ENABLE_UI:-1}
+      - DOCLING_SERVE_MAX_NUM_PAGES=${DOCLING_SERVE_MAX_NUM_PAGES:-200}
+    ports:
+      - "127.0.0.1:${DOCLING_HOST_PORT:-5001}:5001"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:5001/health >/dev/null || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 180s
+    mem_limit: ${DOCLING_MEM_LIMIT:-8g}
+    restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+  sandbox-runner-image:
+    image: lingqing-dev-sandbox-runner:local
+    build:
+      context: ../../..
+      dockerfile: deploy/docker/Dockerfile.sandbox-runner
+    command: "true"
+    restart: "no"
+
+volumes:
+  postgres_data:
+    driver: local
+  chroma_data:
+    driver: local

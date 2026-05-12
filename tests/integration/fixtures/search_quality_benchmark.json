@@ -1,0 +1,298 @@
+{
+    "api_connector": {
+        "default_top_n_by_mode": {
+            "fts": 2,
+            "vector": 5,
+            "hybrid": 3
+        },
+        "cases": [
+            {
+                "case_id": "orders_get_detail",
+                "content": {
+                    "method": "GET",
+                    "path_template": "/orders/{id}",
+                    "operation_id": "orders_get_detail",
+                    "summary": "Get order detail by id",
+                    "description": "Returns full order payload by identifier",
+                    "tags": [
+                        "orders",
+                        "detail"
+                    ]
+                },
+                "queries": [
+                    {
+                        "keyword": "orders_get_detail",
+                        "top_n": 1,
+                        "top_n_by_mode": {
+                            "vector": 5,
+                            "hybrid": 3
+                        }
+                    },
+                    {
+                        "keyword": "order detail by id"
+                    }
+                ]
+            },
+            {
+                "case_id": "orders_search",
+                "content": {
+                    "method": "POST",
+                    "path_template": "/orders/search",
+                    "operation_id": "orders_search",
+                    "summary": "Search orders by keyword",
+                    "description": "Search and filter orders using text terms",
+                    "tags": [
+                        "orders",
+                        "search"
+                    ]
+                },
+                "queries": [
+                    {
+                        "keyword": "orders search",
+                        "top_n": 2,
+                        "top_n_by_mode": {
+                            "vector": 5
+                        }
+                    },
+                    {
+                        "keyword": "search orders"
+                    }
+                ]
+            },
+            {
+                "case_id": "invoices_search",
+                "content": {
+                    "method": "POST",
+                    "path_template": "/invoices/search",
+                    "operation_id": "invoices_search",
+                    "summary": "Search invoices by customer",
+                    "description": "Find invoices by customer name or invoice number",
+                    "tags": [
+                        "invoices",
+                        "search"
+                    ]
+                },
+                "queries": [
+                    {
+                        "keyword": "invoices search",
+                        "top_n": 1,
+                        "top_n_by_mode": {
+                            "vector": 5
+                        }
+                    },
+                    {
+                        "keyword": "find invoice by customer"
+                    }
+                ]
+            },
+            {
+                "case_id": "customers_get_profile",
+                "content": {
+                    "method": "GET",
+                    "path_template": "/customers/{id}",
+                    "operation_id": "customers_get_profile",
+                    "summary": "Get customer profile",
+                    "description": "Returns customer profile and preferences",
+                    "tags": [
+                        "customers",
+                        "profile"
+                    ]
+                },
+                "queries": [
+                    {
+                        "keyword": "customer profile",
+                        "top_n": 1,
+                        "top_n_by_mode": {
+                            "vector": 5
+                        }
+                    },
+                    {
+                        "keyword": "get customer preferences"
+                    }
+                ]
+            }
+        ]
+    },
+    "document": {
+        "enabled": true,
+        "default_top_n_by_mode": {
+            "fts": 1,
+            "vector": 2,
+            "hybrid": 1
+        },
+        "cases": [
+            {
+                "case_id": "doc_sales_playbook",
+                "content": {
+                    "filename": "sales-playbook.md",
+                    "file_url": "s3://benchmark/docs/sales-playbook.md",
+                    "preview_text": "Enterprise sales playbook and account planning strategy for quarterly pipeline growth.",
+                    "vector_text": "Enterprise sales playbook with account planning, pipeline strategy, and quarterly revenue forecasting guidance.",
+                    "file_size": 1024
+                },
+                "queries": [
+                    {
+                        "keyword": "sales pipeline strategy"
+                    },
+                    {
+                        "keyword": "account planning playbook"
+                    }
+                ]
+            },
+            {
+                "case_id": "doc_incident_runbook",
+                "content": {
+                    "filename": "incident-runbook.md",
+                    "file_url": "s3://benchmark/docs/incident-runbook.md",
+                    "preview_text": "Incident response runbook with escalation policy, on-call checklist, and postmortem process.",
+                    "vector_text": "Incident response runbook covering escalation policy, on-call checklist, severity triage, and postmortem process.",
+                    "file_size": 1024
+                },
+                "queries": [
+                    {
+                        "keyword": "incident runbook",
+                        "top_n": 1
+                    },
+                    {
+                        "keyword": "on-call checklist"
+                    }
+                ]
+            },
+            {
+                "case_id": "doc_billing_faq",
+                "content": {
+                    "filename": "billing-faq.md",
+                    "file_url": "s3://benchmark/docs/billing-faq.md",
+                    "preview_text": "Billing and invoice FAQ for subscription upgrades, payment retries, and refund handling.",
+                    "vector_text": "Billing and invoice FAQ with subscription upgrades, payment retry handling, failed charges, and refund policy details.",
+                    "file_size": 1024
+                },
+                "queries": [
+                    {
+                        "keyword": "billing invoice refund",
+                        "top_n": 1
+                    },
+                    {
+                        "keyword": "payment retries"
+                    }
+                ]
+            }
+        ]
+    },
+    "asset_metadata": {
+        "enabled": true,
+        "default_top_n_by_mode": {
+            "fts": 1,
+            "vector": 5,
+            "hybrid": 2
+        },
+        "cases": [
+            {
+                "case_id": "asset_orders",
+                "content": {
+                    "asset_name": "orders",
+                    "asset_type": "table",
+                    "description": "Order transactions with status, amount, and customer references",
+                    "columns": [
+                        {
+                            "name": "order_id",
+                            "type": "bigint"
+                        },
+                        {
+                            "name": "customer_id",
+                            "type": "bigint"
+                        },
+                        {
+                            "name": "order_status",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "queries": [
+                    {
+                        "keyword": "Order transactions",
+                        "top_n": 1,
+                        "top_n_by_mode": {
+                            "vector": 5
+                        }
+                    },
+                    {
+                        "keyword": "orders customer references"
+                    }
+                ]
+            },
+            {
+                "case_id": "asset_invoices",
+                "content": {
+                    "asset_name": "invoices",
+                    "asset_type": "table",
+                    "description": "Invoice facts including due date, payment status, and invoice totals",
+                    "columns": [
+                        {
+                            "name": "invoice_id",
+                            "type": "bigint"
+                        },
+                        {
+                            "name": "due_date",
+                            "type": "date"
+                        },
+                        {
+                            "name": "payment_status",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "queries": [
+                    {
+                        "keyword": "invoice payment status",
+                        "top_n": 1,
+                        "top_n_by_mode": {
+                            "vector": 5
+                        }
+                    },
+                    {
+                        "keyword": "invoice due date totals"
+                    }
+                ]
+            },
+            {
+                "case_id": "asset_customers",
+                "content": {
+                    "asset_name": "customers",
+                    "asset_type": "table",
+                    "description": "Customer profiles with segmentation and contact preferences",
+                    "columns": [
+                        {
+                            "name": "customer_id",
+                            "type": "bigint"
+                        },
+                        {
+                            "name": "segment",
+                            "type": "text"
+                        },
+                        {
+                            "name": "email",
+                            "type": "text"
+                        }
+                    ]
+                },
+                "queries": [
+                    {
+                        "keyword": "customer segmentation",
+                        "top_n_by_mode": {
+                            "fts": 2,
+                            "vector": 5,
+                            "hybrid": 3
+                        }
+                    },
+                    {
+                        "keyword": "customers profiles"
+                    },
+                    {
+                        "keyword": "customers contact"
+                    }
+                ]
+            }
+        ]
+    }
+}
