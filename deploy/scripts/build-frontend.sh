@@ -28,6 +28,7 @@ DOCKER_DIR="$DEPLOY_ROOT/docker"
 REGISTRY_URL=""
 VERSION=""
 CI_MODE=false
+TAG_ONLY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -37,6 +38,10 @@ while [[ $# -gt 0 ]]; do
         ;;
         --skip-push)
             SKIP_PUSH=true
+            shift
+        ;;
+        --tag-only)
+            TAG_ONLY=true
             shift
         ;;
         *)
@@ -89,7 +94,9 @@ if [[ $? -eq 0 ]]; then
         if [[ "$CI_MODE" == true ]]; then
             echo -e "${BLUE}Pushing frontend images...${NC}"
             docker push "${REGISTRY_URL}/frontend:${VERSION}"
-            docker push "${REGISTRY_URL}/frontend:latest"
+            if [[ "$TAG_ONLY" != true ]]; then
+                docker push "${REGISTRY_URL}/frontend:latest"
+            fi
             echo -e "${GREEN}✓ Frontend images pushed${NC}"
         else
             read -p "Push frontend image to registry? (y/n) " -n 1 -r
@@ -97,7 +104,9 @@ if [[ $? -eq 0 ]]; then
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 echo -e "${BLUE}Pushing frontend images...${NC}"
                 docker push "${REGISTRY_URL}/frontend:${VERSION}"
-                docker push "${REGISTRY_URL}/frontend:latest"
+                if [[ "$TAG_ONLY" != true ]]; then
+                    docker push "${REGISTRY_URL}/frontend:latest"
+                fi
                 echo -e "${GREEN}✓ Frontend images pushed${NC}"
             fi
         fi

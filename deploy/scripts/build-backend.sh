@@ -34,6 +34,7 @@ REGISTRY_URL=""
 APP_VERSION=""
 SKIP_PUSH=false
 CI_MODE=false
+TAG_ONLY=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -45,6 +46,10 @@ while [[ $# -gt 0 ]]; do
             CI_MODE=true
             shift
         ;;
+        --tag-only)
+            TAG_ONLY=true
+            shift
+        ;;
         *)
             if [[ -z "$REGISTRY_URL" ]]; then
                 REGISTRY_URL="$1"
@@ -52,7 +57,7 @@ while [[ $# -gt 0 ]]; do
                 APP_VERSION="$1"
             else
                 echo -e "${RED}Error: Unknown argument '$1'${NC}"
-                echo "Usage: $0 <REGISTRY_URL> <VERSION> [--ci|--skip-push]"
+                echo "Usage: $0 <REGISTRY_URL> <VERSION> [--ci|--skip-push|--tag-only]"
                 exit 1
             fi
             shift
@@ -261,7 +266,9 @@ if docker build \
         if [[ "$CI_MODE" == true ]]; then
             echo -e "${BLUE}Pushing app images...${NC}"
             docker push "$APP_IMAGE"
-            docker push "$APP_IMAGE_LATEST"
+            if [[ "$TAG_ONLY" != true ]]; then
+                docker push "$APP_IMAGE_LATEST"
+            fi
             echo -e "${GREEN}✓ App images pushed${NC}"
         else
             read -p "Push app image to registry? (y/n) " -n 1 -r
@@ -269,7 +276,9 @@ if docker build \
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 echo -e "${BLUE}Pushing app images...${NC}"
                 docker push "$APP_IMAGE"
-                docker push "$APP_IMAGE_LATEST"
+                if [[ "$TAG_ONLY" != true ]]; then
+                    docker push "$APP_IMAGE_LATEST"
+                fi
                 echo -e "${GREEN}✓ App images pushed${NC}"
             fi
         fi
@@ -293,7 +302,9 @@ if docker build \
         if [[ "$CI_MODE" == true ]]; then
             echo -e "${BLUE}Pushing sandbox-runner images...${NC}"
             docker push "$SANDBOX_RUNNER_IMAGE"
-            docker push "$SANDBOX_RUNNER_IMAGE_LATEST"
+            if [[ "$TAG_ONLY" != true ]]; then
+                docker push "$SANDBOX_RUNNER_IMAGE_LATEST"
+            fi
             echo -e "${GREEN}✓ Sandbox runner images pushed${NC}"
         else
             read -p "Push sandbox-runner image to registry? (y/n) " -n 1 -r
@@ -301,7 +312,9 @@ if docker build \
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 echo -e "${BLUE}Pushing sandbox-runner images...${NC}"
                 docker push "$SANDBOX_RUNNER_IMAGE"
-                docker push "$SANDBOX_RUNNER_IMAGE_LATEST"
+                if [[ "$TAG_ONLY" != true ]]; then
+                    docker push "$SANDBOX_RUNNER_IMAGE_LATEST"
+                fi
                 echo -e "${GREEN}✓ Sandbox runner images pushed${NC}"
             fi
         fi
@@ -325,7 +338,9 @@ if docker build \
         if [[ "$CI_MODE" == true ]]; then
             echo -e "${BLUE}Pushing sandbox-controller images...${NC}"
             docker push "$SANDBOX_CONTROLLER_IMAGE"
-            docker push "$SANDBOX_CONTROLLER_IMAGE_LATEST"
+            if [[ "$TAG_ONLY" != true ]]; then
+                docker push "$SANDBOX_CONTROLLER_IMAGE_LATEST"
+            fi
             echo -e "${GREEN}✓ Sandbox controller images pushed${NC}"
         else
             read -p "Push sandbox-controller image to registry? (y/n) " -n 1 -r
@@ -333,7 +348,9 @@ if docker build \
             if [[ $REPLY =~ ^[Yy]$ ]]; then
                 echo -e "${BLUE}Pushing sandbox-controller images...${NC}"
                 docker push "$SANDBOX_CONTROLLER_IMAGE"
-                docker push "$SANDBOX_CONTROLLER_IMAGE_LATEST"
+                if [[ "$TAG_ONLY" != true ]]; then
+                    docker push "$SANDBOX_CONTROLLER_IMAGE_LATEST"
+                fi
                 echo -e "${GREEN}✓ Sandbox controller images pushed${NC}"
             fi
         fi
