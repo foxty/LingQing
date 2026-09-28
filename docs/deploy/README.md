@@ -9,7 +9,7 @@ LingQing is **self-hosted**. You provide the VM, container registry, PostgreSQL,
 | Path | Best for | Guide |
 | --- | --- | --- |
 | **Try locally** | Evaluation, E2E smoke | [getting-started.md](getting-started.md) + [dev-guide.md](../dev-guide.md) |
-| **Single VM (Compose)** | First production | [quick-start.md](quick-start.md) |
+| **Single VM (Compose)** | First production | [vm-bootstrap.md](vm-bootstrap.md) or [quick-start.md](quick-start.md) |
 | **Custom CI/CD** | Repeatable releases | [byo-cicd.md](byo-cicd.md) |
 
 ## Tiers
@@ -28,8 +28,10 @@ Details: [getting-started.md → All tiers](getting-started.md#all-tiers).
 | Script | Role |
 | --- | --- |
 | `deploy/scripts/local-stack.sh` | Local dev + E2E |
+| `deploy/scripts/remote/host-deploy.sh` | On-host deploy from release bundle (shipped as `bootstrap.sh`) |
+| `deploy/scripts/remote/deploy.sh` | Remote deploy via SSH (staging or production) |
 | `deploy/scripts/remote/release.sh` | Build + push + production deploy |
-| `deploy/scripts/remote/deploy.sh` | Remote deploy (staging or production) |
+| `deploy/scripts/package-release-bundle.sh` | Build release tarball (CI) |
 | `deploy/scripts/build-*.sh` | Image build (local or CI) |
 | `deploy/scripts/generate-env.sh` | Env file from template (CI) |
 
@@ -37,6 +39,7 @@ Details: [getting-started.md → All tiers](getting-started.md#all-tiers).
 
 | Document | Purpose |
 | --- | --- |
+| [vm-bootstrap.md](vm-bootstrap.md) | VM deploy without repo clone |
 | [getting-started.md](getting-started.md) | Decision tree, tiers, scripts |
 | [quick-start.md](quick-start.md) | Production deploy step-by-step |
 | [configuration.md](configuration.md) | Env vars, Nginx/TLS |

@@ -33,7 +33,7 @@ TIER       ├─────────────┼────────
 | **dev** | Laptop | `compose/local/infra.yml` | `.env.local` | `./deploy/scripts/local-stack.sh infra-up` |
 | **e2e** | Laptop | `compose/local/full-stack.yml` | `.env.e2e` | `./deploy/scripts/local-stack.sh stack-up` |
 | **staging** | Remote VM | `remote/stack.yml` + `overrides/staging.yml` | `.env.staging` | `./deploy/scripts/remote/deploy.sh … staging` |
-| **production** | Remote VM | `compose/remote/stack.yml` | `.env.prod` | `./deploy/scripts/remote/release.sh …` |
+| **production** | Remote VM | release bundle or `remote/stack.yml` | `.env` / `.env.prod` | `./bootstrap.sh` or `./deploy/scripts/remote/deploy.sh …` |
 
 Staging and production share the same remote stack; staging adds port `18080` via override.
 
@@ -48,6 +48,8 @@ Staging and production share the same remote stack; staging adds port `18080` vi
 | `deploy/scripts/build-frontend.sh` | Build/push frontend gateway image |
 | `deploy/scripts/generate-env.sh` | Materialize env from template (CI) |
 | `deploy/scripts/remote/deploy.sh` | Remote deploy (`staging` or `production`) |
+| `deploy/scripts/remote/host-deploy.sh` | On-host deploy from release bundle (no repo clone) |
+| `deploy/scripts/package-release-bundle.sh` | Build release tarball (CI) |
 | `deploy/scripts/remote/release.sh` | Build + push + production deploy from laptop |
 
 ### `release.sh` vs `deploy.sh`
@@ -121,8 +123,8 @@ Recommended rollout:
 
 ```text
 1. E2E on laptop (optional)
-2. remote/deploy.sh … staging
-3. remote/release.sh … production
+2. Release bundle bootstrap … staging (vm-bootstrap.md)
+3. Release bundle bootstrap … production
 4. CI/CD → byo-cicd.md
 ```
 
@@ -140,8 +142,17 @@ Outer Nginx examples: [configuration.md](configuration.md#outer-nginx-setup-merg
 
 ## After deploy: first tenant
 
+From repo checkout:
+
 ```bash
 uv run --env-file .env.prod scripts/tenant_cli.py create --name "Demo" --slug demo
+```
+
+On VM without repo clone:
+
+```bash
+APP_CONTAINER=$(docker ps --format '{{.Names}}' | grep tenant-app-service | head -n 1)
+docker exec -it "$APP_CONTAINER" uv run --no-dev scripts/tenant_cli.py create --name "Demo" --slug demo
 ```
 
 Login: `admin@demo` / `admin` — change immediately in production.
@@ -152,6 +163,7 @@ Login: `admin@demo` / `admin` — change immediately in production.
 
 | Goal | Document |
 | --- | --- |
+| VM deploy without repo clone | [vm-bootstrap.md](vm-bootstrap.md) |
 | Production step-by-step | [quick-start.md](quick-start.md) |
 | Env vars, Nginx | [configuration.md](configuration.md) |
 | Topology | [architecture.md](architecture.md) |
