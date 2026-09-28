@@ -90,6 +90,7 @@ def docling_service_url():
     _log(f"Starting Docling container ({docling_image}) — first pull can take 10+ minutes")
     with (
         DockerContainer(docling_image)
+        .with_kwargs(platform="linux/amd64")
         .with_exposed_ports(5001)
         .with_env("DOCLING_SERVE_ENABLE_UI", "0")
     ) as container:

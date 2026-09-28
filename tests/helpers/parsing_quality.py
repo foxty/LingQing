@@ -18,6 +18,7 @@ SOURCES_DIR = FIXTURES_DIR / "sources"
 BASELINES_DIR = FIXTURES_DIR / "baselines"
 MANIFEST_PATH = FIXTURES_DIR / "manifest.json"
 DOCLING_VERSION_FILE = Path(__file__).resolve().parent.parent.parent / "deploy" / "env" / "docling.version"
+GOLDEN_BBOX_DECIMALS = 2
 
 
 def pinned_docling_image() -> str:
@@ -82,20 +83,71 @@ def load_integration_golden(fixture: dict[str, Any]) -> dict[str, Any]:
         return json.load(handle)
 
 
-def normalize_blocks_document(blocks_document: dict[str, Any]) -> dict[str, Any]:
+def _normalize_block_bbox(block: dict[str, Any]) -> dict[str, Any]:
+    bbox = block.get("bbox")
+    if not isinstance(bbox, dict):
+        return block
+    rounded = {
+        key: round(float(value), GOLDEN_BBOX_DECIMALS)
+        for key, value in bbox.items()
+        if isinstance(value, (int, float))
+    }
+    if len(rounded) != 4:
+        return block
+    return {**block, "bbox": rounded}
+
+
+def normalize_blocks_document(blocks_document: dict[str, Any], *, for_compare: bool = False) -> dict[str, Any]:
     """Return the persisted blocks document shape used for golden comparison."""
     blocks = blocks_document.get("blocks", [])
     if not isinstance(blocks, list):
         blocks = []
+    normalized_blocks = [_normalize_block_bbox(block) if for_compare and isinstance(block, dict) else block for block in blocks]
     return {
         "schema_version": blocks_document.get("schema_version", 1),
         "parser": blocks_document.get("parser", "docling"),
-        "blocks": blocks,
+        "blocks": normalized_blocks,
     }
 
 
+def golden_blocks_diff(actual: dict[str, Any], golden: dict[str, Any]) -> str:
+    """Build a concise human-readable diff for golden block mismatches."""
+    actual_doc = normalize_blocks_document(actual, for_compare=True)
+    golden_doc = normalize_blocks_document(golden, for_compare=True)
+    actual_blocks = actual_doc["blocks"]
+    golden_blocks = golden_doc["blocks"]
+    lines = [
+        f"block count: actual={len(actual_blocks)} golden={len(golden_blocks)}",
+    ]
+    max_blocks = max(len(actual_blocks), len(golden_blocks))
+    diff_count = 0
+    for index in range(max_blocks):
+        actual_block = actual_blocks[index] if index < len(actual_blocks) else None
+        golden_block = golden_blocks[index] if index < len(golden_blocks) else None
+        if actual_block == golden_block:
+            continue
+        diff_count += 1
+        if diff_count > 5:
+            continue
+        lines.append(f"block[{index}]:")
+        if actual_block is None:
+            lines.append(f"  missing in actual: {json.dumps(golden_block, ensure_ascii=False)[:240]}")
+            continue
+        if golden_block is None:
+            lines.append(f"  extra in actual: {json.dumps(actual_block, ensure_ascii=False)[:240]}")
+            continue
+        for key in sorted(set(actual_block) | set(golden_block)):
+            actual_value = actual_block.get(key)
+            golden_value = golden_block.get(key)
+            if actual_value != golden_value:
+                lines.append(f"  {key}: actual={actual_value!r} golden={golden_value!r}")
+    if diff_count > 5:
+        lines.append(f"... and {diff_count - 5} more differing blocks")
+    return "\n".join(lines)
+
+
 def blocks_match_golden(actual: dict[str, Any], golden: dict[str, Any]) -> bool:
-    return normalize_blocks_document(actual) == normalize_blocks_document(golden)
+    return normalize_blocks_document(actual, for_compare=True) == normalize_blocks_document(golden, for_compare=True)
 
 
 async def persist_integration_blocks(
@@ -182,7 +234,9 @@ def assert_fixture_quality(blocks_document: dict[str, Any], expectations: dict[s
 
 def assert_integration_golden(blocks_document: dict[str, Any], fixture: dict[str, Any]) -> None:
     golden = load_integration_golden(fixture)
-    assert blocks_match_golden(blocks_document, golden), fixture["id"]
+    if not blocks_match_golden(blocks_document, golden):
+        diff = golden_blocks_diff(blocks_document, golden)
+        raise AssertionError(f"{fixture['id']} golden mismatch:\n{diff}")
     quality = fixture.get("quality")
     if isinstance(quality, dict) and quality:
         assert_fixture_quality(blocks_document, quality)

@@ -3,6 +3,7 @@
 Uses the image pin in ``deploy/env/docling.version`` (via testcontainers).
 Compares parser output to committed goldens under ``tests/fixtures/parsing/baselines/``.
 Regenerate goldens after a Docling bump: ``scripts/update_docling_golden_blocks.py``.
+Goldens must be produced on ``linux/amd64`` (same as CI testcontainers).
 
     uv run pytest tests/docling_integration/ -m docling -s
 """

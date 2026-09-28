@@ -1,0 +1,68 @@
+name: Regenerate Docling goldens
+
+on:
+  workflow_dispatch:
+    inputs:
+      fixture:
+        description: Fixture id (leave blank for all integration fixtures)
+        required: false
+        default: mortgage_pdf
+
+env:
+  TESTCONTAINERS_RYUK_DISABLED: "true"
+
+jobs:
+  regenerate:
+    name: Regenerate golden blocks
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Pull Docling image
+        run: docker pull "$(cat deploy/env/docling.version)"
+
+      - name: Regenerate golden blocks
+        env:
+          FIXTURE: ${{ github.event.inputs.fixture }}
+        run: |
+          set -euo pipefail
+          image="$(cat deploy/env/docling.version)"
+          container="$(docker run -d --platform linux/amd64 -p 5001:5001 -e DOCLING_SERVE_ENABLE_UI=0 "$image")"
+          cleanup() {
+            docker stop "$container" >/dev/null 2>&1 || true
+            docker rm "$container" >/dev/null 2>&1 || true
+          }
+          trap cleanup EXIT
+
+          for _ in $(seq 1 150); do
+            if curl -sf http://127.0.0.1:5001/health >/dev/null 2>&1; then
+              break
+            fi
+            sleep 2
+          done
+          curl -sf http://127.0.0.1:5001/health >/dev/null
+
+          args=()
+          if [[ -n "${FIXTURE}" ]]; then
+            args+=(--fixture "$FIXTURE")
+          fi
+          DOCLING_SERVICE_URL=http://127.0.0.1:5001 \
+            DOCLING_TASK_TIMEOUT_SECONDS=1800 \
+            uv run python scripts/update_docling_golden_blocks.py "${args[@]}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: docling-golden-blocks
+          path: tests/fixtures/parsing/baselines/

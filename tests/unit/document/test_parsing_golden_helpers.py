@@ -6,6 +6,7 @@ from tests.helpers.parsing_quality import (
     DOCLING_VERSION_FILE,
     GOLDEN_DOCUMENT_ID,
     blocks_match_golden,
+    golden_blocks_diff,
     normalize_blocks_document,
     persist_integration_blocks,
     pinned_docling_image,
@@ -29,6 +30,50 @@ def test_blocks_match_golden_requires_full_block_shape():
         "blocks": [{"type": "text", "text": "Body", "page": 2}],
     }
     assert blocks_match_golden(actual, golden)
+
+
+def test_blocks_match_golden_ignores_small_bbox_differences():
+    golden = {
+        "schema_version": 1,
+        "parser": "docling",
+        "blocks": [
+            {
+                "type": "text",
+                "text": "Body",
+                "page": 1,
+                "bbox": {"left": 1.004, "top": 2.004, "right": 3.004, "bottom": 4.004},
+            }
+        ],
+    }
+    actual = {
+        "schema_version": 1,
+        "parser": "docling",
+        "blocks": [
+            {
+                "type": "text",
+                "text": "Body",
+                "page": 1,
+                "bbox": {"left": 1.001, "top": 2.001, "right": 3.001, "bottom": 4.001},
+            }
+        ],
+    }
+    assert blocks_match_golden(actual, golden)
+
+
+def test_golden_blocks_diff_reports_first_mismatch():
+    golden = {
+        "schema_version": 1,
+        "parser": "docling",
+        "blocks": [{"type": "text", "text": "Expected", "page": 1}],
+    }
+    actual = {
+        "schema_version": 1,
+        "parser": "docling",
+        "blocks": [{"type": "text", "text": "Actual", "page": 1}],
+    }
+    diff = golden_blocks_diff(actual, golden)
+    assert "block[0]" in diff
+    assert "text:" in diff
 
 
 def test_blocks_match_golden_detects_image_uri_differences():

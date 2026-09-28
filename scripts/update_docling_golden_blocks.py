@@ -2,7 +2,11 @@
 """Regenerate Docling golden block files after a parser/image bump.
 
 Run when you change deploy/env/docling.version or add integration fixtures.
-Requires a running Docling service (local stack or testcontainer):
+Requires a running Docling service on linux/amd64 (local stack, testcontainer, or CI runner):
+
+    docker run --rm -d --platform linux/amd64 -p 5001:5001 \\
+      -e DOCLING_SERVE_ENABLE_UI=0 \\
+      "$(cat deploy/env/docling.version)"
 
     DOCLING_SERVICE_URL=http://127.0.0.1:5001 uv run python scripts/update_docling_golden_blocks.py
     DOCLING_SERVICE_URL=http://127.0.0.1:5001 uv run python scripts/update_docling_golden_blocks.py --fixture mortgage_pdf
