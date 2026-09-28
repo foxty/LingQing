@@ -24,8 +24,10 @@ deploy/
     ├── build-backend.sh
     ├── build-frontend.sh
     ├── generate-env.sh
+    ├── package-release-bundle.sh  # CI: tarball for GitHub Releases
     └── remote/
-        ├── deploy.sh      # remote pull + compose up
+        ├── host-deploy.sh   # on-host deploy from release bundle (shipped as bootstrap.sh)
+        ├── deploy.sh      # remote pull + compose up (SSH from laptop)
         └── release.sh     # build + push + deploy (production)
 ```
 
@@ -36,7 +38,7 @@ deploy/
 | **dev** | Laptop | `compose/local/infra.yml` | `.env.local` | `scripts/local-stack.sh infra-up` |
 | **e2e** | Laptop | `compose/local/full-stack.yml` | `env/.env.e2e` | `scripts/local-stack.sh stack-up` |
 | **staging** | Remote VM | `compose/remote/stack.yml` + override | `.env.staging` | `scripts/remote/deploy.sh … staging` |
-| **production** | Remote VM | `compose/remote/stack.yml` | `.env.prod` | `scripts/remote/release.sh …` |
+| **production** | Remote VM | release bundle or `remote/stack.yml` | `.env` / `.env.prod` | `remote/host-deploy.sh` or `remote/deploy.sh …` |
 
 **Folder = where** (local vs remote). **Tier = purpose** (env file + deploy flag).
 
@@ -53,12 +55,16 @@ cp deploy/env/.env.template deploy/env/.env.e2e   # container config: DB host=po
 ./deploy/scripts/local-stack.sh stack-up
 ./deploy/scripts/local-stack.sh smoke
 
-# Production release from laptop
-cp deploy/env/.env.template .env.prod             # fill in secrets
-./deploy/scripts/remote/release.sh user@vm ghcr.io/org/lingqing .env.prod v2.0.0 all
+# Production on VM (no repo clone — from GitHub Release bundle)
+curl -fsSL https://github.com/foxty/LingQing/releases/download/v2.0.0/lingqing-deploy-v2.0.0.tar.gz | tar -xz
+cd lingqing-deploy-v2.0.0 && cp .env.template .env && ./bootstrap.sh --version v2.0.0 --registry ghcr.io/foxty/lingqing
 
-# Staging deploy (images already in registry)
-./deploy/scripts/remote/deploy.sh v2.0.0 ghcr.io/org/lingqing vm deploy .env.staging all staging
+# Production deploy from laptop (SSH)
+cp deploy/env/.env.template .env.prod
+./deploy/scripts/remote/deploy.sh v2.0.0 ghcr.io/foxty/lingqing user@vm deploy .env.prod all production
+
+# Local build + production release from laptop
+./deploy/scripts/remote/release.sh user@vm ghcr.io/org/lingqing .env.prod v2.0.0 all
 ```
 
 ## Local tiers in detail

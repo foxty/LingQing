@@ -11,7 +11,7 @@ on:
       - "v*"
 
 permissions:
-  contents: read
+  contents: write
   packages: write
 
 concurrency:
@@ -58,6 +58,54 @@ jobs:
           chmod +x ./deploy/scripts/build-frontend.sh
           ./deploy/scripts/build-frontend.sh "$REGISTRY_URL" "${GITHUB_REF_NAME}" --ci --tag-only
 
+      - name: Package deploy bundle
+        run: |
+          chmod +x ./deploy/scripts/package-release-bundle.sh ./deploy/scripts/remote/host-deploy.sh
+          mkdir -p dist
+          ./deploy/scripts/package-release-bundle.sh \
+            "${GITHUB_REF_NAME}" \
+            dist \
+            "${REGISTRY_URL}" \
+            "${{ github.repository }}"
+          cp deploy/scripts/remote/host-deploy.sh dist/bootstrap.sh
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.ref_name }}
+          name: ${{ github.ref_name }}
+          files: |
+            dist/lingqing-deploy-*.tar.gz
+            dist/bootstrap.sh
+          body: |
+            ## Deploy on your VM (no repo clone)
+
+            ```bash
+            VERSION=${{ github.ref_name }}
+            curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/lingqing-deploy-${VERSION}.tar.gz" | tar -xz
+            cd "lingqing-deploy-${VERSION}"
+            cp .env.template .env && $EDITOR .env
+            ./bootstrap.sh --version "${VERSION}" --registry ${{ env.REGISTRY_URL }}
+            ```
+
+            Or bootstrap script only:
+
+            ```bash
+            curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/bootstrap.sh" \
+              | VERSION=${{ github.ref_name }} REGISTRY_URL=${{ env.REGISTRY_URL }} GITHUB_REPO=${{ github.repository }} bash
+            ```
+
+            Full guide: [docs/deploy/vm-bootstrap.md](https://github.com/${{ github.repository }}/blob/main/docs/deploy/vm-bootstrap.md)
+
+            ## Images
+
+            | Image | Tag |
+            | --- | --- |
+            | `${{ env.REGISTRY_URL }}/backend-app` | `${{ github.ref_name }}` |
+            | `${{ env.REGISTRY_URL }}/frontend` | `${{ github.ref_name }}` |
+            | `${{ env.REGISTRY_URL }}/sandbox-controller` | `${{ github.ref_name }}` |
+            | `${{ env.REGISTRY_URL }}/sandbox-runner` | `${{ github.ref_name }}` |
+
       - name: Publish summary
         run: |
           VERSION="${GITHUB_REF_NAME}"
@@ -69,4 +117,5 @@ jobs:
             echo "| \`${REGISTRY_URL}/${image}\` | \`${VERSION}\` |" >> "$GITHUB_STEP_SUMMARY"
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "Deploy with \`REGISTRY_URL=${REGISTRY_URL}\` and \`VERSION=${VERSION}\`." >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy bundle: \`lingqing-deploy-${VERSION}.tar.gz\` (see GitHub Release)." >> "$GITHUB_STEP_SUMMARY"
+          echo "VM bootstrap: [docs/deploy/vm-bootstrap.md](docs/deploy/vm-bootstrap.md)" >> "$GITHUB_STEP_SUMMARY"
