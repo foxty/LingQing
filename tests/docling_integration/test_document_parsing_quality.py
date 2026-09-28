@@ -1,10 +1,12 @@
 """Live Docling parsing integration tests against binary fixtures.
 
+Local dev only — excluded from CI (``test:ci`` uses ``-m 'not docling'``).
 Uses the image pin in ``deploy/env/docling.version`` (via testcontainers).
 Compares parser output to committed goldens under ``tests/fixtures/parsing/baselines/``.
 Regenerate goldens after a Docling bump: ``scripts/update_docling_golden_blocks.py``.
 
-    uv run pytest tests/docling_integration/ -m docling -s
+    npx nx run root:test:docling
+    # or: uv run pytest tests/docling_integration/ -m docling -s
 """
 
 from __future__ import annotations

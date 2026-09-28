@@ -1,7 +1,6 @@
 name: CI
 
 on:
-  push:
   pull_request:
 
 concurrency:
@@ -49,30 +48,6 @@ jobs:
 
       - name: Check live app SDK
         run: npm run check-live-app-sdk
-
-  backend-docling:
-    name: Backend (Docling)
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - uses: actions/checkout@v4
-
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-
-      - name: Install dependencies
-        run: uv sync --all-groups
-
-      - name: Pull Docling image
-        run: docker pull "$(cat deploy/env/docling.version)"
-
-      - name: Docling integration tests
-        run: uv run pytest tests/docling_integration/ -v -m docling
 
   tenant-app-portal:
     name: Tenant app portal

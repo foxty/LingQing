@@ -50,7 +50,10 @@ def pytest_configure(config):
     config.addinivalue_line("markers", "unit: marks tests as unit tests (fast, no external dependencies)")
     config.addinivalue_line("markers", "integration: marks tests as integration tests (require running server)")
     config.addinivalue_line("markers", "slow: marks tests as slow running")
-    config.addinivalue_line("markers", "docling: marks tests that require a live Docling service")
+    config.addinivalue_line(
+        "markers",
+        "docling: marks tests that require a live Docling service (local dev only; excluded from CI)",
+    )
 
 
 def pytest_collection_modifyitems(config, items):
