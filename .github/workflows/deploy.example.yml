@@ -22,11 +22,6 @@ on:
         type: choice
         options: [all, app, manager]
         default: all
-      tier:
-        description: Target tier
-        type: choice
-        options: [production, staging]
-        default: production
 
 jobs:
   build:
@@ -67,7 +62,7 @@ jobs:
           TENANT_MANAGER_DB_PASSWORD: ${{ secrets.TENANT_MANAGER_DB_PASSWORD }}
         run: |
           chmod +x ./deploy/scripts/generate-env.sh
-          ./deploy/scripts/generate-env.sh deploy/env/.env.template "/tmp/.env.${{ inputs.tier }}"
+          ./deploy/scripts/generate-env.sh deploy/env/.env.template /tmp/.env.prod
 
       - name: Deploy
         run: |
@@ -77,9 +72,8 @@ jobs:
             "$REGISTRY_URL" \
             "$DEPLOY_HOST" \
             "$DEPLOY_USER" \
-            "/tmp/.env.${{ inputs.tier }}" \
-            "${{ inputs.stack }}" \
-            "${{ inputs.tier }}"
+            "/tmp/.env.prod" \
+            "${{ inputs.stack }}"
 
       - name: Cleanup SSH key
         if: always()

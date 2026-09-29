@@ -18,17 +18,14 @@ Public docs use **kebab-case** English filenames.
 
 ## Deploy & operations
 
-Start at [deploy/getting-started.md](deploy/getting-started.md) and [deploy/README.md](../deploy/README.md) (layout cheat sheet).
+Start at [deploy/README.md](deploy/README.md) · repo layout: [deploy/README.md](../deploy/README.md).
 
 | Document | Description |
 | --- | --- |
-| [deploy/getting-started.md](deploy/getting-started.md) | **Start here** — tiers (dev/e2e/staging/production) and scripts |
-| [deploy/README.md](../deploy/README.md) | Deploy folder layout and commands |
-| [deploy/quick-start.md](deploy/quick-start.md) | **Production quick start** (single VM) |
+| [deploy/guide.md](deploy/guide.md) | **Deploy guide** — production steps, scripts, troubleshooting |
+| [deploy/reference.md](deploy/reference.md) | PostgreSQL, env vars, Nginx/TLS, topology |
 | [deploy/byo-cicd.md](deploy/byo-cicd.md) | Custom CI/CD with build/deploy scripts |
-| [deploy/configuration.md](deploy/configuration.md) | Env vars and Nginx/TLS reference |
-| [deploy/architecture.md](deploy/architecture.md) | Service topology |
-| [deploy/troubleshooting.md](deploy/troubleshooting.md) | Common deploy issues |
+| [deploy/README.md](../deploy/README.md) | Deploy folder layout and commands |
 
 ## Development reference
 

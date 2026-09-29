@@ -155,7 +155,7 @@ async def test_create_and_update_workflow(test_client_with_db, auth_headers):
 
 ## Manual E2E
 
-Automated browser E2E is planned; today use the full Docker stack and smoke checks in [deploy/quick-start.md](deploy/quick-start.md).
+Automated browser E2E is planned; today use the full Docker stack and smoke checks in [deploy/guide.md](deploy/guide.md).
 
 ```bash
 cp deploy/env/.env.template deploy/env/.env.e2e

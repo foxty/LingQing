@@ -6,6 +6,9 @@
 #
 # Produces:
 #   <OUTPUT_DIR>/lingqing-deploy-<VERSION>.tar.gz
+#
+# One bundle per VM: staging and production use the same files on separate hosts;
+# only .env values differ (domains, DB, data path).
 
 set -euo pipefail
 
@@ -21,6 +24,8 @@ fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_ROOT="$(cd "$DEPLOY_ROOT/.." && pwd)"
+REMOTE_DIR="${SCRIPT_DIR}/remote"
 STAGING_DIR="$(mktemp -d)"
 BUNDLE_NAME="lingqing-deploy-${VERSION}"
 BUNDLE_ROOT="${STAGING_DIR}/${BUNDLE_NAME}"
@@ -33,49 +38,72 @@ trap cleanup EXIT
 mkdir -p "$BUNDLE_ROOT" "$OUTPUT_DIR"
 
 cp "${DEPLOY_ROOT}/compose/remote/stack.yml" "${BUNDLE_ROOT}/docker-compose.yml"
-cp "${DEPLOY_ROOT}/compose/remote/overrides/staging.yml" "${BUNDLE_ROOT}/docker-compose.staging.yml"
-cp "${DEPLOY_ROOT}/env/.env.template" "${BUNDLE_ROOT}/.env.template"
-cp "${SCRIPT_DIR}/remote/host-deploy.sh" "${BUNDLE_ROOT}/bootstrap.sh"
-chmod +x "${BUNDLE_ROOT}/bootstrap.sh"
+cp "${DEPLOY_ROOT}/env/.env.production.template" "${BUNDLE_ROOT}/.env.template"
+cp "${REMOTE_DIR}/host-deploy.sh" "${BUNDLE_ROOT}/bootstrap.sh"
+cp "${PROJECT_ROOT}/scripts/init_db.sh" "${BUNDLE_ROOT}/init_db.sh"
+chmod +x "${BUNDLE_ROOT}/bootstrap.sh" "${BUNDLE_ROOT}/init_db.sh"
 
 cat > "${BUNDLE_ROOT}/README.md" <<EOF
 # LingQing Deploy Bundle ${VERSION}
 
-Deploy LingQing on a Linux VM using pre-built container images. No repository clone required.
+Deploy LingQing on a Linux VM using pre-built container images. **No repository clone required.**
 
-## Prerequisites
+This bundle does **not** include PostgreSQL — provision a managed instance (RDS, Cloud SQL, etc.) first.
 
-- Docker Engine + Compose plugin
-- Managed PostgreSQL reachable from the VM
-- DNS for \`app.example.com\` and \`manager.example.com\`
-- Outer Nginx (or similar) for TLS, proxying to \`127.0.0.1:8080\`
+**Staging and production:** same bundle on **separate VMs**; only \`.env\` differs. Gateway: \`127.0.0.1:8080\`.
 
-## Quick start (production)
+## Quick start
+
+### 1. Initialize PostgreSQL (once, from laptop or bastion)
+
+Requires \`psql\` and network access to your database admin account:
 
 \`\`\`bash
-tar -xzf lingqing-deploy-${VERSION}.tar.gz
-cd lingqing-deploy-${VERSION}
+export POSTGRES_HOST=your-db.example.com
+export POSTGRES_USER=postgres
+export PGPASSWORD=your_admin_password
+
+./init_db.sh 'choose_app_password' 'choose_manager_password'
+\`\`\`
+
+Creates \`lq_tenant_app\` + \`lq_tenant_manager\` databases and users. Use the same passwords in \`.env\` below.
+
+### 2. Configure environment
+
+\`\`\`bash
 cp .env.template .env
-# Edit .env: SECRET_KEY, DB credentials, DATA_ROOT_HOST_PATH, public URLs
+nano .env
+\`\`\`
+
+Edit the **REQUIRED** section at the top of \`.env.template\`:
+
+| Variable | Example |
+| --- | --- |
+| \`SECRET_KEY\` | \`openssl rand -hex 32\` |
+| \`TENANT_APP_DB_HOST\` | PostgreSQL hostname |
+| \`TENANT_APP_DB_PASSWORD\` | App password from \`init_db.sh\` |
+| \`TENANT_MANAGER_DB_HOST\` | Same as app host (one PG server) |
+| \`TENANT_MANAGER_DB_PASSWORD\` | Manager password from \`init_db.sh\` |
+| \`DATA_ROOT_HOST_PATH\` | \`/var/lib/lingqing/data\` |
+| \`APP_PUBLIC_URL\` | \`https://app.example.com\` |
+| \`MANAGER_PUBLIC_URL\` | \`https://manager.example.com\` |
+
+### 3. Deploy
+
+\`\`\`bash
 ./bootstrap.sh --version ${VERSION} --registry ${REGISTRY_URL}
 \`\`\`
 
-## One-liner (download bundle on VM)
+\`bootstrap.sh\` derives \`CORS_ORIGINS\`, \`PORTAL_ORIGIN\`, and \`TENANT_APP_API_ORIGIN\` from the public URLs.
+
+Full reference: https://github.com/${GITHUB_REPO}/blob/main/docs/deploy/reference.md
+
+## Download
 
 \`\`\`bash
 curl -fsSL https://github.com/${GITHUB_REPO}/releases/download/${VERSION}/lingqing-deploy-${VERSION}.tar.gz | tar -xz
 cd lingqing-deploy-${VERSION}
-cp .env.template .env && \$EDITOR .env
-./bootstrap.sh --version ${VERSION} --registry ${REGISTRY_URL}
 \`\`\`
-
-## Staging tier
-
-\`\`\`bash
-./bootstrap.sh --version ${VERSION} --registry ${REGISTRY_URL} --tier staging --dir ~/lingqing-deploy/staging
-\`\`\`
-
-Gateway listens on \`127.0.0.1:18080\` for staging.
 
 ## Images
 
@@ -95,11 +123,7 @@ docker exec -it "\$APP_CONTAINER" uv run --no-dev scripts/tenant_cli.py create -
 
 Login: \`admin@demo\` / \`admin\` — change immediately in production.
 
-## Upgrade
-
-Re-run \`bootstrap.sh\` with a new \`--version\` in the same deploy directory.
-
-Full docs: https://github.com/${GITHUB_REPO}/blob/main/docs/deploy/vm-bootstrap.md
+Full docs: https://github.com/${GITHUB_REPO}/blob/main/docs/deploy/guide.md
 EOF
 
 echo "$VERSION" > "${BUNDLE_ROOT}/VERSION"
