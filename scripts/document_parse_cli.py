@@ -15,7 +15,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from apps.config import get_file_storage
 from apps.shared.db.session import app_db_session
-from apps.shared.document.processing_service import DocumentProcessingService
+from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.types import ParseIssueRow, ParseStatusSnapshot
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.tenant.repository import TenantRepository
@@ -41,7 +41,7 @@ async def handle_parse(args) -> int:
     file_storage = get_file_storage()
     for tenant_id in tenant_ids:
         async with app_db_session() as session:
-            processing = DocumentProcessingService(tenant_id, session, file_storage)
+            processing = DocumentParsePipeline(tenant_id, session, file_storage)
             doc_ids = await processing.list_parse_target_ids(
                 document_id=args.document_id,
                 collection_id=getattr(args, "collection_id", None),
@@ -139,7 +139,7 @@ async def handle_status(args) -> int:
     file_storage = get_file_storage()
     for tenant_id in tenant_ids:
         async with app_db_session() as session:
-            processing = DocumentProcessingService(tenant_id, session, file_storage)
+            processing = DocumentParsePipeline(tenant_id, session, file_storage)
             snapshots.append(await processing.parse_status_snapshot())
             if args.show_issues:
                 issue_rows.extend(await processing.list_parse_issues(limit=args.limit))

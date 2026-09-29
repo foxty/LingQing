@@ -17,7 +17,7 @@ def _patch_worker(monkeypatch, result):
         yield object()
 
     monkeypatch.setattr(
-        "apps.shared.tasks.system.jobs.document_parse.DocumentProcessingService",
+        "apps.shared.tasks.system.jobs.document_parse.DocumentParsePipeline",
         lambda tenant_id, session, file_storage: processing,
     )
     monkeypatch.setattr(
