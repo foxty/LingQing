@@ -7,6 +7,7 @@ for any outbound calls; the webhook itself is verified by signing secret.
 
 import asyncio
 import json
+import time
 from unittest.mock import MagicMock
 from uuid import uuid4
 
@@ -21,6 +22,22 @@ from tests.slack.slack_event_factory import (
     make_message_event,
     make_url_verification_payload,
 )
+
+
+async def _wait_until(assertion_coro, timeout_seconds: float = 8.0) -> None:
+    deadline = time.monotonic() + timeout_seconds
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            await assertion_coro()
+            return
+        except AssertionError as exc:
+            last_error = exc
+            await asyncio.sleep(0.2)
+
+    if last_error is not None:
+        raise last_error
+    raise AssertionError("Condition was not met before timeout")
 
 
 class TestSlackWebhook:
@@ -111,9 +128,11 @@ class TestSlackWebhook:
         assert resp.status_code == 200
         assert resp.json()["status"] == "disabled"
 
-        await asyncio.sleep(0.5)
-        assert fake.posted_messages
-        assert "disabled" in fake.posted_messages[0]["text"].lower()
+        async def _assert_disabled_notification() -> None:
+            assert fake.posted_messages
+            assert "disabled" in fake.posted_messages[0]["text"].lower()
+
+        await _wait_until(_assert_disabled_notification)
 
     @pytest.mark.asyncio
     async def test_team_id_mismatch_returns_403(self, slack_test_setup):
@@ -349,11 +368,13 @@ class TestSlackWebhook:
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
 
-        await asyncio.sleep(0.5)
+        async def _assert_rebound() -> None:
+            assert "thread_id" in captured
+            assert captured["thread_id"] != migrated_thread_id
+            assert captured["agent_id"] == 1
+            assert fake.posted_messages, "expected bot reply after rebinding migrated thread link"
 
-        assert captured["thread_id"] != migrated_thread_id
-        assert captured["agent_id"] == 1
-        assert fake.posted_messages, "expected bot reply after rebinding migrated thread link"
+        await _wait_until(_assert_rebound)
 
         async with session_factory() as verify_session:
             linked_thread_id = await verify_session.scalar(
