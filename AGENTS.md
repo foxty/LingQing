@@ -164,6 +164,61 @@ npm run migrate:tm
 - Validate with focused tests after changes (unit first). Stay scoped.
 - Create TODO plan for multi-step tasks; give brief updates.
 
+**Git commits (only when the user asks):**
+
+Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#summary):
+
+```
+<type>[optional scope]: <description>
+
+[optional body]
+
+[optional footer(s)]
+```
+
+- **Types (lowercase):** `feat` (new feature), `fix` (bug fix), plus `docs`, `refactor`, `test`, `chore`, `ci`, `build`, `perf` as needed
+- **Scope (optional):** noun in parentheses — e.g. `deploy`, `docs`, `ci`, `tenant-app`, `shared`
+- **Description:** imperative mood, lowercase start, no trailing period, ≤72 chars — e.g. `refactor(deploy): simplify release bundle and consolidate docs`
+- **Body:** optional; blank line after description; explain **why**, not a file list
+- **Breaking changes:** `feat!:` / `fix(scope)!:` or footer `BREAKING CHANGE: …`
+- **Do not** commit unless explicitly requested; never skip hooks; never amend unless user rules allow
+
+```bash
+git commit -m "$(cat <<'EOF'
+refactor(deploy): simplify release bundle and consolidate docs
+
+Drop side-by-side staging on one VM; ship init_db.sh in the bundle.
+EOF
+)"
+```
+
+**Pull requests (only when the user asks):**
+
+- **Title:** same [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) format as the commit subject — e.g. `refactor(deploy): simplify release bundle and consolidate docs`
+- **Body sections** (use what applies):
+  - `## Summary` — 1–3 bullets: what changed and why
+  - `## Architecture / decisions` — key design choices, trade-offs, or behavior changes reviewers should know (omit if trivial)
+  - `## Test plan` — checkbox list of verification steps
+- Push with `git push -u origin HEAD`; create with `gh pr create`; return the PR URL
+
+```bash
+gh pr create --title "refactor(deploy): simplify release bundle and consolidate docs" --body "$(cat <<'EOF'
+## Summary
+- Drop side-by-side staging/prod on one VM
+- Ship init_db.sh and minimal .env.template in release bundle
+
+## Architecture / decisions
+- One VM per environment; same bundle for prod and staging, only `.env` differs
+- PostgreSQL stays external; bundle includes `init_db.sh` for no-repo operators
+- Deploy docs consolidated to guide + reference (procedure vs lookup)
+
+## Test plan
+- [ ] package-release-bundle.sh produces expected tarball
+- [ ] bootstrap.sh smoke checks pass
+EOF
+)"
+```
+
 **Output Style:**
 
 - Concise, code-first. File refs: `path/file.ts#L10-L12`. Commands in fenced blocks. Direct tone.
