@@ -1,7 +1,0 @@
-# Staging tier override (used with compose/remote/stack.yml)
-# Publishes gateway on 127.0.0.1:18080 for side-by-side production on the same VM.
-
-services:
-  gateway-service:
-    ports:
-      - "127.0.0.1:18080:80"

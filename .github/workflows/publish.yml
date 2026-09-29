@@ -80,6 +80,8 @@ jobs:
           body: |
             ## Deploy on your VM (no repo clone)
 
+            Same bundle for prod or staging — use on **separate VMs**; only `.env` differs.
+
             ```bash
             VERSION=${{ github.ref_name }}
             curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/lingqing-deploy-${VERSION}.tar.gz" | tar -xz
@@ -88,14 +90,7 @@ jobs:
             ./bootstrap.sh --version "${VERSION}" --registry ${{ env.REGISTRY_URL }}
             ```
 
-            Or bootstrap script only:
-
-            ```bash
-            curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${{ github.ref_name }}/bootstrap.sh" \
-              | VERSION=${{ github.ref_name }} REGISTRY_URL=${{ env.REGISTRY_URL }} GITHUB_REPO=${{ github.repository }} bash
-            ```
-
-            Full guide: [docs/deploy/vm-bootstrap.md](https://github.com/${{ github.repository }}/blob/main/docs/deploy/vm-bootstrap.md)
+            Full guide: [docs/deploy/guide.md](https://github.com/${{ github.repository }}/blob/main/docs/deploy/guide.md)
 
             ## Images
 
@@ -118,4 +113,4 @@ jobs:
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "Deploy bundle: \`lingqing-deploy-${VERSION}.tar.gz\` (see GitHub Release)." >> "$GITHUB_STEP_SUMMARY"
-          echo "VM bootstrap: [docs/deploy/vm-bootstrap.md](docs/deploy/vm-bootstrap.md)" >> "$GITHUB_STEP_SUMMARY"
+          echo "Deploy guide: [docs/deploy/guide.md](docs/deploy/guide.md)" >> "$GITHUB_STEP_SUMMARY"

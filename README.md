@@ -95,9 +95,9 @@ Full install, run modes (hot reload vs full Docker), and troubleshooting → **[
 
 ## Deployment
 
-LingQing is self-hosted. See [docs/deploy/getting-started.md](docs/deploy/getting-started.md) (environments & scripts) and [docs/deploy/README.md](docs/deploy/README.md):
+LingQing is self-hosted. See [docs/deploy/README.md](docs/deploy/README.md):
 
-- **Single VM (recommended):** [Production quick start](docs/deploy/quick-start.md)
+- **Single VM (recommended):** [Deploy guide](docs/deploy/guide.md)
 - **Custom CI/CD:** [BYO pipeline guide](docs/deploy/byo-cicd.md) + [workflow example](.github/workflows/deploy.example.yml)
 
 ## Common commands

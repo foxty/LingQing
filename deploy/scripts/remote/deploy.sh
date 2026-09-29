@@ -2,18 +2,17 @@
 # Remote server deploy: pull registry images and start Docker Compose on target host.
 #
 # Usage:
-#   ./deploy.sh <VERSION> <REGISTRY_URL> <DEPLOY_HOST> <DEPLOY_USER> <ENV_FILE> [STACK] [TIER] [SSH_KEY]
+#   ./deploy.sh <VERSION> <REGISTRY_URL> <DEPLOY_HOST> <DEPLOY_USER> <ENV_FILE> [STACK] [SSH_KEY]
 #
 # STACK:
 #   app      = tenant-app-service + scheduler-service + gateway-service
 #   manager  = tenant-manager-service + gateway-service
 #   all      = all services (default)
 #
-# TIER:
-#   staging | production  (aliases: test | prod)
-#
 # SSH_KEY:
 #   Path to SSH private key (default: ~/.ssh/deploy_key, fallback to SSH agent)
+#
+# Staging and production use the same compose stack on separate VMs; only .env differs.
 
 set -e
 
@@ -28,31 +27,13 @@ DEPLOY_HOST=${3}
 DEPLOY_USER=${4}
 ENV_FILE=${5}
 STACK=${6:-"all"}
-TIER_INPUT=${7:-"production"}
-SSH_KEY=${8:-""}
-
-normalize_tier() {
-    case "$1" in
-        staging|test)
-            echo "staging"
-        ;;
-        production|prod)
-            echo "production"
-        ;;
-        *)
-            echo "$1"
-        ;;
-    esac
-}
-
-TIER="$(normalize_tier "$TIER_INPUT")"
+SSH_KEY=${7:-""}
 
 if [[ -z "$VERSION" ]] || [[ -z "$REGISTRY_URL" ]] || [[ -z "$DEPLOY_HOST" ]] || [[ -z "$DEPLOY_USER" ]] || [[ -z "$ENV_FILE" ]]; then
     echo -e "${RED}Error: Required parameters missing${NC}"
-    echo "Usage: $0 <VERSION> <REGISTRY_URL> <DEPLOY_HOST> <DEPLOY_USER> <ENV_FILE> [STACK] [TIER] [SSH_KEY]"
-    echo "Examples:"
-    echo "  $0 v1.0.0 registry.example.com prod.example.com deploy /tmp/.env.prod app production"
-    echo "  $0 v1.0.0 registry.example.com staging.example.com deploy /tmp/.env.staging manager staging"
+    echo "Usage: $0 <VERSION> <REGISTRY_URL> <DEPLOY_HOST> <DEPLOY_USER> <ENV_FILE> [STACK] [SSH_KEY]"
+    echo "Example:"
+    echo "  $0 v1.0.0 registry.example.com prod.example.com deploy /tmp/.env.prod app"
     exit 1
 fi
 
@@ -62,38 +43,18 @@ if [[ ! -f "$ENV_FILE" ]]; then
 fi
 
 case "$STACK" in
-    all|app|manager)
-    ;;
+    all|app|manager) ;;
     *)
         echo -e "${RED}Error: Invalid STACK '$STACK'. Allowed: all, app, manager${NC}"
         exit 1
-    ;;
+        ;;
 esac
-
-case "$TIER" in
-    staging|production)
-    ;;
-    *)
-        echo -e "${RED}Error: Invalid TIER '$TIER_INPUT'. Allowed: staging, production (aliases: test, prod)${NC}"
-        exit 1
-    ;;
-esac
-
-if [[ "$TIER_INPUT" != "$TIER" ]]; then
-    echo -e "${YELLOW}Note: tier alias '$TIER_INPUT' mapped to '$TIER'${NC}"
-fi
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEPLOY_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
 COMPOSE_STACK="$DEPLOY_ROOT/compose/remote/stack.yml"
-COMPOSE_STAGING_OVERRIDE="$DEPLOY_ROOT/compose/remote/overrides/staging.yml"
-DEPLOY_DIR="~/lingqing-deploy/${TIER}"
-PROJECT_NAME="lingqing-${TIER}"
-OVERRIDE_FILE=""
-
-if [[ "$TIER" == "staging" ]]; then
-    OVERRIDE_FILE="docker-compose.override.yml"
-fi
+DEPLOY_DIR="~/lingqing-deploy"
+PROJECT_NAME="lingqing"
 
 SSH_OPTS=""
 SCP_OPTS=""
@@ -105,11 +66,71 @@ elif [[ -f ~/.ssh/deploy_key ]]; then
     SCP_OPTS="-i ~/.ssh/deploy_key"
 fi
 
+read_env_value() {
+    grep -E "^${2}=" "$1" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '[:space:'$'\r'']' || true
+}
+
+host_from_url() {
+    echo "$1" | sed -E 's#^https?://##' | cut -d/ -f1
+}
+
+set_env_value() {
+    local env_file="$1"
+    local key="$2"
+    local value="$3"
+    if grep -q "^${key}=" "$env_file"; then
+        local escaped
+        escaped="$(printf '%s' "$value" | sed -e 's/[\/&]/\\&/g')"
+        sed -i.bak "s|^${key}=.*|${key}=${escaped}|" "$env_file"
+        rm -f "${env_file}.bak"
+    else
+        echo "${key}=${value}" >> "$env_file"
+    fi
+}
+
+expand_public_urls() {
+    local env_file="$1"
+    local app_url manager_url
+
+    app_url="$(read_env_value "$env_file" APP_PUBLIC_URL)"
+    manager_url="$(read_env_value "$env_file" MANAGER_PUBLIC_URL)"
+    if [[ -z "$app_url" || -z "$manager_url" ]]; then
+        return 0
+    fi
+
+    set_env_value "$env_file" CORS_ORIGINS "${app_url},${manager_url}"
+    set_env_value "$env_file" PORTAL_ORIGIN "$app_url"
+    set_env_value "$env_file" TENANT_APP_API_ORIGIN "$app_url"
+}
+
+normalize_env_file() {
+    local env_file="$1"
+    local app_db_host manager_db_host
+
+    app_db_host="$(read_env_value "$env_file" TENANT_APP_DB_HOST)"
+    manager_db_host="$(read_env_value "$env_file" TENANT_MANAGER_DB_HOST)"
+    if [[ -n "$app_db_host" && -z "$manager_db_host" ]]; then
+        set_env_value "$env_file" TENANT_MANAGER_DB_HOST "$app_db_host"
+    fi
+}
+
+DEPLOY_ENV_FILE="$(mktemp)"
+cp "$ENV_FILE" "$DEPLOY_ENV_FILE"
+normalize_env_file "$DEPLOY_ENV_FILE"
+expand_public_urls "$DEPLOY_ENV_FILE"
+trap 'rm -f "$DEPLOY_ENV_FILE"' EXIT
+
+GATEWAY_PORT="$(read_env_value "$DEPLOY_ENV_FILE" GATEWAY_SERVICE_PORT)"
+GATEWAY_PORT="${GATEWAY_PORT:-8080}"
+APP_HOST="$(host_from_url "$(read_env_value "$DEPLOY_ENV_FILE" APP_PUBLIC_URL)")"
+MANAGER_HOST="$(host_from_url "$(read_env_value "$DEPLOY_ENV_FILE" MANAGER_PUBLIC_URL)")"
+APP_HOST="${APP_HOST:-app.example.com}"
+MANAGER_HOST="${MANAGER_HOST:-manager.example.com}"
+
 echo -e "${YELLOW}Remote deployment${NC}"
 echo "Version: $VERSION"
 echo "Registry URL: $REGISTRY_URL"
 echo "Target Host: $DEPLOY_USER@$DEPLOY_HOST"
-echo "Tier: $TIER"
 echo "Stack: $STACK"
 echo "Project: $PROJECT_NAME"
 echo "Env File: $ENV_FILE"
@@ -123,11 +144,8 @@ ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "mkdir -p $DEPLOY_DIR" || {
     exit 1
 }
 
-scp $SCP_OPTS "$ENV_FILE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/.env"
+scp $SCP_OPTS "$DEPLOY_ENV_FILE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/.env"
 scp $SCP_OPTS "$COMPOSE_STACK" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/docker-compose.yml"
-if [[ "$TIER" == "staging" ]]; then
-    scp $SCP_OPTS "$COMPOSE_STAGING_OVERRIDE" "$DEPLOY_USER@$DEPLOY_HOST:$DEPLOY_DIR/docker-compose.override.yml"
-fi
 
 echo -e "${GREEN}Files copied${NC}"
 echo ""
@@ -138,7 +156,6 @@ ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" << REMOTE_SCRIPT
 
   DEPLOY_DIR=$DEPLOY_DIR
   PROJECT_NAME=$PROJECT_NAME
-  OVERRIDE_FILE=$OVERRIDE_FILE
 
   export VERSION=$VERSION
   export REGISTRY_URL=$REGISTRY_URL
@@ -166,9 +183,6 @@ ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "bash -s" << REMOTE_SCRIPT
 
   cd \$DEPLOY_DIR
   COMPOSE_FILES="-f docker-compose.yml"
-  if [[ -n "\$OVERRIDE_FILE" ]] && [[ -f "\$OVERRIDE_FILE" ]]; then
-    COMPOSE_FILES="\$COMPOSE_FILES -f \$OVERRIDE_FILE"
-  fi
 
   echo "Validating compose files..."
   docker-compose \$COMPOSE_FILES -p \$PROJECT_NAME config -q
@@ -186,19 +200,6 @@ REMOTE_SCRIPT
 
 echo ""
 echo -e "${YELLOW}[3/3] Running smoke checks...${NC}"
-if [[ "$TIER" == "staging" ]]; then
-    GATEWAY_PORT=18080
-    APP_HOST="app-test.example.com"
-    MANAGER_HOST="manager-test.example.com"
-else
-    GATEWAY_PORT=$(grep -E '^GATEWAY_SERVICE_PORT=' "$ENV_FILE" | tail -n 1 | cut -d '=' -f2 | tr -d '[:space:]')
-    if [[ -z "$GATEWAY_PORT" ]]; then
-        GATEWAY_PORT=8080
-    fi
-    APP_HOST="app.example.com"
-    MANAGER_HOST="manager.example.com"
-fi
-
 if [[ "$STACK" == "manager" ]]; then
     ssh $SSH_OPTS "$DEPLOY_USER@$DEPLOY_HOST" "curl -fsS -H 'Host: $MANAGER_HOST' http://127.0.0.1:$GATEWAY_PORT/health >/dev/null"
 elif [[ "$STACK" == "app" ]]; then
@@ -214,7 +215,6 @@ echo -e "${GREEN}Deployment Summary:${NC}"
 echo "  Version: $VERSION"
 echo "  Registry: $REGISTRY_URL"
 echo "  Target: $DEPLOY_USER@$DEPLOY_HOST"
-echo "  Tier: $TIER"
 echo "  Stack: $STACK"
 echo ""
 echo "To check logs on remote server:"

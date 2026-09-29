@@ -1,6 +1,6 @@
 # LingQing Development Guide
 
-> **Production deployment** is documented separately: [deploy/quick-start.md](deploy/quick-start.md).
+> **Production deployment** is documented separately: [deploy/guide.md](deploy/guide.md).
 
 ## Local setup (first time)
 
@@ -212,7 +212,7 @@ uv run --env-file .env.local scripts/tenant_cli.py create --name "Name" --slug s
 3. Full reset (destructive): `docker system prune -a`
 4. Retry: `./deploy/scripts/local-stack.sh stack-up` or rebuild with `docker compose build --no-cache`
 
-For registry mirrors (some regions), see Docker Engine `registry-mirrors` in [deploy/troubleshooting.md](deploy/troubleshooting.md).
+For registry mirrors (some regions), see Docker Engine `registry-mirrors` in [deploy/guide.md → Troubleshooting](deploy/guide.md#docker-registry-pull-slow-or-blocked).
 
 ---
 
@@ -243,6 +243,6 @@ Apply in Docker Desktop → Settings → Docker Engine (macOS/Windows) or `/etc/
 ./deploy/scripts/local-stack.sh stack-up
 ```
 
-See [deploy/troubleshooting.md](deploy/troubleshooting.md) for production deploy issues.
+See [deploy/guide.md → Troubleshooting](deploy/guide.md#troubleshooting) for production deploy issues.
 
 ---

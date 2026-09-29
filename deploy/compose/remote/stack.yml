@@ -1,6 +1,6 @@
-# LingQing remote server stack (staging + production)
+# LingQing remote server stack
 # Pre-built registry images; external PostgreSQL required.
-# Tier: staging (with overrides/staging.yml) or production (this file only).
+# Use on one VM per environment (prod or staging); only .env differs between VMs.
 #
 # Required environment variables:
 #   REGISTRY_URL: Container registry URL (e.g., docker.io/myorg, ghcr.io/myorg)

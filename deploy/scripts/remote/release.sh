@@ -1,5 +1,5 @@
 #!/bin/bash
-# Build locally, push to registry, and deploy production tier to a remote host.
+# Build locally, push to registry, and deploy to a remote host.
 #
 # USAGE:
 #   ./release.sh <REMOTE_HOST> <REGISTRY_URL> <ENV_FILE> [VERSION] [STACK]
@@ -62,7 +62,7 @@ case "$STACK" in
 esac
 
 echo -e "${YELLOW}========================================${NC}"
-echo -e "${YELLOW}Production release (build + deploy)${NC}"
+echo -e "${YELLOW}Release (build + deploy)${NC}"
 echo -e "${YELLOW}========================================${NC}"
 echo "Remote Host:  $DEPLOY_HOST"
 echo "Deploy User:  $DEPLOY_USER"
@@ -70,7 +70,6 @@ echo "Registry:     $REGISTRY_URL"
 echo "Env File:     $ENV_FILE"
 echo "Version:      $VERSION"
 echo "Stack:        $STACK"
-echo "Tier:         production"
 echo ""
 
 echo -e "${YELLOW}[1/2] Building and pushing images...${NC}"
@@ -80,7 +79,7 @@ echo -e "${GREEN}✓ Images built and pushed${NC}"
 echo ""
 
 echo -e "${YELLOW}[2/2] Deploying to remote host...${NC}"
-"$SCRIPT_DIR/deploy.sh" "$VERSION" "$REGISTRY_URL" "$DEPLOY_HOST" "$DEPLOY_USER" "$ENV_FILE" "$STACK" "production"
+"$SCRIPT_DIR/deploy.sh" "$VERSION" "$REGISTRY_URL" "$DEPLOY_HOST" "$DEPLOY_USER" "$ENV_FILE" "$STACK"
 
 echo ""
 echo -e "${GREEN}========================================${NC}"

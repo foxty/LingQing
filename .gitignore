@@ -92,6 +92,7 @@ __pypackages__/
 .env.*
 !.env.example
 !.env.template
+!.env.production.template
 venv/
 
 
