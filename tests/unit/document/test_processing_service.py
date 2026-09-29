@@ -1,4 +1,4 @@
-"""Tests for DocumentProcessingService async parse orchestration."""
+"""Tests for DocumentParsePipeline async parse orchestration."""
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import pytest
 
 from apps.shared.document.domain import DocumentDomain
 from apps.shared.document.parsers.base import ParseSubmission
-from apps.shared.document.processing_service import DocumentProcessingService
+from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.types import DocumentProcessOutcome, DocumentStatus, PollJobOutcome
 
 
@@ -101,10 +101,10 @@ def _document_db(*, doc_id: int = 42) -> SimpleNamespace:
 
 
 @pytest.fixture
-def processing_service() -> DocumentProcessingService:
+def processing_service() -> DocumentParsePipeline:
     file_storage = AsyncMock()
     file_storage.exists = AsyncMock(return_value=False)
-    service = DocumentProcessingService(
+    service = DocumentParsePipeline(
         tenant_id=1,
         db_session=AsyncMock(),
         file_storage=file_storage,
@@ -193,7 +193,7 @@ async def test_process_pending_captures_failure_and_continues(caplog):
     async def session_factory():
         yield sessions.pop(0)
 
-    class _StubService(DocumentProcessingService):
+    class _StubService(DocumentParsePipeline):
         def __init__(self, tenant_id, db_session, file_storage):
             self.tenant_id = tenant_id
             self.db_session = db_session
@@ -228,7 +228,7 @@ async def test_process_document_recovers_existing_blocks_without_parser(processi
     persist = AsyncMock()
     monkeypatch.setattr(processing_service, "_persist_blocks", persist)
     monkeypatch.setattr(
-        "apps.shared.document.processing_service.try_read_existing_blocks",
+        "apps.shared.document.parse_pipeline.try_read_existing_blocks",
         AsyncMock(return_value=parser.blocks),
     )
 
@@ -251,7 +251,7 @@ async def test_poll_one_job_recovers_when_async_parser_fails(processing_service,
     persist = AsyncMock()
     monkeypatch.setattr(processing_service, "_persist_blocks", persist)
     monkeypatch.setattr(
-        "apps.shared.document.processing_service.try_read_existing_blocks",
+        "apps.shared.document.parse_pipeline.try_read_existing_blocks",
         AsyncMock(return_value=parser.blocks),
     )
 
@@ -271,7 +271,7 @@ async def test_poll_pending_counts_completed_and_failed():
     async def session_factory():
         yield sessions.pop(0)
 
-    class _StubService(DocumentProcessingService):
+    class _StubService(DocumentParsePipeline):
         def __init__(self, tenant_id, db_session, file_storage):
             self.tenant_id = tenant_id
             self.db_session = db_session
@@ -295,7 +295,7 @@ async def test_poll_pending_counts_completed_and_failed():
 
 @pytest.mark.asyncio
 async def test_run_pending_merges_process_and_poll():
-    class _StubService(DocumentProcessingService):
+    class _StubService(DocumentParsePipeline):
         def __init__(self, tenant_id, db_session, file_storage):
             self.tenant_id = tenant_id
             self.db_session = db_session

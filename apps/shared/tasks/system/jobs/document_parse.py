@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from apps.config import EnvConfig, get_file_storage
 from apps.shared.db.session import app_db_session
-from apps.shared.document.processing_service import DocumentProcessingService
+from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.types import DocumentParseWorkerResult
 from apps.shared.tasks.domain import TaskExecutionContext
 from apps.shared.tasks.system.handler_result import (
@@ -28,8 +28,8 @@ async def run_document_parse_jobs(
     resolved_batch_size = batch_size or EnvConfig.DOCUMENT_PARSE_JOB_BATCH_SIZE
 
     async with app_db_session() as session:
-        processing = DocumentProcessingService(tenant_id, session, get_file_storage())
-        result = await processing.run_pending(
+        parse_pipeline = DocumentParsePipeline(tenant_id, session, get_file_storage())
+        result = await parse_pipeline.run_pending(
             session_factory=app_db_session,
             batch_size=resolved_batch_size,
         )

@@ -1,15 +1,10 @@
 """Document management service."""
 
-import hashlib
-from datetime import datetime
-
 from fastapi import UploadFile
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import (
-    DuplicateResourceError,
     InternalServiceError,
     ResourceNotFoundError,
     ValidationError,
@@ -17,6 +12,7 @@ from apps.shared.core.exceptions import (
 from apps.shared.document.adapters import db_document_to_domain, domain_document_to_api
 from apps.shared.document.collection_service import DocumentCollectionService
 from apps.shared.document.domain import DocumentDomain
+from apps.shared.document.intake import DocumentIntake, IntakeRequest
 from apps.shared.document.manifest import (
     document_image_relative_key,
     get_storage_uri,
@@ -24,7 +20,7 @@ from apps.shared.document.manifest import (
     read_blocks_json,
     summarize_blocks,
 )
-from apps.shared.document.processing_service import DocumentProcessingService
+from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.repository import DBDocumentRepository
 from apps.shared.document.schemas import (
     DocumentInfo,
@@ -36,7 +32,7 @@ from apps.shared.document.types import DocumentImageFile
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import ABAC_ACTION_READ, ABAC_ACTION_WRITE, RESOURCE_TYPE_DOCUMENT
 from apps.shared.infra.storage import FileStorage
-from apps.shared.infra.storage.paths import normalize_storage_key, resolve_storage_ref
+from apps.shared.infra.storage.paths import resolve_storage_ref
 from apps.shared.search.indexing_service import ResourceIndexService
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.tenant.config_loader import load_tenant_config
@@ -91,26 +87,17 @@ class DocumentService(TenantAwareService):
         return self._resource_index_service
 
     @staticmethod
-    def _calculate_file_hash(file_content: bytes) -> str:
-        return hashlib.sha256(file_content).hexdigest()
-
-    @staticmethod
     def _duplicate_content_message(
         upload_filename: str,
         existing_filename: str,
         *,
-        upload_date: datetime | None = None,
+        upload_date=None,
     ) -> str:
-        """Build a user-facing duplicate-content error for collection uploads."""
-        if upload_filename == existing_filename:
-            message = f"该集合中已存在相同内容的文件 '{existing_filename}'"
-        else:
-            message = (
-                f"文件 '{upload_filename}' 与已上传的文件 '{existing_filename}' 内容相同，无法重复上传"
-            )
-        if upload_date is not None:
-            return f"{message}（已存在文件上传于 {upload_date.isoformat()}）。"
-        return f"{message}。"
+        return DocumentIntake.duplicate_content_message(
+            upload_filename,
+            existing_filename,
+            upload_date=upload_date,
+        )
 
     @staticmethod
     def _actor(requester_id: int, requester_role: str | None, tenant_id: int) -> ActorContext:
@@ -209,70 +196,21 @@ class DocumentService(TenantAwareService):
         )
 
         file_content = await file.read()
-        file_hash = self._calculate_file_hash(file_content)
-        await file.seek(0)
-        if hasattr(file.file, "seek"):
-            file.file.seek(0)
-
-        existing_doc = await self.document_repo.find_by_hash(self.tenant_id, file_hash, collection_id)
-        if existing_doc:
-            logger.warning(
-                "Duplicate file detected: %s (hash=%s..., collection_id=%s, existing_doc_id=%s)",
-                file.filename,
-                file_hash[:8],
-                collection_id,
-                existing_doc.id,
+        intake = DocumentIntake(self.tenant_id, self.db_session, self.file_storage)
+        return await intake.persist(
+            IntakeRequest(
+                collection_id=collection_id,
+                filename=file.filename,
+                content=file_content,
+                owner_id=owner_id,
+                source="upload",
+                on_duplicate="error",
             )
-            raise DuplicateResourceError(
-                self._duplicate_content_message(
-                    file.filename,
-                    existing_doc.filename,
-                    upload_date=existing_doc.upload_date,
-                )
-            )
-
-        storage_key = await self.file_storage.save(str(self.tenant_id), file.filename, file.file)
-        file_url = normalize_storage_key(self.tenant_id, storage_key)
-        resolved_path = resolve_storage_ref(self.tenant_id, file_url)
-        file_size = await self.file_storage.get_size(resolved_path)
-        logger.info("File saved to storage: %s, size=%s", file_url, file_size)
-
-        document_domain = DocumentDomain.create_new(
-            tenant_id=self.tenant_id,
-            collection_id=collection_id,
-            filename=file.filename,
-            file_url=file_url,
-            file_size=file_size,
-            file_hash=file_hash,
-            owner_id=owner_id,
         )
-
-        try:
-            document_db = await self.document_repo.create_document(document_domain)
-            document_domain = db_document_to_domain(document_db)
-        except IntegrityError as e:
-            logger.warning(
-                "Concurrent duplicate upload detected: %s (hash=%s..., collection_id=%s)",
-                file.filename,
-                file_hash[:8],
-                collection_id,
-            )
-            raise DuplicateResourceError(
-                self._duplicate_content_message(file.filename, file.filename)
-            ) from e
-
-        await self._process_uploaded_document(document_domain)
-        document_db = await self.document_repo.get_by_id_and_tenant(document_domain.id, self.tenant_id)
-        resource_index = await self._get_resource_index_repo().get_by_resource(
-            self.tenant_id,
-            RESOURCE_TYPE_DOCUMENT,
-            document_domain.id,
-        )
-        return db_document_to_domain(document_db, resource_index)
 
     async def queue_document_reparse(self, document_id: int, *, triggered_by: str = "api") -> DocumentDomain:
-        processing = DocumentProcessingService(self.tenant_id, self.db_session, self.file_storage)
-        await processing.queue_document_reparse(document_id, triggered_by=triggered_by)
+        parse_pipeline = DocumentParsePipeline(self.tenant_id, self.db_session, self.file_storage)
+        await parse_pipeline.queue_document_reparse(document_id, triggered_by=triggered_by)
         return await self._get_document_domain(document_id)
 
     async def queue_document_reindex(self, document_id: int) -> DocumentDomain:
@@ -304,8 +242,8 @@ class DocumentService(TenantAwareService):
             actor=self._actor(requester_id, requester_role, self.tenant_id),
             action=ABAC_ACTION_WRITE,
         )
-        processing = DocumentProcessingService(self.tenant_id, self.db_session, self.file_storage)
-        queued_count = await processing.queue_collection_reparse(collection_id, triggered_by=triggered_by)
+        parse_pipeline = DocumentParsePipeline(self.tenant_id, self.db_session, self.file_storage)
+        queued_count = await parse_pipeline.queue_collection_reparse(collection_id, triggered_by=triggered_by)
         logger.info(
             "collection_reparse_queued tenant_id=%s collection_id=%s queued_count=%s",
             self.tenant_id,
@@ -498,14 +436,6 @@ class DocumentService(TenantAwareService):
             "deleted_count": deleted_count,
             "total_count": len(doc_ids),
         }
-
-    async def _process_uploaded_document(self, doc: DocumentDomain) -> None:
-        processing = DocumentProcessingService(self.tenant_id, self.db_session, self.file_storage)
-        try:
-            await processing.initialize_resource_index(doc)
-            await processing.enqueue_document_parse(doc, triggered_by="upload")
-        except Exception as exc:
-            logger.warning("Failed to enqueue document parse %d: %s", doc.id, exc)
 
     async def _delete_document_resource_index(self, doc_id: int) -> None:
         try:
