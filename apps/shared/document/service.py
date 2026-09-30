@@ -22,13 +22,13 @@ from apps.shared.document.manifest import (
 )
 from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.repository import DBDocumentRepository
-from apps.shared.document.sync_repository import DocumentSyncRepository
 from apps.shared.document.schemas import (
     DocumentInfo,
     DocumentParsedBlock,
     DocumentParsedContent,
     DocumentQueueResponse,
 )
+from apps.shared.document.sync_repository import DocumentSyncRepository
 from apps.shared.document.types import DocumentImageFile
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import ABAC_ACTION_READ, ABAC_ACTION_WRITE, RESOURCE_TYPE_DOCUMENT

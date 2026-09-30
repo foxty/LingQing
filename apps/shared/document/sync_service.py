@@ -10,6 +10,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_settings
+from apps.shared.auth.oauth_pkce import generate_pkce
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import (
     AuthenticationError,
@@ -43,13 +44,12 @@ from apps.shared.document.sync_schemas import (
 from apps.shared.document.sync_types import DEFAULT_DOCUMENT_SOURCE_PROVIDER
 from apps.shared.document.types import DocumentStatus
 from apps.shared.domain.actor import ActorContext
-from apps.shared.domain.types import ABAC_ACTION_READ, ABAC_ACTION_WRITE, AUTHZ_ACTION_MANAGE
+from apps.shared.domain.types import ABAC_ACTION_READ, AUTHZ_ACTION_MANAGE
 from apps.shared.infra.external_files.google_drive import GoogleDriveClient
 from apps.shared.infra.external_files.port import ExternalFileEntry
 from apps.shared.infra.storage import FileStorage
 from apps.shared.infra.storage.paths import normalize_storage_key, resolve_storage_ref
 from apps.shared.utils.logger import get_logger
-from apps.shared.auth.oauth_pkce import generate_pkce
 
 logger = get_logger(__name__)
 
