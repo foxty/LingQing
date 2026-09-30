@@ -80,7 +80,7 @@ async def test_search_documents_uses_access_scope_filters(monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_get_resource_context_chunks_checks_document_collection_authz(monkeypatch):
+async def test_get_resource_context_chunks_for_anchors_checks_document_collection_authz(monkeypatch):
     from apps.shared.core.exceptions import AuthorizationError
     from apps.shared.domain.types import RESOURCE_TYPE_DOCUMENT
 
@@ -100,11 +100,10 @@ async def test_get_resource_context_chunks_checks_document_collection_authz(monk
     )
 
     with pytest.raises(AuthorizationError):
-        await service.get_resource_context_chunks(
+        await service.get_resource_context_chunks_for_anchors(
             resource_type=RESOURCE_TYPE_DOCUMENT,
             resource_id=99,
-            chunk_index=0,
-            context_range=1,
+            chunk_indexes=[0],
         )
 
     collection_service.require_document_access.assert_awaited_once()

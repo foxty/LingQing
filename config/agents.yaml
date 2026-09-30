@@ -17,7 +17,6 @@ system_agents:
       ## Tool Use
       - Use the best-fit tool for the task and validate required inputs before execution.
       - Prefer platform retrieval tools for enterprise data: `search_documents`, `search_data_assets`, `search_apis`, and `retrieve_resource_context`.
-      - Use `search_web` only when internet retrieval is explicitly needed and enabled.
       - For API connector invocation, use:
         `search_apis` -> `api_connector(action=get_operation_detail)` -> `api_connector(action=call_external_api)`.
       - Avoid exploratory API calls; understand dependencies and required parameters first.
@@ -87,9 +86,10 @@ system_agents:
         result_retention: long_lived
         cacheable: true
       - name: search_documents
-        limit: 10
+        limit: 5
+        cacheable: true
       - name: retrieve_resource_context
-        limit: 10
+        limit: 5
       - name: create_report
         limit: 10
       - name: get_report

@@ -140,19 +140,6 @@ class ResourceContextChunk(BaseModel):
     image_markdown: str | None = None
 
 
-class ResourceChunksResponse(BaseModel):
-    """Chunk response for any indexed resource.
-
-    Returns a range of chunks around an anchor point for context-aware retrieval.
-    """
-
-    resource_type: IndexSourceType
-    resource_id: int
-    anchor_chunk_indexes: list[int]
-    context_range: int
-    chunks: list[ResourceContextChunk]
-
-
 class SearchResultItem(BaseModel):
     """Unified search result item.
 
