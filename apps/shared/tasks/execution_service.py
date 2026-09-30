@@ -805,6 +805,7 @@ class ScheduledTaskExecutionService:
             "apps.shared.tasks.system.jobs.cleanup:cleanup_old_charts",
             "apps.shared.tasks.system.jobs.cleanup:cleanup_expired_temp_tables",
             "apps.shared.tasks.system.jobs.document_parse:run_document_parse_jobs",
+            "apps.shared.tasks.system.jobs.document_sync:run_document_sync_jobs",
         }
 
         def _resolve_handler(handler_ref: str) -> Callable[..., TypingAny]:

@@ -24,6 +24,7 @@ from apps.shared.external_identity import (
     IdentityBindingService,
 )
 from apps.shared.external_identity.identity_source_repository import IdentitySourceRepository
+from apps.shared.auth.oauth_pkce import generate_nonce, generate_pkce
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.token import JwtTokenIssuer
@@ -36,12 +37,7 @@ from apps.tenant_app_service.sso.dtos import (
     SsoExchangeResponse,
     SsoStartResponse,
 )
-from apps.tenant_app_service.sso.providers import (
-    OidcAdapter,
-    fetch_discovery,
-    generate_nonce,
-    generate_pkce,
-)
+from apps.tenant_app_service.sso.providers import OidcAdapter, fetch_discovery
 from apps.tenant_app_service.sso.repository import SsoRepository
 
 logger = get_logger(__name__)

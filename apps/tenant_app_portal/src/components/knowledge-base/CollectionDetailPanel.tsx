@@ -1,6 +1,7 @@
 import { DocumentTable } from '@/components/DocumentTable'
 import EmptyState from '@/components/EmptyState'
 import CollectionHeader from '@/components/knowledge-base/CollectionHeader'
+import CollectionSyncPanel from '@/components/knowledge-base/CollectionSyncPanel'
 import DocumentListToolbar from '@/components/knowledge-base/DocumentListToolbar'
 import { Button } from '@/components/ui/button'
 import { UploadProgressNotifications } from '@/components/UploadProgressNotifications'
@@ -8,6 +9,8 @@ import { ACCEPT_FILE_TYPES } from '@/constants/documents'
 import type { KnowledgeBaseDocumentsData } from '@/hooks/useKnowledgeBasePage'
 import type { UploadProgress } from '@/hooks/useFileUpload'
 import type { DocumentCollection } from '@/lib/documentCollectionsApi'
+import { useAuth } from '@/hooks/useAuth'
+import { actionRules } from '@/lib/permissionRules'
 import { Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -67,6 +70,10 @@ export default function CollectionDetailPanel({
   onFileUpload,
 }: CollectionDetailPanelProps) {
   const { t } = useTranslation()
+  const { hasAny } = useAuth()
+  const canReadDocuments = hasAny(actionRules.canReadDocuments())
+  const canWriteCollection = collection.can_write
+  const canManageCollectionSync = collection.can_manage
 
   const showEmptyCollection =
     !isLoading &&
@@ -78,8 +85,9 @@ export default function CollectionDetailPanel({
     <div className="space-y-4 min-w-0">
       <CollectionHeader
         collection={collection}
-        canUpload={canUpload}
-        canDelete={canDelete}
+        canUpload={canUpload && canWriteCollection}
+        canDelete={canDelete && canWriteCollection}
+        canWriteCollection={canWriteCollection}
         canReadTags={canReadTags}
         uploading={uploading}
         selectedCount={selectedIds.size}
@@ -93,6 +101,14 @@ export default function CollectionDetailPanel({
         onReindexAll={onReindexAll}
         queuePending={queuePending}
       />
+
+      {canReadDocuments ? (
+        <CollectionSyncPanel
+          collectionId={collection.id}
+          documentCount={collection.document_count}
+          canManageCollection={canManageCollectionSync}
+        />
+      ) : null}
 
       <input
         id="file-upload"

@@ -84,6 +84,7 @@ def domain_document_to_api(domain_doc: DocumentDomain) -> DocumentInfo:
         source_parser=domain_doc.source_parser,
         parsed_at=domain_doc.parsed_at.isoformat() if domain_doc.parsed_at else None,
         parse_error=domain_doc.parse_error,
+        intake_source=domain_doc.intake_source,
     )
 
 
@@ -116,7 +117,12 @@ def domain_collection_to_db_model(domain: DocumentCollectionDomain) -> db_models
     )
 
 
-def domain_collection_to_api(domain: DocumentCollectionDomain) -> DocumentCollectionResponse:
+def domain_collection_to_api(
+    domain: DocumentCollectionDomain,
+    *,
+    can_write: bool = True,
+    can_manage: bool = True,
+) -> DocumentCollectionResponse:
     return DocumentCollectionResponse(
         id=domain.id,
         tenant_id=domain.tenant_id,
@@ -125,6 +131,8 @@ def domain_collection_to_api(domain: DocumentCollectionDomain) -> DocumentCollec
         owner_id=domain.owner_id,
         owner_name=domain.owner_name,
         document_count=domain.document_count,
+        can_write=can_write,
+        can_manage=can_manage,
         created_at=domain.created_at.isoformat(),
         updated_at=domain.updated_at.isoformat(),
     )

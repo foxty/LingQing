@@ -11,14 +11,10 @@ import time
 
 import pytest
 
+from apps.shared.auth.oauth_pkce import generate_nonce, generate_pkce
 from apps.shared.core.exceptions import AuthenticationError, ValidationError
 from apps.tenant_app_service.sso.domain import ProviderConfig
-from apps.tenant_app_service.sso.providers import (
-    OidcAdapter,
-    generate_nonce,
-    generate_pkce,
-    get_adapter,
-)
+from apps.tenant_app_service.sso.providers import OidcAdapter, get_adapter
 
 
 def _config(**overrides) -> ProviderConfig:

@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-09-24T09:46:39.918094+00:00",
+  "generated_at": "2026-09-29T03:04:39.237994+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -50,6 +50,16 @@
     {
       "operation_key": "DELETE_/document-collections/{collection_id}",
       "summary": "Delete Document Collection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/document-collections/{collection_id}/sync-connector",
+      "summary": "Delete Sync Connector",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/document-sync/connections/{connection_id}",
+      "summary": "Disconnect Drive Connection",
       "risk_level": "write"
     },
     {
@@ -230,6 +240,36 @@
     {
       "operation_key": "GET_/document-collections/{collection_id}",
       "summary": "Get Document Collection",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/document-collections/{collection_id}/sync-connector",
+      "summary": "Get Sync Connector",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/document-sources/google-drive",
+      "summary": "Get Google Drive Source",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/document-sync/connections",
+      "summary": "List Drive Connections",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/document-sync/connections/{connection_id}/picker-config",
+      "summary": "Get Drive Picker Config",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/document-sync/google/authorize",
+      "summary": "Google Drive Authorize",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/document-sync/google/callback",
+      "summary": "Google Drive Callback",
       "risk_level": "read"
     },
     {
@@ -568,6 +608,16 @@
       "risk_level": "write"
     },
     {
+      "operation_key": "POST_/document-collections/{collection_id}/sync-connector",
+      "summary": "Create Sync Connector",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/document-sync/connectors/{connector_id}/sync",
+      "summary": "Trigger Connector Sync",
+      "risk_level": "write"
+    },
+    {
       "operation_key": "POST_/documents/upload",
       "summary": "Upload Document",
       "risk_level": "write"
@@ -630,6 +680,11 @@
     {
       "operation_key": "PUT_/document-collections/{collection_id}",
       "summary": "Update Document Collection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/document-sources/google-drive",
+      "summary": "Upsert Google Drive Source",
       "risk_level": "write"
     },
     {

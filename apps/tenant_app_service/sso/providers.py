@@ -8,7 +8,6 @@ IdPs later add a new provider_type and a new adapter implementing
 
 from __future__ import annotations
 
-import secrets
 from dataclasses import dataclass
 from datetime import UTC
 from typing import Protocol
@@ -16,6 +15,7 @@ from urllib.parse import urlencode
 
 import httpx
 
+from apps.shared.auth.oauth_pkce import generate_nonce, generate_pkce
 from apps.shared.core.exceptions import AuthenticationError, ValidationError
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.sso.domain import (
@@ -60,23 +60,6 @@ class IdentityProvider(Protocol):
         token_response: dict,
         expected_nonce: str,
     ) -> ExtractedIdentity: ...
-
-
-def generate_pkce() -> tuple[str, str, str]:
-    """Return (state, code_verifier, code_challenge) for an OIDC flow."""
-    state = secrets.token_urlsafe(32)
-    code_verifier = secrets.token_urlsafe(48)
-    # S256 challenge
-    import base64
-    import hashlib
-
-    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
-    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-    return state, code_verifier, code_challenge
-
-
-def generate_nonce() -> str:
-    return secrets.token_urlsafe(32)
 
 
 @dataclass

@@ -1,5 +1,7 @@
 """Database-backed Document Repository."""
 
+from datetime import UTC, datetime
+
 from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -193,7 +195,33 @@ class DBDocumentRepository(BaseRepository[Document]):
         logger.info(f"Document status updated (flushed): id={doc_id}, status={resolved}")
         return document
 
-    async def soft_delete(self, doc_id: int) -> bool:
+    async def update_document_file(
+        self,
+        doc_id: int,
+        tenant_id: int,
+        *,
+        filename: str,
+        file_url: str,
+        file_size: int,
+        file_hash: str,
+    ) -> Document | None:
+        """Update stored file metadata after an external sync refresh."""
+        document = await self.get_by_id_and_tenant(doc_id, tenant_id)
+        if not document:
+            logger.warning("Document not found for file update: id=%s tenant_id=%s", doc_id, tenant_id)
+            return None
+
+        document.filename = filename
+        document.file_url = file_url
+        document.file_size = file_size
+        document.file_hash = file_hash
+        document.upload_date = datetime.now(UTC)
+        await self.db.flush()
+        await self.db.refresh(document)
+        logger.info("Document file metadata updated: id=%s filename=%s", doc_id, filename)
+        return document
+
+    async def soft_delete(self, doc_id: int, tenant_id: int | None = None) -> bool:
         """Soft delete document (mark as deleted).
 
         Uses flush() to persist changes within the current transaction.
@@ -201,11 +229,15 @@ class DBDocumentRepository(BaseRepository[Document]):
 
         Args:
             doc_id: Document ID
+            tenant_id: When set, scope lookup to this tenant
 
         Returns:
             True if successful, False if not found
         """
-        document = await self.get_by_id(doc_id)
+        if tenant_id is not None:
+            document = await self.get_by_id_and_tenant(doc_id, tenant_id)
+        else:
+            document = await self.get_by_id(doc_id)
         if not document:
             return False
 

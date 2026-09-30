@@ -2,7 +2,7 @@
 
 from pydantic import BaseModel, Field
 
-from apps.shared.document.types import BlockType, DocumentStatus
+from apps.shared.document.types import BlockType, DocumentStatus, IntakeSource
 
 
 class DocumentInfo(BaseModel):
@@ -26,6 +26,7 @@ class DocumentInfo(BaseModel):
     source_parser: str | None = None
     parsed_at: str | None = None
     parse_error: str | None = None
+    intake_source: IntakeSource = "upload"
 
 
 class DocumentParsedBlock(BaseModel):
@@ -96,5 +97,7 @@ class DocumentCollectionResponse(BaseModel):
     owner_id: int
     owner_name: str | None = None
     document_count: int = 0
+    can_write: bool = False
+    can_manage: bool = False
     created_at: str
     updated_at: str

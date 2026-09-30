@@ -44,6 +44,11 @@ i18n.addResourceBundle('en', 'translation', {
     confirmDelete: 'Confirm Delete',
     confirmDeleteDesc: 'Are you sure you want to delete "{{name}}"?',
     irreversible: 'This action cannot be undone.',
+    sourceDrive: 'Drive',
+    sourceUpload: 'Upload',
+    sourceColumn: 'Source',
+    driveDeleteWarning:
+      'This document is synced from Google Drive. It may reappear after the next sync.',
   },
 }, true, true)
 
@@ -76,13 +81,18 @@ i18n.addResourceBundle('zh', 'translation', {
     confirmDelete: '确认删除',
     confirmDeleteDesc: '确定要删除"{{name}}"？',
     irreversible: '此操作不可撤销。',
+    sourceDrive: 'Drive',
+    sourceUpload: '上传',
+    sourceColumn: '来源',
+    driveDeleteWarning: '此文档来自 Google Drive 同步，下次同步后可能会重新出现。',
   },
 }, true, true)
 import { DocumentParsedPreview } from '@/components/DocumentParsedPreview'
 import { useDeleteDocuments, useReindexDocument, useReparseDocument } from '@/hooks/useDocuments'
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
-import { Database, FileText, RefreshCw, Trash2 } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Cloud, Database, FileText, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
@@ -181,6 +191,20 @@ export function DocumentTable({
     )
   }
 
+  const renderSourceBadge = (doc: Document) => {
+    const isDrive = doc.intakeSource === 'drive_sync'
+    return (
+      <Badge
+        variant="outline"
+        className="h-5 shrink-0 gap-1 px-1.5 text-[11px] font-normal"
+        title={isDrive ? t('knowledgeBase.sourceDrive') : t('knowledgeBase.sourceUpload')}
+      >
+        {isDrive ? <Cloud className="h-3 w-3" /> : <Upload className="h-3 w-3" />}
+        {isDrive ? t('knowledgeBase.sourceDrive') : t('knowledgeBase.sourceUpload')}
+      </Badge>
+    )
+  }
+
   const renderIndexStatus = (doc: Document) => {
     const view = getIndexPipelineStatus(doc)
     return (
@@ -224,6 +248,7 @@ export function DocumentTable({
                 />
               </TableHead>
               <TableHead className="h-10">{t('knowledgeBase.filename')}</TableHead>
+              <TableHead className="h-10 w-24">{t('knowledgeBase.sourceColumn')}</TableHead>
               <TableHead className="h-10 w-32">{t('knowledgeBase.uploader')}</TableHead>
               <TableHead className="h-10 w-24">{t('knowledgeBase.size')}</TableHead>
               <TableHead className="h-10 w-40">{t('knowledgeBase.uploadTime')}</TableHead>
@@ -246,11 +271,11 @@ export function DocumentTable({
                   />
                 </TableCell>
                 <TableCell className="py-2.5">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 min-w-0">
                     <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <button
                       type="button"
-                      className="text-sm truncate text-left hover:underline"
+                      className="text-sm truncate text-left hover:underline min-w-0"
                       title={t('knowledgeBase.viewParsed')}
                       onClick={() => setPreviewDoc(doc)}
                     >
@@ -258,6 +283,7 @@ export function DocumentTable({
                     </button>
                   </div>
                 </TableCell>
+                <TableCell className="py-2.5">{renderSourceBadge(doc)}</TableCell>
                 <TableCell className="py-2.5 text-sm">{doc.ownerUsername || '—'}</TableCell>
                 <TableCell className="py-2.5 text-sm">{formatFileSize(doc.fileSize)}</TableCell>
                 <TableCell className="py-2.5 text-sm">{formatDate(doc.uploadDate)}</TableCell>
@@ -331,6 +357,12 @@ export function DocumentTable({
         description={(doc) => (
           <>
             {t('knowledgeBase.confirmDeleteDesc', { name: doc?.filename })}
+            {doc?.intakeSource === 'drive_sync' ? (
+              <>
+                <br />
+                <span className="text-amber-600">{t('knowledgeBase.driveDeleteWarning')}</span>
+              </>
+            ) : null}
             <br />
             <span className="text-red-600">{t('knowledgeBase.irreversible')}</span>
           </>

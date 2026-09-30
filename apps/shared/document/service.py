@@ -22,6 +22,7 @@ from apps.shared.document.manifest import (
 )
 from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.repository import DBDocumentRepository
+from apps.shared.document.sync_repository import DocumentSyncRepository
 from apps.shared.document.schemas import (
     DocumentInfo,
     DocumentParsedBlock,
@@ -176,7 +177,20 @@ class DocumentService(TenantAwareService):
             doc_ids,
         )
 
-        documents = [domain_document_to_api(db_document_to_domain(doc, resource_index_map.get(doc.id))) for doc in docs]
+        drive_linked_ids: set[int] = set()
+        if collection_id is not None and doc_ids:
+            drive_linked_ids = await DocumentSyncRepository(self.db_session).list_drive_linked_document_ids(
+                self.tenant_id,
+                collection_id,
+                document_ids=doc_ids,
+            )
+
+        documents = []
+        for doc in docs:
+            domain = db_document_to_domain(doc, resource_index_map.get(doc.id))
+            if doc.id in drive_linked_ids:
+                domain.intake_source = "drive_sync"
+            documents.append(domain_document_to_api(domain))
         return documents, pagination
 
     async def upload_document(

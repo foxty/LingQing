@@ -130,9 +130,10 @@ export function getArtifactNavItems(
 }
 
 export function getSettingsNavItems(
-  t: (key: string) => string
+  t: (key: string) => string,
+  options: { includeDocumentSources?: boolean } = {}
 ): SidebarNavItem[] {
-  return [
+  const items: SidebarNavItem[] = [
     { to: '/settings/models', label: t('settings.models'), matchPrefixes: ['/settings/models'] },
     {
       to: '/settings/embedding',
@@ -149,6 +150,16 @@ export function getSettingsNavItems(
     { to: '/settings/users', label: t('settings.users'), matchPrefixes: ['/settings/users'] },
     { to: '/settings/usage', label: t('settings.usage'), matchPrefixes: ['/settings/usage'] },
   ]
+
+  if (options.includeDocumentSources) {
+    items.splice(5, 0, {
+      to: '/settings/document-sources',
+      label: t('settings.documentSources'),
+      matchPrefixes: ['/settings/document-sources'],
+    })
+  }
+
+  return items
 }
 
 export function getIntegrationNavItems(

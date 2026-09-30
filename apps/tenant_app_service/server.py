@@ -38,6 +38,8 @@ from apps.tenant_app_service.routers import (
     dashboard,
     data_sources,
     document_collections,
+    document_sources,
+    document_sync,
     documents,
     health,
     hitl,
@@ -112,6 +114,8 @@ app.include_router(auth.router)
 app.include_router(tenants.router)
 app.include_router(documents.router)
 app.include_router(document_collections.router)
+app.include_router(document_sources.router)
+app.include_router(document_sync.router)
 app.include_router(data_sources.router)
 app.include_router(api_connectors.router)
 app.include_router(search.router)

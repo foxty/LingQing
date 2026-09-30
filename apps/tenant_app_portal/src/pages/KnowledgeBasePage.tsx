@@ -39,6 +39,8 @@ i18n.addResourceBundle('en', 'translation', {
     updateCollectionSuccess: 'Collection updated',
     saveCollectionFailed: 'Failed to save collection',
     andMore: 'and {{count}} more...',
+    batchDriveDeleteWarning:
+      '{{count}} selected document(s) are synced from Google Drive and may reappear after the next sync.',
     irreversible: 'This action cannot be undone.',
     batchDelete: 'Delete',
     ownerLabel: 'Owner: {{name}}',
@@ -49,6 +51,8 @@ i18n.addResourceBundle('en', 'translation', {
     reparseQueued: 'Queued for re-parse',
     reindexQueued: 'Queued for re-index',
     fileTooLarge: 'This file exceeds the upload size limit. Choose a smaller file or split the document.',
+    driveConnected: 'Google Drive connected successfully',
+    driveConnectError: 'Failed to connect Google Drive',
   },
 }, true, true)
 
@@ -84,6 +88,8 @@ i18n.addResourceBundle('zh', 'translation', {
     updateCollectionSuccess: '集合已更新',
     saveCollectionFailed: '保存集合失败',
     andMore: '还有{{count}}个...',
+    batchDriveDeleteWarning:
+      '所选 {{count}} 个文档来自 Google Drive 同步，下次同步后可能会重新出现。',
     irreversible: '此操作不可撤销。',
     batchDelete: '删除',
     ownerLabel: '所有者：{{name}}',
@@ -94,6 +100,8 @@ i18n.addResourceBundle('zh', 'translation', {
     reparseQueued: '已加入重新解析队列',
     reindexQueued: '已加入重新索引队列',
     fileTooLarge: '文件超过上传大小上限，请选择更小的文件或拆分文档。',
+    driveConnected: 'Google Drive 连接成功',
+    driveConnectError: 'Google Drive 连接失败',
   },
 }, true, true)
 
@@ -145,8 +153,8 @@ export default function KnowledgeBasePage() {
             normalizedQuery={kb.normalizedQuery}
             searchQuery={kb.searchQuery}
             selectedIds={kb.selectedIds}
-            canUpload={kb.canUpload}
-            canDelete={kb.canDelete}
+            canUpload={kb.canUpload && (kb.selectedCollection?.can_write ?? false)}
+            canDelete={kb.canDelete && (kb.selectedCollection?.can_write ?? false)}
             canReadTags={kb.canReadTags}
             uploading={kb.uploading}
             uploadProgress={kb.uploadProgress}
