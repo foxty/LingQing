@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import ANY, AsyncMock, MagicMock
 
 import pytest
 from sqlalchemy.exc import IntegrityError
@@ -91,7 +91,7 @@ async def test_persist_skips_duplicate_when_configured(intake: DocumentIntake):
 @pytest.mark.asyncio
 async def test_persist_registers_document_for_parse(intake: DocumentIntake, monkeypatch):
     intake._document_repo.find_by_hash = AsyncMock(return_value=None)
-    intake.file_storage.save = AsyncMock(return_value="documents/1/report.pdf")
+    intake.file_storage.save = AsyncMock(return_value="42/original/report.pdf")
     intake.file_storage.get_size = AsyncMock(return_value=256)
 
     created_db = MagicMock()
@@ -99,7 +99,7 @@ async def test_persist_registers_document_for_parse(intake: DocumentIntake, monk
     created_db.tenant_id = 1
     created_db.collection_id = 10
     created_db.filename = "report.pdf"
-    created_db.file_url = "documents/1/report.pdf"
+    created_db.file_url = "42/original/report.pdf"
     created_db.file_size = 256
     created_db.file_hash = DocumentIntake.calculate_file_hash(b"hello")
     created_db.status = "processing"
@@ -109,6 +109,7 @@ async def test_persist_registers_document_for_parse(intake: DocumentIntake, monk
     created_db.updated_at = datetime.now(UTC)
 
     intake._document_repo.create_document = AsyncMock(return_value=created_db)
+    intake._document_repo.update_document_file = AsyncMock(return_value=created_db)
     intake._document_repo.get_by_id_and_tenant = AsyncMock(return_value=created_db)
     intake._document_repo.update_status = AsyncMock()
     intake._resource_index_repo.get_by_resource = AsyncMock(return_value=None)
@@ -128,14 +129,14 @@ async def test_persist_registers_document_for_parse(intake: DocumentIntake, monk
 
     assert doc.id == 42
     register_mock.assert_awaited_once()
-    intake.file_storage.save.assert_awaited_once()
+    intake.file_storage.save.assert_awaited_once_with("1", "42/original/report.pdf", ANY)
+    intake._document_repo.update_document_file.assert_awaited_once()
 
 
 @pytest.mark.asyncio
 async def test_persist_maps_integrity_error_to_duplicate(intake: DocumentIntake):
     intake._document_repo.find_by_hash = AsyncMock(return_value=None)
-    intake.file_storage.save = AsyncMock(return_value="documents/1/report.pdf")
-    intake.file_storage.get_size = AsyncMock(return_value=256)
+    intake.file_storage.save = AsyncMock(return_value="42/original/report.pdf")
     intake._document_repo.create_document = AsyncMock(side_effect=IntegrityError("stmt", {}, Exception()))
 
     with pytest.raises(DuplicateResourceError):
@@ -147,3 +148,56 @@ async def test_persist_maps_integrity_error_to_duplicate(intake: DocumentIntake)
                 owner_id=7,
             )
         )
+
+    intake.file_storage.save.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_persist_flattens_gemini_filename_and_saves_under_doc_original(intake: DocumentIntake, monkeypatch):
+    gemini_raw = "CMS Search & DLP Knowledge Sharing Session - 2026/09/01 11:01 CST - Notes by Gemini.docx"
+    stored_filename = (
+        "CMS Search & DLP Knowledge Sharing Session - 2026 - 09 - 01 11:01 CST - Notes by Gemini.docx"
+    )
+    expected_key = f"7/original/{stored_filename}"
+
+    intake._document_repo.find_by_hash = AsyncMock(return_value=None)
+    intake.file_storage.save = AsyncMock(return_value=expected_key)
+    intake.file_storage.get_size = AsyncMock(return_value=128)
+
+    created_db = MagicMock()
+    created_db.id = 7
+    created_db.tenant_id = 1
+    created_db.collection_id = 10
+    created_db.filename = stored_filename
+    created_db.file_url = expected_key
+    created_db.file_size = 128
+    created_db.file_hash = DocumentIntake.calculate_file_hash(b"gemini-notes")
+    created_db.status = "processing"
+    created_db.owner_id = 7
+    created_db.upload_date = datetime.now(UTC)
+    created_db.created_at = datetime.now(UTC)
+    created_db.updated_at = datetime.now(UTC)
+
+    intake._document_repo.create_document = AsyncMock(return_value=created_db)
+    intake._document_repo.update_document_file = AsyncMock(return_value=created_db)
+    intake._document_repo.get_by_id_and_tenant = AsyncMock(return_value=created_db)
+    intake._resource_index_repo.get_by_resource = AsyncMock(return_value=None)
+    monkeypatch.setattr(intake, "_register_for_parse", AsyncMock())
+
+    await intake.persist(
+        IntakeRequest(
+            collection_id=10,
+            filename=gemini_raw,
+            content=b"gemini-notes",
+            owner_id=7,
+        )
+    )
+
+    create_kwargs = intake._document_repo.create_document.await_args.args[0]
+    assert create_kwargs.filename == stored_filename
+
+    intake.file_storage.save.assert_awaited_once_with("1", expected_key, ANY)
+
+    update_kwargs = intake._document_repo.update_document_file.await_args.kwargs
+    assert update_kwargs["filename"] == stored_filename
+    assert update_kwargs["file_url"] == expected_key

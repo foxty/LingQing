@@ -95,7 +95,7 @@ async def test_delete_documents_invokes_parsed_and_index_cleanup(monkeypatch):
         collection_id=1,
         owner_id=1,
         filename="sample.pdf",
-        file_url="sample.pdf",
+        file_url="7/original/sample.pdf",
         file_size=10,
         file_hash="abc",
         status=DocumentStatus.ACTIVE,
@@ -129,4 +129,62 @@ async def test_delete_documents_invokes_parsed_and_index_cleanup(monkeypatch):
     assert result["deleted_count"] == 1
     assert deleted_parsed == [7]
     file_storage.delete.assert_awaited_once()
+    deleted_path = file_storage.delete.await_args.args[0]
+    assert deleted_path.endswith("7/original/sample.pdf")
     service._delete_document_resource_index.assert_awaited_once_with(7)
+
+
+@pytest.mark.asyncio
+async def test_delete_documents_removes_original_and_parsed_tree_on_disk(tenant_docs_root, monkeypatch):
+    from apps.shared.document.service import DocumentService
+
+    storage = LocalFileStorage()
+    original_path = tenant_docs_root / "7" / "original" / "sample.pdf"
+    original_path.parent.mkdir(parents=True, exist_ok=True)
+    original_path.write_bytes(b"sample")
+    parsed_path = tenant_docs_root / "7" / "parsed" / "latest" / "blocks.json"
+    parsed_path.parent.mkdir(parents=True, exist_ok=True)
+    parsed_path.write_text('{"blocks": []}', encoding="utf-8")
+
+    document_db = MagicMock()
+    document_db.collection_id = 1
+    document_db.id = 7
+
+    document_domain = DocumentDomain(
+        id=7,
+        tenant_id=1,
+        collection_id=1,
+        owner_id=1,
+        filename="sample.pdf",
+        file_url="7/original/sample.pdf",
+        file_size=6,
+        file_hash="abc",
+        status=DocumentStatus.ACTIVE,
+        upload_date=datetime.now(UTC),
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+
+    resource_index = MagicMock()
+    resource_index.raw_content = {
+        "schema_version": 1,
+        "storage_uri": "7/parsed/latest/blocks.json",
+    }
+
+    service = DocumentService(tenant_id=1, db_session=AsyncMock(), file_storage=storage)
+    service.document_repo.get_by_id_and_tenant = AsyncMock(return_value=document_db)
+    service.document_repo.delete_document = AsyncMock(return_value=True)
+    service._collection_service.require_collection_access = AsyncMock()
+    service._get_resource_index_repo = MagicMock(
+        return_value=MagicMock(get_by_resource=AsyncMock(return_value=resource_index))
+    )
+    service._delete_document_resource_index = AsyncMock()
+    monkeypatch.setattr(
+        "apps.shared.document.service.db_document_to_domain",
+        lambda _db, _index=None: document_domain,
+    )
+
+    result = await service.delete_documents([7], requester_id=1, requester_role="admin")
+
+    assert result["deleted_count"] == 1
+    assert not (tenant_docs_root / "7").exists()

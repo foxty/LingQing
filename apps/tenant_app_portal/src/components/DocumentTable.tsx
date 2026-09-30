@@ -20,7 +20,9 @@ i18n.addResourceBundle('en', 'translation', {
     noMatchingDocs: 'No documents match your search',
     noDocuments: 'No documents yet',
     selectAll: 'Select all',
+    documentId: 'ID',
     filename: 'Filename',
+    documentIdLabel: 'Document #{{id}}',
     uploader: 'Uploader',
     size: 'Size',
     uploadTime: 'Upload Time',
@@ -57,7 +59,9 @@ i18n.addResourceBundle('zh', 'translation', {
     noMatchingDocs: '没有匹配的文档',
     noDocuments: '暂无文档',
     selectAll: '全选',
+    documentId: 'ID',
     filename: '文件名',
+    documentIdLabel: '文档 #{{id}}',
     uploader: '上传者',
     size: '大小',
     uploadTime: '上传时间',
@@ -247,6 +251,7 @@ export function DocumentTable({
                   className={isSomeSelected ? 'data-[state=checked]:bg-primary/50' : ''}
                 />
               </TableHead>
+              <TableHead className="h-10 w-16">{t('knowledgeBase.documentId')}</TableHead>
               <TableHead className="h-10">{t('knowledgeBase.filename')}</TableHead>
               <TableHead className="h-10 w-24">{t('knowledgeBase.sourceColumn')}</TableHead>
               <TableHead className="h-10 w-32">{t('knowledgeBase.uploader')}</TableHead>
@@ -269,6 +274,14 @@ export function DocumentTable({
                     onCheckedChange={(checked) => handleSelectOne(doc.id, checked as boolean)}
                     aria-label={t('knowledgeBase.selectDocument', { name: doc.filename })}
                   />
+                </TableCell>
+                <TableCell className="py-2.5">
+                  <span
+                    className="font-mono text-xs text-muted-foreground tabular-nums"
+                    title={t('knowledgeBase.documentIdLabel', { id: doc.id })}
+                  >
+                    #{doc.id}
+                  </span>
                 </TableCell>
                 <TableCell className="py-2.5">
                   <div className="flex items-center gap-2 min-w-0">
@@ -356,6 +369,11 @@ export function DocumentTable({
         title={t('knowledgeBase.confirmDelete')}
         description={(doc) => (
           <>
+            {doc ? (
+              <span className="font-mono text-xs text-muted-foreground block mb-1">
+                {t('knowledgeBase.documentIdLabel', { id: doc.id })}
+              </span>
+            ) : null}
             {t('knowledgeBase.confirmDeleteDesc', { name: doc?.filename })}
             {doc?.intakeSource === 'drive_sync' ? (
               <>

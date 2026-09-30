@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -409,3 +409,38 @@ async def test_resolve_access_token_refreshes_when_expired(sync_service: Documen
 
     assert token == "new-access"
     assert connection.oauth_credentials_enc == {"enc": "updated"}
+
+
+@pytest.mark.asyncio
+async def test_update_existing_document_saves_under_doc_original_path(sync_service: DocumentSyncService):
+    document_db = MagicMock()
+    document_db.file_hash = "old-hash"
+    document_db.filename = "old.pdf"
+    document_db.file_url = "8/original/old.pdf"
+    sync_service._document_repo.get_by_id_and_tenant = AsyncMock(return_value=document_db)
+    sync_service._document_repo.update_document_file = AsyncMock()
+
+    drive_client = AsyncMock()
+    drive_client.download_file = AsyncMock(return_value=("report.pdf", b"new-content"))
+
+    sync_service.file_storage.save = AsyncMock(return_value="8/original/report.pdf")
+    sync_service.file_storage.get_size = AsyncMock(return_value=12)
+    sync_service.file_storage.delete = AsyncMock(return_value=True)
+
+    parse_pipeline = MagicMock()
+    parse_pipeline.queue_document_reparse = AsyncMock()
+
+    updated = await sync_service._update_existing_document(
+        parse_pipeline=parse_pipeline,
+        document_id=8,
+        drive_client=drive_client,
+        remote=_entry("file-a"),
+    )
+
+    assert updated is True
+    sync_service.file_storage.save.assert_awaited_once_with("1", "8/original/report.pdf", ANY)
+    sync_service._document_repo.update_document_file.assert_awaited_once()
+    update_kwargs = sync_service._document_repo.update_document_file.await_args.kwargs
+    assert update_kwargs["file_url"] == "8/original/report.pdf"
+    sync_service.file_storage.delete.assert_awaited_once()
+    parse_pipeline.queue_document_reparse.assert_awaited_once_with(8, triggered_by="drive_sync")
