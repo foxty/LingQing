@@ -8,10 +8,10 @@ from unittest.mock import ANY, AsyncMock, MagicMock, patch
 import pytest
 
 from apps.shared.core.exceptions import AuthorizationError, DuplicateResourceError, ValidationError
-from apps.shared.domain.types import ABAC_ACTION_READ, AUTHZ_ACTION_MANAGE
 from apps.shared.document.sync_schemas import CreateSyncConnectorRequest, GoogleDriveSourceConfigRequest
 from apps.shared.document.sync_service import DocumentSyncService, SyncDiffResult
 from apps.shared.domain.actor import ActorContext
+from apps.shared.domain.types import ABAC_ACTION_READ, AUTHZ_ACTION_MANAGE
 from apps.shared.infra.external_files.port import ExternalFileEntry
 
 
@@ -102,15 +102,18 @@ async def test_apply_sync_diff_skips_unchanged_files(sync_service: DocumentSyncS
         external_modified_at=modified_at,
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    drive_client = AsyncMock()
 
-    result = await sync_service._apply_sync_diff(
-        connector=MagicMock(id=5, collection_id=20),
-        connection=MagicMock(owner_id=7),
-        drive_client=AsyncMock(),
-        remote_files=[_entry("file-a", modified_at=modified_at)],
-    )
+    with patch("apps.shared.document.sync_service.DocumentParsePipeline"):
+        result = await sync_service._apply_sync_diff(
+            connector=MagicMock(id=5, collection_id=20),
+            connection=MagicMock(owner_id=7),
+            drive_client=drive_client,
+            remote_files=[_entry("file-a", modified_at=modified_at)],
+        )
 
     assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped=1)
+    drive_client.download_file.assert_not_awaited()
 
 
 @pytest.mark.asyncio

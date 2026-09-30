@@ -10,8 +10,8 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.shared.document.domain import DocumentDomain
-from apps.shared.document.parsers.base import ParseSubmission
 from apps.shared.document.parse_pipeline import DocumentParsePipeline
+from apps.shared.document.parsers.base import ParseSubmission
 from apps.shared.document.types import DocumentProcessOutcome, DocumentStatus, PollJobOutcome
 
 
@@ -103,7 +103,7 @@ def _document_db(*, doc_id: int = 42) -> SimpleNamespace:
 @pytest.fixture
 def processing_service() -> DocumentParsePipeline:
     file_storage = AsyncMock()
-    file_storage.exists = AsyncMock(return_value=False)
+    file_storage.exists = AsyncMock(return_value=True)
     service = DocumentParsePipeline(
         tenant_id=1,
         db_session=AsyncMock(),
@@ -152,9 +152,24 @@ async def test_poll_one_job_marks_failed_on_async_failure(processing_service):
 
 
 @pytest.mark.asyncio
+async def test_process_document_fails_fast_when_source_file_missing(processing_service):
+    processing_service.file_storage.exists = AsyncMock(return_value=False)
+    processing_service._registry = _FakeRegistry(_FakeAsyncParser())
+    processing_service._document_repo.update_status = AsyncMock()
+    processing_service._resource_index_repo.update_parse_failed = AsyncMock()
+
+    with pytest.raises(FileNotFoundError, match="File not found:"):
+        await processing_service.process_document(_sample_doc())
+
+    processing_service._document_repo.update_status.assert_awaited_with(42, DocumentStatus.FAILED)
+    processing_service._resource_index_repo.update_parse_failed.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_process_document_submits_async_parser(processing_service):
     parser = _FakeAsyncParser()
     processing_service._registry = _FakeRegistry(parser)
+    processing_service.file_storage.exists = AsyncMock(return_value=True)
     processing_service._document_repo.update_status = AsyncMock()
     processing_service._resource_index_repo.update_parse_submitted = AsyncMock()
 

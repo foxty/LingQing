@@ -35,6 +35,7 @@ from apps.shared.document.types import (
 )
 from apps.shared.domain.types import RESOURCE_TYPE_DOCUMENT
 from apps.shared.infra.storage import FileStorage
+from apps.shared.infra.storage.paths import resolve_storage_ref
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.search.schemas import ResourceIndexCreateDTO
 from apps.shared.tenant.config_loader import load_tenant_config
@@ -229,6 +230,7 @@ class DocumentParsePipeline:
         await self._document_repo.update_status(doc.id, DocumentStatus.PROCESSING)
         started = datetime.now(UTC)
         try:
+            await self._ensure_source_file_exists(doc)
             recovered = await self._try_complete_from_existing_blocks(doc, parser.name)
             if recovered:
                 logger.info(
@@ -428,6 +430,11 @@ class DocumentParsePipeline:
                 exc,
             )
             return PollJobOutcome.FAILED
+
+    async def _ensure_source_file_exists(self, doc: DocumentDomain) -> None:
+        resolved = resolve_storage_ref(self.tenant_id, doc.file_url)
+        if not await self.file_storage.exists(resolved):
+            raise FileNotFoundError(f"File not found: {resolved}")
 
     async def _try_complete_from_existing_blocks(self, doc: DocumentDomain, parser_name: str) -> bool:
         blocks_document = await try_read_existing_blocks(

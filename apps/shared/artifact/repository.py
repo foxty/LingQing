@@ -1,6 +1,7 @@
 """Repository for canonical artifacts, thread links, and sharing."""
 
 from sqlalchemy import and_, delete, exists, func, not_, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import joinedload
 
@@ -309,7 +310,30 @@ class ArtifactRepository:
             url=url,
             artifact_metadata=artifact_metadata or {},
         )
-        self.db.add(artifact)
-        await self.db.flush()
+        try:
+            async with self.db.begin_nested():
+                self.db.add(artifact)
+                await self.db.flush()
+        except IntegrityError:
+            stmt = select(Artifact).where(
+                Artifact.tenant_id == tenant_id,
+                Artifact.artifact_type == artifact_type,
+                Artifact.resource_id == resource_id,
+            )
+            result = await self.db.execute(stmt)
+            artifact = result.scalar_one_or_none()
+            if artifact is None:
+                raise
+            if title is not None:
+                artifact.title = title
+            if url is not None:
+                artifact.url = url
+            if artifact_metadata is not None:
+                artifact.artifact_metadata = artifact_metadata
+            if artifact.source_thread_id is None and source_thread_id is not None:
+                artifact.source_thread_id = source_thread_id
+            if artifact.owner_id is None:
+                artifact.owner_id = owner_id
+            await self.db.flush()
         await self._ensure_resource_acl(artifact=artifact, owner_id=owner_id)
         return artifact
