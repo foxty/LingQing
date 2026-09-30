@@ -75,7 +75,7 @@ cp .env.template .env
 nano .env
 \`\`\`
 
-Edit the **REQUIRED** section at the top of \`.env.template\`:
+Edit the **FILL BEFORE DEPLOY** section of \`.env.template\`:
 
 | Variable | Example |
 | --- | --- |

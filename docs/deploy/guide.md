@@ -130,7 +130,7 @@ cd "lingqing-deploy-${VERSION}"
 export POSTGRES_HOST=your-db.example.com POSTGRES_USER=postgres PGPASSWORD=admin_pass
 ./init_db.sh 'app_pass' 'manager_pass'
 
-cp .env.template .env && nano .env   # fill REQUIRED section at top
+cp .env.template .env && nano .env   # fill "FILL BEFORE DEPLOY" section
 ./bootstrap.sh --version "${VERSION}" --registry ghcr.io/foxty/lingqing
 ```
 

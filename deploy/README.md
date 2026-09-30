@@ -9,7 +9,7 @@ deploy/
 ├── README.md              ← you are here
 ├── env/
 │   ├── .env.template              # full env reference (all tiers)
-│   ├── .env.production.template   # minimal remote VM env (~25 lines; shipped as .env.template in bundle)
+│   ├── .env.production.template   # minimal remote VM env (bootstrap checklist + defaults; shipped as .env.template in bundle)
 │   └── .env.e2e                   # E2E container config (create from template; not committed)
 ├── docker/                # Dockerfiles, entrypoint, inner nginx
 ├── compose/
