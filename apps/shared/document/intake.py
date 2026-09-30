@@ -14,12 +14,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.core.exceptions import DuplicateResourceError
 from apps.shared.document.adapters import db_document_to_domain
 from apps.shared.document.domain import DocumentDomain
+from apps.shared.document.manifest import document_original_relative_key, normalize_document_filename
 from apps.shared.document.parsers.registry import get_parser_registry
 from apps.shared.document.repository import DBDocumentRepository
 from apps.shared.document.types import DocumentStatus, IntakeSource
 from apps.shared.domain.types import RESOURCE_TYPE_DOCUMENT
 from apps.shared.infra.storage import FileStorage
-from apps.shared.infra.storage.paths import normalize_storage_key, resolve_storage_ref
+from apps.shared.infra.storage.paths import normalize_storage_key
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.search.schemas import ResourceIndexCreateDTO
 from apps.shared.tenant.config_loader import load_tenant_config
@@ -111,28 +112,14 @@ class DocumentIntake:
                     )
                 )
 
-        storage_key = await self.file_storage.save(
-            str(self.tenant_id),
-            request.filename,
-            io.BytesIO(request.content),
-        )
-        file_url = normalize_storage_key(self.tenant_id, storage_key)
-        resolved_path = resolve_storage_ref(self.tenant_id, file_url)
-        file_size = await self.file_storage.get_size(resolved_path)
-        logger.info(
-            "document_intake_saved tenant_id=%s collection_id=%s file_url=%s size=%s source=%s",
-            self.tenant_id,
-            request.collection_id,
-            file_url,
-            file_size,
-            request.source,
-        )
+        file_size = len(request.content)
+        stored_filename = normalize_document_filename(request.filename)
 
         document_domain = DocumentDomain.create_new(
             tenant_id=self.tenant_id,
             collection_id=request.collection_id,
-            filename=request.filename,
-            file_url=file_url,
+            filename=stored_filename,
+            file_url=stored_filename,
             file_size=file_size,
             file_hash=file_hash,
             owner_id=request.owner_id,
@@ -140,7 +127,6 @@ class DocumentIntake:
 
         try:
             document_db = await self._document_repo.create_document(document_domain)
-            document_domain = db_document_to_domain(document_db)
         except IntegrityError as exc:
             logger.warning(
                 "Concurrent duplicate intake detected: %s (hash=%s..., collection_id=%s)",
@@ -149,6 +135,33 @@ class DocumentIntake:
                 request.collection_id,
             )
             raise DuplicateResourceError(self.duplicate_content_message(request.filename, request.filename)) from exc
+
+        relative_key = document_original_relative_key(document_db.id, stored_filename)
+        storage_key = await self.file_storage.save(
+            str(self.tenant_id),
+            relative_key,
+            io.BytesIO(request.content),
+        )
+        file_url = normalize_storage_key(self.tenant_id, storage_key)
+        logger.info(
+            "document_intake_saved tenant_id=%s collection_id=%s document_id=%s file_url=%s size=%s source=%s",
+            self.tenant_id,
+            request.collection_id,
+            document_db.id,
+            file_url,
+            file_size,
+            request.source,
+        )
+
+        document_db = await self._document_repo.update_document_file(
+            document_db.id,
+            self.tenant_id,
+            filename=stored_filename,
+            file_url=file_url,
+            file_size=file_size,
+            file_hash=file_hash,
+        )
+        document_domain = db_document_to_domain(document_db)
 
         try:
             await self._register_for_parse(document_domain, triggered_by=request.source)

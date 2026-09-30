@@ -59,8 +59,39 @@ _EXTENSION_MEDIA_TYPES = {
 }
 
 
+ORIGINAL_SUBDIR = "original"
+
+
 def blocks_relative_key(document_id: int) -> str:
     return f"{document_id}/{BLOCKS_RELATIVE_KEY}"
+
+
+def normalize_document_filename(filename: str) -> str:
+    """Flatten path-like slashes in upload filenames (e.g. Gemini note titles).
+
+    Gemini notes often arrive as ``Title/MM/DD time - Notes by Gemini.docx``.
+    Slashes must not be used as storage path segments.
+    """
+    normalized = filename.replace("\\", "/").strip()
+    if "/" not in normalized:
+        return Path(normalized).name or normalized
+    return normalized.replace("/", " - ")
+
+
+def document_original_relative_key(document_id: int, filename: str) -> str:
+    """Tenant-relative key for the original uploaded file."""
+    safe_name = normalize_document_filename(filename)
+    if not safe_name or safe_name in (".", ".."):
+        raise ValueError(f"Invalid document filename: {filename!r}")
+    return f"{document_id}/{ORIGINAL_SUBDIR}/{safe_name}"
+
+
+def is_document_original_storage_key(document_id: int, storage_key: str) -> bool:
+    """Return True when storage_key already uses the per-document original layout."""
+    normalized = storage_key.replace("\\", "/")
+    if normalized.startswith("s3://"):
+        return False
+    return normalized.startswith(f"{document_id}/{ORIGINAL_SUBDIR}/")
 
 
 def document_image_relative_key(document_id: int, filename: str) -> str | None:

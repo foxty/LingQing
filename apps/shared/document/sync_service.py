@@ -22,6 +22,7 @@ from apps.shared.core.exceptions import (
 from apps.shared.db.models import DocumentSourceProvider
 from apps.shared.document.collection_service import DocumentCollectionService
 from apps.shared.document.intake import DocumentIntake, IntakeRequest
+from apps.shared.document.manifest import document_original_relative_key
 from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.repository import DBDocumentRepository
 from apps.shared.document.source_provider_repository import DocumentSourceProviderRepository
@@ -616,9 +617,10 @@ class DocumentSyncService(TenantAwareService):
             return False
 
         old_file_url = document_db.file_url
+        relative_key = document_original_relative_key(document_id, filename)
         storage_key = await self.file_storage.save(
             str(self.tenant_id),
-            filename,
+            relative_key,
             io.BytesIO(content),
         )
         file_url = normalize_storage_key(self.tenant_id, storage_key)
