@@ -92,6 +92,8 @@ export type VectorStatus =
   | 'failed'
   | 'permanent_failed'
 
+export type DocumentIntakeSource = 'upload' | 'drive_sync'
+
 export interface Document {
   id: number
   filename: string
@@ -109,6 +111,7 @@ export interface Document {
   parsedAt?: string
   parseError?: string
   updatedAt?: string
+  intakeSource?: DocumentIntakeSource
 }
 
 export interface Agent {
@@ -192,6 +195,7 @@ export interface ApiDocument {
   parsed_at?: string | null
   parse_error?: string | null
   updated_at?: string
+  intake_source?: DocumentIntakeSource
 }
 
 export interface ApiAgent {
@@ -231,6 +235,7 @@ export const convertApiDocumentToDocument = (apiDoc: ApiDocument): Document => (
   parsedAt: apiDoc.parsed_at ?? undefined,
   parseError: apiDoc.parse_error ?? undefined,
   updatedAt: apiDoc.updated_at,
+  intakeSource: apiDoc.intake_source ?? 'upload',
 })
 
 export const convertApiAgentToAgent = (apiAgent: ApiAgent): Agent => ({

@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-09-24T09:46:39.918094+00:00",
+  "generated_at": "2026-09-30T00:34:16.738025+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -2487,6 +2487,38 @@
         "title": "CreateAgentSlackIntegrationRequest",
         "description": "Create a Slack bot for a specific agent."
       },
+      "CreateSyncConnectorRequest": {
+        "properties": {
+          "source_connection_id": {
+            "type": "integer",
+            "title": "Source Connection Id"
+          },
+          "source_folder_id": {
+            "type": "string",
+            "maxLength": 128,
+            "minLength": 1,
+            "title": "Source Folder Id"
+          },
+          "source_folder_name": {
+            "type": "string",
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Source Folder Name"
+          },
+          "include_subfolders": {
+            "type": "boolean",
+            "title": "Include Subfolders",
+            "default": true
+          }
+        },
+        "type": "object",
+        "required": [
+          "source_connection_id",
+          "source_folder_id",
+          "source_folder_name"
+        ],
+        "title": "CreateSyncConnectorRequest"
+      },
       "CustomAuthConfigSchema": {
         "properties": {
           "auth_method": {
@@ -4076,6 +4108,16 @@
             "title": "Document Count",
             "default": 0
           },
+          "can_write": {
+            "type": "boolean",
+            "title": "Can Write",
+            "default": false
+          },
+          "can_manage": {
+            "type": "boolean",
+            "title": "Can Manage",
+            "default": false
+          },
           "created_at": {
             "type": "string",
             "title": "Created At"
@@ -4259,6 +4301,15 @@
               }
             ],
             "title": "Parse Error"
+          },
+          "intake_source": {
+            "type": "string",
+            "enum": [
+              "upload",
+              "drive_sync"
+            ],
+            "title": "Intake Source",
+            "default": "upload"
           }
         },
         "type": "object",
@@ -4425,6 +4476,58 @@
         "title": "DocumentQueueResponse",
         "description": "Response for bulk document queue operations."
       },
+      "DocumentSourceConnectionResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "provider_id": {
+            "type": "integer",
+            "title": "Provider Id"
+          },
+          "provider": {
+            "type": "string",
+            "title": "Provider"
+          },
+          "account_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Email"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "provider_id",
+          "provider",
+          "account_email",
+          "status",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "DocumentSourceConnectionResponse"
+      },
       "DocumentStatus": {
         "type": "string",
         "enum": [
@@ -4434,6 +4537,42 @@
           "deleted"
         ],
         "title": "DocumentStatus"
+      },
+      "DriveAuthorizeResponse": {
+        "properties": {
+          "authorize_url": {
+            "type": "string",
+            "title": "Authorize Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "authorize_url"
+        ],
+        "title": "DriveAuthorizeResponse"
+      },
+      "DrivePickerConfigResponse": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "title": "Client Id"
+          },
+          "access_token": {
+            "type": "string",
+            "title": "Access Token"
+          },
+          "app_id": {
+            "type": "string",
+            "title": "App Id"
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_id",
+          "access_token",
+          "app_id"
+        ],
+        "title": "DrivePickerConfigResponse"
       },
       "EmbeddingModelConfigDTO": {
         "properties": {
@@ -4771,6 +4910,65 @@
         "type": "object",
         "title": "GaugeDisplayConfigDTO",
         "description": "Gauge chart display configuration."
+      },
+      "GoogleDriveSourceConfigRequest": {
+        "properties": {
+          "client_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "type": "string",
+            "title": "Client Secret",
+            "description": "Send empty string on update to keep previous value.",
+            "default": ""
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "client_id"
+        ],
+        "title": "GoogleDriveSourceConfigRequest"
+      },
+      "GoogleDriveSourceConfigResponse": {
+        "properties": {
+          "provider": {
+            "type": "string",
+            "title": "Provider",
+            "default": "google_drive"
+          },
+          "enabled": {
+            "type": "boolean",
+            "title": "Enabled"
+          },
+          "client_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Id"
+          },
+          "client_secret_configured": {
+            "type": "boolean",
+            "title": "Client Secret Configured",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "enabled"
+        ],
+        "title": "GoogleDriveSourceConfigResponse"
       },
       "HTTPValidationError": {
         "properties": {
@@ -6565,6 +6763,146 @@
         "title": "SlackTestConnectionResponse",
         "description": "Result of a Slack `auth.test` connection check."
       },
+      "SyncConnectorResponse": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "source_connection_id": {
+            "type": "integer",
+            "title": "Source Connection Id"
+          },
+          "collection_id": {
+            "type": "integer",
+            "title": "Collection Id"
+          },
+          "source_folder_id": {
+            "type": "string",
+            "title": "Source Folder Id"
+          },
+          "source_folder_name": {
+            "type": "string",
+            "title": "Source Folder Name"
+          },
+          "include_subfolders": {
+            "type": "boolean",
+            "title": "Include Subfolders"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
+          },
+          "last_sync_error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Sync Error"
+          },
+          "connection_owner_id": {
+            "type": "integer",
+            "title": "Connection Owner Id"
+          },
+          "connection_owner_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Connection Owner Username"
+          },
+          "account_email": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Email"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "source_connection_id",
+          "collection_id",
+          "source_folder_id",
+          "source_folder_name",
+          "include_subfolders",
+          "status",
+          "last_synced_at",
+          "last_sync_error",
+          "connection_owner_id",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "SyncConnectorResponse"
+      },
+      "SyncConnectorResultResponse": {
+        "properties": {
+          "connector_id": {
+            "type": "integer",
+            "title": "Connector Id"
+          },
+          "added": {
+            "type": "integer",
+            "title": "Added"
+          },
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          },
+          "deleted": {
+            "type": "integer",
+            "title": "Deleted"
+          },
+          "skipped": {
+            "type": "integer",
+            "title": "Skipped"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connector_id",
+          "added",
+          "updated",
+          "deleted",
+          "skipped"
+        ],
+        "title": "SyncConnectorResultResponse"
+      },
       "SyncSchemaRequest": {
         "properties": {
           "file_content": {
@@ -7644,6 +7982,8 @@
     "DELETE_/dashboards/{dashboard_id}/widgets/{widget_id}": "remove_dashboard_widget_dashboards__dashboard_id__widgets__widget_id__delete",
     "DELETE_/data-sources/{data_source_id}/tags/{tag_value_id}": "unbind_data_source_tag_data_sources__data_source_id__tags__tag_value_id__delete",
     "DELETE_/document-collections/{collection_id}": "delete_document_collection_document_collections__collection_id__delete",
+    "DELETE_/document-collections/{collection_id}/sync-connector": "delete_sync_connector_document_collections__collection_id__sync_connector_delete",
+    "DELETE_/document-sync/connections/{connection_id}": "disconnect_drive_connection_document_sync_connections__connection_id__delete",
     "DELETE_/reports/{report_id}": "delete_report_reports__report_id__delete",
     "DELETE_/scheduled-tasks/{task_id}": "delete_scheduled_task_scheduled_tasks__task_id__delete",
     "DELETE_/skills/{name}": "delete_skill_skills__name__delete",
@@ -7680,6 +8020,12 @@
     "GET_/data-sources/{data_source_id}/tags": "list_data_source_tags_data_sources__data_source_id__tags_get",
     "GET_/document-collections": "list_document_collections_document_collections_get",
     "GET_/document-collections/{collection_id}": "get_document_collection_document_collections__collection_id__get",
+    "GET_/document-collections/{collection_id}/sync-connector": "get_sync_connector_document_collections__collection_id__sync_connector_get",
+    "GET_/document-sources/google-drive": "get_google_drive_source_document_sources_google_drive_get",
+    "GET_/document-sync/connections": "list_drive_connections_document_sync_connections_get",
+    "GET_/document-sync/connections/{connection_id}/picker-config": "get_drive_picker_config_document_sync_connections__connection_id__picker_config_get",
+    "GET_/document-sync/google/authorize": "google_drive_authorize_document_sync_google_authorize_get",
+    "GET_/document-sync/google/callback": "google_drive_callback_document_sync_google_callback_get",
     "GET_/documents": "list_documents_documents_get",
     "GET_/documents/{document_id}/images/{filename}": "get_document_image_documents__document_id__images__filename__get",
     "GET_/documents/{document_id}/parsed": "get_parsed_document_documents__document_id__parsed_get",
@@ -7747,6 +8093,8 @@
     "POST_/document-collections": "create_document_collection_document_collections_post",
     "POST_/document-collections/{collection_id}/reindex": "queue_collection_reindex_document_collections__collection_id__reindex_post",
     "POST_/document-collections/{collection_id}/reparse": "queue_collection_reparse_document_collections__collection_id__reparse_post",
+    "POST_/document-collections/{collection_id}/sync-connector": "create_sync_connector_document_collections__collection_id__sync_connector_post",
+    "POST_/document-sync/connectors/{connector_id}/sync": "trigger_connector_sync_document_sync_connectors__connector_id__sync_post",
     "POST_/documents/upload": "upload_document_documents_upload_post",
     "POST_/documents/{document_id}/reindex": "queue_document_reindex_documents__document_id__reindex_post",
     "POST_/documents/{document_id}/reparse": "queue_document_reparse_documents__document_id__reparse_post",
@@ -7760,6 +8108,7 @@
     "PUT_/agents/{agent_id}": "update_agent_agents__agent_id__put",
     "PUT_/dashboards/{dashboard_id}": "update_dashboard_dashboards__dashboard_id__put",
     "PUT_/document-collections/{collection_id}": "update_document_collection_document_collections__collection_id__put",
+    "PUT_/document-sources/google-drive": "upsert_google_drive_source_document_sources_google_drive_put",
     "PUT_/llm-config/agent-config": "update_agent_config_llm_config_agent_config_put",
     "PUT_/llm-config/config": "update_llm_config_llm_config_config_put",
     "PUT_/llm-config/embedding-config": "update_embedding_config_llm_config_embedding_config_put",
@@ -8419,6 +8768,49 @@
         "idempotent": false
       }
     },
+    "create_sync_connector_document_collections__collection_id__sync_connector_post": {
+      "operation_key": "POST_/document-collections/{collection_id}/sync-connector",
+      "method": "POST",
+      "path": "/document-collections/{collection_id}/sync-connector",
+      "summary": "Create Sync Connector",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateSyncConnectorRequest"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "201",
+        "success_schema": {
+          "$ref": "#/components/schemas/SyncConnectorResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
     "delete_agent_agents__agent_id__delete": {
       "operation_key": "DELETE_/agents/{agent_id}",
       "method": "DELETE",
@@ -8702,6 +9094,36 @@
         "idempotent": true
       }
     },
+    "delete_sync_connector_document_collections__collection_id__sync_connector_delete": {
+      "operation_key": "DELETE_/document-collections/{collection_id}/sync-connector",
+      "method": "DELETE",
+      "path": "/document-collections/{collection_id}/sync-connector",
+      "summary": "Delete Sync Connector",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "204",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
     "diff_live_app_environments_apps__app_id__environments_diff_get": {
       "operation_key": "GET_/apps/{app_id}/environments/diff",
       "method": "GET",
@@ -8785,6 +9207,36 @@
       "constraints": {
         "side_effect": true,
         "idempotent": false
+      }
+    },
+    "disconnect_drive_connection_document_sync_connections__connection_id__delete": {
+      "operation_key": "DELETE_/document-sync/connections/{connection_id}",
+      "method": "DELETE",
+      "path": "/document-sync/connections/{connection_id}",
+      "summary": "Disconnect Drive Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connection Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "204",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
       }
     },
     "download_agent_slack_app_manifest_agents__agent_id__integrations_slack_manifest_get": {
@@ -9207,6 +9659,39 @@
         "idempotent": true
       }
     },
+    "get_drive_picker_config_document_sync_connections__connection_id__picker_config_get": {
+      "operation_key": "GET_/document-sync/connections/{connection_id}/picker-config",
+      "method": "GET",
+      "path": "/document-sync/connections/{connection_id}/picker-config",
+      "summary": "Get Drive Picker Config",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connection_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connection Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/DrivePickerConfigResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
     "get_embedding_config_llm_config_embedding_config_get": {
       "operation_key": "GET_/llm-config/embedding-config",
       "method": "GET",
@@ -9226,6 +9711,24 @@
             }
           ],
           "title": "Response Get Embedding Config Llm Config Embedding Config Get"
+        }
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_google_drive_source_document_sources_google_drive_get": {
+      "operation_key": "GET_/document-sources/google-drive",
+      "method": "GET",
+      "path": "/document-sources/google-drive",
+      "summary": "Get Google Drive Source",
+      "description": "",
+      "request": {},
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/GoogleDriveSourceConfigResponse"
         }
       },
       "constraints": {
@@ -9669,6 +10172,47 @@
         "idempotent": true
       }
     },
+    "get_sync_connector_document_collections__collection_id__sync_connector_get": {
+      "operation_key": "GET_/document-collections/{collection_id}/sync-connector",
+      "method": "GET",
+      "path": "/document-collections/{collection_id}/sync-connector",
+      "summary": "Get Sync Connector",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "collection_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Collection Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "anyOf": [
+            {
+              "$ref": "#/components/schemas/SyncConnectorResponse"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "title": "Response Get Sync Connector Document Collections  Collection Id  Sync Connector Get"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
     "get_task_run_logs_scheduled_tasks__task_id__runs__run_id__logs_get": {
       "operation_key": "GET_/scheduled-tasks/{task_id}/runs/{run_id}/logs",
       "method": "GET",
@@ -9965,6 +10509,63 @@
         "success_schema": {
           "$ref": "#/components/schemas/TenantUsageStatsDTO"
         },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "google_drive_authorize_document_sync_google_authorize_get": {
+      "operation_key": "GET_/document-sync/google/authorize",
+      "method": "GET",
+      "path": "/document-sync/google/authorize",
+      "summary": "Google Drive Authorize",
+      "description": "",
+      "request": {},
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/DriveAuthorizeResponse"
+        }
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "google_drive_callback_document_sync_google_callback_get": {
+      "operation_key": "GET_/document-sync/google/callback",
+      "method": "GET",
+      "path": "/document-sync/google/callback",
+      "summary": "Google Drive Callback",
+      "description": "",
+      "request": {
+        "query_params": [
+          {
+            "name": "state",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "State"
+            },
+            "description": ""
+          },
+          {
+            "name": "code",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Code"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
         "error_statuses": [
           "422"
         ]
@@ -10437,6 +11038,28 @@
         "error_statuses": [
           "422"
         ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_drive_connections_document_sync_connections_get": {
+      "operation_key": "GET_/document-sync/connections",
+      "method": "GET",
+      "path": "/document-sync/connections",
+      "summary": "List Drive Connections",
+      "description": "",
+      "request": {},
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "items": {
+            "$ref": "#/components/schemas/DocumentSourceConnectionResponse"
+          },
+          "type": "array",
+          "title": "Response List Drive Connections Document Sync Connections Get"
+        }
       },
       "constraints": {
         "side_effect": false,
@@ -12477,6 +13100,39 @@
         "idempotent": false
       }
     },
+    "trigger_connector_sync_document_sync_connectors__connector_id__sync_post": {
+      "operation_key": "POST_/document-sync/connectors/{connector_id}/sync",
+      "method": "POST",
+      "path": "/document-sync/connectors/{connector_id}/sync",
+      "summary": "Trigger Connector Sync",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connector Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/SyncConnectorResultResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
     "unbind_data_source_tag_data_sources__data_source_id__tags__tag_value_id__delete": {
       "operation_key": "DELETE_/data-sources/{data_source_id}/tags/{tag_value_id}",
       "method": "DELETE",
@@ -13218,6 +13874,38 @@
       "constraints": {
         "side_effect": true,
         "idempotent": false
+      }
+    },
+    "upsert_google_drive_source_document_sources_google_drive_put": {
+      "operation_key": "PUT_/document-sources/google-drive",
+      "method": "PUT",
+      "path": "/document-sources/google-drive",
+      "summary": "Upsert Google Drive Source",
+      "description": "",
+      "request": {
+        "body_schema": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GoogleDriveSourceConfigRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/GoogleDriveSourceConfigResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
       }
     }
   }

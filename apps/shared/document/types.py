@@ -43,6 +43,7 @@ class ParseJobStatus(StrEnum):
 
 
 BlockType = Literal["text", "heading", "table", "image", "mixed"]
+IntakeSource = Literal["upload", "drive_sync"]
 
 BLOCK_TYPE_TEXT = "text"
 BLOCK_TYPE_HEADING = "heading"

@@ -16,7 +16,7 @@ from apps.shared.document.adapters import db_document_to_domain
 from apps.shared.document.domain import DocumentDomain
 from apps.shared.document.parsers.registry import get_parser_registry
 from apps.shared.document.repository import DBDocumentRepository
-from apps.shared.document.types import DocumentStatus
+from apps.shared.document.types import DocumentStatus, IntakeSource
 from apps.shared.domain.types import RESOURCE_TYPE_DOCUMENT
 from apps.shared.infra.storage import FileStorage
 from apps.shared.infra.storage.paths import normalize_storage_key, resolve_storage_ref
@@ -28,7 +28,6 @@ from apps.shared.utils.logger import get_logger
 logger = get_logger(__name__)
 
 DuplicatePolicy = Literal["error", "skip", "update"]
-IntakeSource = Literal["upload", "drive_sync"]
 
 
 @dataclass(frozen=True)

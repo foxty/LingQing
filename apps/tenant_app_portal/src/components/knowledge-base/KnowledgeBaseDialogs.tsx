@@ -96,9 +96,15 @@ export default function KnowledgeBaseDialogs({
         title={t('knowledgeBase.confirmBatchDelete')}
         description={(docIds) => {
           const selectedDocs = documentsData?.items.filter((doc) => docIds?.includes(doc.id)) || []
+          const driveLinkedCount = selectedDocs.filter((doc) => doc.intakeSource === 'drive_sync').length
           return (
             <>
               <Trans i18nKey="knowledgeBase.confirmBatchDeleteDesc" count={docIds?.length || 0} />
+              {driveLinkedCount > 0 ? (
+                <span className="text-amber-600 mt-2 block">
+                  {t('knowledgeBase.batchDriveDeleteWarning', { count: driveLinkedCount })}
+                </span>
+              ) : null}
               <div className="mt-2 max-h-32 overflow-y-auto text-sm">
                 <ul className="list-disc list-inside space-y-1">
                   {selectedDocs.slice(0, 5).map((doc) => (

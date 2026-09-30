@@ -29,6 +29,7 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import (
     ABAC_ACTION_READ,
     ABAC_ACTION_WRITE,
+    AUTHZ_ACTION_MANAGE,
     RESOURCE_TYPE_DOCUMENT_COLLECTION,
     AbacAction,
 )
@@ -164,6 +165,36 @@ class DocumentCollectionService(TenantAwareService):
             raise AuthorizationError("无权访问该文档集合")
         return collection
 
+    async def _collection_capabilities(
+        self,
+        collection: DocumentCollectionDomain,
+        actor: ActorContext,
+    ) -> tuple[bool, bool]:
+        has_manage = await self.has_collections_manage_permission(actor=actor)
+        can_write = await allows_delegated_read(
+            db_session=self.db_session,
+            tenant_id=self.tenant_id,
+            user_id=actor.user_id,
+            user_role=actor.user_role,
+            resource_type=RESOURCE_TYPE_DOCUMENT_COLLECTION,
+            resource_id=collection.id,
+            resource_owner_id=collection.owner_id,
+            action=ABAC_ACTION_WRITE,
+            has_manage_permission=has_manage,
+        )
+        can_manage = await allows_delegated_read(
+            db_session=self.db_session,
+            tenant_id=self.tenant_id,
+            user_id=actor.user_id,
+            user_role=actor.user_role,
+            resource_type=RESOURCE_TYPE_DOCUMENT_COLLECTION,
+            resource_id=collection.id,
+            resource_owner_id=collection.owner_id,
+            action=AUTHZ_ACTION_MANAGE,
+            has_manage_permission=has_manage,
+        )
+        return can_write, can_manage
+
     async def list_collections_for_actor(self, *, actor: ActorContext) -> list[DocumentCollectionResponse]:
         scope = await self._build_collection_auth_scope(actor=actor, action=ABAC_ACTION_READ)
         if scope.deny_all:
@@ -177,12 +208,14 @@ class DocumentCollectionService(TenantAwareService):
             self.tenant_id,
             [c.id for c in collections],
         )
-        return [
-            domain_collection_to_api(
-                db_collection_to_domain(c, document_count=counts.get(c.id, 0)),
+        responses: list[DocumentCollectionResponse] = []
+        for c in collections:
+            domain = db_collection_to_domain(c, document_count=counts.get(c.id, 0))
+            can_write, can_manage = await self._collection_capabilities(domain, actor)
+            responses.append(
+                domain_collection_to_api(domain, can_write=can_write, can_manage=can_manage),
             )
-            for c in collections
-        ]
+        return responses
 
     async def get_collection_for_actor(self, *, collection_id: int, actor: ActorContext) -> DocumentCollectionResponse:
         collection = await self.require_collection_access(
@@ -190,7 +223,8 @@ class DocumentCollectionService(TenantAwareService):
             actor=actor,
             action=ABAC_ACTION_READ,
         )
-        return domain_collection_to_api(collection)
+        can_write, can_manage = await self._collection_capabilities(collection, actor)
+        return domain_collection_to_api(collection, can_write=can_write, can_manage=can_manage)
 
     async def create_collection(
         self,

@@ -8,6 +8,8 @@ export interface DocumentCollection {
   owner_id: number
   owner_name: string | null
   document_count: number
+  can_write: boolean
+  can_manage: boolean
   created_at: string
   updated_at: string
 }

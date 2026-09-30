@@ -48,6 +48,7 @@ export const PERMISSIONS = {
   // Documents
   DOCUMENTS_READ: 'documents.read',
   DOCUMENTS_WRITE: 'documents.write',
+  DOCUMENTS_MANAGE: 'documents.manage',
 
   // Tags / ABAC
   TAGS_READ: 'tags.read',
@@ -130,8 +131,10 @@ export const navRules = {
  * Creation actions require the *.write permission for that artifact type.
  */
 export const actionRules = {
+  canReadDocuments: () => [PERMISSIONS.DOCUMENTS_READ],
   canUploadDocument: () => [PERMISSIONS.DOCUMENTS_WRITE],
   canDeleteDocument: () => [PERMISSIONS.DOCUMENTS_WRITE],
+  canManageDocumentSources: () => [PERMISSIONS.DOCUMENTS_MANAGE],
 
   canCreateDataSource: () => [PERMISSIONS.DATA_SOURCES_WRITE],
   canEditDataSource: () => [PERMISSIONS.DATA_SOURCES_WRITE],

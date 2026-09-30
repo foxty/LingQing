@@ -96,4 +96,11 @@ SYSTEM_TASK_DEFINITIONS: list[SystemTaskDefinition] = [
         schedule_spec={"cron": "0 * * * *", "timezone": "UTC"},
         default_input_params={},
     ),
+    SystemTaskDefinition(
+        stable_key="system.document_sync",
+        name="Document Drive Sync",
+        handler_ref="apps.shared.tasks.system.jobs.document_sync:run_document_sync_jobs",
+        schedule_spec={"cron": "*/15 * * * *", "timezone": "UTC"},
+        default_input_params={},
+    ),
 ]

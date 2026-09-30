@@ -14,6 +14,7 @@ interface CollectionHeaderProps {
   collection: DocumentCollection
   canUpload: boolean
   canDelete: boolean
+  canWriteCollection: boolean
   canReadTags: boolean
   uploading: boolean
   selectedCount: number
@@ -32,6 +33,7 @@ export default function CollectionHeader({
   collection,
   canUpload,
   canDelete,
+  canWriteCollection,
   canReadTags,
   uploading,
   selectedCount,
@@ -46,6 +48,11 @@ export default function CollectionHeader({
   queuePending = false,
 }: CollectionHeaderProps) {
   const { t } = useTranslation()
+
+  const hasMenuItems =
+    canWriteCollection ||
+    canReadTags ||
+    (canDelete && selectedCount > 0 && onBatchDelete != null)
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
@@ -68,6 +75,7 @@ export default function CollectionHeader({
             {t('knowledgeBase.uploadDocument')}
           </Button>
         )}
+        {hasMenuItems ? (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button variant="outline" size="icon" className="h-9 w-9">
@@ -75,10 +83,12 @@ export default function CollectionHeader({
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
-            <DropdownMenuItem onClick={onShare}>
-              <Share2 className="w-4 h-4 mr-2" />
-              {t('knowledgeBase.shareCollection')}
-            </DropdownMenuItem>
+            {canWriteCollection ? (
+              <DropdownMenuItem onClick={onShare}>
+                <Share2 className="w-4 h-4 mr-2" />
+                {t('knowledgeBase.shareCollection')}
+              </DropdownMenuItem>
+            ) : null}
             {canReadTags && (
               <DropdownMenuItem
                 onSelect={(event) => {
@@ -90,7 +100,7 @@ export default function CollectionHeader({
                 {t('knowledgeBase.collectionTags')}
               </DropdownMenuItem>
             )}
-            {canUpload && onReparseAll && onReindexAll && (
+            {canWriteCollection && onReparseAll && onReindexAll && (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem disabled={queuePending} onClick={onReparseAll}>
@@ -115,7 +125,7 @@ export default function CollectionHeader({
                 </DropdownMenuItem>
               </>
             )}
-            {canUpload && (
+            {canWriteCollection ? (
               <>
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={onEdit}>
@@ -130,9 +140,10 @@ export default function CollectionHeader({
                   {t('knowledgeBase.deleteCollection')}
                 </DropdownMenuItem>
               </>
-            )}
+            ) : null}
           </DropdownMenuContent>
         </DropdownMenu>
+        ) : null}
       </div>
     </div>
   )

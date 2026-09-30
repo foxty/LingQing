@@ -3,7 +3,7 @@
 from dataclasses import dataclass
 from datetime import UTC, datetime
 
-from apps.shared.document.types import DocumentStatus
+from apps.shared.document.types import DocumentStatus, IntakeSource
 from apps.shared.domain.base_domain_model import BaseDomainModel
 
 
@@ -32,6 +32,7 @@ class DocumentDomain(BaseDomainModel):
     source_parser: str | None = None
     parsed_at: datetime | None = None
     parse_error: str | None = None
+    intake_source: IntakeSource = "upload"
 
     def is_ready(self) -> bool:
         return self.status == DocumentStatus.ACTIVE

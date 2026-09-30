@@ -230,9 +230,7 @@ class AuthProvider(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    provider_type: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="oidc", server_default="oidc"
-    )
+    provider_type: Mapped[str] = mapped_column(String(20), nullable=False, default="oidc", server_default="oidc")
     display_name: Mapped[str] = mapped_column(String(100), nullable=False)
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
     config_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
@@ -339,14 +337,10 @@ class ExternalIdentity(Base):
         Integer, ForeignKey("identity_sources.id", ondelete="CASCADE"), nullable=False
     )
     external_subject: Mapped[str] = mapped_column(String(255), nullable=False)
-    user_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
-    )
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
     email: Mapped[str | None] = mapped_column(String(255), nullable=True)
     display_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
-    status: Mapped[str] = mapped_column(
-        String(20), nullable=False, default="pending", server_default="pending"
-    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending", server_default="pending")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -840,8 +834,202 @@ class Document(Base):
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="documents", lazy="noload")
-    collection: Mapped["DocumentCollection"] = relationship("DocumentCollection", back_populates="documents", lazy="noload")
+    collection: Mapped["DocumentCollection"] = relationship(
+        "DocumentCollection", back_populates="documents", lazy="noload"
+    )
     owner_user: Mapped["User | None"] = relationship("User", back_populates="documents", foreign_keys=[owner_id])
+
+
+class DocumentSourceProvider(Base):
+    """Tenant-level OAuth app config for external document sources."""
+
+    __tablename__ = "document_source_providers"
+    __table_args__ = (UniqueConstraint("tenant_id", "provider", name="uq_document_source_provider_tenant"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    provider: Mapped[str] = mapped_column(
+        String(32), nullable=False, default="google_drive", server_default="google_drive"
+    )
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=text("false"))
+    config_json: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
+class DocumentSourceOAuthState(Base):
+    """Short-lived PKCE OAuth state for an in-flight document source connect."""
+
+    __tablename__ = "document_source_oauth_states"
+    __table_args__ = (UniqueConstraint("state", name="uq_document_source_oauth_state"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    provider_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("document_source_providers.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    state: Mapped[str] = mapped_column(String(128), nullable=False)
+    code_verifier: Mapped[str] = mapped_column(String(128), nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    source_provider: Mapped["DocumentSourceProvider"] = relationship(
+        "DocumentSourceProvider",
+        lazy="noload",
+    )
+
+
+class DocumentSourceConnection(Base):
+    """User OAuth connection to an external document source."""
+
+    __tablename__ = "document_source_connections"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "owner_id", "provider_id", name="uq_document_source_connection_owner"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    owner_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    provider_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("document_source_providers.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    account_email: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    oauth_credentials_enc: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    source_provider: Mapped["DocumentSourceProvider"] = relationship(
+        "DocumentSourceProvider",
+        lazy="noload",
+    )
+    owner_user: Mapped["User | None"] = relationship("User", foreign_keys=[owner_id], lazy="noload")
+    connectors: Mapped[list["DocumentSyncConnector"]] = relationship(
+        "DocumentSyncConnector",
+        back_populates="source_connection",
+        lazy="noload",
+    )
+
+
+class DocumentSyncConnector(Base):
+    """Binds an external folder to a document collection for sync."""
+
+    __tablename__ = "document_sync_connectors"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "collection_id", name="uq_document_sync_connector_collection"),
+        UniqueConstraint(
+            "source_connection_id",
+            "source_folder_id",
+            name="uq_document_sync_connector_folder",
+        ),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    source_connection_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("document_source_connections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    collection_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("document_collections.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    source_folder_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    source_folder_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    include_subfolders: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default=text("true"))
+    sync_cursor: Mapped[str | None] = mapped_column(String(256), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    last_synced_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_sync_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    source_connection: Mapped["DocumentSourceConnection"] = relationship(
+        "DocumentSourceConnection",
+        back_populates="connectors",
+        lazy="noload",
+    )
+
+
+class DocumentExternalFile(Base):
+    """Maps an external file ID to an internal document for sync tracking."""
+
+    __tablename__ = "document_external_files"
+    __table_args__ = (UniqueConstraint("connector_id", "external_file_id", name="uq_document_external_file"),)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    connector_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("document_sync_connectors.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    document_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("documents.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    external_file_id: Mapped[str] = mapped_column(String(128), nullable=False)
+    external_modified_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    external_name: Mapped[str] = mapped_column(String(500), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
 
 
 class DataSource(Base):
@@ -2190,9 +2378,7 @@ class IngressThreadLink(Base):
     agent_id: Mapped[int] = mapped_column(Integer, nullable=False)
     external_user_id: Mapped[str] = mapped_column(String(50), nullable=False)
     external_channel_id: Mapped[str] = mapped_column(String(50), nullable=False)
-    external_thread_key: Mapped[str] = mapped_column(
-        String(50), nullable=False, default="", server_default=""
-    )
+    external_thread_key: Mapped[str] = mapped_column(String(50), nullable=False, default="", server_default="")
     chat_thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

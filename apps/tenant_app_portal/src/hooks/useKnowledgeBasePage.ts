@@ -17,8 +17,10 @@ import type { DocumentCollection } from '@/lib/documentCollectionsApi'
 import { actionRules } from '@/lib/permissionRules'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import type { Document } from '@/types'
+import { useQueryClient } from '@tanstack/react-query'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { useSearchParams } from 'react-router-dom'
 import { useResourceListTags } from '@/hooks/useResourceListTags'
 
 const ITEMS_PER_PAGE = 10
@@ -26,6 +28,7 @@ const ITEMS_PER_PAGE = 10
 export function useKnowledgeBasePage() {
   const { t } = useTranslation()
   const { showSuccess, showError } = useNotification()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [searchQuery, setSearchQuery] = useState('')
   const [collectionSearch, setCollectionSearch] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
@@ -36,7 +39,8 @@ export function useKnowledgeBasePage() {
   const [formOpen, setFormOpen] = useState(false)
   const [formMode, setFormMode] = useState<'create' | 'edit'>('create')
 
-  const { hasAny } = useAuth()
+  const queryClient = useQueryClient()
+  const { user, hasAny } = useAuth()
   const canReadTags = hasAny(actionRules.canReadTags())
   const canManageTags = hasAny(actionRules.canManageTags())
   const canUpload = hasAny(actionRules.canUploadDocument())
@@ -48,6 +52,18 @@ export function useKnowledgeBasePage() {
   const createCollection = useCreateDocumentCollection()
   const updateCollection = useUpdateDocumentCollection()
   const deleteCollection = useDeleteDocumentCollection()
+
+  useEffect(() => {
+    const drive = searchParams.get('drive')
+    if (drive === 'connected') {
+      showSuccess(t('knowledgeBase.driveConnected'))
+      queryClient.invalidateQueries({ queryKey: ['document-sync', 'connections', user?.tenantId] })
+      setSearchParams({}, { replace: true })
+    } else if (drive === 'error') {
+      showError(t('knowledgeBase.driveConnectError'))
+      setSearchParams({}, { replace: true })
+    }
+  }, [queryClient, searchParams, setSearchParams, showError, showSuccess, t, user?.tenantId])
 
   useEffect(() => {
     if (!selectedCollectionId && collections.length > 0) {

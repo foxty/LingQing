@@ -26,6 +26,7 @@ import SettingsTagsTab from './pages/SettingsTagsTab'
 import SettingsUsageTab from './pages/SettingsUsageTab'
 import SettingsUsersTab from './pages/SettingsUsersTab'
 import SettingsIdentityTab from './pages/SettingsIdentityTab'
+import SettingsDocumentSourcesTab from './pages/SettingsDocumentSourcesTab'
 import SsoCallbackPage from './pages/SsoCallbackPage'
 import ScheduledTaskPage from './pages/ScheduledTaskPage'
 import ScheduledTasksPage from './pages/ScheduledTasksPage'
@@ -136,6 +137,7 @@ function App() {
             </ProtectedRoute>
           }
         />
+        <Route path="/knowledge-base" element={<RedirectWithSearch to="/knowledge" />} />
         <Route
           path="/skills"
           element={
@@ -264,6 +266,10 @@ function App() {
           <Route path="tags" element={<SettingsTagsTab />} />
           <Route path="abac" element={<SettingsAbacTab />} />
           <Route path="identity" element={<SettingsIdentityTab />} />
+          <Route
+            path="document-sources"
+            element={<SettingsDocumentSourcesTab />}
+          />
           <Route path="sso" element={<Navigate to="/settings/identity" replace />} />
           <Route path="users" element={<SettingsUsersTab />} />
           <Route path="usage" element={<SettingsUsageTab />} />

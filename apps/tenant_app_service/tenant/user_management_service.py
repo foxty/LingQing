@@ -163,6 +163,12 @@ class TenantUserManagementService(TenantAwareService):
         membership.deactivated_at = datetime.now(UTC)
         await self.db.flush()
 
+        from apps.config import get_file_storage
+        from apps.shared.document.sync_service import DocumentSyncService
+
+        sync_service = DocumentSyncService(self.tenant_id, self.db, get_file_storage())
+        await sync_service.deactivate_user_connections(owner_id=user_id)
+
         logger.info(f"Deactivated user {user_id} in tenant {self.tenant_id}")
 
     async def recover_user(self, user_id: int) -> None:
