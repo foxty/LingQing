@@ -31,7 +31,7 @@ def tenant_docs_root(tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_delete_parsed_artifacts_removes_document_directory(tenant_docs_root):
+async def test_delete_parsed_artifacts_removes_parsed_directory_but_preserves_original(tenant_docs_root):
     storage = LocalFileStorage()
     blocks_doc = {"schema_version": 1, "parser": "docling", "blocks": [{"type": "text", "text": "hello"}]}
     storage_uri = await write_blocks_json(
@@ -41,6 +41,9 @@ async def test_delete_parsed_artifacts_removes_document_directory(tenant_docs_ro
         blocks_document=blocks_doc,
     )
     doc_dir = tenant_docs_root / "42"
+    original_file = doc_dir / "original" / "report.docx"
+    original_file.parent.mkdir(parents=True, exist_ok=True)
+    original_file.write_bytes(b"source bytes")
     assert (doc_dir / "parsed" / "latest" / "blocks.json").exists()
 
     await delete_parsed_artifacts(
@@ -50,7 +53,10 @@ async def test_delete_parsed_artifacts_removes_document_directory(tenant_docs_ro
         storage_uri=storage_uri,
     )
 
-    assert not doc_dir.exists()
+    assert doc_dir.exists()
+    assert not (doc_dir / "parsed").exists()
+    assert original_file.exists()
+    assert original_file.read_bytes() == b"source bytes"
 
 
 @pytest.mark.asyncio
@@ -60,6 +66,9 @@ async def test_delete_parsed_artifacts_without_storage_uri_uses_default_path(ten
     target = tenant_docs_root / relative_key
     target.parent.mkdir(parents=True, exist_ok=True)
     target.write_text(json.dumps({"parser": "default", "blocks": []}), encoding="utf-8")
+    original_file = tenant_docs_root / "99" / "original" / "report.pdf"
+    original_file.parent.mkdir(parents=True, exist_ok=True)
+    original_file.write_bytes(b"source bytes")
 
     await delete_parsed_artifacts(
         storage,
@@ -68,7 +77,8 @@ async def test_delete_parsed_artifacts_without_storage_uri_uses_default_path(ten
         storage_uri=None,
     )
 
-    assert not (tenant_docs_root / "99").exists()
+    assert not (tenant_docs_root / "99" / "parsed").exists()
+    assert original_file.exists()
 
 
 @pytest.mark.asyncio

@@ -339,13 +339,13 @@ async def delete_parsed_artifacts(
         except Exception as exc:
             logger.warning("Failed to delete parsed artifact %s: %s", path, exc)
 
-    doc_artifact_dir = Path(get_tenant_documents_path(tenant_id)) / str(document_id)
-    if doc_artifact_dir.exists():
+    parsed_dir = Path(get_tenant_documents_path(tenant_id)) / str(document_id) / "parsed"
+    if parsed_dir.exists():
         try:
-            shutil.rmtree(doc_artifact_dir)
-            logger.info("Deleted document artifact directory: %s", doc_artifact_dir)
+            shutil.rmtree(parsed_dir)
+            logger.info("Deleted parsed artifact directory: %s", parsed_dir)
         except Exception as exc:
-            logger.warning("Failed to delete document artifact directory %s: %s", doc_artifact_dir, exc)
+            logger.warning("Failed to delete parsed artifact directory %s: %s", parsed_dir, exc)
 
 
 async def _delete_referenced_images(

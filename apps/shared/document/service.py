@@ -1,8 +1,12 @@
 """Document management service."""
 
+import shutil
+from pathlib import Path
+
 from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.config import get_tenant_documents_path
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import (
     InternalServiceError,
@@ -436,6 +440,10 @@ class DocumentService(TenantAwareService):
                 document_id=document.id,
                 storage_uri=storage_uri,
             )
+
+            doc_dir = Path(get_tenant_documents_path(self.tenant_id)) / str(document.id)
+            if doc_dir.exists():
+                shutil.rmtree(doc_dir)
 
             delete_success = await self.document_repo.delete_document(document.id)
             if delete_success:

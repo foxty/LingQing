@@ -105,7 +105,9 @@ class DocumentSyncService(TenantAwareService):
         config.require_configured(provider_key=provider.provider)
         return provider, config
 
-    async def _require_provider_by_id(self, provider_id: int) -> tuple[DocumentSourceProvider, GoogleDriveProviderConfig]:
+    async def _require_provider_by_id(
+        self, provider_id: int
+    ) -> tuple[DocumentSourceProvider, GoogleDriveProviderConfig]:
         provider = await self._provider_repo.get_provider_by_id(self.tenant_id, provider_id)
         if provider is None:
             raise ResourceNotFoundError(
@@ -505,11 +507,25 @@ class DocumentSyncService(TenantAwareService):
                     external_name=remote.name,
                     external_modified_at=remote.modified_at,
                 )
+                logger.info(
+                    "document_sync_added tenant_id=%s connector_id=%s external_file_id=%s document_id=%s",
+                    self.tenant_id,
+                    connector.id,
+                    external_id,
+                    added_doc.id,
+                )
                 result.added += 1
                 continue
 
             needs_revive = await self._document_is_deleted(mapping.document_id)
             if self._is_unchanged(mapping.external_modified_at, remote.modified_at) and not needs_revive:
+                logger.info(
+                    "document_sync_skip_unchanged tenant_id=%s connector_id=%s external_file_id=%s document_id=%s",
+                    self.tenant_id,
+                    connector.id,
+                    external_id,
+                    mapping.document_id,
+                )
                 result.skipped += 1
                 continue
 
@@ -534,11 +550,19 @@ class DocumentSyncService(TenantAwareService):
                 continue
 
             if needs_revive:
+                logger.info(
+                    "document_sync_revive tenant_id=%s connector_id=%s external_file_id=%s document_id=%s",
+                    self.tenant_id,
+                    connector.id,
+                    external_id,
+                    mapping.document_id,
+                )
                 updated = await self._update_existing_document(
                     parse_pipeline=parse_pipeline,
                     document_id=mapping.document_id,
                     drive_client=drive_client,
                     remote=remote,
+                    reason="revive",
                 )
                 await self._sync_repo.update_external_file(
                     mapping,
@@ -556,6 +580,7 @@ class DocumentSyncService(TenantAwareService):
                 document_id=mapping.document_id,
                 drive_client=drive_client,
                 remote=remote,
+                reason="modified",
             )
             await self._sync_repo.update_external_file(
                 mapping,
@@ -573,8 +598,24 @@ class DocumentSyncService(TenantAwareService):
             if mapping.document_id is not None:
                 if await self._document_repo.soft_delete(mapping.document_id, self.tenant_id):
                     await self._sync_repo.clear_external_file_document(mapping)
+                    logger.info(
+                        "document_sync_deleted tenant_id=%s connector_id=%s external_file_id=%s document_id=%s",
+                        self.tenant_id,
+                        connector.id,
+                        external_id,
+                        mapping.document_id,
+                    )
                     result.deleted += 1
 
+        logger.info(
+            "document_sync_diff tenant_id=%s connector_id=%s added=%s updated=%s deleted=%s skipped=%s",
+            self.tenant_id,
+            connector.id,
+            result.added,
+            result.updated,
+            result.deleted,
+            result.skipped,
+        )
         return result
 
     async def _intake_remote_file(
@@ -606,14 +647,36 @@ class DocumentSyncService(TenantAwareService):
         document_id: int,
         drive_client: GoogleDriveClient,
         remote: ExternalFileEntry,
+        reason: str = "modified",
     ) -> bool:
         document_db = await self._document_repo.get_by_id_and_tenant(document_id, self.tenant_id)
         if document_db is None:
+            logger.warning(
+                "document_sync_update_missing_document tenant_id=%s document_id=%s external_file_id=%s",
+                self.tenant_id,
+                document_id,
+                remote.external_id,
+            )
             return False
 
         filename, content = await drive_client.download_file(remote)
+        logger.info(
+            "document_sync_download tenant_id=%s document_id=%s external_file_id=%s reason=%s bytes=%s",
+            self.tenant_id,
+            document_id,
+            remote.external_id,
+            reason,
+            len(content),
+        )
         file_hash = DocumentIntake.calculate_file_hash(content)
         if document_db.file_hash == file_hash and document_db.filename == filename:
+            logger.info(
+                "document_sync_skip_hash_match tenant_id=%s document_id=%s external_file_id=%s reason=%s",
+                self.tenant_id,
+                document_id,
+                remote.external_id,
+                reason,
+            )
             return False
 
         old_file_url = document_db.file_url
@@ -646,6 +709,16 @@ class DocumentSyncService(TenantAwareService):
                     exc,
                 )
 
+        logger.info(
+            "document_sync_updated tenant_id=%s document_id=%s external_file_id=%s reason=%s "
+            "old_file_url=%s new_file_url=%s",
+            self.tenant_id,
+            document_id,
+            remote.external_id,
+            reason,
+            old_file_url,
+            file_url,
+        )
         await parse_pipeline.queue_document_reparse(document_id, triggered_by="drive_sync")
         return True
 
