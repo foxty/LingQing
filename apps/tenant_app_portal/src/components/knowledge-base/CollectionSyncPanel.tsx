@@ -254,12 +254,12 @@ export default function CollectionSyncPanel({
     syncMutation.mutate(connector.id)
   }
 
-  const handleDisconnectConnector = async (_confirmed: boolean) => {
+  const handleDisconnectConnector = async () => {
     await deleteConnectorMutation.mutateAsync()
     setDisconnectOpen(false)
   }
 
-  const handleDisconnectAccount = async (_confirmed: boolean) => {
+  const handleDisconnectAccount = async () => {
     if (!activeConnection) return
     await disconnectAccountMutation.mutateAsync(activeConnection.id)
     setDisconnectAccountOpen(false)
