@@ -10,6 +10,7 @@ import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_settings
+from apps.shared.auth.oauth_pkce import generate_pkce
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import (
     AuthenticationError,
@@ -21,6 +22,7 @@ from apps.shared.core.exceptions import (
 from apps.shared.db.models import DocumentSourceProvider
 from apps.shared.document.collection_service import DocumentCollectionService
 from apps.shared.document.intake import DocumentIntake, IntakeRequest
+from apps.shared.document.manifest import document_original_relative_key
 from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.repository import DBDocumentRepository
 from apps.shared.document.source_provider_repository import DocumentSourceProviderRepository
@@ -43,13 +45,12 @@ from apps.shared.document.sync_schemas import (
 from apps.shared.document.sync_types import DEFAULT_DOCUMENT_SOURCE_PROVIDER
 from apps.shared.document.types import DocumentStatus
 from apps.shared.domain.actor import ActorContext
-from apps.shared.domain.types import ABAC_ACTION_READ, ABAC_ACTION_WRITE, AUTHZ_ACTION_MANAGE
+from apps.shared.domain.types import ABAC_ACTION_READ, AUTHZ_ACTION_MANAGE
 from apps.shared.infra.external_files.google_drive import GoogleDriveClient
 from apps.shared.infra.external_files.port import ExternalFileEntry
 from apps.shared.infra.storage import FileStorage
 from apps.shared.infra.storage.paths import normalize_storage_key, resolve_storage_ref
 from apps.shared.utils.logger import get_logger
-from apps.shared.auth.oauth_pkce import generate_pkce
 
 logger = get_logger(__name__)
 
@@ -616,9 +617,10 @@ class DocumentSyncService(TenantAwareService):
             return False
 
         old_file_url = document_db.file_url
+        relative_key = document_original_relative_key(document_id, filename)
         storage_key = await self.file_storage.save(
             str(self.tenant_id),
-            filename,
+            relative_key,
             io.BytesIO(content),
         )
         file_url = normalize_storage_key(self.tenant_id, storage_key)

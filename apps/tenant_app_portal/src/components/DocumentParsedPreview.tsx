@@ -21,6 +21,7 @@ i18n.addResourceBundle(
   {
     knowledgeBase: {
       parsedPreview: 'Parsed content',
+      documentIdLabel: 'Document #{{id}}',
       parsedEmpty: 'No parsed content yet.',
       parsedTruncated: 'Showing first {{shown}} of {{total}} blocks.',
       parsedUnavailable: 'Unable to load parsed content.',
@@ -36,6 +37,7 @@ i18n.addResourceBundle(
   {
     knowledgeBase: {
       parsedPreview: '解析内容',
+      documentIdLabel: '文档 #{{id}}',
       parsedEmpty: '还没有解析内容。',
       parsedTruncated: '仅显示前 {{shown}} / {{total}} 个块。',
       parsedUnavailable: '无法加载解析内容。',
@@ -69,9 +71,16 @@ export function DocumentParsedPreview({
           <DialogTitle className="truncate">
             {document?.filename ?? t('knowledgeBase.parsedPreview')}
           </DialogTitle>
-          <DialogDescription>
-            {data?.parser ? `${data.parser}` : t('knowledgeBase.parsedPreview')}
-            {data?.parsed_at ? ` · ${formatDate(data.parsed_at)}` : ''}
+          <DialogDescription className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            {document ? (
+              <span className="font-mono text-xs text-muted-foreground">
+                {t('knowledgeBase.documentIdLabel', { id: document.id })}
+              </span>
+            ) : null}
+            <span>
+              {data?.parser ? `${data.parser}` : t('knowledgeBase.parsedPreview')}
+              {data?.parsed_at ? ` · ${formatDate(data.parsed_at)}` : ''}
+            </span>
           </DialogDescription>
         </DialogHeader>
 

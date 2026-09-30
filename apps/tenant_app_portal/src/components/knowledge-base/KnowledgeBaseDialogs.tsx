@@ -109,6 +109,7 @@ export default function KnowledgeBaseDialogs({
                 <ul className="list-disc list-inside space-y-1">
                   {selectedDocs.slice(0, 5).map((doc) => (
                     <li key={doc.id} className="truncate">
+                      <span className="font-mono text-xs text-muted-foreground mr-1.5">#{doc.id}</span>
                       {doc.filename}
                     </li>
                   ))}
