@@ -98,9 +98,9 @@ async def search(
 
     Searchable content types (controlled by `sources`):
     - **document** — uploaded files (PDFs, Word docs, spreadsheets, etc.) split into
-      chunks and indexed in the vector DB. Results include a ranked snippet and up to
-      3 content chunks with relevance scores. Use `resource_type` and `resource_id` with the
-      `/search/resource/{resource_type}/{resource_id}/chunks` endpoint to retrieve surrounding chunks.
+      chunks and indexed in the vector DB. Results include a ranked snippet, chunk hints,
+      and relevance scores. Agents should follow up with `retrieve_resource_context`
+      using `chunk_indexes` from the search hints.
     - **asset** — data asset metadata (tables, views, datasets) including asset name,
       type, business description, column names/types, and row count. Useful for
       understanding what data is available and what a table/field means.

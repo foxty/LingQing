@@ -195,7 +195,6 @@ async def test_retrieve_resource_context_document_success(monkeypatch, runnable_
             "resource_type": "document",
             "resource_id": 42,
             "chunk_indexes": [1],
-            "context_range": 1,
         },
         config=runnable_config,
     )
@@ -206,62 +205,7 @@ async def test_retrieve_resource_context_document_success(monkeypatch, runnable_
     assert payload["resource_id"] == 42
     assert len(payload["chunks"]) == 1
     assert payload["chunks"][0]["content"] == "hello"
-    assert payload["images"] == []
-
-
-@pytest.mark.asyncio
-async def test_retrieve_resource_context_includes_image_urls(monkeypatch, runnable_config):
-    image_name = "a" * 64 + ".png"
-
-    class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
-            pass
-
-        async def get_resource_context_chunks_for_anchors(self, **kwargs):
-            image_url = f"/documents/42/images/{image_name}"
-            return [
-                ResourceContextChunk(
-                    chunk_index=1,
-                    total_chunks=10,
-                    content="Q3 revenue chart",
-                    block_type="image",
-                    page=3,
-                    image_url=image_url,
-                    image_markdown=f"![Q3 revenue chart]({image_url})",
-                )
-            ]
-
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.app_db_session", lambda: _FakeSessionContext())
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.SearchService", _FakeSearchService)
-
-    result = await retrieve_resource_context.ainvoke(
-        {
-            "resource_type": "document",
-            "resource_id": 42,
-            "chunk_indexes": [1],
-        },
-        config=runnable_config,
-    )
-    payload = json.loads(result.content)
-
-    image_url = f"/documents/42/images/{image_name}"
-    assert payload["images"] == [
-        {
-            "chunk_index": 1,
-            "total_chunks": 10,
-            "content": "Q3 revenue chart",
-            "block_type": "image",
-            "page": 3,
-            "image_url": image_url,
-            "image_markdown": f"![Q3 revenue chart]({image_url})",
-        }
-    ]
-    assert "image_uri" not in payload["chunks"][0]
-    assert "image_uri" not in payload["images"][0]
-    assert payload["chunks"][0]["page"] == 3
-    assert payload["chunks"][0]["block_type"] == "image"
-    assert payload["chunks"][0]["image_url"] == image_url
-    assert payload["chunks"][0]["image_markdown"] == f"![Q3 revenue chart]({image_url})"
+    assert "images" not in payload
 
 
 @pytest.mark.asyncio
@@ -273,7 +217,7 @@ async def test_retrieve_resource_context_batch_anchors(monkeypatch, runnable_con
         async def get_resource_context_chunks_for_anchors(self, **kwargs):
             assert kwargs["chunk_indexes"] == [2, 8]
             return [
-                ResourceContextChunk(chunk_index=1, total_chunks=10, content="one"),
+                ResourceContextChunk(chunk_index=2, total_chunks=10, content="two"),
                 ResourceContextChunk(chunk_index=8, total_chunks=10, content="eight"),
             ]
 
@@ -285,32 +229,29 @@ async def test_retrieve_resource_context_batch_anchors(monkeypatch, runnable_con
             "resource_type": "document",
             "resource_id": 42,
             "chunk_indexes": [2, 8],
-            "context_range": 2,
         },
         config=runnable_config,
     )
     payload = json.loads(result.content)
 
     assert result.status == ToolResultStatus.SUCCESS
-    assert payload["anchor_chunk_indexes"] == [2, 8]
-    assert [chunk["chunk_index"] for chunk in payload["chunks"]] == [1, 8]
+    assert payload["chunk_indexes"] == [2, 8]
+    assert [chunk["chunk_index"] for chunk in payload["chunks"]] == [2, 8]
 
 
 @pytest.mark.asyncio
-async def test_retrieve_resource_context_rejects_too_many_anchors(monkeypatch, runnable_config):
+async def test_retrieve_resource_context_rejects_too_many_chunk_indexes(monkeypatch, runnable_config):
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.app_db_session", lambda: _FakeSessionContext())
 
-    result = await retrieve_resource_context.ainvoke(
-        {
-            "resource_type": "document",
-            "resource_id": 42,
-            "chunk_indexes": [1, 2, 3, 4],
-            "context_range": 2,
-        },
-        config=runnable_config,
-    )
-
-    assert result.status == ToolResultStatus.ERROR
+    with pytest.raises(Exception):
+        await retrieve_resource_context.ainvoke(
+            {
+                "resource_type": "document",
+                "resource_id": 42,
+                "chunk_indexes": list(range(11)),
+            },
+            config=runnable_config,
+        )
 
 
 @pytest.mark.asyncio
@@ -337,7 +278,6 @@ async def test_retrieve_resource_context_passes_tenant_config(monkeypatch, runna
             "resource_type": "document",
             "resource_id": "42",
             "chunk_indexes": [1],
-            "context_range": 1,
         },
         config=runnable_config,
     )

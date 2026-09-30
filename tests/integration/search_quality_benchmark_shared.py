@@ -19,6 +19,7 @@ from apps.shared.authz.authz_query_builder import AuthzSqlFilter
 from apps.shared.core.auth import get_current_user
 from apps.shared.data_source.schemas import RAGSourceType
 from apps.shared.data_source.service import AssetAccessScope
+from apps.shared.document.collection_service import DocumentAccessScope
 from apps.shared.db.models import AssetMetadata, DataSource, Document, DocumentCollection, Tenant, User
 from apps.shared.db.session import get_db
 from apps.shared.domain.actor import ActorContext
@@ -81,10 +82,15 @@ def _configure_api_search_mode(monkeypatch: pytest.MonkeyPatch, mode: str) -> No
 
 
 def _configure_document_search_mode(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
-    async def _mock_document_abac_filter(self):
-        return AuthzSqlFilter(allow_all=True, deny_all=False, clause=None)
+    async def _mock_document_access_scope(self):
+        return DocumentAccessScope(
+            deny_all=False,
+            allow_all=True,
+            document_filter=None,
+            index_parent_filter=None,
+        )
 
-    monkeypatch.setattr(SearchService, "_get_document_authz_filter", _mock_document_abac_filter)
+    monkeypatch.setattr(SearchService, "_get_document_access_scope", _mock_document_access_scope)
 
     if mode == "fts":
 

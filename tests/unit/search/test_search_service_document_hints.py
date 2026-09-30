@@ -8,7 +8,12 @@ from langchain_core.documents import Document
 from apps.shared.document.schemas import DocumentChunk, DocumentSearchResult
 from apps.shared.domain.types import RESOURCE_TYPE_DOCUMENT
 from apps.shared.search.schemas import ResourceContextChunk
-from apps.shared.search.search_service import SearchService, finalize_document_context_chunk
+from apps.shared.search.search_service import (
+    MAX_DOCUMENT_CONTEXT_ANCHORS,
+    MAX_DOCUMENT_CONTEXT_CHUNKS,
+    SearchService,
+    finalize_document_context_chunk,
+)
 
 
 def test_document_to_item_limits_chunk_hints_and_adds_section_hint():
@@ -84,69 +89,102 @@ def test_document_to_item_includes_page_and_image_url():
 def test_normalize_context_anchors_deduplicates_and_caps():
     anchors = SearchService._normalize_context_anchors([2, 2, 8, 11, 19, 78])
 
-    assert anchors == [2, 8, 11]
+    assert anchors == [2, 8, 11, 19, 78]
+    assert len(anchors) <= MAX_DOCUMENT_CONTEXT_ANCHORS
 
 
 @pytest.mark.asyncio
-async def test_get_resource_context_chunks_for_anchors_merges_and_deduplicates():
+async def test_get_resource_context_chunks_for_anchors_fetches_exact_indexes():
     service = SearchService.__new__(SearchService)
     service.user_id = None
     service._authorize_resource_context = AsyncMock()
-    service._fetch_context_docs = AsyncMock(
+    service.rag_manager = AsyncMock()
+
+    async def _fetch_docs(*, resource_type, resource_id, chunk_index, context_range):
+        return [Document(page_content=f"chunk-{chunk_index}", metadata={"chunk_index": chunk_index})]
+
+    service.rag_manager.get_context_chunks_by_resource = AsyncMock(side_effect=_fetch_docs)
+
+    chunks = await service.get_resource_context_chunks_for_anchors(
+        resource_type=RESOURCE_TYPE_DOCUMENT,
+        resource_id=14,
+        chunk_indexes=[2, 8],
+    )
+
+    assert [chunk.chunk_index for chunk in chunks] == [2, 8]
+    assert service.rag_manager.get_context_chunks_by_resource.await_count == 2
+    service._authorize_resource_context.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_resource_context_chunks_for_anchors_auto_neighbor_for_single_anchor():
+    service = SearchService.__new__(SearchService)
+    service.user_id = None
+    service._authorize_resource_context = AsyncMock()
+    service.rag_manager = AsyncMock()
+
+    async def _fetch_docs(*, resource_type, resource_id, chunk_index, context_range):
+        return [Document(page_content=f"chunk-{chunk_index}", metadata={"chunk_index": chunk_index, "block_type": "text"})]
+
+    service.rag_manager.get_context_chunks_by_resource = AsyncMock(side_effect=_fetch_docs)
+
+    chunks = await service.get_resource_context_chunks_for_anchors(
+        resource_type=RESOURCE_TYPE_DOCUMENT,
+        resource_id=14,
+        chunk_indexes=[5],
+    )
+
+    assert [chunk.chunk_index for chunk in chunks] == [4, 5, 6]
+    assert [call.kwargs["chunk_index"] for call in service.rag_manager.get_context_chunks_by_resource.await_args_list] == [
+        4,
+        5,
+        6,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_get_resource_context_chunks_for_anchors_excludes_images():
+    service = SearchService.__new__(SearchService)
+    service.user_id = None
+    service._authorize_resource_context = AsyncMock()
+    service.rag_manager = AsyncMock()
+    service.rag_manager.get_context_chunks_by_resource = AsyncMock(
         side_effect=[
-            [
-                Document(page_content="chunk-1", metadata={"chunk_index": 1, "total_chunks": 10}),
-                Document(page_content="chunk-2", metadata={"chunk_index": 2, "total_chunks": 10}),
-                Document(page_content="chunk-3", metadata={"chunk_index": 3, "total_chunks": 10}),
-            ],
-            [
-                Document(page_content="chunk-3-dup", metadata={"chunk_index": 3, "total_chunks": 10}),
-                Document(page_content="chunk-8", metadata={"chunk_index": 8, "total_chunks": 10}),
-            ],
+            [Document(page_content="text", metadata={"chunk_index": 1, "block_type": "text"})],
+            [Document(page_content="figure", metadata={"chunk_index": 2, "block_type": "image"})],
         ]
     )
 
     chunks = await service.get_resource_context_chunks_for_anchors(
         resource_type=RESOURCE_TYPE_DOCUMENT,
         resource_id=14,
-        chunk_indexes=[2, 8],
-        context_range=2,
+        chunk_indexes=[1, 2],
     )
 
-    assert [chunk.chunk_index for chunk in chunks] == [1, 2, 3, 8]
-    assert chunks[2].content == "chunk-3"
-    service._authorize_resource_context.assert_awaited_once()
+    assert [chunk.chunk_index for chunk in chunks] == [1]
 
 
 @pytest.mark.asyncio
-async def test_fetch_context_docs_merges_page_siblings():
+async def test_get_resource_context_chunks_for_anchors_caps_results():
     service = SearchService.__new__(SearchService)
+    service.user_id = None
+    service._authorize_resource_context = AsyncMock()
     service.rag_manager = AsyncMock()
-    service.rag_manager.get_context_chunks_by_resource = AsyncMock(
-        return_value=[
-            Document(page_content="anchor", metadata={"chunk_index": 165, "page": 6}),
-            Document(page_content="neighbor", metadata={"chunk_index": 166, "page": 6}),
-        ]
-    )
-    service.rag_manager.get_chunks_by_page = AsyncMock(
-        return_value=[
-            Document(page_content="anchor", metadata={"chunk_index": 165, "page": 6}),
-            Document(page_content="neighbor", metadata={"chunk_index": 166, "page": 6}),
-            Document(page_content="same page", metadata={"chunk_index": 170, "page": 6}),
-        ]
-    )
 
-    docs = await service._fetch_context_docs(
+    async def _fetch_docs(*, resource_type, resource_id, chunk_index, context_range):
+        return [
+            Document(
+                page_content=f"chunk-{chunk_index}",
+                metadata={"chunk_index": chunk_index, "block_type": "text"},
+            )
+        ]
+
+    service.rag_manager.get_context_chunks_by_resource = AsyncMock(side_effect=_fetch_docs)
+
+    chunks = await service.get_resource_context_chunks_for_anchors(
         resource_type=RESOURCE_TYPE_DOCUMENT,
         resource_id=14,
-        chunk_index=165,
-        context_range=1,
+        chunk_indexes=list(range(MAX_DOCUMENT_CONTEXT_CHUNKS + 5)),
     )
 
-    assert [doc.metadata["chunk_index"] for doc in docs] == [165, 166, 170]
-    service.rag_manager.get_chunks_by_page.assert_awaited_once_with(
-        resource_type=RESOURCE_TYPE_DOCUMENT,
-        resource_id=14,
-        page=6,
-        limit=200,
-    )
+    assert len(chunks) == MAX_DOCUMENT_CONTEXT_CHUNKS

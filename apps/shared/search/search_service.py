@@ -59,8 +59,9 @@ ALLOWED_SEARCH_SOURCES: tuple[SearchableResourceType, ...] = (
 )
 
 MAX_DOCUMENT_SEARCH_CHUNK_HINTS = 3
-MAX_DOCUMENT_CONTEXT_ANCHORS = 3
-MAX_PAGE_CONTEXT_CHUNKS = 200
+MAX_DOCUMENT_CONTEXT_ANCHORS = 10
+MAX_DOCUMENT_CONTEXT_CHUNKS = 10
+AUTO_NEIGHBOR_RANGE = 1
 
 
 def _chunk_metadata(document) -> dict:
@@ -436,24 +437,6 @@ class SearchService(TenantAwareService):
             return fts_results[:k]
         return self._merge_document_results_rrf(fts_results, vector_results, fts_weight, vector_weight)[:k]
 
-    async def _get_relevant_chunks_for_doc(self, resource_id: int, query: str, k: int = 3) -> list[DocumentChunk]:
-        all_chunks = await self.rag_manager.get_chunks_by_resource(
-            resource_type="document",
-            resource_id=resource_id,
-            limit=100,
-        )
-        if not all_chunks:
-            return []
-        query_terms = set(query.lower().split())
-
-        def score(chunk: Document) -> float:
-            content_lower = chunk.page_content.lower()
-            matches = sum(1 for term in query_terms if term in content_lower)
-            return matches / len(query_terms) if query_terms else 0
-
-        ranked = sorted(all_chunks, key=score, reverse=True)
-        return [_document_chunk_from_vector(c, relevance=score(c)) for c in ranked[:k]]
-
     async def _authorize_resource_context(
         self,
         *,
@@ -508,91 +491,12 @@ class SearchService(TenantAwareService):
                 break
         return anchors
 
-    async def _fetch_context_docs(
-        self,
-        *,
-        resource_type: SearchableResourceType,
-        resource_id: int,
-        chunk_index: int,
-        context_range: int,
-    ) -> list[Document]:
-        if context_range < 0:
-            raise ValidationError(
-                "context_range must be >= 0",
-                details={"code": "INVALID_CONTEXT_RANGE"},
-            )
-        index_docs = await self.rag_manager.get_context_chunks_by_resource(
-            resource_type=resource_type,
-            resource_id=resource_id,
-            chunk_index=chunk_index,
-            context_range=context_range,
-        )
-        anchor_page = next(
-            (
-                metadata.get("page")
-                for doc in index_docs
-                if (metadata := _chunk_metadata(doc)).get("chunk_index") == chunk_index
-                and isinstance(metadata.get("page"), int)
-            ),
-            None,
-        )
-        if anchor_page is None:
-            return index_docs
-
-        page_docs = await self.rag_manager.get_chunks_by_page(
-            resource_type=resource_type,
-            resource_id=resource_id,
-            page=anchor_page,
-            limit=MAX_PAGE_CONTEXT_CHUNKS,
-        )
-        merged: dict[int, Document] = {}
-        for doc in [*index_docs, *page_docs]:
-            chunk_idx = _chunk_metadata(doc).get("chunk_index")
-            if isinstance(chunk_idx, int) and chunk_idx not in merged:
-                merged[chunk_idx] = doc
-        return [merged[idx] for idx in sorted(merged)]
-
-    async def get_resource_context_chunks(
-        self,
-        *,
-        resource_type: SearchableResourceType,
-        resource_id: int,
-        chunk_index: int,
-        context_range: int = 2,
-    ) -> list[ResourceContextChunk]:
-        if chunk_index is not None and chunk_index < 0:
-            raise ValidationError(
-                "chunk_index must be >= 0",
-                details={"code": "INVALID_CHUNK_INDEX"},
-            )
-        await self._authorize_resource_context(resource_type=resource_type, resource_id=resource_id)
-        context_docs = await self._fetch_context_docs(
-            resource_type=resource_type,
-            resource_id=resource_id,
-            chunk_index=chunk_index,
-            context_range=context_range,
-        )
-        if not context_docs:
-            raise ResourceNotFoundError(
-                "No context chunks found",
-                details={
-                    "code": "ANCHOR_CHUNK_NOT_FOUND",
-                    "resource_type": resource_type,
-                    "resource_id": resource_id,
-                },
-            )
-        chunks = [_context_chunk(document) for document in context_docs]
-        if resource_type == RESOURCE_TYPE_DOCUMENT:
-            return finalize_document_context_chunks(chunks, resource_id)
-        return chunks
-
     async def get_resource_context_chunks_for_anchors(
         self,
         *,
         resource_type: SearchableResourceType,
         resource_id: int,
         chunk_indexes: list[int],
-        context_range: int = 2,
     ) -> list[ResourceContextChunk]:
         anchors = self._normalize_context_anchors(chunk_indexes)
         if not anchors:
@@ -603,19 +507,24 @@ class SearchService(TenantAwareService):
 
         await self._authorize_resource_context(resource_type=resource_type, resource_id=resource_id)
 
-        merged: dict[int, ResourceContextChunk] = {}
-        for anchor in anchors:
-            context_docs = await self._fetch_context_docs(
+        if len(anchors) == 1:
+            anchor = anchors[0]
+            target_indexes = list(range(max(0, anchor - AUTO_NEIGHBOR_RANGE), anchor + AUTO_NEIGHBOR_RANGE + 1))
+        else:
+            target_indexes = anchors
+
+        merged: dict[int, Document] = {}
+        for chunk_index in target_indexes:
+            index_docs = await self.rag_manager.get_context_chunks_by_resource(
                 resource_type=resource_type,
                 resource_id=resource_id,
-                chunk_index=anchor,
-                context_range=context_range,
+                chunk_index=chunk_index,
+                context_range=0,
             )
-            for doc in context_docs:
-                chunk_idx = doc.metadata.get("chunk_index")
-                if chunk_idx is None or chunk_idx in merged:
-                    continue
-                merged[chunk_idx] = _context_chunk(doc)
+            for doc in index_docs:
+                chunk_idx = _chunk_metadata(doc).get("chunk_index")
+                if isinstance(chunk_idx, int) and chunk_idx not in merged:
+                    merged[chunk_idx] = doc
 
         if not merged:
             raise ResourceNotFoundError(
@@ -627,9 +536,21 @@ class SearchService(TenantAwareService):
                 },
             )
 
-        chunks = [merged[idx] for idx in sorted(merged)]
+        chunks = [_context_chunk(document) for document in (merged[idx] for idx in sorted(merged))]
+        chunks = [chunk for chunk in chunks if chunk.block_type != "image"]
+        if not chunks:
+            raise ResourceNotFoundError(
+                "No text context chunks found",
+                details={
+                    "code": "ANCHOR_CHUNK_NOT_FOUND",
+                    "resource_type": resource_type,
+                    "resource_id": resource_id,
+                },
+            )
         if resource_type == RESOURCE_TYPE_DOCUMENT:
-            return finalize_document_context_chunks(chunks, resource_id)
+            chunks = finalize_document_context_chunks(chunks, resource_id)
+        if len(chunks) > MAX_DOCUMENT_CONTEXT_CHUNKS:
+            chunks = chunks[:MAX_DOCUMENT_CONTEXT_CHUNKS]
         return chunks
 
     # ==================== Asset Search ====================
@@ -1061,16 +982,6 @@ class SearchService(TenantAwareService):
             document_filter=combined.clause,
             index_parent_filter=index_combined.clause,
         )
-
-    async def _get_document_authz_filter(self):
-        access_scope = await self._get_document_access_scope()
-        if access_scope is None:
-            return None
-        if access_scope.deny_all:
-            return AuthzSqlFilter(allow_all=False, deny_all=True, clause=None)
-        if access_scope.allow_all:
-            return AuthzSqlFilter(allow_all=True, deny_all=False, clause=None)
-        return AuthzSqlFilter(allow_all=False, deny_all=False, clause=access_scope.document_filter)
 
     async def _get_asset_access_scope(self) -> AssetAccessScope | None:
         if self.user_id is None:
