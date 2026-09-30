@@ -15,7 +15,6 @@ from urllib.parse import urlencode
 
 import httpx
 
-from apps.shared.auth.oauth_pkce import generate_nonce, generate_pkce
 from apps.shared.core.exceptions import AuthenticationError, ValidationError
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.sso.domain import (
