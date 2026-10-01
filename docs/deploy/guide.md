@@ -140,6 +140,18 @@ cp .env.template .env && nano .env   # fill "FILL BEFORE DEPLOY" section
 ./bootstrap.sh --version v2.1.0 --registry ghcr.io/foxty/lingqing
 ```
 
+### Daily staging images
+
+Daily builds from `main` publish GHCR tags **`daily-YYYY-MM-DD`** (immutable) and **`daily`** (floating alias). No GitHub Release or deploy bundle — images only. Use on a **staging VM**, not production.
+
+| Goal | Command |
+| --- | --- |
+| Try latest daily | `./bootstrap.sh --version daily --registry ghcr.io/foxty/lingqing` |
+| Pin a specific day (rollback) | `./bootstrap.sh --version daily-2026-10-02 --registry ghcr.io/foxty/lingqing` |
+| Production | semver only, e.g. `v1.0.2` |
+
+Daily images are built only when `main` has commits in the last 24 hours (`.github/workflows/schedule-daily.yml`). Each run also checks for `daily-*` tags older than 14 days and prunes them when found.
+
 **Private GHCR packages:**
 
 ```bash

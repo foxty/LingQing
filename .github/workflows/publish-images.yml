@@ -1,0 +1,83 @@
+# Reusable image build + push to GHCR.
+# Called by publish.yml (semver) and schedule-daily.yml (daily channel).
+
+name: Publish Images
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+        description: "Primary image tag (e.g. v1.0.2 or daily-2026-10-03)"
+      alias_tag:
+        required: false
+        type: string
+        description: "Optional floating alias (e.g. daily)"
+      git_ref:
+        required: false
+        type: string
+        description: "Git ref to build (default: caller checkout ref)"
+        default: ""
+
+permissions:
+  packages: write
+
+env:
+  REGISTRY: ghcr.io
+  REGISTRY_URL: ghcr.io/${{ github.repository_owner }}/lingqing
+
+jobs:
+  build:
+    name: Build and push images
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.git_ref != '' && inputs.git_ref || github.sha }}
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build and push backend images
+        run: |
+          chmod +x ./deploy/scripts/build-backend.sh
+          ./deploy/scripts/build-backend.sh "$REGISTRY_URL" "${{ inputs.version }}" --ci --tag-only
+
+      - name: Build and push frontend image
+        run: |
+          chmod +x ./deploy/scripts/build-frontend.sh
+          ./deploy/scripts/build-frontend.sh "$REGISTRY_URL" "${{ inputs.version }}" --ci --tag-only
+
+      - name: Push alias tag (no rebuild)
+        if: inputs.alias_tag != ''
+        run: |
+          for image in backend-app frontend sandbox-controller sandbox-runner; do
+            docker buildx imagetools create \
+              -t "${REGISTRY_URL}/${image}:${{ inputs.alias_tag }}" \
+              "${REGISTRY_URL}/${image}:${{ inputs.version }}"
+          done
+
+      - name: Publish summary
+        env:
+          VERSION: ${{ inputs.version }}
+          ALIAS_TAG: ${{ inputs.alias_tag }}
+        run: |
+          echo "## Published images" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Image | Tag |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
+          for image in backend-app frontend sandbox-controller sandbox-runner; do
+            echo "| \`${REGISTRY_URL}/${image}\` | \`${VERSION}\` |" >> "$GITHUB_STEP_SUMMARY"
+          done
+          if [[ -n "$ALIAS_TAG" ]]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo "Alias \`${ALIAS_TAG}\` → \`${VERSION}\`" >> "$GITHUB_STEP_SUMMARY"
+          fi
