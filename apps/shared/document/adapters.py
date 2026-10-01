@@ -85,6 +85,7 @@ def domain_document_to_api(domain_doc: DocumentDomain) -> DocumentInfo:
         parsed_at=domain_doc.parsed_at.isoformat() if domain_doc.parsed_at else None,
         parse_error=domain_doc.parse_error,
         intake_source=domain_doc.intake_source,
+        external_file_id=domain_doc.external_file_id,
     )
 
 

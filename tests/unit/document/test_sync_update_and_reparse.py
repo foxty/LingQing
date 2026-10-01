@@ -12,15 +12,22 @@ from apps.shared.document.intake import DocumentIntake
 from apps.shared.document.manifest import write_blocks_json
 from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.sync_service import DocumentSyncService, SyncDiffResult
+from apps.shared.infra.external_files.google_drive import GOOGLE_MIME_DOCUMENT
 from apps.shared.infra.external_files.port import ExternalFileEntry
 from apps.shared.infra.storage.file_storage import LocalFileStorage
 
 
-def _entry(external_id: str, *, modified_at: datetime) -> ExternalFileEntry:
+def _entry(
+    external_id: str,
+    *,
+    modified_at: datetime,
+    mime_type: str = "application/pdf",
+    name: str | None = None,
+) -> ExternalFileEntry:
     return ExternalFileEntry(
         external_id=external_id,
-        name=f"{external_id}.pdf",
-        mime_type="application/pdf",
+        name=name or f"{external_id}.pdf",
+        mime_type=mime_type,
         modified_at=modified_at,
     )
 
@@ -221,6 +228,130 @@ async def test_apply_sync_diff_logs_hash_match_skip(sync_service: DocumentSyncSe
 
     assert "document_sync_download" in caplog.text
     assert "document_sync_skip_hash_match" in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_apply_sync_diff_refreshes_mapping_metadata_before_skip(
+    sync_service: DocumentSyncService,
+):
+    modified_at = datetime(2026, 9, 1, 4, 46, 44, 213000, tzinfo=UTC)
+    mapping = MagicMock(
+        external_file_id="gdoc-1",
+        document_id=10,
+        external_modified_at=modified_at,
+        external_name="Old Title",
+    )
+    sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    sync_service._document_is_deleted = AsyncMock(return_value=False)
+    sync_service._sync_repo.update_external_file = AsyncMock()
+    drive_client = AsyncMock()
+
+    with patch("apps.shared.document.sync_service.DocumentParsePipeline"):
+        result = await sync_service._apply_sync_diff(
+            connector=MagicMock(id=5, collection_id=20),
+            connection=MagicMock(owner_id=7),
+            drive_client=drive_client,
+            remote_files=[
+                _entry(
+                    "gdoc-1",
+                    modified_at=modified_at,
+                    mime_type=GOOGLE_MIME_DOCUMENT,
+                    name="Meeting Notes",
+                )
+            ],
+        )
+
+    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped=1)
+    drive_client.download_file.assert_not_awaited()
+    sync_service._sync_repo.update_external_file.assert_awaited()
+    first_call = sync_service._sync_repo.update_external_file.await_args_list[0]
+    assert first_call.kwargs["external_name"] == "Meeting Notes"
+    assert first_call.kwargs["external_modified_at"] == modified_at
+
+
+@pytest.mark.asyncio
+async def test_apply_sync_diff_null_timestamp_binary_still_downloads(sync_service: DocumentSyncService):
+    """Binary files with NULL stored timestamp still download once to confirm hash match."""
+    modified_at = datetime(2026, 9, 1, tzinfo=UTC)
+    content = b"pdf-bytes"
+    file_hash = DocumentIntake.calculate_file_hash(content)
+    mapping = MagicMock(
+        external_file_id="file-a",
+        document_id=10,
+        external_modified_at=None,
+    )
+    sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    sync_service._document_is_deleted = AsyncMock(return_value=False)
+    sync_service._document_repo.get_by_id_and_tenant = AsyncMock(
+        return_value=SimpleNamespace(
+            id=10,
+            file_hash=file_hash,
+            filename="file-a.pdf",
+            file_url="10/original/file-a.pdf",
+        )
+    )
+    sync_service._sync_repo.update_external_file = AsyncMock()
+    drive_client = AsyncMock()
+    drive_client.download_file = AsyncMock(return_value=("file-a.pdf", content))
+    parse_pipeline = AsyncMock()
+
+    with patch(
+        "apps.shared.document.sync_service.DocumentParsePipeline",
+        return_value=parse_pipeline,
+    ):
+        result = await sync_service._apply_sync_diff(
+            connector=MagicMock(id=5, collection_id=20),
+            connection=MagicMock(owner_id=7),
+            drive_client=drive_client,
+            remote_files=[_entry("file-a", modified_at=modified_at)],
+        )
+
+    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped=1)
+    drive_client.download_file.assert_awaited_once()
+    parse_pipeline.queue_document_reparse.assert_not_awaited()
+    sync_service._sync_repo.update_external_file.assert_awaited_once_with(
+        mapping,
+        external_name="file-a.pdf",
+        external_modified_at=modified_at,
+    )
+
+
+@pytest.mark.asyncio
+async def test_update_existing_document_google_native_does_not_skip_on_hash_match(
+    sync_service: DocumentSyncService,
+):
+    content = b"export-bytes"
+    file_hash = DocumentIntake.calculate_file_hash(content)
+    remote = _entry(
+        "gdoc-1",
+        modified_at=datetime(2026, 9, 2, tzinfo=UTC),
+        mime_type=GOOGLE_MIME_DOCUMENT,
+        name="Meeting Notes",
+    )
+    document_db = SimpleNamespace(
+        id=10,
+        file_hash=file_hash,
+        filename="Meeting Notes.docx",
+        file_url="10/original/Meeting Notes.docx",
+    )
+    sync_service._document_repo.get_by_id_and_tenant = AsyncMock(return_value=document_db)
+    sync_service.file_storage.save = AsyncMock(return_value="documents/1/10/original/Meeting Notes.docx")
+    sync_service.file_storage.get_size = AsyncMock(return_value=len(content))
+    sync_service.file_storage.delete = AsyncMock(return_value=True)
+    sync_service._document_repo.update_document_file = AsyncMock()
+    drive_client = AsyncMock()
+    drive_client.download_file = AsyncMock(return_value=("Meeting Notes.docx", content))
+    parse_pipeline = AsyncMock()
+
+    updated = await sync_service._update_existing_document(
+        parse_pipeline=parse_pipeline,
+        document_id=10,
+        drive_client=drive_client,
+        remote=remote,
+    )
+
+    assert updated is True
+    parse_pipeline.queue_document_reparse.assert_awaited_once_with(10, triggered_by="drive_sync")
 
 
 @pytest.fixture

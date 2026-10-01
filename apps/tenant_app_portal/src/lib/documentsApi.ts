@@ -6,6 +6,11 @@
 import api from './api'
 import type { ApiDocument } from '@/types'
 
+/** Derive a browser URL for a Google Drive source file. */
+export function driveFileViewUrl(externalFileId: string): string {
+  return `https://drive.google.com/file/d/${externalFileId}/view`
+}
+
 /**
  * Paginated response from API
  */

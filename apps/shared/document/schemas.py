@@ -27,6 +27,7 @@ class DocumentInfo(BaseModel):
     parsed_at: str | None = None
     parse_error: str | None = None
     intake_source: IntakeSource = "upload"
+    external_file_id: str | None = None
 
 
 class DocumentParsedBlock(BaseModel):

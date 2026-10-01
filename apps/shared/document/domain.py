@@ -33,6 +33,7 @@ class DocumentDomain(BaseDomainModel):
     parsed_at: datetime | None = None
     parse_error: str | None = None
     intake_source: IntakeSource = "upload"
+    external_file_id: str | None = None
 
     def is_ready(self) -> bool:
         return self.status == DocumentStatus.ACTIVE
