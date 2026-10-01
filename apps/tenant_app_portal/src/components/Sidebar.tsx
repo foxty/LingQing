@@ -9,7 +9,7 @@ import SidebarNavGroup, {
 } from '@/components/SidebarNavGroup'
 import { useAuth } from '@/hooks/useAuth'
 import { cn } from '@/lib/utils'
-import { actionRules, navRules } from '@/lib/permissionRules'
+import { actionRules, navRules, PERMISSIONS } from '@/lib/permissionRules'
 import {
   Cable,
   ChevronLeft,
@@ -42,6 +42,7 @@ export default function Sidebar({ sidebarCollapsed, onToggleSidebar, isActive }:
     () =>
       getSettingsNavItems(t, {
         includeDocumentSources: hasAny(actionRules.canManageDocumentSources()),
+        includeSystemJobs: hasAny([PERMISSIONS.TENANT_ADMIN]),
       }),
     [hasAny, t]
   )

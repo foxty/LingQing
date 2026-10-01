@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-09-30T10:30:17.160652+00:00",
+  "generated_at": "2026-10-01T01:59:38.386701+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -6193,6 +6193,22 @@
             ],
             "title": "Owner Name"
           },
+          "stable_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Stable Key"
+          },
+          "is_system": {
+            "type": "boolean",
+            "title": "Is System",
+            "default": false
+          },
           "next_run_at": {
             "anyOf": [
               {
@@ -7990,6 +8006,10 @@
     "GET_/": "root__get",
     "GET_/acl-shares/{resource_type}/{resource_id}/candidates": "list_share_candidates_acl_shares__resource_type___resource_id__candidates_get",
     "GET_/acl-shares/{resource_type}/{resource_id}/shares": "list_resource_shares_acl_shares__resource_type___resource_id__shares_get",
+    "GET_/admin/system-tasks": "list_system_tasks_admin_system_tasks_get",
+    "GET_/admin/system-tasks/{task_id}": "get_system_task_admin_system_tasks__task_id__get",
+    "GET_/admin/system-tasks/{task_id}/runs": "list_system_task_runs_admin_system_tasks__task_id__runs_get",
+    "GET_/admin/system-tasks/{task_id}/runs/{run_id}/logs": "get_system_task_run_logs_admin_system_tasks__task_id__runs__run_id__logs_get",
     "GET_/agents": "list_agents_agents_get",
     "GET_/agents/catalog/skills": "list_assignable_skills_agents_catalog_skills_get",
     "GET_/agents/{agent_id}": "get_agent_agents__agent_id__get",
@@ -8050,6 +8070,9 @@
     "GET_/skills": "list_skills_skills_get",
     "GET_/skills/{name}": "get_skill_skills__name__get",
     "GET_/skills/{scope}/{name}/env-vars": "list_env_vars_skills__scope___name__env_vars_get",
+    "PATCH_/admin/system-tasks/{task_id}/pause": "pause_system_task_admin_system_tasks__task_id__pause_patch",
+    "PATCH_/admin/system-tasks/{task_id}/resume": "resume_system_task_admin_system_tasks__task_id__resume_patch",
+    "PATCH_/admin/system-tasks/{task_id}/run": "run_system_task_admin_system_tasks__task_id__run_patch",
     "PATCH_/agents/{agent_id}/integrations/slack": "update_agent_slack_integration_agents__agent_id__integrations_slack_patch",
     "PATCH_/api-connectors/operations/{operation_id}": "update_operation_api_connectors_operations__operation_id__patch",
     "PATCH_/api-connectors/operations/{operation_id}/status": "update_operation_status_api_connectors_operations__operation_id__status_patch",
@@ -10213,6 +10236,95 @@
         "idempotent": true
       }
     },
+    "get_system_task_admin_system_tasks__task_id__get": {
+      "operation_key": "GET_/admin/system-tasks/{task_id}",
+      "method": "GET",
+      "path": "/admin/system-tasks/{task_id}",
+      "summary": "Get System Task",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/ScheduledTaskResponseDTO"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_system_task_run_logs_admin_system_tasks__task_id__runs__run_id__logs_get": {
+      "operation_key": "GET_/admin/system-tasks/{task_id}/runs/{run_id}/logs",
+      "method": "GET",
+      "path": "/admin/system-tasks/{task_id}/runs/{run_id}/logs",
+      "summary": "Get System Task Run Logs",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Run Id"
+            },
+            "description": ""
+          }
+        ],
+        "query_params": [
+          {
+            "name": "stream",
+            "required": false,
+            "schema": {
+              "enum": [
+                "stdout",
+                "stderr"
+              ],
+              "type": "string",
+              "description": "Log stream: 'stdout' or 'stderr'",
+              "default": "stdout",
+              "title": "Stream"
+            },
+            "description": "Log stream: 'stdout' or 'stderr'"
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
     "get_task_run_logs_scheduled_tasks__task_id__runs__run_id__logs_get": {
       "operation_key": "GET_/scheduled-tasks/{task_id}/runs/{run_id}/logs",
       "method": "GET",
@@ -11775,6 +11887,149 @@
         "idempotent": true
       }
     },
+    "list_system_task_runs_admin_system_tasks__task_id__runs_get": {
+      "operation_key": "GET_/admin/system-tasks/{task_id}/runs",
+      "method": "GET",
+      "path": "/admin/system-tasks/{task_id}/runs",
+      "summary": "List System Task Runs",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            },
+            "description": ""
+          }
+        ],
+        "query_params": [
+          {
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number (1-indexed)",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number (1-indexed)"
+          },
+          {
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Items per page",
+              "default": 20,
+              "title": "Page Size"
+            },
+            "description": "Items per page"
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/PaginatedResponse_ScheduledTaskRunResponseDTO_"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_system_tasks_admin_system_tasks_get": {
+      "operation_key": "GET_/admin/system-tasks",
+      "method": "GET",
+      "path": "/admin/system-tasks",
+      "summary": "List System Tasks",
+      "description": "",
+      "request": {
+        "query_params": [
+          {
+            "name": "status",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Status"
+            },
+            "description": ""
+          },
+          {
+            "name": "task_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Task Type"
+            },
+            "description": ""
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": ""
+          },
+          {
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0,
+              "title": "Offset"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ScheduledTaskResponseDTO"
+          },
+          "title": "Response List System Tasks Admin System Tasks Get"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
     "mark_all_notifications_read_notifications_read_all_patch": {
       "operation_key": "PATCH_/notifications/read-all",
       "method": "PATCH",
@@ -11874,6 +12129,36 @@
       "method": "PATCH",
       "path": "/scheduled-tasks/{task_id}/pause",
       "summary": "Pause Scheduled Task",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "pause_system_task_admin_system_tasks__task_id__pause_patch": {
+      "operation_key": "PATCH_/admin/system-tasks/{task_id}/pause",
+      "method": "PATCH",
+      "path": "/admin/system-tasks/{task_id}/pause",
+      "summary": "Pause System Task",
       "description": "",
       "request": {
         "path_params": [
@@ -12472,6 +12757,36 @@
         "idempotent": false
       }
     },
+    "resume_system_task_admin_system_tasks__task_id__resume_patch": {
+      "operation_key": "PATCH_/admin/system-tasks/{task_id}/resume",
+      "method": "PATCH",
+      "path": "/admin/system-tasks/{task_id}/resume",
+      "summary": "Resume System Task",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
     "revoke_resource_share_acl_shares__resource_type___resource_id__shares__user_id__delete": {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
       "method": "DELETE",
@@ -12554,6 +12869,36 @@
       "method": "PATCH",
       "path": "/scheduled-tasks/{task_id}/run",
       "summary": "Run Scheduled Task",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "task_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Task Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "run_system_task_admin_system_tasks__task_id__run_patch": {
+      "operation_key": "PATCH_/admin/system-tasks/{task_id}/run",
+      "method": "PATCH",
+      "path": "/admin/system-tasks/{task_id}/run",
+      "summary": "Run System Task",
       "description": "",
       "request": {
         "path_params": [

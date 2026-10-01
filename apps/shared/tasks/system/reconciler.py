@@ -10,13 +10,20 @@ templates pause the corresponding task.
 """
 
 from datetime import UTC, datetime
+from typing import Any
 
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
+from typing_extensions import TypedDict
 
 from apps.shared.db.models import ScheduledTask, Tenant, User
 from apps.shared.db.session import app_db_session
-from apps.shared.tasks.domain import TASK_STATUS_PAUSED, TASK_STATUS_PENDING, SystemTaskConfig
+from apps.shared.tasks.domain import (
+    SOURCE_TYPE_SYSTEM,
+    TASK_STATUS_PAUSED,
+    TASK_STATUS_PENDING,
+    SystemTaskConfig,
+)
 from apps.shared.tasks.scheduling import compute_next_run_at
 from apps.shared.tasks.system.definitions import SYSTEM_TASK_DEFINITIONS, SystemTaskDefinition
 from apps.shared.utils.logger import get_logger
@@ -24,6 +31,16 @@ from apps.shared.utils.logger import get_logger
 logger = get_logger(__name__)
 
 SYSTEM_USER_USERNAME = "__system__"
+
+
+class _SystemTaskReconcileUpdates(TypedDict, total=False):
+    task_config: SystemTaskConfig
+    schedule_spec: dict[str, Any]
+    next_run_at: datetime | None
+    input_params: dict[str, Any] | None
+    source_type: str
+    status: str
+    updated_at: datetime
 
 
 async def _get_or_create_system_user(session: AsyncSession, tenant_id: int) -> User:
@@ -85,6 +102,7 @@ async def _upsert_task_for_definition(
             status=TASK_STATUS_PENDING if definition.enabled else TASK_STATUS_PAUSED,
             next_run_at=next_run_at if definition.enabled else None,
             stable_key=definition.stable_key,
+            source_type=SOURCE_TYPE_SYSTEM,
             execution_mode=definition.execution_mode,
             input_params=definition.default_input_params,
         )
@@ -97,7 +115,7 @@ async def _upsert_task_for_definition(
     else:
         # Update mutable fields if they drifted from the definition
         changed = False
-        updates: dict = {}
+        updates: _SystemTaskReconcileUpdates = {}
 
         # Sync handler_ref in task_config (unified pattern with type safety)
         expected_config: SystemTaskConfig = {"handler_ref": definition.handler_ref}
@@ -111,16 +129,25 @@ async def _upsert_task_for_definition(
         if existing.input_params != definition.default_input_params:
             updates["input_params"] = definition.default_input_params
             changed = True
+        if existing.source_type != SOURCE_TYPE_SYSTEM:
+            updates["source_type"] = SOURCE_TYPE_SYSTEM
+            changed = True
 
-        # Handle enabled/disabled transitions
+        # Handle enabled/disabled transitions.
+        # Only auto-pause: never auto-resume a paused task, because a paused
+        # row may reflect a deliberate admin pause (admin router) rather than
+        # a disabled definition. Re-enabling a definition requires a manual
+        # admin resume.
         if not definition.enabled and existing.status == TASK_STATUS_PENDING:
             updates["status"] = TASK_STATUS_PAUSED
             updates["next_run_at"] = None
             changed = True
         elif definition.enabled and existing.status == TASK_STATUS_PAUSED:
-            updates["status"] = TASK_STATUS_PENDING
-            updates["next_run_at"] = next_run_at
-            changed = True
+            logger.info(
+                "Reconciler: leaving manually paused system task tenant=%s stable_key=%s",
+                tenant_id,
+                definition.stable_key,
+            )
 
         if changed:
             updates["updated_at"] = datetime.now(UTC)

@@ -146,6 +146,10 @@ function canDelete(status: string): boolean {
   return status !== 'running'
 }
 
+function isSystemTask(task: ScheduledTask): boolean {
+  return Boolean(task.is_system)
+}
+
 function getScheduleDisplay(task: ScheduledTask, t: (key: string) => string): string {
   if (task.schedule_type === 'once') return t('scheduledTasks.oneTime')
   const cronExpr = 'cron' in task.schedule_spec ? task.schedule_spec.cron : undefined
@@ -349,6 +353,7 @@ export default function ScheduledTasksPage() {
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-orange-600"
                         title={t('scheduledTasks.cancel')}
                         disabled={!canCancel(task.status) || isMutating}
+                        hidden={isSystemTask(task)}
                         onClick={() => cancelConfirm.open(task)}
                       >
                         <XCircle className="w-3.5 h-3.5" />
@@ -358,6 +363,7 @@ export default function ScheduledTasksPage() {
                         size="sm"
                         className="h-7 w-7 p-0"
                         title={t('scheduledTasks.share')}
+                        hidden={isSystemTask(task)}
                         onClick={() => setSharingTask(task)}
                       >
                         <Share2 className="w-3.5 h-3.5" />
@@ -368,6 +374,7 @@ export default function ScheduledTasksPage() {
                         className="h-7 w-7 p-0 text-muted-foreground hover:text-destructive"
                         title={t('common.delete')}
                         disabled={!canDelete(task.status) || isMutating}
+                        hidden={isSystemTask(task)}
                         onClick={() => deleteConfirm.open(task)}
                       >
                         <Trash2 className="w-3.5 h-3.5" />

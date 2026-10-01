@@ -48,6 +48,7 @@ from apps.tenant_app_service.routers import (
     notifications,
     observability,
     reports,
+    admin_system_tasks,
     scheduled_tasks,
     search,
     skills,
@@ -127,6 +128,7 @@ app.include_router(abac.router)
 app.include_router(observability.router)
 app.include_router(reports.router)
 app.include_router(notifications.router)
+app.include_router(admin_system_tasks.router)
 app.include_router(scheduled_tasks.router)
 app.include_router(chat.router)
 app.include_router(hitl.router)

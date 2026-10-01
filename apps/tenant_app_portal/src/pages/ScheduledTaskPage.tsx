@@ -154,6 +154,10 @@ function canDelete(status: string): boolean {
   return status !== 'running'
 }
 
+function isSystemTask(task: ScheduledTask): boolean {
+  return Boolean(task.is_system)
+}
+
 function getOriginThreadId(taskConfig: ScheduledTaskConfig): string | null {
   if ('origin_thread_id' in taskConfig && typeof taskConfig.origin_thread_id === 'string') {
     return taskConfig.origin_thread_id
@@ -345,10 +349,12 @@ export default function ScheduledTaskPage() {
           </div>
         </div>
         <div className="flex items-center gap-2">
-          <Button variant="outline" size="sm" onClick={() => setSharingTask(task)}>
-            <Share2 className="w-4 h-4 mr-1.5" />
-            {t('scheduledTask.share')}
-          </Button>
+          {!isSystemTask(task) && (
+            <Button variant="outline" size="sm" onClick={() => setSharingTask(task)}>
+              <Share2 className="w-4 h-4 mr-1.5" />
+              {t('scheduledTask.share')}
+            </Button>
+          )}
           <Button
             variant="default"
             size="sm"
@@ -371,24 +377,28 @@ export default function ScheduledTaskPage() {
             )}
             {getToggleLabel(task.status, t)}
           </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canCancel(task.status) || isMutating}
-            onClick={() => setPendingAction('cancel')}
-          >
-            <XCircle className="w-4 h-4 mr-1.5" />
-            {t('scheduledTask.cancel')}
-          </Button>
-          <Button
-            variant="outline"
-            size="sm"
-            disabled={!canDelete(task.status) || isMutating}
-            onClick={() => setPendingAction('delete')}
-          >
-            <Trash2 className="w-4 h-4 mr-1.5" />
-            {t('scheduledTask.delete')}
-          </Button>
+          {!isSystemTask(task) && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canCancel(task.status) || isMutating}
+              onClick={() => setPendingAction('cancel')}
+            >
+              <XCircle className="w-4 h-4 mr-1.5" />
+              {t('scheduledTask.cancel')}
+            </Button>
+          )}
+          {!isSystemTask(task) && (
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={!canDelete(task.status) || isMutating}
+              onClick={() => setPendingAction('delete')}
+            >
+              <Trash2 className="w-4 h-4 mr-1.5" />
+              {t('scheduledTask.delete')}
+            </Button>
+          )}
         </div>
       </div>
 

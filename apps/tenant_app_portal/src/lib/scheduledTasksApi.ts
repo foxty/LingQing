@@ -52,6 +52,8 @@ export interface ScheduledTask {
   error_message: string | null
   created_at: string
   updated_at: string
+  stable_key?: string | null
+  is_system?: boolean
 }
 
 export interface TaskRunResult {
