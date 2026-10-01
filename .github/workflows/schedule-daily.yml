@@ -1,0 +1,120 @@
+# Daily channel: publish images from main + prune stale daily tags when needed.
+# Publish tags: daily-YYYY-MM-DD (immutable) + daily (floating alias).
+# Skips publish when main has no commits in the last 24 hours.
+
+name: Schedule Daily
+
+on:
+  schedule:
+    - cron: "0 18 * * *" # 02:00 UTC+8, every day
+  workflow_dispatch:
+    inputs:
+      retention_days:
+        description: "Keep daily-YYYY-MM-DD tags from the last N days"
+        required: false
+        default: "14"
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Check for new commits
+    runs-on: ubuntu-latest
+    concurrency:
+      group: publish-daily
+      cancel-in-progress: true
+    outputs:
+      should_build: ${{ steps.decide.outputs.should_build }}
+      date_tag: ${{ steps.decide.outputs.date_tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - id: decide
+        run: |
+          DATE_TAG="daily-$(date -u +%Y-%m-%d)"
+          COUNT=$(git rev-list --count HEAD --since="24 hours ago")
+
+          if [[ "$COUNT" == "0" ]]; then
+            echo "No commits on main in the last 24 hours — skipping daily publish"
+            echo "should_build=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          echo "Publishing daily build: ${DATE_TAG} (${COUNT} commit(s) in 24h)"
+          echo "should_build=true" >> "$GITHUB_OUTPUT"
+          echo "date_tag=${DATE_TAG}" >> "$GITHUB_OUTPUT"
+
+  publish:
+    name: Publish daily images
+    needs: check
+    if: |
+      always() &&
+      needs.check.result == 'success' &&
+      needs.check.outputs.should_build == 'true'
+    permissions:
+      packages: write
+    uses: ./.github/workflows/publish-images.yml
+    with:
+      version: ${{ needs.check.outputs.date_tag }}
+      alias_tag: daily
+      git_ref: main
+    secrets: inherit
+
+  cleanup:
+    name: Prune old daily tags
+    runs-on: ubuntu-latest
+    permissions:
+      packages: write
+    steps:
+      - name: Prune stale daily tags if any
+        env:
+          RETENTION_DAYS: ${{ github.event.inputs.retention_days || '14' }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          CUTOFF=$(date -u -d "${RETENTION_DAYS} days ago" +%Y-%m-%d)
+          DELETED=0
+
+          resolve_pkg_path() {
+            local image="$1"
+            local pkg="lingqing%2F${image}"
+            if gh api "/users/${OWNER}/packages/container/${pkg}" --silent >/dev/null 2>&1; then
+              echo "/users/${OWNER}/packages/container/${pkg}"
+            else
+              echo "/orgs/${OWNER}/packages/container/${pkg}"
+            fi
+          }
+
+          for IMAGE in backend-app frontend sandbox-controller sandbox-runner; do
+            PKG_PATH=$(resolve_pkg_path "$IMAGE")
+
+            while read -r row; do
+              ID=$(echo "$row" | jq -r '.id')
+              while IFS= read -r TAG; do
+                [[ "$TAG" =~ ^daily-[0-9]{4}-[0-9]{2}-[0-9]{2}$ ]] || continue
+                DATE="${TAG#daily-}"
+                if [[ "$DATE" < "$CUTOFF" ]]; then
+                  echo "Deleting ${IMAGE}:${TAG} (version ${ID})"
+                  gh api --method DELETE "${PKG_PATH}/versions/${ID}" || true
+                  DELETED=$((DELETED + 1))
+                  break
+                fi
+              done < <(echo "$row" | jq -r '.tags[]')
+            done < <(
+              gh api --paginate "${PKG_PATH}/versions" \
+                --jq '.[] | select(.metadata.container.tags != null) | {id: .id, tags: .metadata.container.tags}' \
+              | jq -c '.'
+            )
+          done
+
+          if [[ "$DELETED" == "0" ]]; then
+            echo "No daily tags older than ${CUTOFF} — cleanup not needed"
+          else
+            echo "Cleanup complete: removed ${DELETED} stale daily tag(s)"
+          fi
