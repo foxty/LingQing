@@ -73,9 +73,11 @@ async def test_list_documents_marks_drive_linked_as_drive_sync(async_db_session)
         collection_id=collection.id,
     )
 
-    by_id = {doc.id: doc.intake_source for doc in docs}
-    assert by_id[upload_doc.id] == "upload"
-    assert by_id[drive_doc.id] == "drive_sync"
+    by_id = {doc.id: doc for doc in docs}
+    assert by_id[upload_doc.id].intake_source == "upload"
+    assert by_id[upload_doc.id].external_file_id is None
+    assert by_id[drive_doc.id].intake_source == "drive_sync"
+    assert by_id[drive_doc.id].external_file_id == "ext-drive"
 
 
 @pytest.mark.asyncio
@@ -102,3 +104,4 @@ async def test_list_documents_without_collection_defaults_to_upload(async_db_ses
 
     matched = next(item for item in docs if item.id == doc.id)
     assert matched.intake_source == "upload"
+    assert matched.external_file_id is None

@@ -22,7 +22,7 @@ from apps.shared.core.exceptions import (
 from apps.shared.db.models import DocumentSourceProvider
 from apps.shared.document.collection_service import DocumentCollectionService
 from apps.shared.document.intake import DocumentIntake, IntakeRequest
-from apps.shared.document.manifest import document_original_relative_key
+from apps.shared.document.manifest import document_original_relative_key, normalize_document_filename
 from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.repository import DBDocumentRepository
 from apps.shared.document.source_provider_repository import DocumentSourceProviderRepository
@@ -46,7 +46,7 @@ from apps.shared.document.sync_types import DEFAULT_DOCUMENT_SOURCE_PROVIDER
 from apps.shared.document.types import DocumentStatus
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import ABAC_ACTION_READ, AUTHZ_ACTION_MANAGE
-from apps.shared.infra.external_files.google_drive import GoogleDriveClient
+from apps.shared.infra.external_files.google_drive import GoogleDriveClient, is_google_native_mime
 from apps.shared.infra.external_files.port import ExternalFileEntry
 from apps.shared.infra.storage import FileStorage
 from apps.shared.infra.storage.paths import normalize_storage_key, resolve_storage_ref
@@ -519,6 +519,12 @@ class DocumentSyncService(TenantAwareService):
 
             needs_revive = await self._document_is_deleted(mapping.document_id)
             if self._is_unchanged(mapping.external_modified_at, remote.modified_at) and not needs_revive:
+                if remote.modified_at is not None or remote.name != mapping.external_name:
+                    await self._sync_repo.update_external_file(
+                        mapping,
+                        external_name=remote.name,
+                        external_modified_at=remote.modified_at,
+                    )
                 logger.info(
                     "document_sync_skip_unchanged tenant_id=%s connector_id=%s external_file_id=%s document_id=%s",
                     self.tenant_id,
@@ -668,19 +674,25 @@ class DocumentSyncService(TenantAwareService):
             reason,
             len(content),
         )
+        stored_filename = normalize_document_filename(filename)
         file_hash = DocumentIntake.calculate_file_hash(content)
-        if document_db.file_hash == file_hash and document_db.filename == filename:
-            logger.info(
-                "document_sync_skip_hash_match tenant_id=%s document_id=%s external_file_id=%s reason=%s",
-                self.tenant_id,
-                document_id,
-                remote.external_id,
-                reason,
-            )
-            return False
+        # Google native exports (gdoc→docx) are non-deterministic; rely on modifiedTime only.
+        if not is_google_native_mime(remote.mime_type):
+            if (
+                document_db.file_hash == file_hash
+                and normalize_document_filename(document_db.filename) == stored_filename
+            ):
+                logger.info(
+                    "document_sync_skip_hash_match tenant_id=%s document_id=%s external_file_id=%s reason=%s",
+                    self.tenant_id,
+                    document_id,
+                    remote.external_id,
+                    reason,
+                )
+                return False
 
         old_file_url = document_db.file_url
-        relative_key = document_original_relative_key(document_id, filename)
+        relative_key = document_original_relative_key(document_id, stored_filename)
         storage_key = await self.file_storage.save(
             str(self.tenant_id),
             relative_key,
@@ -692,7 +704,7 @@ class DocumentSyncService(TenantAwareService):
         await self._document_repo.update_document_file(
             document_id,
             self.tenant_id,
-            filename=filename,
+            filename=stored_filename,
             file_url=file_url,
             file_size=file_size,
             file_hash=file_hash,

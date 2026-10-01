@@ -112,6 +112,7 @@ export interface Document {
   parseError?: string
   updatedAt?: string
   intakeSource?: DocumentIntakeSource
+  externalFileId?: string
 }
 
 export interface Agent {
@@ -196,6 +197,7 @@ export interface ApiDocument {
   parse_error?: string | null
   updated_at?: string
   intake_source?: DocumentIntakeSource
+  external_file_id?: string | null
 }
 
 export interface ApiAgent {
@@ -236,6 +238,7 @@ export const convertApiDocumentToDocument = (apiDoc: ApiDocument): Document => (
   parseError: apiDoc.parse_error ?? undefined,
   updatedAt: apiDoc.updated_at,
   intakeSource: apiDoc.intake_source ?? 'upload',
+  externalFileId: apiDoc.external_file_id ?? undefined,
 })
 
 export const convertApiAgentToAgent = (apiAgent: ApiAgent): Agent => ({

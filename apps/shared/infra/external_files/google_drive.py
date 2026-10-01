@@ -71,9 +71,24 @@ def export_filename(name: str, mime_type: str) -> str:
     return f"{base}{export_ext}" if base else f"{name}{export_ext}"
 
 
+def is_google_native_mime(mime_type: str) -> bool:
+    """Return True for Google Docs/Sheets/Slides (exported on download, not stored as binary)."""
+    return mime_type in GOOGLE_NATIVE_EXPORT_MIMES
+
+
 def _parse_drive_timestamp(value: str | None) -> datetime | None:
     if not value:
         return None
+    # Drive API v3 returns ISO 8601 (e.g. 2026-09-01T04:46:44.213Z).
+    iso_candidate = value[:-1] + "+00:00" if value.endswith("Z") else value
+    try:
+        parsed = datetime.fromisoformat(iso_candidate)
+    except ValueError:
+        parsed = None
+    if parsed is not None:
+        if parsed.tzinfo is None:
+            return parsed.replace(tzinfo=UTC)
+        return parsed.astimezone(UTC)
     try:
         parsed = parsedate_to_datetime(value)
     except (TypeError, ValueError):

@@ -49,6 +49,7 @@ i18n.addResourceBundle('en', 'translation', {
     sourceDrive: 'Drive',
     sourceUpload: 'Upload',
     sourceColumn: 'Source',
+    openInDrive: 'Open in Google Drive',
     driveDeleteWarning:
       'This document is synced from Google Drive. It may reappear after the next sync.',
   },
@@ -88,6 +89,7 @@ i18n.addResourceBundle('zh', 'translation', {
     sourceDrive: 'Drive',
     sourceUpload: '上传',
     sourceColumn: '来源',
+    openInDrive: '在 Google Drive 中打开',
     driveDeleteWarning: '此文档来自 Google Drive 同步，下次同步后可能会重新出现。',
   },
 }, true, true)
@@ -96,6 +98,7 @@ import { useDeleteDocuments, useReindexDocument, useReparseDocument } from '@/ho
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { Badge } from '@/components/ui/badge'
+import { driveFileViewUrl } from '@/lib/documentsApi'
 import { Cloud, Database, FileText, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -197,16 +200,39 @@ export function DocumentTable({
 
   const renderSourceBadge = (doc: Document) => {
     const isDrive = doc.intakeSource === 'drive_sync'
-    return (
+    const driveUrl = doc.externalFileId ? driveFileViewUrl(doc.externalFileId) : undefined
+    const badge = (
       <Badge
         variant="outline"
         className="h-5 shrink-0 gap-1 px-1.5 text-[11px] font-normal"
-        title={isDrive ? t('knowledgeBase.sourceDrive') : t('knowledgeBase.sourceUpload')}
+        title={
+          driveUrl
+            ? t('knowledgeBase.openInDrive')
+            : isDrive
+              ? t('knowledgeBase.sourceDrive')
+              : t('knowledgeBase.sourceUpload')
+        }
       >
         {isDrive ? <Cloud className="h-3 w-3" /> : <Upload className="h-3 w-3" />}
         {isDrive ? t('knowledgeBase.sourceDrive') : t('knowledgeBase.sourceUpload')}
       </Badge>
     )
+
+    if (driveUrl) {
+      return (
+        <a
+          href={driveUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="inline-flex rounded-md hover:opacity-80 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+          aria-label={t('knowledgeBase.openInDrive')}
+        >
+          {badge}
+        </a>
+      )
+    }
+
+    return badge
   }
 
   const renderIndexStatus = (doc: Document) => {

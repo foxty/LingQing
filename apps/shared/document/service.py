@@ -181,19 +181,20 @@ class DocumentService(TenantAwareService):
             doc_ids,
         )
 
-        drive_linked_ids: set[int] = set()
-        if collection_id is not None and doc_ids:
-            drive_linked_ids = await DocumentSyncRepository(self.db_session).list_drive_linked_document_ids(
+        drive_external_file_ids: dict[int, str] = {}
+        if doc_ids:
+            drive_external_file_ids = await DocumentSyncRepository(self.db_session).map_drive_external_file_ids(
                 self.tenant_id,
-                collection_id,
                 document_ids=doc_ids,
             )
 
         documents = []
         for doc in docs:
             domain = db_document_to_domain(doc, resource_index_map.get(doc.id))
-            if doc.id in drive_linked_ids:
+            external_file_id = drive_external_file_ids.get(doc.id)
+            if external_file_id is not None:
                 domain.intake_source = "drive_sync"
+                domain.external_file_id = external_file_id
             documents.append(domain_document_to_api(domain))
         return documents, pagination
 

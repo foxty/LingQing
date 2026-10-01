@@ -403,20 +403,39 @@ class DocumentSyncRepository:
 
         When ``document_ids`` is provided, only those IDs are checked (e.g. one list page).
         """
-        if document_ids is not None and not document_ids:
-            return set()
-
-        stmt = (
-            select(DocumentExternalFile.document_id)
-            .join(DocumentSyncConnector, DocumentExternalFile.connector_id == DocumentSyncConnector.id)
-            .where(
-                DocumentExternalFile.tenant_id == tenant_id,
-                DocumentSyncConnector.collection_id == collection_id,
-                DocumentExternalFile.document_id.is_not(None),
-            )
+        links = await self.map_drive_external_file_ids(
+            tenant_id,
+            document_ids=document_ids,
+            collection_id=collection_id,
         )
+        return set(links)
+
+    async def map_drive_external_file_ids(
+        self,
+        tenant_id: int,
+        *,
+        document_ids: list[int] | None = None,
+        collection_id: int | None = None,
+    ) -> dict[int, str]:
+        """Map document IDs to Drive external file IDs, optionally scoped to a collection."""
+        if document_ids is not None and not document_ids:
+            return {}
+
+        stmt = select(DocumentExternalFile.document_id, DocumentExternalFile.external_file_id).where(
+            DocumentExternalFile.tenant_id == tenant_id,
+            DocumentExternalFile.document_id.is_not(None),
+        )
+        if collection_id is not None:
+            stmt = stmt.join(
+                DocumentSyncConnector,
+                DocumentExternalFile.connector_id == DocumentSyncConnector.id,
+            ).where(DocumentSyncConnector.collection_id == collection_id)
         if document_ids is not None:
             stmt = stmt.where(DocumentExternalFile.document_id.in_(document_ids))
 
         result = await self.db.execute(stmt)
-        return {doc_id for doc_id in result.scalars().all() if doc_id is not None}
+        return {
+            document_id: external_file_id
+            for document_id, external_file_id in result.all()
+            if document_id is not None and external_file_id
+        }

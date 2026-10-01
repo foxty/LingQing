@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-01T01:59:38.386701+00:00",
+  "generated_at": "2026-10-01T14:13:53.777457+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -4310,6 +4310,17 @@
             ],
             "title": "Intake Source",
             "default": "upload"
+          },
+          "external_file_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "External File Id"
           }
         },
         "type": "object",

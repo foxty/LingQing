@@ -58,6 +58,33 @@ async def test_list_folder_tree_returns_supported_files():
     assert files[0].name == "notes.pdf"
 
 
+async def test_list_folder_tree_parses_iso8601_modified_time():
+    def handler(request: httpx.Request) -> httpx.Response:
+        if "/files" in str(request.url) and "alt=media" not in str(request.url):
+            return httpx.Response(
+                200,
+                json={
+                    "files": [
+                        {
+                            "id": "gdoc-1",
+                            "name": "Meeting Notes",
+                            "mimeType": GOOGLE_MIME_DOCUMENT,
+                            "modifiedTime": "2026-09-01T04:46:44.213Z",
+                        }
+                    ]
+                },
+            )
+        return httpx.Response(404, json={"error": "not found"})
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
+        async with GoogleDriveClient(access_token="token", http_client=http_client) as client:
+            files = await client.list_folder_tree("root-folder", include_subfolders=False)
+    assert len(files) == 1
+    assert files[0].modified_at is not None
+    assert files[0].modified_at.year == 2026
+    assert files[0].modified_at.month == 9
+
+
 async def test_list_folder_tree_includes_shared_drive_params():
     captured: dict[str, str] = {}
 
