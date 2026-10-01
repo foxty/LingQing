@@ -198,7 +198,6 @@ async def test_execute_single_task_success_path_marks_success(monkeypatch):
         name="t",
         user_id=1,
         notification_channels=None,
-        source_type="agent",
         execution_mode="internal",
         handler_ref=None,
     )
@@ -430,7 +429,6 @@ async def test_execute_single_task_rolls_back_before_mark_failed(monkeypatch):
         fencing_token=3,
         name="t",
         notification_channels=None,
-        source_type="agent",
         execution_mode="internal",
         handler_ref=None,
         input_params=None,

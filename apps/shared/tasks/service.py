@@ -486,7 +486,6 @@ class ScheduledTaskService(TenantAwareService):
         next_run_at: datetime | None,
         notification_channels: list[str] | None,
         thread_id: str | None,
-        source_type: str = "agent",
         execution_mode: str = "internal",
         input_params: dict | None = None,
     ) -> ScheduledTaskCreateWithArtifactResult:
@@ -500,7 +499,6 @@ class ScheduledTaskService(TenantAwareService):
             schedule_spec=schedule_spec,
             next_run_at=next_run_at,
             notification_channels=notification_channels,
-            source_type=source_type,
             execution_mode=execution_mode,
             input_params=input_params,
         )
