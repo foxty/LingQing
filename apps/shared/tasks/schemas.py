@@ -18,6 +18,8 @@ class ScheduledTaskResponseDTO(BaseModel):
     schedule_spec: dict
     status: str
     owner_name: str | None = None
+    stable_key: str | None = None
+    is_system: bool = False
     next_run_at: datetime | None
     last_run_at: datetime | None
     notification_channels: list[str] | None

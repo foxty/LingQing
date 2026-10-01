@@ -164,7 +164,7 @@ npm run migrate:tm
 - Validate with focused tests after changes (unit first). Stay scoped.
 - Create TODO plan for multi-step tasks; give brief updates.
 
-**Git commits (only when the user asks):**
+**Git commits (only when the user explicitly asks):**
 
 Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#summary):
 
@@ -182,6 +182,11 @@ Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0
 - **Body:** optional; blank line after description; explain **why**, not a file list
 - **Breaking changes:** `feat!:` / `fix(scope)!:` or footer `BREAKING CHANGE: …`
 - **Do not** commit unless explicitly requested; never skip hooks; never amend unless user rules allow
+- **Never auto-commit or auto-push.** `commit`, `push`, and `PR` are three separate actions, each requiring its own explicit user request:
+  - A request to commit does **not** imply permission to push
+  - A request to push does **not** imply permission to open a PR
+  - An earlier agreement like "we'll PR this later" is a plan, not a trigger — wait for the explicit ask at that point
+  - When in doubt, stop after the requested action and confirm before proceeding
 
 ```bash
 git commit -m "$(cat <<'EOF'
@@ -192,14 +197,14 @@ EOF
 )"
 ```
 
-**Pull requests (only when the user asks):**
+**Pull requests (only when the user explicitly asks):**
 
 - **Title:** same [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) format as the commit subject — e.g. `refactor(deploy): simplify release bundle and consolidate docs`
 - **Body sections** (use what applies):
   - `## Summary` — 1–3 bullets: what changed and why
   - `## Architecture / decisions` — key design choices, trade-offs, or behavior changes reviewers should know (omit if trivial)
   - `## Test plan` — checkbox list of verification steps
-- Push with `git push -u origin HEAD`; create with `gh pr create`; return the PR URL
+- Push with `git push -u origin HEAD`; create with `gh pr create`; return the PR URL — **only after the user explicitly asks to push/open the PR**
 
 ```bash
 gh pr create --title "refactor(deploy): simplify release bundle and consolidate docs" --body "$(cat <<'EOF'

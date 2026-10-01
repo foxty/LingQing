@@ -213,6 +213,7 @@ class ContextResourceRepository:
         stmt = (
             select(ScheduledTask.id, ScheduledTask.name)
             .where(ScheduledTask.tenant_id == tenant_id)
+            .where(ScheduledTask.stable_key.is_(None))
             .where(ScheduledTask.name.ilike(f"%{query}%"))
             .order_by(ScheduledTask.name)
             .limit(limit)

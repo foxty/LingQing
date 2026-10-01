@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from apps.shared.tasks.domain import ScheduledTaskDomain
+from apps.shared.tasks.domain import ScheduledTaskDomain, is_system_scheduled_task
 from apps.shared.tasks.schemas import (
     ScheduledTaskResponseDTO,
     ScheduledTaskRunResponseDTO,
@@ -55,6 +55,7 @@ def scheduled_task_to_response_payload(row: Any) -> ScheduledTaskResponseDTO:
         else None
     )
 
+    stable_key = getattr(row, "stable_key", None)
     payload = ScheduledTaskResponseDTO(
         id=row.id,
         name=row.name,
@@ -64,6 +65,8 @@ def scheduled_task_to_response_payload(row: Any) -> ScheduledTaskResponseDTO:
         schedule_spec=row.schedule_spec,
         status=row.status,
         owner_name=owner_name,
+        stable_key=stable_key,
+        is_system=is_system_scheduled_task(row),
         next_run_at=row.next_run_at,
         last_run_at=row.last_run_at,
         notification_channels=row.notification_channels,

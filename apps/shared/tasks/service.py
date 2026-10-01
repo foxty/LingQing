@@ -12,7 +12,7 @@ from apps.shared.artifact.schemas import Artifact
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.base_service import TenantAwareService
-from apps.shared.core.exceptions import ResourceNotFoundError
+from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError
 from apps.shared.db.models import ScheduledTask
 from apps.shared.domain.actor import ActorContext
 from apps.shared.tasks.adapters import scheduled_task_run_to_response_dto
@@ -29,6 +29,7 @@ from apps.shared.tasks.domain import (
     ScheduledTaskType,
     ScheduleSpec,
     TaskConfig,
+    is_system_scheduled_task,
     normalize_agent_run_task_config,
     normalize_scheduled_task_name,
 )
@@ -73,6 +74,18 @@ class ScheduledTaskService(TenantAwareService):
             permission=TenantAppPermissions.ARTIFACTS_MANAGE,
         )
 
+    async def _has_tenant_admin(self, *, actor: ActorContext) -> bool:
+        return await role_has_permission(
+            db=self.db_session,
+            tenant_id=actor.tenant_id,
+            role_key=actor.user_role,
+            permission=TenantAppPermissions.TENANT_ADMIN,
+        )
+
+    async def _require_tenant_admin(self, *, actor: ActorContext) -> None:
+        if not await self._has_tenant_admin(actor=actor):
+            raise AuthorizationError("Tenant admin permission required")
+
     async def _ensure_task_artifact(self, *, task: ScheduledTask) -> None:
         await self.artifacts.link_on_create(
             resource_id=task.id,
@@ -90,14 +103,21 @@ class ScheduledTaskService(TenantAwareService):
 
     async def require_read_access(self, *, task_id: int, actor: ActorContext) -> ScheduledTask:
         task = await self.repo.get_task_by_id(task_id, tenant_id=self.tenant_id)
-        if not task:
+        if not task or is_system_scheduled_task(task):
             raise ResourceNotFoundError(f"Scheduled task not found: {task_id}")
         try:
             await self._task_guard(actor).require_read(resource_id=task_id)
         except ResourceNotFoundError:
-            # Auto-heal missing artifact rows (e.g. legacy/system tasks) and retry ACL check.
+            # Auto-heal missing artifact rows for legacy user tasks and retry ACL check.
             await self._ensure_task_artifact(task=task)
             await self._task_guard(actor).require_read(resource_id=task_id)
+        return task
+
+    async def require_system_task_admin_access(self, *, task_id: int, actor: ActorContext) -> ScheduledTask:
+        await self._require_tenant_admin(actor=actor)
+        task = await self.repo.get_task_by_id(task_id, tenant_id=self.tenant_id)
+        if not task or not is_system_scheduled_task(task):
+            raise ResourceNotFoundError(f"System task not found: {task_id}")
         return task
 
     async def require_write_access(
@@ -141,7 +161,75 @@ class ScheduledTaskService(TenantAwareService):
             task_type=task_type,
             limit=limit,
             offset=offset,
+            user_tasks_only=True,
         )
+
+    async def list_system_tasks_for_admin(
+        self,
+        *,
+        actor: ActorContext,
+        status: str | None = None,
+        task_type: str | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ScheduledTask]:
+        await self._require_tenant_admin(actor=actor)
+        return await self.repo.list_system_tasks(
+            tenant_id=self.tenant_id,
+            status=status,
+            task_type=task_type,
+            limit=limit,
+            offset=offset,
+        )
+
+    async def get_system_task_for_admin(self, *, task_id: int, actor: ActorContext) -> ScheduledTask:
+        return await self.require_system_task_admin_access(task_id=task_id, actor=actor)
+
+    async def list_system_task_runs_for_admin(
+        self,
+        *,
+        task_id: int,
+        actor: ActorContext,
+        page: int = 1,
+        page_size: int = 20,
+    ) -> tuple[list[ScheduledTaskRunResponseDTO], PaginationRequest]:
+        await self.require_system_task_admin_access(task_id=task_id, actor=actor)
+        runs, total = await self.repo.list_task_runs_with_count(
+            task_id=task_id,
+            tenant_id=self.tenant_id,
+            limit=page_size,
+            offset=(page - 1) * page_size,
+        )
+        pagination = PaginationRequest.with_total(page=page, page_size=page_size, total=total)
+        dtos = [scheduled_task_run_to_response_dto(run) for run in runs]
+        return dtos, pagination
+
+    async def get_system_run_log_content_for_admin(
+        self,
+        *,
+        task_id: int,
+        run_id: int,
+        stream: str,
+        actor: ActorContext,
+    ) -> str:
+        await self.require_system_task_admin_access(task_id=task_id, actor=actor)
+        if stream not in ("stdout", "stderr"):
+            raise ValueError("stream must be 'stdout' or 'stderr'.")
+        run = await self.repo.get_run_by_id(run_id=run_id, task_id=task_id, tenant_id=self.tenant_id)
+        if not run:
+            raise ResourceNotFoundError(f"Task run not found: {run_id}")
+        run_dto = scheduled_task_run_to_response_dto(run)
+        result = run_dto.result
+        relative_path = result.stdout_log_path if stream == "stdout" else result.stderr_log_path
+        if not relative_path:
+            raise ResourceNotFoundError(f"No {stream} logs available for this run.")
+        writer = RunLogWriter(EnvConfig.DATA_ROOT_PATH)
+        try:
+            return writer.read_log_content(relative_path, stream=stream)
+        except FileNotFoundError as e:
+            raise ResourceNotFoundError(str(e)) from e
+        except ValueError as e:
+            raise AuthorizationError(str(e)) from e
 
     async def list_task_runs_for_actor(
         self,
@@ -249,8 +337,43 @@ class ScheduledTaskService(TenantAwareService):
             user_id=user_id,
         )
 
+    async def pause_system_task_for_admin(self, *, task_id: int, actor: ActorContext) -> bool:
+        task = await self.require_system_task_admin_access(task_id=task_id, actor=actor)
+        if task.status not in {TASK_STATUS_PENDING, TASK_STATUS_RUNNING}:
+            return False
+        return await self.repo.pause_task(task_id=task_id, tenant_id=self.tenant_id, user_id=None)
+
+    async def resume_system_task_for_admin(self, *, task_id: int, actor: ActorContext) -> bool:
+        task = await self.require_system_task_admin_access(task_id=task_id, actor=actor)
+        if task.status != TASK_STATUS_PAUSED:
+            return False
+        next_run_at = compute_next_run_at(
+            schedule_type=task.schedule_type,
+            schedule_spec=task.schedule_spec,
+        )
+        if next_run_at is None:
+            raise ResourceNotFoundError(f"System task cannot be resumed: {task_id}")
+        return await self.repo.resume_task(
+            task_id=task_id,
+            tenant_id=self.tenant_id,
+            next_run_at=next_run_at,
+            user_id=None,
+        )
+
+    async def run_system_task_for_admin(self, *, task_id: int, actor: ActorContext) -> bool:
+        task = await self.require_system_task_admin_access(task_id=task_id, actor=actor)
+        if task.status not in {TASK_STATUS_PENDING, TASK_STATUS_PAUSED}:
+            return False
+        return await self.repo.trigger_immediate_run(
+            task_id=task_id,
+            tenant_id=self.tenant_id,
+            user_id=None,
+        )
+
     async def delete_task_for_actor(self, *, task_id: int, actor: ActorContext) -> bool:
-        await self.require_owner_access(task_id=task_id, actor=actor)
+        task = await self.require_owner_access(task_id=task_id, actor=actor)
+        if is_system_scheduled_task(task):
+            raise AuthorizationError("System tasks cannot be deleted")
         has_manage = await self._has_manage(actor=actor)
         deleted = await self.repo.delete_task(
             task_id=task_id,
@@ -279,6 +402,8 @@ class ScheduledTaskService(TenantAwareService):
             actor=actor,
             allow_shared_write=True,
         )
+        if is_system_scheduled_task(task):
+            raise AuthorizationError("System tasks cannot be updated")
         # Validate task_type if changing
         if task_type is not None:
             valid_types = {TASK_TYPE_AGENT_RUN, TASK_TYPE_SKILL_CALL, TASK_TYPE_LIVEAPP_JOB}

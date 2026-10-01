@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-09-29T03:04:39.237994+00:00",
+  "generated_at": "2026-09-30T15:23:40.491945+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -90,6 +90,26 @@
     {
       "operation_key": "GET_/acl-shares/{resource_type}/{resource_id}/shares",
       "summary": "List Resource Shares",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/admin/system-tasks",
+      "summary": "List System Tasks",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/admin/system-tasks/{task_id}",
+      "summary": "Get System Task",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/admin/system-tasks/{task_id}/runs",
+      "summary": "List System Task Runs",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/admin/system-tasks/{task_id}/runs/{run_id}/logs",
+      "summary": "Get System Task Run Logs",
       "risk_level": "read"
     },
     {
@@ -391,6 +411,21 @@
       "operation_key": "GET_/skills/{scope}/{name}/env-vars",
       "summary": "List Env Vars",
       "risk_level": "read"
+    },
+    {
+      "operation_key": "PATCH_/admin/system-tasks/{task_id}/pause",
+      "summary": "Pause System Task",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/admin/system-tasks/{task_id}/resume",
+      "summary": "Resume System Task",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PATCH_/admin/system-tasks/{task_id}/run",
+      "summary": "Run System Task",
+      "risk_level": "write"
     },
     {
       "operation_key": "PATCH_/agents/{agent_id}/integrations/slack",

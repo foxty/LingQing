@@ -120,6 +120,10 @@ class ScheduledTaskRepository(ArtifactAwareMixin):
         result = await self.session.execute(stmt)
         return list(result.scalars().all())
 
+    @staticmethod
+    def _apply_user_task_scope(stmt):
+        return stmt.where(ScheduledTask.stable_key.is_(None))
+
     async def list_for_tenant(
         self,
         *,
@@ -128,6 +132,7 @@ class ScheduledTaskRepository(ArtifactAwareMixin):
         task_type: ScheduledTaskType | None = None,
         limit: int = 50,
         offset: int = 0,
+        user_tasks_only: bool = True,
     ) -> list[ScheduledTask]:
         def _configure(stmt):
             scoped = (
@@ -136,6 +141,8 @@ class ScheduledTaskRepository(ArtifactAwareMixin):
                 .limit(limit)
                 .offset(offset)
             )
+            if user_tasks_only:
+                scoped = self._apply_user_task_scope(scoped)
             if status:
                 scoped = scoped.where(ScheduledTask.status == status)
             if task_type:
@@ -153,6 +160,7 @@ class ScheduledTaskRepository(ArtifactAwareMixin):
         task_type: ScheduledTaskType | None = None,
         limit: int = 50,
         offset: int = 0,
+        user_tasks_only: bool = True,
     ) -> list[ScheduledTask]:
         def _configure(stmt):
             scoped = (
@@ -161,6 +169,8 @@ class ScheduledTaskRepository(ArtifactAwareMixin):
                 .limit(limit)
                 .offset(offset)
             )
+            if user_tasks_only:
+                scoped = self._apply_user_task_scope(scoped)
             if status:
                 scoped = scoped.where(ScheduledTask.status == status)
             if task_type:
@@ -172,6 +182,33 @@ class ScheduledTaskRepository(ArtifactAwareMixin):
             user_id=user_id,
             configure=_configure,
         )
+
+    async def list_system_tasks(
+        self,
+        *,
+        tenant_id: int,
+        status: ScheduledTaskStatus | None = None,
+        task_type: ScheduledTaskType | None = None,
+        limit: int = 50,
+        offset: int = 0,
+    ) -> list[ScheduledTask]:
+        stmt = (
+            select(ScheduledTask)
+            .where(
+                ScheduledTask.tenant_id == tenant_id,
+                ScheduledTask.stable_key.isnot(None),
+            )
+            .options(selectinload(ScheduledTask.owner_user))
+            .order_by(ScheduledTask.name.asc())
+            .limit(limit)
+            .offset(offset)
+        )
+        if status:
+            stmt = stmt.where(ScheduledTask.status == status)
+        if task_type:
+            stmt = stmt.where(ScheduledTask.task_type == task_type)
+        result = await self.session.execute(stmt)
+        return list(result.scalars().all())
 
     async def list_tasks_by_ids(
         self,

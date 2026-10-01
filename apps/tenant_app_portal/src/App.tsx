@@ -27,6 +27,7 @@ import SettingsUsageTab from './pages/SettingsUsageTab'
 import SettingsUsersTab from './pages/SettingsUsersTab'
 import SettingsIdentityTab from './pages/SettingsIdentityTab'
 import SettingsDocumentSourcesTab from './pages/SettingsDocumentSourcesTab'
+import SettingsSystemJobsTab from './pages/SettingsSystemJobsTab'
 import SsoCallbackPage from './pages/SsoCallbackPage'
 import ScheduledTaskPage from './pages/ScheduledTaskPage'
 import ScheduledTasksPage from './pages/ScheduledTasksPage'
@@ -273,6 +274,7 @@ function App() {
           <Route path="sso" element={<Navigate to="/settings/identity" replace />} />
           <Route path="users" element={<SettingsUsersTab />} />
           <Route path="usage" element={<SettingsUsageTab />} />
+          <Route path="system-jobs" element={<SettingsSystemJobsTab />} />
           <Route path="subscription" element={<SettingsSubscriptionTab />} />
         </Route>
         <Route path="*" element={<DefaultRedirect />} />

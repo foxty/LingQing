@@ -13,6 +13,26 @@ TASK_TYPE_SKILL_CALL = "skill_call"
 TASK_TYPE_LIVEAPP_JOB = "liveapp_job"
 TASK_TYPE_SYSTEM = "system"
 ScheduledTaskType = Literal["agent_run", "skill_call", "liveapp_job", "system"]
+
+# Task origin (scheduled_tasks.source_type) — see DB column comment
+SOURCE_TYPE_AGENT = "agent"
+SOURCE_TYPE_SYSTEM = "system"
+SOURCE_TYPE_LIVEAPP = "liveapp"
+SOURCE_TYPE_SKILL = "skill"
+ScheduledTaskSourceType = Literal["agent", "system", "liveapp", "skill"]
+
+
+def is_system_scheduled_task(task) -> bool:
+    """Return True for platform-managed tasks seeded by the system reconciler.
+
+    Uses ``stable_key``, not ``task_type``, because:
+    - ``task_type=system`` only describes execution strategy (internal handler dispatch)
+    - ``stable_key`` is the reconciler's idempotent ownership key and the auth-split boundary
+    - user-created tasks never get a stable_key; reconciler rows always do
+    """
+    return bool(getattr(task, "stable_key", None))
+
+
 ALL_SCHEDULED_TASK_TYPES: tuple[str, ...] = get_args(ScheduledTaskType)
 
 # Execution modes
