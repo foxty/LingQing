@@ -14,13 +14,6 @@ TASK_TYPE_LIVEAPP_JOB = "liveapp_job"
 TASK_TYPE_SYSTEM = "system"
 ScheduledTaskType = Literal["agent_run", "skill_call", "liveapp_job", "system"]
 
-# Task origin (scheduled_tasks.source_type) — see DB column comment
-SOURCE_TYPE_AGENT = "agent"
-SOURCE_TYPE_SYSTEM = "system"
-SOURCE_TYPE_LIVEAPP = "liveapp"
-SOURCE_TYPE_SKILL = "skill"
-ScheduledTaskSourceType = Literal["agent", "system", "liveapp", "skill"]
-
 
 def is_system_scheduled_task(task) -> bool:
     """Return True for platform-managed tasks seeded by the system reconciler.

@@ -18,12 +18,7 @@ from typing_extensions import TypedDict
 
 from apps.shared.db.models import ScheduledTask, Tenant, User
 from apps.shared.db.session import app_db_session
-from apps.shared.tasks.domain import (
-    SOURCE_TYPE_SYSTEM,
-    TASK_STATUS_PAUSED,
-    TASK_STATUS_PENDING,
-    SystemTaskConfig,
-)
+from apps.shared.tasks.domain import TASK_STATUS_PAUSED, TASK_STATUS_PENDING, SystemTaskConfig
 from apps.shared.tasks.scheduling import compute_next_run_at
 from apps.shared.tasks.system.definitions import SYSTEM_TASK_DEFINITIONS, SystemTaskDefinition
 from apps.shared.utils.logger import get_logger
@@ -38,7 +33,6 @@ class _SystemTaskReconcileUpdates(TypedDict, total=False):
     schedule_spec: dict[str, Any]
     next_run_at: datetime | None
     input_params: dict[str, Any] | None
-    source_type: str
     status: str
     updated_at: datetime
 
@@ -102,7 +96,6 @@ async def _upsert_task_for_definition(
             status=TASK_STATUS_PENDING if definition.enabled else TASK_STATUS_PAUSED,
             next_run_at=next_run_at if definition.enabled else None,
             stable_key=definition.stable_key,
-            source_type=SOURCE_TYPE_SYSTEM,
             execution_mode=definition.execution_mode,
             input_params=definition.default_input_params,
         )
@@ -129,10 +122,6 @@ async def _upsert_task_for_definition(
         if existing.input_params != definition.default_input_params:
             updates["input_params"] = definition.default_input_params
             changed = True
-        if existing.source_type != SOURCE_TYPE_SYSTEM:
-            updates["source_type"] = SOURCE_TYPE_SYSTEM
-            changed = True
-
         # Handle enabled/disabled transitions.
         # Only auto-pause: never auto-resume a paused task, because a paused
         # row may reflect a deliberate admin pause (admin router) rather than

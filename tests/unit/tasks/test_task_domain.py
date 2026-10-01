@@ -4,6 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
+from types import SimpleNamespace
+
 from apps.shared.tasks.domain import (
     ALL_SCHEDULE_TYPES,
     ALL_SCHEDULED_TASK_TYPES,
@@ -25,6 +27,7 @@ from apps.shared.tasks.domain import (
     TASK_TYPE_SKILL_CALL,
     TASK_TYPE_SYSTEM,
     ScheduledTaskDomain,
+    is_system_scheduled_task,
     is_valid_schedule_type,
     is_valid_scheduled_task_type,
     normalize_agent_run_task_config,
@@ -89,6 +92,20 @@ class TestIsValidScheduledTaskType:
     def test_invalid_types(self):
         for t in ("", "unknown", "etl_job", "AGENT_RUN", None):
             assert is_valid_scheduled_task_type(t) is False
+
+
+class TestIsSystemScheduledTask:
+    def test_true_when_stable_key_set(self):
+        task = SimpleNamespace(stable_key="system.document_parse.poll")
+        assert is_system_scheduled_task(task) is True
+
+    def test_false_when_stable_key_missing(self):
+        assert is_system_scheduled_task(SimpleNamespace(stable_key=None)) is False
+        assert is_system_scheduled_task(SimpleNamespace()) is False
+
+    def test_boundary_uses_stable_key_not_task_type(self):
+        task = SimpleNamespace(stable_key=None, task_type=TASK_TYPE_SYSTEM)
+        assert is_system_scheduled_task(task) is False
 
 
 class TestIsValidScheduleType:

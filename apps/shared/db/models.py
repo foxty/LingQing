@@ -1448,7 +1448,8 @@ class TaskRun(Base):
 
     Design:
     - scheduled_task_id links to the ScheduledTask when driven by the scheduler
-    - tenant_id/source_type/orchestration_run_id enable cross-source observability
+    - tenant_id/orchestration_run_id enable cross-source observability
+    - task_type is the canonical execution/origin label
     - attempt tracks retry count (1-based)
     - Tenant info also kept in input_params for audit/replay convenience
     """
@@ -1493,11 +1494,6 @@ class TaskRun(Base):
         index=True,
         comment="Tenant scope for this run",
     )
-    source_type: Mapped[str | None] = mapped_column(
-        String(20),
-        nullable=True,
-        comment="Task origin: system, agent, liveapp, skill",
-    )
     orchestration_run_id: Mapped[str | None] = mapped_column(
         String(64),
         nullable=True,
@@ -1536,7 +1532,6 @@ class ScheduledTask(Base):
         Index("idx_scheduled_tasks_tenant_user", "tenant_id", "user_id"),
         Index("idx_scheduled_tasks_tenant_owner", "tenant_id", "owner_id"),
         Index("idx_scheduled_tasks_type", "task_type"),
-        Index("idx_scheduled_tasks_source_type", "source_type"),
         Index("idx_scheduled_tasks_tenant_stable_key", "tenant_id", "stable_key"),
         UniqueConstraint("tenant_id", "stable_key", name="uq_scheduled_tasks_tenant_stable_key"),
     )
@@ -1612,13 +1607,6 @@ class ScheduledTask(Base):
         String(128),
         nullable=True,
         comment="Stable idempotent key for system task upsert; unique per tenant when set",
-    )
-    source_type: Mapped[str] = mapped_column(
-        String(20),
-        nullable=False,
-        default="agent",
-        server_default="agent",
-        comment="Task origin: system, agent, liveapp, skill",
     )
     execution_mode: Mapped[str] = mapped_column(
         String(20),

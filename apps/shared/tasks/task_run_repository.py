@@ -22,7 +22,6 @@ class TaskRunRepository:
         input_params: dict | None = None,
         scheduled_task_id: int | None = None,
         tenant_id: int | None = None,
-        source_type: str | None = None,
         orchestration_run_id: str | None = None,
         attempt: int = 1,
     ) -> TaskRun:
@@ -37,7 +36,6 @@ class TaskRunRepository:
             result={},
             scheduled_task_id=scheduled_task_id,
             tenant_id=tenant_id,
-            source_type=source_type,
             orchestration_run_id=orchestration_run_id,
             attempt=attempt,
         )

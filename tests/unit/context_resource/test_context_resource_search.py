@@ -5,6 +5,7 @@ from __future__ import annotations
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+from sqlalchemy.dialects import sqlite
 
 from apps.shared.context_resource.domain import ContextResourceItem, ContextResourceKey
 from apps.shared.context_resource.repository import ContextResourceRepository
@@ -156,3 +157,21 @@ def _rows_result(rows: list[tuple]):
     result = MagicMock()
     result.all.return_value = rows
     return result
+
+
+@pytest.mark.asyncio
+async def test_search_scheduled_tasks_excludes_system_tasks():
+    db = MagicMock()
+    db.execute = AsyncMock(return_value=_rows_result([(7, "User nightly job")]))
+    repo = ContextResourceRepository(db)
+
+    items = await repo._search_scheduled_tasks(tenant_id=1, query="job", limit=5)
+
+    assert len(items) == 1
+    assert items[0].resource_type == "scheduled_task"
+    assert items[0].resource_id == 7
+    assert items[0].title == "User nightly job"
+    stmt = db.execute.await_args.args[0]
+    sql = str(stmt.compile(dialect=sqlite.dialect())).lower()
+    assert "stable_key" in sql
+    assert "is null" in sql
