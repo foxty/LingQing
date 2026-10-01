@@ -1,10 +1,5 @@
 import api from './api'
 
-/** Browser URL for a Google Drive file (native Google files and binary uploads). */
-export function driveFileViewUrl(externalFileId: string): string {
-  return `https://drive.google.com/file/d/${externalFileId}/view`
-}
-
 export interface DriveAuthorizeResponse {
   authorize_url: string
 }
