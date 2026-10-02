@@ -1,12 +1,11 @@
 import { DocumentTable } from '@/components/DocumentTable'
 import EmptyState from '@/components/EmptyState'
-import CollectionHeader from '@/components/knowledge-base/CollectionHeader'
 import CollectionSyncPanel from '@/components/knowledge-base/CollectionSyncPanel'
-import DocumentListToolbar from '@/components/knowledge-base/DocumentListToolbar'
+import ListDetailToolbar, { type ListDetailOverflowItem } from '@/components/ListDetailToolbar'
 import { Button } from '@/components/ui/button'
 import { UploadProgressNotifications } from '@/components/UploadProgressNotifications'
 import { ACCEPT_FILE_TYPES } from '@/constants/documents'
-import type { KnowledgeBaseDocumentsData } from '@/hooks/useKnowledgeBasePage'
+import type { CollectionDocumentsData } from '@/hooks/useCollectionDocumentsPage'
 import type { UploadProgress } from '@/hooks/useFileUpload'
 import type { DocumentCollection } from '@/lib/documentCollectionsApi'
 import { useAuth } from '@/hooks/useAuth'
@@ -16,29 +15,23 @@ import { useTranslation } from 'react-i18next'
 
 interface CollectionDetailPanelProps {
   collection: DocumentCollection
-  data: KnowledgeBaseDocumentsData
+  data: CollectionDocumentsData
   isLoading: boolean
   normalizedQuery?: string
   searchQuery: string
   selectedIds: Set<number>
   canUpload: boolean
   canDelete: boolean
-  canReadTags: boolean
+  canManageCollectionSync: boolean
   uploading: boolean
+  onUpload: () => void
+  onBatchDelete: () => void
+  overflowItems?: ListDetailOverflowItem[]
   uploadProgress: UploadProgress[]
   onSearchQueryChange: (value: string) => void
   onClearSearchQuery: () => void
   onSelectionChange: (ids: Set<number>) => void
   onPageChange: (page: number) => void
-  onBatchDelete: () => void
-  onUpload: () => void
-  onShare: () => void
-  onTags: () => void
-  onEdit: () => void
-  onDelete: () => void
-  onReparseAll: () => void
-  onReindexAll: () => void
-  queuePending?: boolean
   onFileUpload: (event: React.ChangeEvent<HTMLInputElement>) => void
 }
 
@@ -51,29 +44,21 @@ export default function CollectionDetailPanel({
   selectedIds,
   canUpload,
   canDelete,
-  canReadTags,
+  canManageCollectionSync,
   uploading,
   uploadProgress,
+  onUpload,
+  onBatchDelete,
+  overflowItems,
   onSearchQueryChange,
   onClearSearchQuery,
   onSelectionChange,
   onPageChange,
-  onBatchDelete,
-  onUpload,
-  onShare,
-  onTags,
-  onEdit,
-  onDelete,
-  onReparseAll,
-  onReindexAll,
-  queuePending = false,
   onFileUpload,
 }: CollectionDetailPanelProps) {
   const { t } = useTranslation()
   const { hasAny } = useAuth()
   const canReadDocuments = hasAny(actionRules.canReadDocuments())
-  const canWriteCollection = collection.can_write
-  const canManageCollectionSync = collection.can_manage
 
   const showEmptyCollection =
     !isLoading &&
@@ -83,25 +68,6 @@ export default function CollectionDetailPanel({
 
   return (
     <div className="space-y-4 min-w-0">
-      <CollectionHeader
-        collection={collection}
-        canUpload={canUpload && canWriteCollection}
-        canDelete={canDelete && canWriteCollection}
-        canWriteCollection={canWriteCollection}
-        canReadTags={canReadTags}
-        uploading={uploading}
-        selectedCount={selectedIds.size}
-        onUpload={onUpload}
-        onShare={onShare}
-        onTags={onTags}
-        onEdit={onEdit}
-        onDelete={onDelete}
-        onBatchDelete={onBatchDelete}
-        onReparseAll={onReparseAll}
-        onReindexAll={onReindexAll}
-        queuePending={queuePending}
-      />
-
       {canReadDocuments ? (
         <CollectionSyncPanel
           collectionId={collection.id}
@@ -120,10 +86,30 @@ export default function CollectionDetailPanel({
         disabled={uploading}
       />
 
-      <DocumentListToolbar
+      <ListDetailToolbar
         searchQuery={searchQuery}
+        searchPlaceholder={t('knowledgeBase.searchPlaceholder')}
         onSearchQueryChange={onSearchQueryChange}
         onClearSearchQuery={onClearSearchQuery}
+        primaryAction={
+          canUpload
+            ? {
+                label: t('knowledgeBase.uploadDocument'),
+                onClick: onUpload,
+                icon: Upload,
+                disabled: uploading,
+              }
+            : undefined
+        }
+        batchAction={
+          canDelete && selectedIds.size > 0
+            ? {
+                label: t('knowledgeBase.deleteSelected', { count: selectedIds.size }),
+                onClick: onBatchDelete,
+              }
+            : undefined
+        }
+        overflowItems={overflowItems}
       />
 
       <UploadProgressNotifications items={uploadProgress} />
@@ -134,7 +120,7 @@ export default function CollectionDetailPanel({
           description={t('knowledgeBase.emptyCollectionDesc')}
           action={
             canUpload ? (
-              <Button onClick={onUpload} disabled={uploading}>
+              <Button variant="outline" onClick={onUpload} disabled={uploading}>
                 <Upload className="w-4 h-4 mr-2" />
                 {t('knowledgeBase.uploadFirstDocument')}
               </Button>

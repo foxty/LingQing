@@ -153,11 +153,13 @@ One chrome for every authenticated, non-embed page.
 ┌──────────────────────────────────────────────┐
 │ Mark · tenant · locale · user menu           │
 ├────────┬─────────────────────────────────────┤
-│ Rail   │ Page header (title, purpose, 1 CTA) │
+│ Rail   │ Page header (title + purpose)       │
 │        ├─────────────────────────────────────┤
-│        │ Canvas — one surface type           │
+│        │ List toolbar or canvas body       │
 └────────┴─────────────────────────────────────┘
 ```
+
+List index/detail pages put CTAs in the **list toolbar** row below the header, not in the page header (see §4 Table).
 
 **Header**
 
@@ -210,14 +212,51 @@ Scan a set of **capabilities or resources**.
 
 ### Table
 
-Operate on records.
+Operate on records. Use one of the two **list layouts** below — do not invent a third chrome.
 
-- Page header: title + one-line purpose + one primary.
+**Shared table rules**
+
 - Columns: identity, status, truncated values (`+N`), actions as ghost or overflow.
 - Destructive: overflow → **confirm dialog**. Never `Button variant="destructive"` on every row.
 - Status: one pattern (badge **or** switch), not dots + switches + solids in one row.
 - Rows 40–44px, sticky header. Horizontal scroll for extra columns, never the page.
 - Table shell is `--card` (same as Card). Not transparent on page `--background`.
+- Wide tables: `table-fixed w-full`; identity column gets `max-w-0` + `truncate` or `line-clamp-2` + full text in `title`.
+
+**List index** — browse/create containers (collections, data sources, API connectors). Reference: knowledge base collections index.
+
+```
+┌ Title + one-line purpose (identity only — no buttons) ────────────┐
+├ Search (sm:w-72) ──────── [Refresh outline] [Primary: Create/Add] ┤
+├ optional: filters / tabs (segmented, full width)                    ┤
+└ Table in card shell — row click navigates to detail               ┘
+```
+
+- **Page header** = identity only: `text-2xl` title, `text-sm text-muted-foreground` description. No buttons in the header row.
+- **List toolbar** (row below header): search left; **refresh outline** then **one solid primary** (Create / New / Add) on the right. Use **`ListIndexToolbar`**.
+- Container catalog actions (Share, Tags, Edit, Delete) on row via **`ContainerRowActions`** only — not in the page header.
+- Optional filter/tabs row sits between toolbar and table (Skills tabs, scheduled-task status filters).
+
+**List detail** — operate on records inside one container (documents in a collection, assets in a data source). Reference: collection documents page.
+
+```
+┌ Breadcrumb → container name + meta (identity only — no CTAs) ────┐
+├ optional: in-context status bar (e.g. Drive sync — status + ⋯)   ┤
+├ Search ── [Batch outline if selected] [Primary] [⋯ overflow]   ┤
+└ Table in card shell — row ⋯ for record actions                   ┘
+```
+
+- Use **`ContainerDetailHeader`** for breadcrumb + title + meta **only**. No primary button, no refresh, no ⋯ in the header.
+- **List-scoped CTAs** (Upload, Add record, batch delete, re-parse all) live in the **list toolbar** on the same row as search — not in the page header.
+- One solid primary in the toolbar (Upload / Add). Batch actions when rows are selected = **outline** button beside primary.
+- Infrequent collection-level ops (re-parse all, re-index all) → toolbar ⋯ overflow.
+- In-context infra (Drive sync, schema sync banner) = status bar between header and toolbar; its ⋯ holds **only** that infra’s ops (sync now, disconnect) — never duplicate refresh icons in both header and banner.
+- Container Share/Tags/Edit/Delete stay on the **parent index** route only.
+
+**When not to use list layouts**
+
+- **Catalog (cards)** — Skills, agents: card grid + drawer; tabs/filters ok; primary stays in page header.
+- **Workbench, Document, Dashboard** — different surface types; no forced table toolbar.
 
 ### Form
 
@@ -275,33 +314,18 @@ Do not read long documents in a dialog. Do not give Save and Delete equal solid 
 
 ### Parent index + Child detail
 
-Default pattern for **container → records** features (data sources → assets, API connectors → operations, and new container types).
+Default pattern for **container → records** features (knowledge base collections → documents, data sources → assets, API connectors → operations).
 
-**Parent index (Catalog or Table)**
-
-- One route per container type. Browse, compare, and create containers.
-- One page-level primary (Add / Create).
-- Row click navigates to the child detail route.
-- Container catalog actions (Share, Tags, Edit, Delete) use **`ContainerRowActions`** on the parent list row only. Do not duplicate them on the child detail page.
-
-**Child detail (Table)**
-
-- URL includes the parent id. Full-width child table — no persistent container sidebar stealing horizontal space.
-- Breadcrumb: parent label (link) → container name. Use `ContainerDetailHeader`.
-- Header: container name + meta + **one child-scoped primary** (Upload, Add asset, Add API) + ghost refresh + optional ⋯ overflow for **in-context ops** (e.g. Sync schema) — not Share/Tags/Edit/Delete.
-- Selection batch actions on child rows may appear as outline buttons beside the primary when rows are selected.
+- **Parent route** → **List index** layout (section 4, Table).
+- **Child route** → **List detail** layout (section 4, Table).
+- Two routes when the child table is wide (≥ ~6 columns) or needs full canvas width. No persistent left sidebar for container switching.
 
 **Lint (parent-child)**
 
-- Wide child tables (roughly ≥8 columns): two routes; no persistent left rail for container switching.
-- Child detail uses `ContainerDetailHeader`; parent index uses `ContainerRowActions`.
-- Container Share/Tags/Edit/Delete appear on the parent list only (not child detail, not child rows).
-
-**Documented exception — Knowledge base**
-
-- Single-page sidebar (~240–280px) is allowed when the child table stays narrow and frequent collection switching is the primary job.
-- `CollectionHeader` holds container actions (one primary + ⋯) because there is no separate parent index route.
-- If document columns grow, migrate to the two-route pattern or a collapsible rail.
+- Parent index: Create/Add in list toolbar (not page header); Share/Tags/Edit/Delete via **`ContainerRowActions`** on rows only.
+- Child detail: **`ContainerDetailHeader`** identity-only; list toolbar holds Upload/Add + batch + ⋯.
+- Do not duplicate container catalog actions or duplicate refresh/sync controls across header and status bar.
+- Migrate legacy child pages that still put Upload in `ContainerDetailHeader` to the list-detail toolbar pattern when touched.
 
 ---
 
@@ -327,7 +351,11 @@ Use the existing shadcn primitives. Extend variants; do not fork a second button
 
 **Dropdown menu** — overflow for ≤ 7 actions. Include destructive as a **menu item**, then confirm.
 
-**Container detail header** — breadcrumb parent link, container title + meta, one child-scoped primary action, ghost refresh, optional ⋯ overflow for in-context ops only. Shared component for two-route child detail pages.
+**Container detail header** — breadcrumb parent link, container title + meta. **Identity only** on list-detail pages — no primary, refresh, or ⋯ (those belong in the list toolbar or an in-context status bar).
+
+**List index toolbar** — search left; refresh outline + one solid Create/Add right. Shared **`ListIndexToolbar`** component.
+
+**List detail toolbar** — search left; optional batch outline + one solid Upload/Add + optional ⋯ right. Shared **`ListDetailToolbar`** component. Infrequent ops (refresh, re-parse, schema sync) go in ⋯ overflow — not in the page header.
 
 **Container row actions** — ghost Share / Tags / Edit / Delete on parent index table rows. Shared component; the only place for container catalog actions in the two-route pattern.
 
@@ -345,7 +373,7 @@ Use the existing shadcn primitives. Extend variants; do not fork a second button
 ## 7. Lint list (pass/fail)
 
 1. ≤2 visible product-accent hits per screen.
-2. ≤1 solid primary button per view (repeat once at end of a long scroll only).
+2. ≤1 solid primary button per view (list index + list detail: Create/Upload in list toolbar only; repeat once at end of a long scroll only).
 3. No solid destructive control in a table row.
 4. No raw prompt, policy wall, or secret full value in a list.
 5. No second persistent app sidebar.

@@ -11,6 +11,7 @@ import DataAssetsPage from './pages/DataAssetsPage'
 import ApiConnectorsPage from './pages/ApiConnectorsPage'
 import ApiConnectorDetailPage from './pages/ApiConnectorDetailPage'
 import DataSourcesPage from './pages/DataSourcesPage'
+import CollectionDocumentsPage from './pages/CollectionDocumentsPage'
 import KnowledgeBasePage from './pages/KnowledgeBasePage'
 import LiveAppsPage from './pages/LiveAppsPage'
 import LoginPage from './pages/LoginPage'
@@ -135,6 +136,14 @@ function App() {
           element={
             <ProtectedRoute>
               <KnowledgeBasePage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/knowledge/collections/:collectionId"
+          element={
+            <ProtectedRoute>
+              <CollectionDocumentsPage />
             </ProtectedRoute>
           }
         />

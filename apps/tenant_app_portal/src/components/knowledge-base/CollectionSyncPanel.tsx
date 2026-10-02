@@ -299,8 +299,15 @@ export default function CollectionSyncPanel({
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
-          <DropdownMenuItem onClick={handleSync} disabled={isBusy}>
-            <RefreshCw className="mr-2 h-4 w-4" />
+          <DropdownMenuItem
+            onClick={handleSync}
+            disabled={isBusy || connector.status !== 'active'}
+          >
+            {syncMutation.isPending ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <RefreshCw className="mr-2 h-4 w-4" />
+            )}
             {t('collectionSync.syncNow')}
           </DropdownMenuItem>
           <DropdownMenuSeparator />
@@ -316,32 +323,7 @@ export default function CollectionSyncPanel({
       <>
         <TooltipProvider delayDuration={300}>
           <SyncStatusBar
-            actions={
-              canManageConnector ? (
-                <>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-8 w-8"
-                        onClick={handleSync}
-                        disabled={isBusy || connector.status !== 'active'}
-                      >
-                        {syncMutation.isPending ? (
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                        ) : (
-                          <RefreshCw className="h-4 w-4" />
-                        )}
-                        <span className="sr-only">{t('collectionSync.syncNow')}</span>
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{t('collectionSync.syncNow')}</TooltipContent>
-                  </Tooltip>
-                  {manageMenu}
-                </>
-              ) : null
-            }
+            actions={canManageConnector ? manageMenu : null}
           >
             <Tooltip>
               <TooltipTrigger asChild>

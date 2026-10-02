@@ -10,6 +10,10 @@ export interface DocumentCollection {
   document_count: number
   can_write: boolean
   can_manage: boolean
+  has_drive_sync: boolean
+  sync_folder_name: string | null
+  sync_status: string | null
+  last_synced_at: string | null
   created_at: string
   updated_at: string
 }

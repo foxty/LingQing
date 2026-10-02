@@ -52,6 +52,8 @@ i18n.addResourceBundle('en', 'translation', {
     openInDrive: 'Open in Google Drive',
     driveDeleteWarning:
       'This document is synced from Google Drive. It may reappear after the next sync.',
+    pipelineStatus: 'Pipeline',
+    rowActions: 'Document actions',
   },
 }, true, true)
 
@@ -91,6 +93,8 @@ i18n.addResourceBundle('zh', 'translation', {
     sourceColumn: '来源',
     openInDrive: '在 Google Drive 中打开',
     driveDeleteWarning: '此文档来自 Google Drive 同步，下次同步后可能会重新出现。',
+    pipelineStatus: '处理状态',
+    rowActions: '文档操作',
   },
 }, true, true)
 import { DocumentParsedPreview } from '@/components/DocumentParsedPreview'
@@ -98,8 +102,15 @@ import { useDeleteDocuments, useReindexDocument, useReparseDocument } from '@/ho
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { Badge } from '@/components/ui/badge'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import { driveFileViewUrl } from '@/lib/documentsApi'
-import { Cloud, Database, FileText, RefreshCw, Trash2, Upload } from 'lucide-react'
+import { Cloud, Database, Eye, FileText, MoreHorizontal, RefreshCw, Trash2, Upload } from 'lucide-react'
 import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
@@ -248,13 +259,71 @@ export function DocumentTable({
     )
   }
 
+  const renderPipelineStatus = (doc: Document) => (
+    <div className="flex flex-col gap-1">
+      {renderParseStatus(doc)}
+      {renderIndexStatus(doc)}
+    </div>
+  )
+
+  const renderRowActions = (doc: Document) => (
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <Button
+          variant="ghost"
+          className="h-11 w-11 p-0"
+          aria-label={t('knowledgeBase.rowActions')}
+        >
+          <MoreHorizontal className="w-4 h-4" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end">
+        <DropdownMenuItem onClick={() => setPreviewDoc(doc)}>
+          <Eye className="w-4 h-4 mr-2" />
+          {t('knowledgeBase.viewParsed')}
+        </DropdownMenuItem>
+        {canWrite ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              disabled={queuePending}
+              onClick={() => reparseMutation.mutate(doc.id)}
+            >
+              <RefreshCw className="w-4 h-4 mr-2" />
+              {t('knowledgeBase.queueReparse')}
+            </DropdownMenuItem>
+            <DropdownMenuItem
+              disabled={queuePending || doc.status === 'processing'}
+              onClick={() => reindexMutation.mutate(doc.id)}
+            >
+              <Database className="w-4 h-4 mr-2" />
+              {t('knowledgeBase.queueReindex')}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+        {canDelete ? (
+          <>
+            <DropdownMenuSeparator />
+            <DropdownMenuItem
+              className="text-destructive focus:text-destructive"
+              onClick={() => handleDeleteClick(doc)}
+            >
+              <Trash2 className="w-4 h-4 mr-2" />
+              {t('common.delete')}
+            </DropdownMenuItem>
+          </>
+        ) : null}
+      </DropdownMenuContent>
+    </DropdownMenu>
+  )
+
   if (isLoading) {
     return <p className="text-center text-sm text-muted-foreground py-8">{t('common.loading')}</p>
   }
 
   if (!documents || documents.length === 0) {
     return (
-      <div className="text-center py-12 border rounded-lg bg-muted/20">
+      <div className="text-center py-12 border rounded-lg bg-card">
         <FileText className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
         <p className="text-sm text-muted-foreground">
           {searchQuery ? t('knowledgeBase.noMatchingDocs') : t('knowledgeBase.noDocuments')}
@@ -265,8 +334,8 @@ export function DocumentTable({
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-lg border bg-card">
-        <Table>
+      <div className="rounded-lg border bg-card">
+        <Table className="table-fixed w-full">
           <TableHeader>
             <TableRow className="hover:bg-transparent">
               <TableHead className="h-10 w-12">
@@ -277,17 +346,13 @@ export function DocumentTable({
                   className={isSomeSelected ? 'data-[state=checked]:bg-primary/50' : ''}
                 />
               </TableHead>
-              <TableHead className="h-10 w-16">{t('knowledgeBase.documentId')}</TableHead>
-              <TableHead className="h-10">{t('knowledgeBase.filename')}</TableHead>
+              <TableHead className="h-10 w-[42%] min-w-[12rem]">{t('knowledgeBase.filename')}</TableHead>
               <TableHead className="h-10 w-24">{t('knowledgeBase.sourceColumn')}</TableHead>
-              <TableHead className="h-10 w-32">{t('knowledgeBase.uploader')}</TableHead>
-              <TableHead className="h-10 w-24">{t('knowledgeBase.size')}</TableHead>
-              <TableHead className="h-10 w-40">{t('knowledgeBase.uploadTime')}</TableHead>
-              <TableHead className="h-10 w-40">{t('common.updateTime')}</TableHead>
-              <TableHead className="h-10 w-32">{t('knowledgeBase.parseStatus')}</TableHead>
-              <TableHead className="h-10 w-32">{t('knowledgeBase.indexStatus')}</TableHead>
+              <TableHead className="h-10 w-20 hidden lg:table-cell">{t('knowledgeBase.size')}</TableHead>
+              <TableHead className="h-10 w-36 hidden md:table-cell">{t('common.updateTime')}</TableHead>
+              <TableHead className="h-10 w-36">{t('knowledgeBase.pipelineStatus')}</TableHead>
               {showActions && (
-                <TableHead className="h-10 w-28 text-right">{t('common.action')}</TableHead>
+                <TableHead className="h-10 w-12 text-right">{t('common.action')}</TableHead>
               )}
             </TableRow>
           </TableHeader>
@@ -301,21 +366,13 @@ export function DocumentTable({
                     aria-label={t('knowledgeBase.selectDocument', { name: doc.filename })}
                   />
                 </TableCell>
-                <TableCell className="py-2.5">
-                  <span
-                    className="font-mono text-xs text-muted-foreground tabular-nums"
-                    title={t('knowledgeBase.documentIdLabel', { id: doc.id })}
-                  >
-                    #{doc.id}
-                  </span>
-                </TableCell>
-                <TableCell className="py-2.5">
+                <TableCell className="py-2.5 max-w-0">
                   <div className="flex items-center gap-2 min-w-0">
                     <FileText className="w-4 h-4 text-muted-foreground flex-shrink-0" />
                     <button
                       type="button"
-                      className="text-sm truncate text-left hover:underline min-w-0"
-                      title={t('knowledgeBase.viewParsed')}
+                      className="text-sm line-clamp-2 text-left hover:underline min-w-0 break-all"
+                      title={`${t('knowledgeBase.documentIdLabel', { id: doc.id })}\n${doc.filename}`}
                       onClick={() => setPreviewDoc(doc)}
                     >
                       {doc.filename}
@@ -323,56 +380,11 @@ export function DocumentTable({
                   </div>
                 </TableCell>
                 <TableCell className="py-2.5">{renderSourceBadge(doc)}</TableCell>
-                <TableCell className="py-2.5 text-sm">{doc.ownerUsername || '—'}</TableCell>
-                <TableCell className="py-2.5 text-sm">{formatFileSize(doc.fileSize)}</TableCell>
-                <TableCell className="py-2.5 text-sm">{formatDate(doc.uploadDate)}</TableCell>
-                <TableCell className="py-2.5 text-sm">{formatDate(doc.updatedAt)}</TableCell>
-                <TableCell className="py-2.5 text-sm">{renderParseStatus(doc)}</TableCell>
-                <TableCell className="py-2.5 text-sm">{renderIndexStatus(doc)}</TableCell>
+                <TableCell className="py-2.5 text-sm hidden lg:table-cell">{formatFileSize(doc.fileSize)}</TableCell>
+                <TableCell className="py-2.5 text-sm hidden md:table-cell">{formatDate(doc.updatedAt)}</TableCell>
+                <TableCell className="py-2.5 text-sm">{renderPipelineStatus(doc)}</TableCell>
                 {showActions && (
-                  <TableCell className="py-2.5 text-right">
-                    <div className="flex items-center justify-end gap-1">
-                      {canWrite && (
-                        <>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            disabled={queuePending}
-                            onClick={() => reparseMutation.mutate(doc.id)}
-                            aria-label={t('knowledgeBase.queueReparse')}
-                            title={t('knowledgeBase.queueReparse')}
-                          >
-                            <RefreshCw className="w-4 h-4" />
-                          </Button>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            disabled={queuePending || doc.status === 'processing'}
-                            onClick={() => reindexMutation.mutate(doc.id)}
-                            aria-label={t('knowledgeBase.queueReindex')}
-                            title={t('knowledgeBase.queueReindex')}
-                          >
-                            <Database className="w-4 h-4" />
-                          </Button>
-                        </>
-                      )}
-                      {canDelete && (
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={() => handleDeleteClick(doc)}
-                          disabled={deleteMutation.isPending}
-                          aria-label={t('common.delete')}
-                          title={t('common.delete')}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      )}
-                    </div>
-                  </TableCell>
+                  <TableCell className="py-2.5 text-right">{renderRowActions(doc)}</TableCell>
                 )}
               </TableRow>
             ))}

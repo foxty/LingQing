@@ -1,10 +1,22 @@
-import EmptyState from '@/components/EmptyState'
-import CollectionDetailPanel from '@/components/knowledge-base/CollectionDetailPanel'
-import CollectionSidebar from '@/components/knowledge-base/CollectionSidebar'
-import KnowledgeBaseDialogs from '@/components/knowledge-base/KnowledgeBaseDialogs'
+import ContainerRowActions from '@/components/ContainerRowActions'
+import CollectionsDialogs from '@/components/knowledge-base/CollectionsDialogs'
+import ListIndexToolbar from '@/components/ListIndexToolbar'
+import TagChips from '@/components/TagChips'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { useKnowledgeBasePage } from '@/hooks/useKnowledgeBasePage'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { useCollectionsPage } from '@/hooks/useCollectionsPage'
+import { formatDate } from '@/lib/dateTime'
+import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import i18n from '@/i18n/config'
+import { Cloud, FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
 i18n.addResourceBundle('en', 'translation', {
@@ -53,6 +65,17 @@ i18n.addResourceBundle('en', 'translation', {
     fileTooLarge: 'This file exceeds the upload size limit. Choose a smaller file or split the document.',
     driveConnected: 'Google Drive connected successfully',
     driveConnectError: 'Failed to connect Google Drive',
+    nameCol: 'Name',
+    docsCol: 'Documents',
+    ownerCol: 'Owner',
+    syncCol: 'Drive Sync',
+    descCol: 'Description',
+    updatedCol: 'Updated',
+    syncActive: 'Synced',
+    syncStopped: 'Stopped',
+    syncFolder: 'Folder: {{name}}',
+    noMatchingCollections: 'No matching collections',
+    openCollection: 'Open collection {{name}}',
   },
 }, true, true)
 
@@ -102,12 +125,23 @@ i18n.addResourceBundle('zh', 'translation', {
     fileTooLarge: '文件超过上传大小上限，请选择更小的文件或拆分文档。',
     driveConnected: 'Google Drive 连接成功',
     driveConnectError: 'Google Drive 连接失败',
+    nameCol: '名称',
+    docsCol: '文档数',
+    ownerCol: '所有者',
+    syncCol: 'Drive 同步',
+    descCol: '描述',
+    updatedCol: '更新时间',
+    syncActive: '已同步',
+    syncStopped: '已停止',
+    syncFolder: '文件夹：{{name}}',
+    noMatchingCollections: '没有匹配的集合',
+    openCollection: '打开集合 {{name}}',
   },
 }, true, true)
 
 export default function KnowledgeBasePage() {
   const { t } = useTranslation()
-  const kb = useKnowledgeBasePage()
+  const page = useCollectionsPage()
 
   return (
     <div className="space-y-4">
@@ -116,85 +150,158 @@ export default function KnowledgeBasePage() {
         <p className="text-sm text-muted-foreground">{t('knowledgeBase.description')}</p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <CollectionSidebar
-          collections={kb.collections}
-          filteredCollections={kb.filteredCollections}
-          isLoading={kb.collectionsLoading}
-          selectedCollectionId={kb.selectedCollectionId}
-          collectionSearch={kb.collectionSearch}
-          showCollectionSearch={kb.showCollectionSearch}
-          canUpload={kb.canUpload}
-          canReadTags={kb.canReadTags}
-          tagKeys={kb.tagKeys}
-          collectionTagsMap={kb.collectionTagsMap}
-          onCollectionSearchChange={kb.setCollectionSearch}
-          onSelectCollection={kb.onSelectCollection}
-          onCreateCollection={kb.onCreateCollection}
-        />
+      <ListIndexToolbar
+        searchQuery={page.collectionSearch}
+        searchPlaceholder={t('knowledgeBase.searchCollections')}
+        onSearchQueryChange={page.setCollectionSearch}
+        onClearSearchQuery={() => page.setCollectionSearch('')}
+        onRefresh={() => page.refetchCollections()}
+        refreshing={page.collectionsLoading}
+        refreshLabel={t('common.refresh')}
+        primaryAction={{
+          label: t('knowledgeBase.newCollection'),
+          onClick: page.onCreateCollection,
+          hidden: !page.canUpload,
+        }}
+      />
 
-        {!kb.selectedCollectionId || !kb.selectedCollection ? (
-          <EmptyState
-            title={t('knowledgeBase.noCollections')}
-            description={t('knowledgeBase.selectCollection')}
-            action={
-              kb.canUpload && kb.collections.length === 0 ? (
-                <Button size="sm" onClick={kb.onCreateCollection}>
-                  {t('knowledgeBase.newCollection')}
-                </Button>
-              ) : undefined
-            }
-          />
-        ) : (
-          <CollectionDetailPanel
-            collection={kb.selectedCollection}
-            data={kb.data}
-            isLoading={kb.isLoading}
-            normalizedQuery={kb.normalizedQuery}
-            searchQuery={kb.searchQuery}
-            selectedIds={kb.selectedIds}
-            canUpload={kb.canUpload && (kb.selectedCollection?.can_write ?? false)}
-            canDelete={kb.canDelete && (kb.selectedCollection?.can_write ?? false)}
-            canReadTags={kb.canReadTags}
-            uploading={kb.uploading}
-            uploadProgress={kb.uploadProgress}
-            onSearchQueryChange={kb.onSearchQueryChange}
-            onClearSearchQuery={kb.onClearSearchQuery}
-            onSelectionChange={kb.onSelectionChange}
-            onPageChange={kb.onPageChange}
-            onBatchDelete={kb.onBatchDeleteClick}
-            onUpload={kb.triggerUpload}
-            onShare={() => kb.setShareOpen(true)}
-            onTags={() => kb.setTagsOpen(true)}
-            onEdit={kb.onEditCollection}
-            onDelete={kb.onDeleteCollectionClick}
-            onReparseAll={kb.onReparseCollection}
-            onReindexAll={kb.onReindexCollection}
-            queuePending={kb.collectionQueuePending}
-            onFileUpload={kb.handleFileUpload}
-          />
-        )}
-      </div>
+      {page.collectionsLoading && page.collections.length === 0 ? (
+        <p className="text-center text-sm text-muted-foreground py-8">{t('common.loading')}</p>
+      ) : page.collections.length === 0 ? (
+        <div className="text-center py-12 border rounded-lg bg-card">
+          <FolderOpen className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+          <p className="text-sm font-medium">{t('knowledgeBase.noCollections')}</p>
+          <p className="text-sm text-muted-foreground mt-1">{t('knowledgeBase.noCollectionsDesc')}</p>
+          {page.canUpload && (
+            <Button variant="outline" className="mt-4" onClick={page.onCreateCollection}>
+              {t('knowledgeBase.newCollection')}
+            </Button>
+          )}
+        </div>
+      ) : page.filteredCollections.length === 0 ? (
+        <p className="text-center text-sm text-muted-foreground py-8">
+          {t('knowledgeBase.noMatchingCollections')}
+        </p>
+      ) : (
+        <div className="overflow-hidden rounded-lg border bg-card">
+          <Table className="table-fixed w-full">
+            <TableHeader>
+              <TableRow className="hover:bg-transparent">
+                <TableHead className="h-10 w-[34%] min-w-[12rem]">{t('knowledgeBase.nameCol')}</TableHead>
+                <TableHead className="h-10 w-20 text-center">{t('knowledgeBase.docsCol')}</TableHead>
+                <TableHead className="h-10 w-28 hidden md:table-cell">{t('knowledgeBase.ownerCol')}</TableHead>
+                <TableHead className="h-10 w-36 hidden lg:table-cell">{t('knowledgeBase.syncCol')}</TableHead>
+                <TableHead className="h-10 hidden xl:table-cell">{t('knowledgeBase.descCol')}</TableHead>
+                <TableHead className="h-10 w-36 hidden sm:table-cell">{t('knowledgeBase.updatedCol')}</TableHead>
+                <TableHead className="h-10 w-28 text-right">{t('common.action')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {page.filteredCollections.map((collection) => (
+                <TableRow key={collection.id}>
+                  <TableCell className="py-2.5 max-w-0">
+                    <button
+                      type="button"
+                      className="flex items-start gap-2 min-w-0 w-full text-left group"
+                      onClick={() => page.onNavigateToCollection(collection.id)}
+                      aria-label={t('knowledgeBase.openCollection', { name: collection.name })}
+                    >
+                      <FolderOpen className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
+                      <div className="min-w-0 flex-1 space-y-1">
+                        <span className="text-sm font-medium truncate block group-hover:underline">
+                          {collection.name}
+                        </span>
+                        {page.canReadTags && (page.collectionTagsMap[collection.id]?.length || 0) > 0 ? (
+                          <TagChips
+                            tags={page.collectionTagsMap[collection.id]}
+                            tagKeys={page.tagKeys}
+                            compact
+                            maxVisible={2}
+                          />
+                        ) : null}
+                      </div>
+                    </button>
+                  </TableCell>
+                  <TableCell className="py-2.5 text-center text-sm tabular-nums">
+                    {collection.document_count}
+                  </TableCell>
+                  <TableCell className="py-2.5 text-sm hidden md:table-cell truncate">
+                    {collection.owner_name || '—'}
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden lg:table-cell">
+                    {collection.has_drive_sync ? (
+                      <div className="space-y-0.5 min-w-0">
+                        <Badge variant="outline" className="h-5 gap-1 px-1.5 text-[11px] font-normal">
+                          <Cloud className="h-3 w-3" />
+                          {collection.sync_status === 'active'
+                            ? t('knowledgeBase.syncActive')
+                            : t('knowledgeBase.syncStopped')}
+                        </Badge>
+                        {collection.sync_folder_name ? (
+                          <p
+                            className="text-xs text-muted-foreground truncate"
+                            title={collection.sync_folder_name}
+                          >
+                            {t('knowledgeBase.syncFolder', { name: collection.sync_folder_name })}
+                          </p>
+                        ) : null}
+                      </div>
+                    ) : (
+                      <span className="text-sm text-muted-foreground">—</span>
+                    )}
+                  </TableCell>
+                  <TableCell className="py-2.5 hidden xl:table-cell max-w-0">
+                    <p className="text-sm text-muted-foreground truncate" title={collection.description ?? undefined}>
+                      {collection.description || '—'}
+                    </p>
+                  </TableCell>
+                  <TableCell className="py-2.5 text-sm hidden sm:table-cell">
+                    {formatDate(collection.updated_at)}
+                  </TableCell>
+                  <TableCell className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                    <ContainerRowActions
+                      onShare={() => page.onShareCollection(collection)}
+                      shareTitle={t('knowledgeBase.shareCollection')}
+                      tags={{
+                        resourceType: TAG_RESOURCE_TYPES.DOCUMENT_COLLECTION,
+                        resourceId: collection.id,
+                        resourceTitle: collection.name,
+                        canRead: page.canReadTags,
+                        canManage: page.canManageTags,
+                        onTagsUpdated: page.setCollectionTags,
+                      }}
+                      tagsTitle={t('knowledgeBase.collectionTags')}
+                      onEdit={() => page.onEditCollection(collection)}
+                      editHidden={!collection.can_write}
+                      editTitle={t('knowledgeBase.renameCollection')}
+                      onDelete={() => page.onDeleteCollectionClick(collection)}
+                      deleteHidden={!collection.can_write}
+                      deleteTitle={t('knowledgeBase.deleteCollection')}
+                    />
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+      )}
 
-      <KnowledgeBaseDialogs
-        selectedCollection={kb.selectedCollection}
-        canReadTags={kb.canReadTags}
-        canManageTags={kb.canManageTags}
-        formOpen={kb.formOpen}
-        formMode={kb.formMode}
-        isFormSubmitting={kb.isFormSubmitting}
-        shareOpen={kb.shareOpen}
-        tagsOpen={kb.tagsOpen}
-        onTagsOpenChange={kb.setTagsOpen}
-        onCollectionTagsUpdated={kb.setCollectionTags}
-        documentsData={kb.data}
-        deleteBatchConfirm={kb.deleteBatchConfirm}
-        deleteCollectionConfirm={kb.deleteCollectionConfirm}
-        onFormOpenChange={kb.setFormOpen}
-        onCollectionFormSubmit={kb.onCollectionFormSubmit}
-        onShareOpenChange={kb.setShareOpen}
-        onBatchDeleteConfirm={kb.onBatchDeleteConfirm}
-        onDeleteCollectionConfirm={kb.onDeleteCollectionConfirm}
+      <CollectionsDialogs
+        activeCollection={page.activeCollection}
+        canReadTags={page.canReadTags}
+        canManageTags={page.canManageTags}
+        formOpen={page.formOpen}
+        formMode={page.formMode}
+        isFormSubmitting={page.isFormSubmitting}
+        shareOpen={page.shareOpen}
+        tagsOpen={page.tagsOpen}
+        onTagsOpenChange={page.setTagsOpen}
+        onCollectionTagsUpdated={page.setCollectionTags}
+        deleteCollectionConfirm={page.deleteCollectionConfirm}
+        onFormOpenChange={page.setFormOpen}
+        onCollectionFormSubmit={page.onCollectionFormSubmit}
+        onShareOpenChange={page.setShareOpen}
+        onDeleteCollectionConfirm={page.onDeleteCollectionConfirm}
       />
     </div>
   )

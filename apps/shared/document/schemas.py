@@ -100,5 +100,9 @@ class DocumentCollectionResponse(BaseModel):
     document_count: int = 0
     can_write: bool = False
     can_manage: bool = False
+    has_drive_sync: bool = False
+    sync_folder_name: str | None = None
+    sync_status: str | None = None
+    last_synced_at: str | None = None
     created_at: str
     updated_at: str
