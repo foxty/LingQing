@@ -1,5 +1,6 @@
 import AddDataSourceDialog from '@/components/AddDataSourceDialog'
 import ContainerRowActions from '@/components/ContainerRowActions'
+import ListIndexToolbar from '@/components/ListIndexToolbar'
 import PaginationBar from '@/components/PaginationBar'
 import ResourceAclShareDialog from '@/components/ResourceAclShareDialog'
 import TagChips from '@/components/TagChips'
@@ -14,8 +15,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Badge } from '@/components/ui/badge'
-import { Button, buttonVariants } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
+import { buttonVariants } from '@/components/ui/button'
 import {
   Table,
   TableBody,
@@ -34,7 +34,7 @@ import { listAssets } from '@/lib/dataSourceApi'
 import { formatDate } from '@/lib/dateTime'
 import { actionRules } from '@/lib/permissionRules'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
-import { Database, Plus, RefreshCw, Search, X } from 'lucide-react'
+import { Database, RefreshCw } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
@@ -223,72 +223,40 @@ export default function DataSourcesPage() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-semibold">{t('dataSources.title')}</h1>
-          <p className="text-sm text-muted-foreground">{t('dataSources.description')}</p>
-        </div>
-        {canCreate && (
-          <Button onClick={() => setAddDialogOpen(true)}>
-            <Plus className="w-4 h-4 mr-2" />
-            {t('dataSources.addButton')}
-          </Button>
-        )}
+      <div>
+        <h1 className="text-2xl font-semibold">{t('dataSources.title')}</h1>
+        <p className="text-sm text-muted-foreground">{t('dataSources.description')}</p>
       </div>
 
-      {/* Data Sources Section */}
       <div className="space-y-4">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="relative w-full sm:w-72">
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-            <Input
-              placeholder={t('dataSources.searchPlaceholder')}
-              value={searchQuery}
-              onChange={(e) => {
-                setCurrentPage(1)
-                setSearchQuery(e.target.value)
-              }}
-              className="pl-8 h-9"
-            />
-            {searchQuery && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="absolute right-1 top-1 h-7 w-7 p-0"
-                onClick={() => {
-                  setCurrentPage(1)
-                  setSearchQuery('')
-                }}
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            )}
-          </div>
-
-          <div className="flex items-center justify-end gap-2">
-            <Button
-              variant="outline"
-              onClick={() =>
-                fetchDataSources(
-                  currentPage,
-                  DATA_SOURCE_PAGE_SIZE,
-                  searchQuery.trim() || undefined
-                )
-              }
-              disabled={loading}
-              size="sm"
-            >
-              <RefreshCw className={`w-4 h-4 mr-2 ${loading ? 'animate-spin' : ''}`} />
-              {t('common.refresh')}
-            </Button>
-          </div>
-        </div>
+        <ListIndexToolbar
+          searchQuery={searchQuery}
+          searchPlaceholder={t('dataSources.searchPlaceholder')}
+          onSearchQueryChange={(value) => {
+            setCurrentPage(1)
+            setSearchQuery(value)
+          }}
+          onClearSearchQuery={() => {
+            setCurrentPage(1)
+            setSearchQuery('')
+          }}
+          onRefresh={() =>
+            fetchDataSources(currentPage, DATA_SOURCE_PAGE_SIZE, searchQuery.trim() || undefined)
+          }
+          refreshing={loading}
+          refreshLabel={t('common.refresh')}
+          primaryAction={{
+            label: t('dataSources.addButton'),
+            onClick: () => setAddDialogOpen(true),
+            hidden: !canCreate,
+          }}
+        />
 
         {/* Data Sources Table */}
         {loading && dataSources.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-8">{t('common.loading')}</p>
         ) : dataSources.length === 0 ? (
-          <div className="text-center py-12 border rounded-lg bg-muted/20">
+          <div className="text-center py-12 border rounded-lg bg-card">
             <Database className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
             <p className="text-sm text-muted-foreground">
               {searchQuery ? t('dataSources.noMatchingSources') : t('dataSources.noDataSources')}

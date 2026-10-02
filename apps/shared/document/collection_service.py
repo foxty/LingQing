@@ -25,6 +25,7 @@ from apps.shared.document.adapters import db_collection_to_domain, domain_collec
 from apps.shared.document.domain import DocumentCollectionDomain
 from apps.shared.document.repository import DocumentCollectionRepository
 from apps.shared.document.schemas import DocumentCollectionCreate, DocumentCollectionResponse, DocumentCollectionUpdate
+from apps.shared.document.sync_repository import DocumentSyncRepository
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import (
     ABAC_ACTION_READ,
@@ -204,16 +205,27 @@ class DocumentCollectionService(TenantAwareService):
             self.tenant_id,
             scope_clause=None if scope.allow_all else scope.clause,
         )
-        counts = await self._repo.count_documents_by_collection(
+        collection_ids = [c.id for c in collections]
+        counts = await self._repo.count_documents_by_collection(self.tenant_id, collection_ids)
+        connectors = await DocumentSyncRepository(self.db_session).map_connectors_by_collection(
             self.tenant_id,
-            [c.id for c in collections],
+            collection_ids,
         )
         responses: list[DocumentCollectionResponse] = []
         for c in collections:
             domain = db_collection_to_domain(c, document_count=counts.get(c.id, 0))
             can_write, can_manage = await self._collection_capabilities(domain, actor)
+            connector = connectors.get(c.id)
             responses.append(
-                domain_collection_to_api(domain, can_write=can_write, can_manage=can_manage),
+                domain_collection_to_api(
+                    domain,
+                    can_write=can_write,
+                    can_manage=can_manage,
+                    has_drive_sync=connector is not None,
+                    sync_folder_name=connector.source_folder_name if connector else None,
+                    sync_status=connector.status if connector else None,
+                    last_synced_at=connector.last_synced_at.isoformat() if connector and connector.last_synced_at else None,
+                ),
             )
         return responses
 
@@ -224,7 +236,19 @@ class DocumentCollectionService(TenantAwareService):
             action=ABAC_ACTION_READ,
         )
         can_write, can_manage = await self._collection_capabilities(collection, actor)
-        return domain_collection_to_api(collection, can_write=can_write, can_manage=can_manage)
+        connector = await DocumentSyncRepository(self.db_session).get_connector_by_collection(
+            self.tenant_id,
+            collection_id,
+        )
+        return domain_collection_to_api(
+            collection,
+            can_write=can_write,
+            can_manage=can_manage,
+            has_drive_sync=connector is not None,
+            sync_folder_name=connector.source_folder_name if connector else None,
+            sync_status=connector.status if connector else None,
+            last_synced_at=connector.last_synced_at.isoformat() if connector and connector.last_synced_at else None,
+        )
 
     async def create_collection(
         self,

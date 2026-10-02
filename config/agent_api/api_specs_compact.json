@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-01T14:13:53.777457+00:00",
+  "generated_at": "2026-10-02T04:13:13.537324+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -4117,6 +4117,44 @@
             "type": "boolean",
             "title": "Can Manage",
             "default": false
+          },
+          "has_drive_sync": {
+            "type": "boolean",
+            "title": "Has Drive Sync",
+            "default": false
+          },
+          "sync_folder_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Folder Name"
+          },
+          "sync_status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sync Status"
+          },
+          "last_synced_at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Last Synced At"
           },
           "created_at": {
             "type": "string",

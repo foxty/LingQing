@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 
 import ContainerDetailHeader from '@/components/ContainerDetailHeader'
+import ListDetailToolbar from '@/components/ListDetailToolbar'
 import ApiOperationCallDialog from '@/components/ApiOperationCallDialog'
 import ApiOperationTable from '@/components/ApiOperationTable'
 import ImportOpenApiDialog from '@/components/ImportOpenApiDialog'
@@ -10,7 +11,6 @@ import type { ManualOperationValues } from '@/components/ManualOperationDialog'
 import OpenApiMetaPanel from '@/components/OpenApiMetaPanel'
 import PageStatsActionBar from '@/components/PageStatsActionBar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Button } from '@/components/ui/button'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useApiConnectors } from '@/hooks/useApiConnectors'
 import { useNotification } from '@/hooks/useNotification'
@@ -36,9 +36,15 @@ i18n.addResourceBundle('en', 'translation', {
     apiDistribution: 'API Distribution',
     byStatus: 'By Status',
     bySource: 'By Source',
+    statusActive: 'Active',
+    statusDisabled: 'Disabled',
+    statusStale: 'Stale',
+    sourceManual: 'Manual',
+    sourceImported: 'Imported',
     share: 'Share',
     modify: 'Modify',
     addApi: 'Add API',
+    searchOperations: 'Search operations...',
     importOpenApi: 'Import OpenAPI',
     syncSchema: 'Sync Schema',
     loadOperationsFailed: 'Failed to load operations',
@@ -81,9 +87,15 @@ i18n.addResourceBundle('zh', 'translation', {
     apiDistribution: 'API分布',
     byStatus: '按状态',
     bySource: '按来源',
+    statusActive: '启用',
+    statusDisabled: '停用',
+    statusStale: '过期',
+    sourceManual: '手动',
+    sourceImported: '导入',
     share: '分享',
     modify: '修改',
     addApi: '添加API',
+    searchOperations: '搜索操作...',
     importOpenApi: '导入OpenAPI',
     syncSchema: '同步模式',
     loadOperationsFailed: '加载操作失败',
@@ -441,42 +453,6 @@ export default function ApiConnectorDetailPage() {
             <span className="font-mono text-xs">{selectedConnector.base_url}</span>
           ) : null
         }
-        primaryAction={
-          selectedConnector ? (
-            <>
-              <Button disabled={loading} onClick={() => setAddOperationDialogOpen(true)}>
-                <Plus className="w-4 h-4 mr-2" />
-                {t('apiConnectorDetail.addApi')}
-              </Button>
-              <ManualOperationDialog
-                mode="create"
-                open={addOperationDialogOpen}
-                onOpenChange={setAddOperationDialogOpen}
-                disabled={loading}
-                onSubmit={handleAddManualOperation}
-              />
-            </>
-          ) : null
-        }
-        overflowItems={
-          selectedConnector
-            ? [
-                selectedConnector.schema_source_type === 'openapi_upload'
-                  ? {
-                      label: t('apiConnectorDetail.importOpenApi'),
-                      icon: Upload,
-                      onClick: handleImportOpenApi,
-                    }
-                  : {
-                      label: t('apiConnectorDetail.syncSchema'),
-                      icon: RefreshCw,
-                      onClick: handleSyncSchemaClick,
-                    },
-              ]
-            : undefined
-        }
-        onRefresh={selectedConnector ? handleRefresh : undefined}
-        refreshing={loading}
       />
 
       {error && (
@@ -523,15 +499,15 @@ export default function ApiConnectorDetailPage() {
                                 <div className="mb-1 text-xs text-muted-foreground">{t('apiConnectorDetail.byStatus')}</div>
                                 <div className="space-y-1 text-xs">
                                   <div className="flex items-center justify-between">
-                                    <span>Active</span>
+                                    <span>{t('apiConnectorDetail.statusActive')}</span>
                                     <span className="font-medium">{operationStats.active}</span>
                                   </div>
                                   <div className="flex items-center justify-between">
-                                    <span>Disabled</span>
+                                    <span>{t('apiConnectorDetail.statusDisabled')}</span>
                                     <span className="font-medium">{operationStats.disabled}</span>
                                   </div>
                                   <div className="flex items-center justify-between">
-                                    <span>Stale</span>
+                                    <span>{t('apiConnectorDetail.statusStale')}</span>
                                     <span className="font-medium">{operationStats.stale}</span>
                                   </div>
                                 </div>
@@ -540,11 +516,11 @@ export default function ApiConnectorDetailPage() {
                                 <div className="mb-1 text-xs text-muted-foreground">{t('apiConnectorDetail.bySource')}</div>
                                 <div className="space-y-1 text-xs">
                                   <div className="flex items-center justify-between">
-                                    <span>Manual</span>
+                                    <span>{t('apiConnectorDetail.sourceManual')}</span>
                                     <span className="font-medium">{operationStats.manual}</span>
                                   </div>
                                   <div className="flex items-center justify-between">
-                                    <span>Imported</span>
+                                    <span>{t('apiConnectorDetail.sourceImported')}</span>
                                     <span className="font-medium">{operationStats.imported}</span>
                                   </div>
                                 </div>
@@ -567,19 +543,55 @@ export default function ApiConnectorDetailPage() {
               disabled={loading}
               onImport={(content) => handleSyncSchema(content)}
             />
-            <ApiOperationTable
-              operations={operations}
-              selectedOperationUid={selectedOperation?.operation_uid}
+            <ListDetailToolbar
               searchQuery={searchQuery}
+              searchPlaceholder={t('apiConnectorDetail.searchOperations')}
               onSearchQueryChange={setSearchQuery}
-              onSearch={() => {
-                void handleSearchOperations()
-              }}
-              onClearSearch={() => {
+              onClearSearchQuery={() => {
                 setSearchQuery('')
                 setAppliedQuery('')
                 setCurrentPage(1)
               }}
+              onSearchSubmit={() => {
+                void handleSearchOperations()
+              }}
+              primaryAction={{
+                label: t('apiConnectorDetail.addApi'),
+                onClick: () => setAddOperationDialogOpen(true),
+                icon: Plus,
+                disabled: loading,
+              }}
+              overflowItems={[
+                {
+                  label: t('common.refresh'),
+                  icon: RefreshCw,
+                  onClick: () => {
+                    void handleRefresh()
+                  },
+                },
+                selectedConnector.schema_source_type === 'openapi_upload'
+                  ? {
+                      label: t('apiConnectorDetail.importOpenApi'),
+                      icon: Upload,
+                      onClick: handleImportOpenApi,
+                    }
+                  : {
+                      label: t('apiConnectorDetail.syncSchema'),
+                      icon: RefreshCw,
+                      onClick: handleSyncSchemaClick,
+                    },
+              ]}
+            />
+            <ManualOperationDialog
+              mode="create"
+              open={addOperationDialogOpen}
+              onOpenChange={setAddOperationDialogOpen}
+              disabled={loading}
+              onSubmit={handleAddManualOperation}
+            />
+            <ApiOperationTable
+              operations={operations}
+              selectedOperationUid={selectedOperation?.operation_uid}
               onSelectOperation={setSelectedOperation}
               onTestOperation={handleOpenOperationTest}
               onToggleOperationStatus={(operation) => {

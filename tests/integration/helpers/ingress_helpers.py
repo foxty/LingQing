@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import time
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
 
@@ -21,6 +22,23 @@ async def set_workspace_bind_policy(session_factory, *, tenant_id: int, team_id:
         source = await source_repo.ensure_slack_workspace_source(tenant_id=tenant_id, team_id=team_id)
         await IdentitySourceRepository(session).update_bind_policy(tenant_id, source.id, bind_policy)
         await session.commit()
+
+
+async def wait_until_background(assertion_coro, timeout_seconds: float = 8.0) -> None:
+    """Poll until assertion passes (for asyncio background ingress tasks)."""
+    deadline = time.monotonic() + timeout_seconds
+    last_error = None
+    while time.monotonic() < deadline:
+        try:
+            await assertion_coro()
+            return
+        except AssertionError as exc:
+            last_error = exc
+            await asyncio.sleep(0.2)
+
+    if last_error is not None:
+        raise last_error
+    raise AssertionError("Condition was not met before timeout")
 
 
 async def post_slack_dm(

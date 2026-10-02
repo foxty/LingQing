@@ -1,5 +1,6 @@
 import AssetSchemaDialog from '@/components/AssetSchemaDialog'
 import ContainerDetailHeader from '@/components/ContainerDetailHeader'
+import ListDetailToolbar from '@/components/ListDetailToolbar'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import CSVUploadDialog from '@/components/CSVUploadDialog'
 import PaginationBar from '@/components/PaginationBar'
@@ -9,7 +10,13 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Input } from '@/components/ui/input'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
 import {
   Table,
   TableBody,
@@ -30,7 +37,7 @@ import {
   type AssetMetadata,
   type DataSource,
 } from '@/lib/dataSourceApi'
-import { Info, RefreshCw, Search, Table2, Trash2, Upload } from 'lucide-react'
+import { Info, MoreHorizontal, RefreshCw, Table2, Trash2, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
@@ -66,6 +73,8 @@ i18n.addResourceBundle('en', 'translation', {
     shareDataSource: 'Share Data Source',
     dataSourceTags: 'Data Source Tags',
     deleteAsset: 'Delete',
+    syncMetadata: 'Sync metadata',
+    rowActions: 'Asset actions',
     dataSourceNotExists: 'Data source not found',
     fetchFailed: 'Failed to fetch data',
     metadataUpdated: 'Metadata updated for {{name}}',
@@ -119,6 +128,7 @@ i18n.addResourceBundle('zh', 'translation', {
     dataSourceTags: '数据源标签',
     syncMetadata: '同步元数据',
     deleteAsset: '删除',
+    rowActions: '资产操作',
     dataSourceNotExists: '数据源不存在',
     fetchFailed: '获取数据失败',
     metadataUpdated: '{{name}}的元数据已更新',
@@ -403,45 +413,47 @@ export default function DataAssetsPage() {
             ) : null}
           </>
         }
-        primaryAction={
-          dataSource.managed ? (
-            <Button onClick={() => setUploadDialogOpen(true)}>
-              <Upload className="w-4 h-4 mr-2" />
-              {t('dataAssets.uploadCsv')}
-            </Button>
-          ) : (
-            <Button onClick={() => setSelectAssetsDialogOpen(true)}>
-              <Upload className="w-4 h-4 mr-2" />
-              {t('dataAssets.addAsset')}
-            </Button>
-          )
-        }
-        onRefresh={() => fetchData(currentPage, normalizedQuery)}
-        refreshing={assetsLoading}
-        trailingActions={
-          selectedAssets.length > 0 ? (
-            <Button onClick={handleBatchDeleteClick} variant="outline" size="sm">
-              <Trash2 className="w-4 h-4 mr-2" />
-              {t('dataAssets.deleteSelected', { count: selectedAssets.length })}
-            </Button>
-          ) : null
-        }
       />
 
-      {/* Search Bar */}
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-        <Input
-          placeholder={t('dataAssets.searchPlaceholder')}
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-          className="pl-9"
-        />
-      </div>
+      <ListDetailToolbar
+        searchQuery={searchQuery}
+        searchPlaceholder={t('dataAssets.searchPlaceholder')}
+        onSearchQueryChange={setSearchQuery}
+        onClearSearchQuery={() => setSearchQuery('')}
+        primaryAction={
+          dataSource.managed
+            ? {
+                label: t('dataAssets.uploadCsv'),
+                onClick: () => setUploadDialogOpen(true),
+                icon: Upload,
+              }
+            : {
+                label: t('dataAssets.addAsset'),
+                onClick: () => setSelectAssetsDialogOpen(true),
+                icon: Upload,
+              }
+        }
+        batchAction={
+          selectedAssets.length > 0
+            ? {
+                label: t('dataAssets.deleteSelected', { count: selectedAssets.length }),
+                onClick: handleBatchDeleteClick,
+                icon: Trash2,
+              }
+            : undefined
+        }
+        overflowItems={[
+          {
+            label: t('common.refresh'),
+            icon: RefreshCw,
+            onClick: () => fetchData(currentPage, normalizedQuery),
+          },
+        ]}
+      />
 
       {/* Assets Table */}
       {assets.length === 0 ? (
-        <div className="text-center py-12 border rounded-lg bg-muted/20">
+        <div className="text-center py-12 border rounded-lg bg-card">
           <Table2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
           <p className="text-sm text-muted-foreground">
             {searchQuery ? t('dataAssets.noMatchingAssets') : t('dataAssets.noDataAssets')}
@@ -516,32 +528,39 @@ export default function DataAssetsPage() {
                     </TableCell>
                     <TableCell className="py-2.5 text-sm">{renderMetadataSyncStatus(asset)}</TableCell>
                     <TableCell className="py-2.5 text-sm">{renderVectorSyncStatus(asset)}</TableCell>
-                    <TableCell className="py-2.5 text-right">
-                      <div className="flex items-center justify-end gap-1">
-                        {!dataSource.managed && (
+                    <TableCell className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
                           <Button
-                            size="sm"
                             variant="ghost"
-                            onClick={() => handleSyncAsset(asset)}
-                            disabled={syncingAssetIds.has(asset.id)}
-                            className="h-8 w-8 p-0"
-                            title={t('dataAssets.syncMetadata')}
+                            className="h-11 w-11 p-0"
+                            aria-label={t('dataAssets.rowActions')}
                           >
-                            <RefreshCw
-                              className={`w-4 h-4 ${syncingAssetIds.has(asset.id) ? 'animate-spin' : ''}`}
-                            />
+                            <MoreHorizontal className="w-4 h-4" />
                           </Button>
-                        )}
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          onClick={() => handleDeleteClick(asset)}
-                          className="h-8 w-8 p-0"
-                          title={t('dataAssets.deleteAsset')}
-                        >
-                          <Trash2 className="w-4 h-4 text-destructive" />
-                        </Button>
-                      </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                          {!dataSource.managed ? (
+                            <DropdownMenuItem
+                              disabled={syncingAssetIds.has(asset.id)}
+                              onClick={() => handleSyncAsset(asset)}
+                            >
+                              <RefreshCw
+                                className={`w-4 h-4 mr-2 ${syncingAssetIds.has(asset.id) ? 'animate-spin' : ''}`}
+                              />
+                              {t('dataAssets.syncMetadata')}
+                            </DropdownMenuItem>
+                          ) : null}
+                          {!dataSource.managed ? <DropdownMenuSeparator /> : null}
+                          <DropdownMenuItem
+                            className="text-destructive focus:text-destructive"
+                            onClick={() => handleDeleteClick(asset)}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            {t('dataAssets.deleteAsset')}
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
                     </TableCell>
                   </TableRow>
                 ))}

@@ -8,7 +8,11 @@ from uuid import uuid4
 import pytest
 
 from tests.integration.conftest import make_auth_headers
-from tests.integration.helpers.ingress_helpers import post_slack_dm, seed_pending_slack_identity
+from tests.integration.helpers.ingress_helpers import (
+    post_slack_dm,
+    seed_pending_slack_identity,
+    wait_until_background,
+)
 from tests.integration.test_slack_config_api import _create_test_agent
 
 
@@ -76,14 +80,17 @@ class TestSlackIngressFailures:
             return MagicMock(response=MagicMock(content="welcome back"))
 
         monkeypatch.setattr(
-            "apps.tenant_app_service.slack.ingress_service.ChatService.chat",
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.chat",
             fake_chat,
         )
 
         fake.posted_messages.clear()
-        await post_slack_dm(slack_test_setup, slack_user=slack_user, wait_seconds=0.5)
+        await post_slack_dm(slack_test_setup, slack_user=slack_user, wait_seconds=0)
 
-        assert captured.get("called") is True
+        async def _assert_chat_invoked() -> None:
+            assert captured.get("called") is True
+
+        await wait_until_background(_assert_chat_invoked)
 
     @pytest.mark.asyncio
     async def test_seeded_pending_can_be_rejected(self, slack_test_setup):

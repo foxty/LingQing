@@ -249,6 +249,26 @@ class DocumentSyncRepository:
         )
         return result.scalar_one_or_none()
 
+    async def map_connectors_by_collection(
+        self,
+        tenant_id: int,
+        collection_ids: list[int],
+    ) -> dict[int, DocumentSyncConnector]:
+        """Return sync connectors keyed by collection id (at most one per collection)."""
+        if not collection_ids:
+            return {}
+        result = await self.db.execute(
+            select(DocumentSyncConnector).where(
+                DocumentSyncConnector.tenant_id == tenant_id,
+                DocumentSyncConnector.collection_id.in_(collection_ids),
+            )
+        )
+        return {
+            connector.collection_id: connector
+            for connector in result.scalars().all()
+            if connector.collection_id is not None
+        }
+
     async def create_connector(
         self,
         *,
