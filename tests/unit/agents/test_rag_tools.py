@@ -23,14 +23,28 @@ class _FakeSessionContext:
         return False
 
 
+@pytest.fixture(autouse=True)
+def mock_embeddings_resolver(monkeypatch):
+    fake_embeddings = object()
+
+    async def _resolve(_tenant_id, _session):
+        return fake_embeddings
+
+    monkeypatch.setattr(
+        "apps.shared.llm_providers.embedding_resolver.resolve_tenant_embeddings",
+        _resolve,
+    )
+    return fake_embeddings
+
+
 @pytest.mark.asyncio
 async def test_search_documents_success(monkeypatch, runnable_config):
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
             assert tenant_id == 1
             assert user_id == 123
             assert user_role == "admin"
-            assert tenant_config == {}  # tenant_config from runtime_context fixture
+            assert embeddings is not None
 
         async def search_documents(self, *, query, page, page_size):
             assert query == "orders"
@@ -55,13 +69,13 @@ async def test_search_documents_success(monkeypatch, runnable_config):
 
 
 @pytest.mark.asyncio
-async def test_search_documents_passes_tenant_config(monkeypatch, runnable_config):
-    """Verify tenant_config is passed to SearchService."""
-    captured_config = {}
+async def test_search_documents_passes_embeddings(monkeypatch, runnable_config, mock_embeddings_resolver):
+    """Verify registry embeddings are passed to SearchService."""
+    captured = {}
 
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
-            captured_config["tenant_config"] = tenant_config
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
+            captured["embeddings"] = embeddings
 
         async def search_documents(self, *, query, page, page_size):
             return [], PaginationRequest(page=1, page_size=page_size, total=0)
@@ -74,13 +88,13 @@ async def test_search_documents_passes_tenant_config(monkeypatch, runnable_confi
         config=runnable_config,
     )
 
-    assert captured_config["tenant_config"] == {}
+    assert captured["embeddings"] is mock_embeddings_resolver
 
 
 @pytest.mark.asyncio
 async def test_search_data_assets_success(monkeypatch, runnable_config):
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
             pass
 
         async def search_assets(self, *, query, page, page_size):
@@ -100,13 +114,13 @@ async def test_search_data_assets_success(monkeypatch, runnable_config):
 
 
 @pytest.mark.asyncio
-async def test_search_data_assets_passes_tenant_config(monkeypatch, runnable_config):
-    """Verify tenant_config is passed to SearchService for asset search."""
-    captured_config = {}
+async def test_search_data_assets_passes_embeddings(monkeypatch, runnable_config, mock_embeddings_resolver):
+    """Verify registry embeddings are passed to SearchService for asset search."""
+    captured = {}
 
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
-            captured_config["tenant_config"] = tenant_config
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
+            captured["embeddings"] = embeddings
 
         async def search_assets(self, *, query, page, page_size):
             return [], PaginationRequest(page=1, page_size=page_size, total=0)
@@ -119,13 +133,13 @@ async def test_search_data_assets_passes_tenant_config(monkeypatch, runnable_con
         config=runnable_config,
     )
 
-    assert captured_config["tenant_config"] == {}
+    assert captured["embeddings"] is mock_embeddings_resolver
 
 
 @pytest.mark.asyncio
 async def test_search_apis_success(monkeypatch, runnable_config):
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
             pass
 
         async def search_api_connectors(self, *, query, page, page_size):
@@ -145,13 +159,13 @@ async def test_search_apis_success(monkeypatch, runnable_config):
 
 
 @pytest.mark.asyncio
-async def test_search_apis_passes_tenant_config(monkeypatch, runnable_config):
-    """Verify tenant_config is passed to SearchService for API search."""
-    captured_config = {}
+async def test_search_apis_passes_embeddings(monkeypatch, runnable_config, mock_embeddings_resolver):
+    """Verify registry embeddings are passed to SearchService for API search."""
+    captured = {}
 
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
-            captured_config["tenant_config"] = tenant_config
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
+            captured["embeddings"] = embeddings
 
         async def search_api_connectors(self, *, query, page, page_size):
             return [], PaginationRequest(page=1, page_size=page_size, total=0)
@@ -164,7 +178,7 @@ async def test_search_apis_passes_tenant_config(monkeypatch, runnable_config):
         config=runnable_config,
     )
 
-    assert captured_config["tenant_config"] == {}
+    assert captured["embeddings"] is mock_embeddings_resolver
 
 
 @pytest.mark.asyncio
@@ -177,7 +191,7 @@ async def test_retrieve_resource_context_invalid_type(monkeypatch, runnable_conf
 @pytest.mark.asyncio
 async def test_retrieve_resource_context_document_success(monkeypatch, runnable_config):
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
             self.tenant_id = tenant_id
             self.session = session
             self.user_id = user_id
@@ -211,7 +225,7 @@ async def test_retrieve_resource_context_document_success(monkeypatch, runnable_
 @pytest.mark.asyncio
 async def test_retrieve_resource_context_batch_anchors(monkeypatch, runnable_config):
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
             self.tenant_id = tenant_id
 
         async def get_resource_context_chunks_for_anchors(self, **kwargs):
@@ -255,13 +269,14 @@ async def test_retrieve_resource_context_rejects_too_many_chunk_indexes(monkeypa
 
 
 @pytest.mark.asyncio
-async def test_retrieve_resource_context_passes_tenant_config(monkeypatch, runnable_config):
-    """Verify tenant_config is passed to SearchService for resource context retrieval."""
-    captured_config = {}
+async def test_retrieve_resource_context_passes_embeddings(monkeypatch, runnable_config):
+    """Verify registry embeddings are passed to SearchService for resource context retrieval."""
+    captured = {}
+    fake_embeddings = object()
 
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
-            captured_config["tenant_config"] = tenant_config
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
+            captured["embeddings"] = embeddings
             self.tenant_id = tenant_id
             self.session = session
             self.user_id = user_id
@@ -270,8 +285,15 @@ async def test_retrieve_resource_context_passes_tenant_config(monkeypatch, runna
         async def get_resource_context_chunks_for_anchors(self, **kwargs):
             return [ResourceContextChunk(chunk_index=1, total_chunks=10, content="test")]
 
+    async def _fake_resolve(_tenant_id, _session):
+        return fake_embeddings
+
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.app_db_session", lambda: _FakeSessionContext())
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.SearchService", _FakeSearchService)
+    monkeypatch.setattr(
+        "apps.shared.llm_providers.embedding_resolver.resolve_tenant_embeddings",
+        _fake_resolve,
+    )
 
     await retrieve_resource_context.ainvoke(
         {
@@ -282,12 +304,12 @@ async def test_retrieve_resource_context_passes_tenant_config(monkeypatch, runna
         config=runnable_config,
     )
 
-    assert captured_config["tenant_config"] == {}
+    assert captured["embeddings"] is fake_embeddings
 
 
 @pytest.mark.asyncio
-async def test_search_documents_with_embedding_config(monkeypatch):
-    """Test that tenant_config with embedding settings is passed correctly."""
+async def test_search_documents_resolves_registry_embeddings(monkeypatch):
+    """Test that SearchService receives embeddings from the registry resolver."""
     from langchain_core.runnables import RunnableConfig
 
     from apps.tenant_app_service.agents.domain import (
@@ -296,30 +318,31 @@ async def test_search_documents_with_embedding_config(monkeypatch):
         AgentUserContext,
     )
 
-    captured_config = {}
+    captured = {}
+    fake_embeddings = object()
 
     class _FakeSearchService:
-        def __init__(self, tenant_id, session, user_id, user_role, tenant_config=None, **_kwargs):
-            captured_config["tenant_config"] = tenant_config
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
+            captured["embeddings"] = embeddings
 
         async def search_documents(self, *, query, page, page_size):
             return [], PaginationRequest(page=1, page_size=page_size, total=0)
 
+    async def _fake_resolve(_tenant_id, _session):
+        return fake_embeddings
+
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.app_db_session", lambda: _FakeSessionContext())
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.SearchService", _FakeSearchService)
+    monkeypatch.setattr(
+        "apps.shared.llm_providers.embedding_resolver.resolve_tenant_embeddings",
+        _fake_resolve,
+    )
 
-    # Create runtime context with embedding config
-    tenant_config_with_embedding = {
-        "embedding": {
-            "model": "text-embedding-3-large",
-            "dimension": 1024,
-        }
-    }
     runtime_ctx = AgentRuntimeContext(
         tenant=AgentTenantContext(
             tenant_id=1,
             tenant_name="test_tenant",
-            config=tenant_config_with_embedding,
+            config={},
         ),
         user=AgentUserContext(
             user_id=123,
@@ -346,6 +369,4 @@ async def test_search_documents_with_embedding_config(monkeypatch):
         config=config,
     )
 
-    assert captured_config["tenant_config"] == tenant_config_with_embedding
-    assert captured_config["tenant_config"]["embedding"]["model"] == "text-embedding-3-large"
-    assert captured_config["tenant_config"]["embedding"]["dimension"] == 1024
+    assert captured["embeddings"] is fake_embeddings

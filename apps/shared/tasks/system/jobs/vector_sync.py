@@ -91,16 +91,11 @@ async def sync_to_vector_db(
     started_at = perf_counter()
     try:
         async with app_db_session() as session:
-            tenant_result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
-            tenant = tenant_result.scalar_one_or_none()
-            tenant_config = tenant.config if tenant else None
-
             file_storage = get_file_storage()
-            index_service = ResourceIndexService(
+            index_service = await ResourceIndexService.create(
                 tenant_id=tenant_id,
                 db_session=session,
                 file_storage=file_storage,
-                tenant_config=tenant_config,
             )
 
             if mode == "full":
@@ -215,11 +210,7 @@ async def _cleanup_by_resource_type(
     logger.info(f"[START] {source_label} orphan cleanup{dry_run_tag} | tenant={tenant_id}")
     try:
         async with app_db_session() as session:
-            tenant_result = await session.execute(select(Tenant).where(Tenant.id == tenant_id))
-            tenant = tenant_result.scalar_one_or_none()
-            tenant_config = tenant.config if tenant else None
-
-            index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session, tenant_config=tenant_config)
+            index_service = await ResourceIndexService.create(tenant_id=tenant_id, db_session=session)
             result = await index_service.cleanup_orphan_vectors(resource_type, dry_run=dry_run)
 
             if result["orphaned_count"] == 0:

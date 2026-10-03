@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field
 
 
 class ModelInfoDTO(BaseModel):
-    """Model information from models.yaml registry."""
+    """Model information from providers.yaml catalog."""
 
     key: str = Field(..., description="Model key identifier")
     name: str = Field(..., description="Human-readable model name")

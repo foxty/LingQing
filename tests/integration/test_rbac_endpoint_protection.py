@@ -80,9 +80,24 @@ PROTECTED_ENDPOINTS = [
     ("GET", "/documents", Permissions.DOCUMENTS_READ),
     ("POST", "/documents/upload", Permissions.DOCUMENTS_WRITE),
     ("DELETE", "/documents", Permissions.DOCUMENTS_WRITE),
+    # LLM Config — platform catalog (read-only presets)
+    ("GET", "/llm-config/providers", Permissions.TENANT_SETTINGS_READ),
+    ("GET", "/llm-config/providers/by-category?category=llm", Permissions.TENANT_SETTINGS_READ),
+    ("GET", "/llm-config/models?category=llm", Permissions.TENANT_SETTINGS_READ),
+    # LLM Config — tenant registry
+    ("GET", "/llm-config/registry/providers", Permissions.TENANT_SETTINGS_READ),
+    ("POST", "/llm-config/registry/providers", Permissions.TENANT_SETTINGS_WRITE),
+    ("PUT", "/llm-config/registry/providers/{provider_id}", Permissions.TENANT_SETTINGS_WRITE),
+    ("DELETE", "/llm-config/registry/providers/{provider_id}", Permissions.TENANT_SETTINGS_WRITE),
+    ("POST", "/llm-config/registry/providers/{provider_id}/test", Permissions.TENANT_SETTINGS_READ),
+    ("GET", "/llm-config/registry/profiles", Permissions.TENANT_SETTINGS_READ),
+    ("POST", "/llm-config/registry/profiles", Permissions.TENANT_SETTINGS_WRITE),
+    ("PUT", "/llm-config/registry/profiles/{profile_id}", Permissions.TENANT_SETTINGS_WRITE),
+    ("DELETE", "/llm-config/registry/profiles/{profile_id}", Permissions.TENANT_SETTINGS_WRITE),
+    ("POST", "/llm-config/registry/profiles/{profile_id}/test", Permissions.TENANT_SETTINGS_READ),
+    ("GET", "/llm-config/registry/defaults", Permissions.TENANT_SETTINGS_READ),
+    ("PUT", "/llm-config/registry/defaults", Permissions.TENANT_SETTINGS_WRITE),
     # Tenant Management Endpoints
-    ("GET", "/tenants/settings", Permissions.TENANT_SETTINGS_READ),
-    ("PUT", "/tenants/settings", Permissions.TENANT_SETTINGS_WRITE),
     ("GET", "/tenants/users", Permissions.USERS_MANAGE),
     ("POST", "/tenants/users", Permissions.USERS_MANAGE),
     ("PUT", "/tenants/users/{user_id}", Permissions.USERS_MANAGE),
@@ -170,6 +185,8 @@ class TestRBACEndpointProtection:
         test_path = test_path.replace("{user_id}", "1")
         test_path = test_path.replace("{widget_id}", "widget-1")
         test_path = test_path.replace("{filter_id}", "filter-1")
+        test_path = test_path.replace("{provider_id}", "1")
+        test_path = test_path.replace("{profile_id}", "1")
 
         # 1. Test unauthenticated request → 401
         headers: dict[str, str] = {}  # No authorization header

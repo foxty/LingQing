@@ -145,8 +145,8 @@ class TestGetProperty:
 
         assert manager.get_property("nonexistent") is None
 
-    def test_model_key_accessor(self, minimal_yaml):
+    def test_model_profile_id_accessor(self, minimal_yaml):
         loader = AgentConfigLoader(config_path=str(minimal_yaml))
         manager = _manager(loader)
 
-        assert manager.model_key() is None
+        assert manager.model_profile_id() is None

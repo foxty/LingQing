@@ -67,7 +67,7 @@ class AgentLoadedConfig(TypedDict, total=False):
     system_prompt: str
     default_tools: list[AgentToolYaml]
     example_questions: list[str]
-    model_key: str
+    model_profile_id: int | None
     temperature: float
     top_p: float
     max_tokens: int

@@ -344,14 +344,12 @@ class AgentConfigLoader:
         self,
         agent_id: int | None = None,
         agent_name: str | None = None,
-        model_key: str | None = None,
     ) -> MiniAgentConfig:
         """Create MiniAgentConfig by merging YAML + Python configs.
 
         Args:
             agent_id: Mini agent ID (optional if agent_name provided)
             agent_name: Mini agent name (optional if agent_id provided)
-            model_key: Optional model key override (rarely needed)
 
         Returns:
             MiniAgentConfig instance
@@ -377,14 +375,10 @@ class AgentConfigLoader:
         if response_format_ref and response_format_ref in RESPONSE_FORMAT_REGISTRY:
             response_format = RESPONSE_FORMAT_REGISTRY[response_format_ref]
 
-        # All config from YAML, model_key override only when necessary
-        final_model_key = model_key or preset.get("model_key")
-
         return MiniAgentConfig(
             agent_id=preset["agent_id"],
             agent_name=preset["agent_name"],
             system_prompt=preset["system_prompt"],
-            model_key=final_model_key,
             temperature=preset.get("temperature"),
             max_tokens=preset.get("max_tokens"),
             response_format=response_format,

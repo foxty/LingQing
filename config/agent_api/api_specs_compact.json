@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-02T04:13:13.537324+00:00",
+  "generated_at": "2026-10-02T13:56:12.931423+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -176,16 +176,16 @@
             "type": "array",
             "title": "Api Connector Ids"
           },
-          "model_key": {
+          "model_profile_id": {
             "anyOf": [
               {
-                "type": "string"
+                "type": "integer"
               },
               {
                 "type": "null"
               }
             ],
-            "title": "Model Key"
+            "title": "Model Profile Id"
           }
         },
         "type": "object",
@@ -2487,6 +2487,118 @@
         "title": "CreateAgentSlackIntegrationRequest",
         "description": "Create a Slack bot for a specific agent."
       },
+      "CreateLLMModelProfileRequest": {
+        "properties": {
+          "provider_id": {
+            "type": "integer",
+            "title": "Provider Id"
+          },
+          "name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Name"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ModelProfileCategory"
+          },
+          "model_id": {
+            "type": "string",
+            "maxLength": 255,
+            "minLength": 1,
+            "title": "Model Id"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelParamsDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catalog_model_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Model Key"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source",
+            "default": "preset"
+          }
+        },
+        "type": "object",
+        "required": [
+          "provider_id",
+          "name",
+          "category",
+          "model_id"
+        ],
+        "title": "CreateLLMModelProfileRequest"
+      },
+      "CreateLLMProviderRequest": {
+        "properties": {
+          "display_name": {
+            "type": "string",
+            "maxLength": 100,
+            "minLength": 1,
+            "title": "Display Name"
+          },
+          "preset_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Key"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "default": "openai-compatible"
+          },
+          "api_base": {
+            "type": "string",
+            "maxLength": 1024,
+            "minLength": 1,
+            "title": "Api Base"
+          },
+          "embedding_api_base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Api Base"
+          },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key",
+            "default": ""
+          }
+        },
+        "type": "object",
+        "required": [
+          "display_name",
+          "api_base"
+        ],
+        "title": "CreateLLMProviderRequest"
+      },
       "CreateSyncConnectorRequest": {
         "properties": {
           "source_connection_id": {
@@ -4623,84 +4735,6 @@
         ],
         "title": "DrivePickerConfigResponse"
       },
-      "EmbeddingModelConfigDTO": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Display name for the embedding model",
-            "default": ""
-          },
-          "type": {
-            "type": "string",
-            "title": "Type",
-            "description": "Model type: openai-compatible",
-            "default": "openai-compatible"
-          },
-          "api_base": {
-            "type": "string",
-            "title": "Api Base",
-            "description": "API base URL"
-          },
-          "api_key": {
-            "type": "string",
-            "title": "Api Key",
-            "description": "API key (will be encrypted before storage). Empty to keep existing key.",
-            "default": ""
-          },
-          "model_id": {
-            "type": "string",
-            "title": "Model Id",
-            "description": "Embedding model identifier"
-          }
-        },
-        "type": "object",
-        "required": [
-          "api_base",
-          "model_id"
-        ],
-        "title": "EmbeddingModelConfigDTO",
-        "description": "Embedding model configuration."
-      },
-      "EmbeddingModelConfigResponseDTO": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Display name for the embedding model"
-          },
-          "type": {
-            "type": "string",
-            "title": "Type",
-            "description": "Model type"
-          },
-          "api_base": {
-            "type": "string",
-            "title": "Api Base",
-            "description": "API base URL"
-          },
-          "api_key_masked": {
-            "type": "string",
-            "title": "Api Key Masked",
-            "description": "Masked API key"
-          },
-          "model_id": {
-            "type": "string",
-            "title": "Model Id",
-            "description": "Embedding model identifier"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "type",
-          "api_base",
-          "api_key_masked",
-          "model_id"
-        ],
-        "title": "EmbeddingModelConfigResponseDTO",
-        "description": "Embedding model configuration for API response (API key masked)."
-      },
       "EnvVarListResponse": {
         "properties": {
           "env_vars": {
@@ -5224,6 +5258,169 @@
         "title": "HitlApprovalResponse",
         "description": "HITL approval response payload."
       },
+      "LLMDefaultsResponseDTO": {
+        "properties": {
+          "agent_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Profile Id"
+          },
+          "mini_agent_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mini Agent Profile Id"
+          },
+          "embedding_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Profile Id"
+          }
+        },
+        "type": "object",
+        "title": "LLMDefaultsResponseDTO"
+      },
+      "LLMModelProfileResponseDTO": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "provider_id": {
+            "type": "integer",
+            "title": "Provider Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "category": {
+            "$ref": "#/components/schemas/ModelProfileCategory"
+          },
+          "model_id": {
+            "type": "string",
+            "title": "Model Id"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Params"
+          },
+          "catalog_model_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Model Key"
+          },
+          "source": {
+            "type": "string",
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "provider_id",
+          "name",
+          "category",
+          "model_id",
+          "params",
+          "catalog_model_key",
+          "source"
+        ],
+        "title": "LLMModelProfileResponseDTO"
+      },
+      "LLMProviderResponseDTO": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "display_name": {
+            "type": "string",
+            "title": "Display Name"
+          },
+          "preset_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Key"
+          },
+          "type": {
+            "type": "string",
+            "title": "Type"
+          },
+          "api_base": {
+            "type": "string",
+            "title": "Api Base"
+          },
+          "embedding_api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Api Base"
+          },
+          "api_key_masked": {
+            "type": "string",
+            "title": "Api Key Masked"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "display_name",
+          "preset_key",
+          "type",
+          "api_base",
+          "embedding_api_base",
+          "api_key_masked",
+          "status"
+        ],
+        "title": "LLMProviderResponseDTO"
+      },
       "LiveAppMutateRequestDTO": {
         "properties": {
           "operation": {
@@ -5430,106 +5627,6 @@
         "title": "ModelCategory",
         "description": "Model category enumeration for LLM and embedding models."
       },
-      "ModelConfigDTO": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Display name for the model"
-          },
-          "type": {
-            "type": "string",
-            "title": "Type",
-            "description": "Model type: openai-compatible"
-          },
-          "api_base": {
-            "type": "string",
-            "title": "Api Base",
-            "description": "API base URL"
-          },
-          "api_key": {
-            "type": "string",
-            "title": "Api Key",
-            "description": "API key (will be encrypted before storage)"
-          },
-          "model_id": {
-            "type": "string",
-            "title": "Model Id",
-            "description": "Model identifier sent to API"
-          },
-          "params": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelParamsDTO"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Model parameters (temperature, max_tokens, top_p)"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "type",
-          "api_base",
-          "api_key",
-          "model_id"
-        ],
-        "title": "ModelConfigDTO",
-        "description": "Model configuration for a single LLM model."
-      },
-      "ModelConfigResponseDTO": {
-        "properties": {
-          "name": {
-            "type": "string",
-            "title": "Name",
-            "description": "Display name for the model"
-          },
-          "type": {
-            "type": "string",
-            "title": "Type",
-            "description": "Model type: openai-compatible"
-          },
-          "api_base": {
-            "type": "string",
-            "title": "Api Base",
-            "description": "API base URL"
-          },
-          "api_key_masked": {
-            "type": "string",
-            "title": "Api Key Masked",
-            "description": "Masked API key (e.g., 'sk-***abc')"
-          },
-          "model_id": {
-            "type": "string",
-            "title": "Model Id",
-            "description": "Model identifier sent to API"
-          },
-          "params": {
-            "anyOf": [
-              {
-                "$ref": "#/components/schemas/ModelParamsDTO"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "description": "Model parameters"
-          }
-        },
-        "type": "object",
-        "required": [
-          "name",
-          "type",
-          "api_base",
-          "api_key_masked",
-          "model_id"
-        ],
-        "title": "ModelConfigResponseDTO",
-        "description": "Model configuration for API response (API key masked)."
-      },
       "ModelDTO": {
         "properties": {
           "key": {
@@ -5572,6 +5669,18 @@
             ],
             "title": "Metadata",
             "description": "Model metadata like description, cost"
+          },
+          "category": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Category",
+            "description": "Model category when filtered"
           }
         },
         "type": "object",
@@ -5600,7 +5709,15 @@
         },
         "type": "object",
         "title": "ModelParamsDTO",
-        "description": "Typed model parameters for API layer."
+        "description": "Typed model parameters for profile create/update requests."
+      },
+      "ModelProfileCategory": {
+        "type": "string",
+        "enum": [
+          "llm",
+          "embedding"
+        ],
+        "title": "ModelProfileCategory"
       },
       "NoAuthConfigSchema": {
         "properties": {
@@ -5921,6 +6038,18 @@
       },
       "ProviderWithModelsByCategoryDTO": {
         "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key",
+            "description": "Stable preset key from providers.yaml"
+          },
           "provider": {
             "type": "string",
             "title": "Provider",
@@ -5992,6 +6121,18 @@
       },
       "ProviderWithModelsDTO": {
         "properties": {
+          "key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Key",
+            "description": "Stable preset key from providers.yaml"
+          },
           "provider": {
             "type": "string",
             "title": "Provider",
@@ -7435,72 +7576,6 @@
         "title": "TaskRunResultDTO",
         "description": "Typed result payload for a task run.\n\nLog metadata fields are always present (when logs were persisted).\nThe ``data`` dict holds task-type-specific output (sandbox stdout/stderr,\nagent_run execution_context, system handler result, etc.)."
       },
-      "TenantEmbeddingConfigDTO": {
-        "properties": {
-          "embedding_model": {
-            "$ref": "#/components/schemas/EmbeddingModelConfigDTO",
-            "description": "Embedding model configuration"
-          }
-        },
-        "type": "object",
-        "required": [
-          "embedding_model"
-        ],
-        "title": "TenantEmbeddingConfigDTO",
-        "description": "Tenant-level Embedding model configuration."
-      },
-      "TenantEmbeddingConfigResponseDTO": {
-        "properties": {
-          "embedding_model": {
-            "$ref": "#/components/schemas/EmbeddingModelConfigResponseDTO",
-            "description": "Embedding model configuration"
-          }
-        },
-        "type": "object",
-        "required": [
-          "embedding_model"
-        ],
-        "title": "TenantEmbeddingConfigResponseDTO",
-        "description": "Tenant Embedding configuration for API response (API keys masked)."
-      },
-      "TenantLLMConfigDTO": {
-        "properties": {
-          "agent_model": {
-            "$ref": "#/components/schemas/ModelConfigDTO",
-            "description": "Main agent model configuration"
-          },
-          "mini_agent_model": {
-            "$ref": "#/components/schemas/ModelConfigDTO",
-            "description": "Mini agent model configuration"
-          }
-        },
-        "type": "object",
-        "required": [
-          "agent_model",
-          "mini_agent_model"
-        ],
-        "title": "TenantLLMConfigDTO",
-        "description": "Tenant-level LLM configuration containing agent and mini-agent models."
-      },
-      "TenantLLMConfigResponseDTO": {
-        "properties": {
-          "agent_model": {
-            "$ref": "#/components/schemas/ModelConfigResponseDTO",
-            "description": "Main agent model configuration"
-          },
-          "mini_agent_model": {
-            "$ref": "#/components/schemas/ModelConfigResponseDTO",
-            "description": "Mini agent model configuration"
-          }
-        },
-        "type": "object",
-        "required": [
-          "agent_model",
-          "mini_agent_model"
-        ],
-        "title": "TenantLLMConfigResponseDTO",
-        "description": "Tenant LLM configuration for API response (API keys masked)."
-      },
       "TenantUsageStatsDTO": {
         "properties": {
           "tenant_id": {
@@ -7599,30 +7674,6 @@
         "title": "TenantUsageStatsDTO",
         "description": "Tenant usage statistics for observability and billing."
       },
-      "TestConnectionRequest": {
-        "properties": {
-          "api_base": {
-            "type": "string",
-            "title": "Api Base"
-          },
-          "model_id": {
-            "type": "string",
-            "title": "Model Id"
-          },
-          "api_key": {
-            "type": "string",
-            "title": "Api Key",
-            "default": ""
-          }
-        },
-        "type": "object",
-        "required": [
-          "api_base",
-          "model_id"
-        ],
-        "title": "TestConnectionRequest",
-        "description": "Request body for testing LLM connection."
-      },
       "TestConnectionResponse": {
         "properties": {
           "success": {
@@ -7669,16 +7720,8 @@
         "title": "TestConnectionResponse",
         "description": "Test connection response."
       },
-      "TestEmbeddingConnectionRequest": {
+      "TestModelProfileRequest": {
         "properties": {
-          "api_base": {
-            "type": "string",
-            "title": "Api Base"
-          },
-          "model_id": {
-            "type": "string",
-            "title": "Model Id"
-          },
           "api_key": {
             "type": "string",
             "title": "Api Key",
@@ -7686,12 +7729,44 @@
           }
         },
         "type": "object",
-        "required": [
-          "api_base",
-          "model_id"
-        ],
-        "title": "TestEmbeddingConnectionRequest",
-        "description": "Request body for testing Embedding connection."
+        "title": "TestModelProfileRequest"
+      },
+      "TestProviderConnectionRequest": {
+        "properties": {
+          "api_base": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key",
+            "default": ""
+          },
+          "category": {
+            "$ref": "#/components/schemas/ModelCategory",
+            "default": "llm"
+          }
+        },
+        "type": "object",
+        "title": "TestProviderConnectionRequest"
       },
       "TokenUsageDailyPoint": {
         "properties": {
@@ -7955,6 +8030,191 @@
         "title": "UpdateAgentSlackIntegrationRequest",
         "description": "Update an agent Slack integration. Empty token/secret keeps the previous value."
       },
+      "UpdateLLMDefaultsRequest": {
+        "properties": {
+          "agent_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Profile Id"
+          },
+          "mini_agent_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Mini Agent Profile Id"
+          },
+          "embedding_profile_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Profile Id"
+          }
+        },
+        "type": "object",
+        "title": "UpdateLLMDefaultsRequest"
+      },
+      "UpdateLLMModelProfileRequest": {
+        "properties": {
+          "name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Name"
+          },
+          "model_id": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Model Id"
+          },
+          "params": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ModelParamsDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "catalog_model_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Catalog Model Key"
+          },
+          "source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Source"
+          }
+        },
+        "type": "object",
+        "title": "UpdateLLMModelProfileRequest"
+      },
+      "UpdateLLMProviderRequest": {
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 100,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "preset_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Preset Key"
+          },
+          "type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Type"
+          },
+          "api_base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024,
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Api Base"
+          },
+          "embedding_api_base": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 1024
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Embedding Api Base"
+          },
+          "api_key": {
+            "type": "string",
+            "title": "Api Key",
+            "default": ""
+          },
+          "status": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "title": "UpdateLLMProviderRequest"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -8049,6 +8309,8 @@
     "DELETE_/document-collections/{collection_id}": "delete_document_collection_document_collections__collection_id__delete",
     "DELETE_/document-collections/{collection_id}/sync-connector": "delete_sync_connector_document_collections__collection_id__sync_connector_delete",
     "DELETE_/document-sync/connections/{connection_id}": "disconnect_drive_connection_document_sync_connections__connection_id__delete",
+    "DELETE_/llm-config/registry/profiles/{profile_id}": "delete_registry_profile_llm_config_registry_profiles__profile_id__delete",
+    "DELETE_/llm-config/registry/providers/{provider_id}": "delete_registry_provider_llm_config_registry_providers__provider_id__delete",
     "DELETE_/reports/{report_id}": "delete_report_reports__report_id__delete",
     "DELETE_/scheduled-tasks/{task_id}": "delete_scheduled_task_scheduled_tasks__task_id__delete",
     "DELETE_/skills/{name}": "delete_skill_skills__name__delete",
@@ -8099,11 +8361,12 @@
     "GET_/documents/{document_id}/images/{filename}": "get_document_image_documents__document_id__images__filename__get",
     "GET_/documents/{document_id}/parsed": "get_parsed_document_documents__document_id__parsed_get",
     "GET_/hitl/approvals/{proposal_id}": "get_approval_hitl_approvals__proposal_id__get",
-    "GET_/llm-config/config": "get_llm_config_llm_config_config_get",
-    "GET_/llm-config/embedding-config": "get_embedding_config_llm_config_embedding_config_get",
     "GET_/llm-config/models": "list_models_llm_config_models_get",
     "GET_/llm-config/providers": "list_llm_providers_llm_config_providers_get",
     "GET_/llm-config/providers/by-category": "list_providers_by_category_llm_config_providers_by_category_get",
+    "GET_/llm-config/registry/defaults": "get_registry_defaults_llm_config_registry_defaults_get",
+    "GET_/llm-config/registry/profiles": "list_registry_profiles_llm_config_registry_profiles_get",
+    "GET_/llm-config/registry/providers": "list_registry_providers_llm_config_registry_providers_get",
     "GET_/notifications": "list_notifications_notifications_get",
     "GET_/notifications/preferences": "get_notification_preferences_notifications_preferences_get",
     "GET_/observability/tenant/token-daily": "get_tenant_token_daily_observability_tenant_token_daily_get",
@@ -8172,19 +8435,19 @@
     "POST_/documents/{document_id}/reparse": "queue_document_reparse_documents__document_id__reparse_post",
     "POST_/hitl/approvals/{proposal_id}/approve": "approve_approval_hitl_approvals__proposal_id__approve_post",
     "POST_/hitl/approvals/{proposal_id}/reject": "reject_approval_hitl_approvals__proposal_id__reject_post",
-    "POST_/llm-config/copy-agent-to-mini": "copy_agent_to_mini_llm_config_copy_agent_to_mini_post",
-    "POST_/llm-config/test-connection": "test_llm_connection_llm_config_test_connection_post",
-    "POST_/llm-config/test-embedding-connection": "test_embedding_connection_llm_config_test_embedding_connection_post",
+    "POST_/llm-config/registry/profiles": "create_registry_profile_llm_config_registry_profiles_post",
+    "POST_/llm-config/registry/profiles/{profile_id}/test": "test_registry_profile_connection_llm_config_registry_profiles__profile_id__test_post",
+    "POST_/llm-config/registry/providers": "create_registry_provider_llm_config_registry_providers_post",
+    "POST_/llm-config/registry/providers/{provider_id}/test": "test_registry_provider_connection_llm_config_registry_providers__provider_id__test_post",
     "POST_/skills": "create_skill_skills_post",
     "POST_/skills/import": "import_skill_skills_import_post",
     "PUT_/agents/{agent_id}": "update_agent_agents__agent_id__put",
     "PUT_/dashboards/{dashboard_id}": "update_dashboard_dashboards__dashboard_id__put",
     "PUT_/document-collections/{collection_id}": "update_document_collection_document_collections__collection_id__put",
     "PUT_/document-sources/google-drive": "upsert_google_drive_source_document_sources_google_drive_put",
-    "PUT_/llm-config/agent-config": "update_agent_config_llm_config_agent_config_put",
-    "PUT_/llm-config/config": "update_llm_config_llm_config_config_put",
-    "PUT_/llm-config/embedding-config": "update_embedding_config_llm_config_embedding_config_put",
-    "PUT_/llm-config/mini-agent-config": "update_mini_agent_config_llm_config_mini_agent_config_put",
+    "PUT_/llm-config/registry/defaults": "update_registry_defaults_llm_config_registry_defaults_put",
+    "PUT_/llm-config/registry/profiles/{profile_id}": "update_registry_profile_llm_config_registry_profiles__profile_id__put",
+    "PUT_/llm-config/registry/providers/{provider_id}": "update_registry_provider_llm_config_registry_providers__provider_id__put",
     "PUT_/notifications/preferences": "update_notification_preferences_notifications_preferences_put",
     "PUT_/skills/{scope}/{name}/env-vars": "update_env_vars_skills__scope___name__env_vars_put"
   },
@@ -8574,24 +8837,6 @@
         "idempotent": false
       }
     },
-    "copy_agent_to_mini_llm_config_copy_agent_to_mini_post": {
-      "operation_key": "POST_/llm-config/copy-agent-to-mini",
-      "method": "POST",
-      "path": "/llm-config/copy-agent-to-mini",
-      "summary": "Copy Agent To Mini",
-      "description": "Copy agent model config to mini agent model (including encrypted API key).",
-      "request": {},
-      "response": {
-        "success_status": "200",
-        "success_schema": {
-          "$ref": "#/components/schemas/TenantLLMConfigResponseDTO"
-        }
-      },
-      "constraints": {
-        "side_effect": true,
-        "idempotent": false
-      }
-    },
     "create_agent_agents_post": {
       "operation_key": "POST_/agents",
       "method": "POST",
@@ -8786,6 +9031,70 @@
         "success_status": "201",
         "success_schema": {
           "$ref": "#/components/schemas/DocumentCollectionResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "create_registry_profile_llm_config_registry_profiles_post": {
+      "operation_key": "POST_/llm-config/registry/profiles",
+      "method": "POST",
+      "path": "/llm-config/registry/profiles",
+      "summary": "Create Registry Profile",
+      "description": "",
+      "request": {
+        "body_schema": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLLMModelProfileRequest"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/LLMModelProfileResponseDTO"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "create_registry_provider_llm_config_registry_providers_post": {
+      "operation_key": "POST_/llm-config/registry/providers",
+      "method": "POST",
+      "path": "/llm-config/registry/providers",
+      "summary": "Create Registry Provider",
+      "description": "",
+      "request": {
+        "body_schema": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateLLMProviderRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/LLMProviderResponseDTO"
         },
         "error_statuses": [
           "422"
@@ -9048,6 +9357,66 @@
             "schema": {
               "type": "integer",
               "title": "Operation Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "204",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "delete_registry_profile_llm_config_registry_profiles__profile_id__delete": {
+      "operation_key": "DELETE_/llm-config/registry/profiles/{profile_id}",
+      "method": "DELETE",
+      "path": "/llm-config/registry/profiles/{profile_id}",
+      "summary": "Delete Registry Profile",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "204",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "delete_registry_provider_llm_config_registry_providers__provider_id__delete": {
+      "operation_key": "DELETE_/llm-config/registry/providers/{provider_id}",
+      "method": "DELETE",
+      "path": "/llm-config/registry/providers/{provider_id}",
+      "summary": "Delete Registry Provider",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Provider Id"
             },
             "description": ""
           }
@@ -9764,32 +10133,6 @@
         "idempotent": true
       }
     },
-    "get_embedding_config_llm_config_embedding_config_get": {
-      "operation_key": "GET_/llm-config/embedding-config",
-      "method": "GET",
-      "path": "/llm-config/embedding-config",
-      "summary": "Get Embedding Config",
-      "description": "Get tenant's current Embedding configuration.\n\nReturns None if not yet configured, allowing UI to show default selection.",
-      "request": {},
-      "response": {
-        "success_status": "200",
-        "success_schema": {
-          "anyOf": [
-            {
-              "$ref": "#/components/schemas/TenantEmbeddingConfigResponseDTO"
-            },
-            {
-              "type": "null"
-            }
-          ],
-          "title": "Response Get Embedding Config Llm Config Embedding Config Get"
-        }
-      },
-      "constraints": {
-        "side_effect": false,
-        "idempotent": true
-      }
-    },
     "get_google_drive_source_document_sources_google_drive_get": {
       "operation_key": "GET_/document-sources/google-drive",
       "method": "GET",
@@ -9994,24 +10337,6 @@
         "idempotent": true
       }
     },
-    "get_llm_config_llm_config_config_get": {
-      "operation_key": "GET_/llm-config/config",
-      "method": "GET",
-      "path": "/llm-config/config",
-      "summary": "Get Llm Config",
-      "description": "Get tenant's current LLM configuration.",
-      "request": {},
-      "response": {
-        "success_status": "200",
-        "success_schema": {
-          "$ref": "#/components/schemas/TenantLLMConfigResponseDTO"
-        }
-      },
-      "constraints": {
-        "side_effect": false,
-        "idempotent": true
-      }
-    },
     "get_notification_preferences_notifications_preferences_get": {
       "operation_key": "GET_/notifications/preferences",
       "method": "GET",
@@ -10094,6 +10419,24 @@
         "error_statuses": [
           "422"
         ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_registry_defaults_llm_config_registry_defaults_get": {
+      "operation_key": "GET_/llm-config/registry/defaults",
+      "method": "GET",
+      "path": "/llm-config/registry/defaults",
+      "summary": "Get Registry Defaults",
+      "description": "",
+      "request": {},
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/LLMDefaultsResponseDTO"
+        }
       },
       "constraints": {
         "side_effect": false,
@@ -11289,7 +11632,7 @@
       "method": "GET",
       "path": "/llm-config/providers",
       "summary": "List Llm Providers",
-      "description": "List all available LLM providers and their models.",
+      "description": "List platform catalog providers and their models.",
       "request": {},
       "response": {
         "success_status": "200",
@@ -11311,7 +11654,7 @@
       "method": "GET",
       "path": "/llm-config/models",
       "summary": "List Models",
-      "description": "List models filtered by category and optionally by provider.",
+      "description": "List catalog models filtered by category and optionally by provider.",
       "request": {
         "query_params": [
           {
@@ -11581,7 +11924,7 @@
       "method": "GET",
       "path": "/llm-config/providers/by-category",
       "summary": "List Providers By Category",
-      "description": "List providers with models filtered by category (llm or embedding).",
+      "description": "List catalog providers with models filtered by category.",
       "request": {
         "query_params": [
           {
@@ -11606,6 +11949,72 @@
         "error_statuses": [
           "422"
         ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_registry_profiles_llm_config_registry_profiles_get": {
+      "operation_key": "GET_/llm-config/registry/profiles",
+      "method": "GET",
+      "path": "/llm-config/registry/profiles",
+      "summary": "List Registry Profiles",
+      "description": "",
+      "request": {
+        "query_params": [
+          {
+            "name": "category",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "$ref": "#/components/schemas/ModelProfileCategory"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Category"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/LLMModelProfileResponseDTO"
+          },
+          "title": "Response List Registry Profiles Llm Config Registry Profiles Get"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_registry_providers_llm_config_registry_providers_get": {
+      "operation_key": "GET_/llm-config/registry/providers",
+      "method": "GET",
+      "path": "/llm-config/registry/providers",
+      "summary": "List Registry Providers",
+      "description": "",
+      "request": {},
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "items": {
+            "$ref": "#/components/schemas/LLMProviderResponseDTO"
+          },
+          "type": "array",
+          "title": "Response List Registry Providers Llm Config Registry Providers Get"
+        }
       },
       "constraints": {
         "side_effect": false,
@@ -13384,22 +13793,33 @@
         "idempotent": false
       }
     },
-    "test_embedding_connection_llm_config_test_embedding_connection_post": {
-      "operation_key": "POST_/llm-config/test-embedding-connection",
+    "test_registry_profile_connection_llm_config_registry_profiles__profile_id__test_post": {
+      "operation_key": "POST_/llm-config/registry/profiles/{profile_id}/test",
       "method": "POST",
-      "path": "/llm-config/test-embedding-connection",
-      "summary": "Test Embedding Connection",
-      "description": "Test Embedding connection by making an actual API call.",
+      "path": "/llm-config/registry/profiles/{profile_id}/test",
+      "summary": "Test Registry Profile Connection",
+      "description": "",
       "request": {
+        "path_params": [
+          {
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            },
+            "description": ""
+          }
+        ],
         "body_schema": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TestEmbeddingConnectionRequest"
+                "$ref": "#/components/schemas/TestModelProfileRequest"
               }
             }
-          },
-          "required": true
+          }
         }
       },
       "response": {
@@ -13413,22 +13833,33 @@
         "idempotent": false
       }
     },
-    "test_llm_connection_llm_config_test_connection_post": {
-      "operation_key": "POST_/llm-config/test-connection",
+    "test_registry_provider_connection_llm_config_registry_providers__provider_id__test_post": {
+      "operation_key": "POST_/llm-config/registry/providers/{provider_id}/test",
       "method": "POST",
-      "path": "/llm-config/test-connection",
-      "summary": "Test Llm Connection",
-      "description": "Test LLM connection by making an actual API call.",
+      "path": "/llm-config/registry/providers/{provider_id}/test",
+      "summary": "Test Registry Provider Connection",
+      "description": "",
       "request": {
+        "path_params": [
+          {
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Provider Id"
+            },
+            "description": ""
+          }
+        ],
         "body_schema": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/TestConnectionRequest"
+                "$ref": "#/components/schemas/TestProviderConnectionRequest"
               }
             }
-          },
-          "required": true
+          }
         }
       },
       "response": {
@@ -13599,38 +14030,6 @@
         "success_status": "200",
         "success_schema": {
           "$ref": "#/components/schemas/AgentResponse"
-        },
-        "error_statuses": [
-          "422"
-        ]
-      },
-      "constraints": {
-        "side_effect": true,
-        "idempotent": true
-      }
-    },
-    "update_agent_config_llm_config_agent_config_put": {
-      "operation_key": "PUT_/llm-config/agent-config",
-      "method": "PUT",
-      "path": "/llm-config/agent-config",
-      "summary": "Update Agent Config",
-      "description": "Update only the agent model configuration.",
-      "request": {
-        "body_schema": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ModelConfigDTO"
-              }
-            }
-          },
-          "required": true
-        }
-      },
-      "response": {
-        "success_status": "200",
-        "success_schema": {
-          "$ref": "#/components/schemas/TenantLLMConfigResponseDTO"
         },
         "error_statuses": [
           "422"
@@ -13925,38 +14324,6 @@
         "idempotent": true
       }
     },
-    "update_embedding_config_llm_config_embedding_config_put": {
-      "operation_key": "PUT_/llm-config/embedding-config",
-      "method": "PUT",
-      "path": "/llm-config/embedding-config",
-      "summary": "Update Embedding Config",
-      "description": "Update tenant's Embedding configuration.",
-      "request": {
-        "body_schema": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TenantEmbeddingConfigDTO"
-              }
-            }
-          },
-          "required": true
-        }
-      },
-      "response": {
-        "success_status": "200",
-        "success_schema": {
-          "$ref": "#/components/schemas/TenantEmbeddingConfigResponseDTO"
-        },
-        "error_statuses": [
-          "422"
-        ]
-      },
-      "constraints": {
-        "side_effect": true,
-        "idempotent": true
-      }
-    },
     "update_env_vars_skills__scope___name__env_vars_put": {
       "operation_key": "PUT_/skills/{scope}/{name}/env-vars",
       "method": "PUT",
@@ -13999,70 +14366,6 @@
         "success_status": "200",
         "success_schema": {
           "$ref": "#/components/schemas/EnvVarListResponse"
-        },
-        "error_statuses": [
-          "422"
-        ]
-      },
-      "constraints": {
-        "side_effect": true,
-        "idempotent": true
-      }
-    },
-    "update_llm_config_llm_config_config_put": {
-      "operation_key": "PUT_/llm-config/config",
-      "method": "PUT",
-      "path": "/llm-config/config",
-      "summary": "Update Llm Config",
-      "description": "Update tenant's LLM configuration.",
-      "request": {
-        "body_schema": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/TenantLLMConfigDTO"
-              }
-            }
-          },
-          "required": true
-        }
-      },
-      "response": {
-        "success_status": "200",
-        "success_schema": {
-          "$ref": "#/components/schemas/TenantLLMConfigResponseDTO"
-        },
-        "error_statuses": [
-          "422"
-        ]
-      },
-      "constraints": {
-        "side_effect": true,
-        "idempotent": true
-      }
-    },
-    "update_mini_agent_config_llm_config_mini_agent_config_put": {
-      "operation_key": "PUT_/llm-config/mini-agent-config",
-      "method": "PUT",
-      "path": "/llm-config/mini-agent-config",
-      "summary": "Update Mini Agent Config",
-      "description": "Update only the mini agent model configuration.",
-      "request": {
-        "body_schema": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ModelConfigDTO"
-              }
-            }
-          },
-          "required": true
-        }
-      },
-      "response": {
-        "success_status": "200",
-        "success_schema": {
-          "$ref": "#/components/schemas/TenantLLMConfigResponseDTO"
         },
         "error_statuses": [
           "422"
@@ -14193,6 +14496,124 @@
       "constraints": {
         "side_effect": true,
         "idempotent": false
+      }
+    },
+    "update_registry_defaults_llm_config_registry_defaults_put": {
+      "operation_key": "PUT_/llm-config/registry/defaults",
+      "method": "PUT",
+      "path": "/llm-config/registry/defaults",
+      "summary": "Update Registry Defaults",
+      "description": "",
+      "request": {
+        "body_schema": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLLMDefaultsRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/LLMDefaultsResponseDTO"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "update_registry_profile_llm_config_registry_profiles__profile_id__put": {
+      "operation_key": "PUT_/llm-config/registry/profiles/{profile_id}",
+      "method": "PUT",
+      "path": "/llm-config/registry/profiles/{profile_id}",
+      "summary": "Update Registry Profile",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "profile_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Profile Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLLMModelProfileRequest"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/LLMModelProfileResponseDTO"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "update_registry_provider_llm_config_registry_providers__provider_id__put": {
+      "operation_key": "PUT_/llm-config/registry/providers/{provider_id}",
+      "method": "PUT",
+      "path": "/llm-config/registry/providers/{provider_id}",
+      "summary": "Update Registry Provider",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "provider_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Provider Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateLLMProviderRequest"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/LLMProviderResponseDTO"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
       }
     },
     "upload_csv_data_sources__data_source_id__assets_upload_csv_post": {

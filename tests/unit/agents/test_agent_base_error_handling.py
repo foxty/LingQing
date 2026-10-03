@@ -23,7 +23,6 @@ def agent(agent_stub_config_factory, runtime_context):
     stub_config = agent_stub_config_factory(
         agent_id=runtime_context.agent_id,
         agent_name=runtime_context.agent_name,
-        model_key="test-model",
         system_prompt="test prompt",
     )
     return AgentBase(stub_config)
@@ -56,7 +55,9 @@ class TestLlmCallErrorHandling:
         mock_model = MagicMock()
         mock_model.ainvoke = AsyncMock(side_effect=RuntimeError("model overloaded"))
 
-        with patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model):
+        with patch.object(
+            agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+        ):
             state_update = await agent._llm_call(base_state, config)
 
         last_msg = state_update["messages"][-1]
@@ -69,7 +70,9 @@ class TestLlmCallErrorHandling:
         mock_model = MagicMock()
         mock_model.ainvoke = AsyncMock(side_effect=ValueError("bad request"))
 
-        with patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model):
+        with patch.object(
+            agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+        ):
             state_update = await agent._llm_call(base_state, config)
 
         assert "messages" in state_update
@@ -80,7 +83,9 @@ class TestLlmCallErrorHandling:
         mock_model = MagicMock()
         mock_model.ainvoke = AsyncMock(side_effect=ValueError("bad request"))
 
-        with patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model):
+        with patch.object(
+            agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+        ):
             state_update = await agent._llm_call(base_state, config)
 
         msgs = state_update["messages"]
@@ -92,7 +97,9 @@ class TestLlmCallErrorHandling:
         mock_model = MagicMock()
         mock_model.ainvoke = AsyncMock(side_effect=RuntimeError("timeout"))
 
-        with patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model):
+        with patch.object(
+            agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+        ):
             state_update = await agent._llm_call(base_state, config)
 
         error_msg = state_update["messages"][-1]
@@ -126,7 +133,14 @@ class TestLlmCallErrorHandling:
             yield _Tracker()
 
         with (
-            patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model),
+            patch.object(
+                agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+            ),
+            patch.object(
+                agent._model_binding_manager,
+                "get_configured_model_id",
+                return_value="test-model",
+            ),
             patch("apps.tenant_app_service.agents.agent_base.llm_call_tracker", fake_llm_call_tracker),
         ):
             await agent._llm_call(base_state, config)

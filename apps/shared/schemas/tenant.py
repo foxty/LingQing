@@ -2,14 +2,17 @@
 
 from pydantic import BaseModel, Field
 
-from apps.shared.schemas.model_config import TenantEmbeddingConfigDTO, TenantLLMConfigDTO
+
+class LLMDefaultsDTO(BaseModel):
+    agent_profile_id: int | None = None
+    mini_agent_profile_id: int | None = None
+    embedding_profile_id: int | None = None
 
 
 class TenantConfigDTO(BaseModel):
-    """Tenant configuration aggregate - combines infrastructure layer configs."""
+    """Tenant configuration aggregate."""
 
-    llm_config: TenantLLMConfigDTO | None = Field(default=None, description="LLM model configuration")
-    embedding_config: TenantEmbeddingConfigDTO | None = Field(default=None, description="Embedding model configuration")
+    llm_defaults: LLMDefaultsDTO | None = Field(default=None, description="Default model profile IDs")
 
 
 class TenantDTO(BaseModel):

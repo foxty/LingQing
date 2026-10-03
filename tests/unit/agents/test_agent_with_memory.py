@@ -102,7 +102,6 @@ class TestAgentWithMemory:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="default-model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -185,7 +184,6 @@ class TestAgentWithMemory:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -219,7 +217,6 @@ class TestAgentWithMemory:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -288,7 +285,6 @@ class TestAgentWithMemory:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)

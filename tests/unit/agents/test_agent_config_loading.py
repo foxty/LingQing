@@ -42,20 +42,20 @@ class TestAgentConfigLoading:
         assert agent.agent_config.max_loop_iterations == 5
         assert agent.agent_id == -1
 
-    async def test_init_applies_name_and_model_overrides(self):
-        """Test that __init__ overlays name/prompt/model on the locked document."""
+    async def test_init_applies_name_and_model_profile_overrides(self):
+        """Test that __init__ overlays name/prompt/model profile on the locked document."""
         agent = AgentBase(
             load_yaml_agent_config(-1),
             config_overrides={
                 "name": "TestAgent",
                 "system_prompt": "Test prompt",
-                "model_key": "gpt-4",
+                "model_profile_id": 42,
             },
         )
 
         assert agent.agent_id == -1
         assert agent.agent_name == "TestAgent"
-        assert agent.agent_config.model_key() == "gpt-4"
+        assert agent.agent_config.model_profile_id() == 42
 
     async def test_init_returns_configured_agent(self):
         """Test that AgentBase(config) returns a fully configured agent."""

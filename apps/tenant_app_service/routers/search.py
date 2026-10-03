@@ -3,10 +3,10 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.core.auth import get_current_tenant, get_current_user
+from apps.shared.core.auth import get_current_user
 from apps.shared.db.session import get_db
-from apps.shared.schemas.tenant import TenantDTO
 from apps.shared.schemas.user import UserDTO
+from apps.shared.llm_providers.embedding_resolver import resolve_tenant_embeddings
 from apps.shared.search import SearchService
 from apps.shared.search.schemas import (
     SearchResponse,
@@ -89,7 +89,6 @@ async def search(
     page_size: int | None = Query(None, ge=1, le=50, description="Results per page (resource-type capped)"),
     current_user: UserDTO = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    tenant_dto: TenantDTO = Depends(get_current_tenant),
 ):
     """Search the tenant knowledge base using hybrid semantic + keyword ranking (RRF).
 
@@ -119,12 +118,13 @@ async def search(
     normalized_sources = _normalize_sources(sources)
     effective_page_size = _resolve_page_size(normalized_sources, page_size)
 
+    embeddings = await resolve_tenant_embeddings(current_user.tenant_id, db)
     service = SearchService(
         tenant_id=current_user.tenant_id,
         session=db,
         user_id=current_user.id,
         user_role=current_user.role,
-        tenant_config=tenant_dto.config.model_dump() if tenant_dto.config else None,
+        embeddings=embeddings,
     )
     items, pagination = await service.search_for_actor(
         query=query,

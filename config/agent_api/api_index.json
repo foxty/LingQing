@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-09-30T15:23:40.491945+00:00",
+  "generated_at": "2026-10-02T11:58:51.550881+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -60,6 +60,16 @@
     {
       "operation_key": "DELETE_/document-sync/connections/{connection_id}",
       "summary": "Disconnect Drive Connection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/llm-config/registry/profiles/{profile_id}",
+      "summary": "Delete Registry Profile",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/llm-config/registry/providers/{provider_id}",
+      "summary": "Delete Registry Provider",
       "risk_level": "write"
     },
     {
@@ -313,16 +323,6 @@
       "risk_level": "read"
     },
     {
-      "operation_key": "GET_/llm-config/config",
-      "summary": "Get Llm Config",
-      "risk_level": "read"
-    },
-    {
-      "operation_key": "GET_/llm-config/embedding-config",
-      "summary": "Get Embedding Config",
-      "risk_level": "read"
-    },
-    {
       "operation_key": "GET_/llm-config/models",
       "summary": "List Models",
       "risk_level": "read"
@@ -335,6 +335,21 @@
     {
       "operation_key": "GET_/llm-config/providers/by-category",
       "summary": "List Providers By Category",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/llm-config/registry/defaults",
+      "summary": "Get Registry Defaults",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/llm-config/registry/profiles",
+      "summary": "List Registry Profiles",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/llm-config/registry/providers",
+      "summary": "List Registry Providers",
       "risk_level": "read"
     },
     {
@@ -678,18 +693,23 @@
       "risk_level": "write"
     },
     {
-      "operation_key": "POST_/llm-config/copy-agent-to-mini",
-      "summary": "Copy Agent To Mini",
+      "operation_key": "POST_/llm-config/registry/profiles",
+      "summary": "Create Registry Profile",
       "risk_level": "write"
     },
     {
-      "operation_key": "POST_/llm-config/test-connection",
-      "summary": "Test Llm Connection",
+      "operation_key": "POST_/llm-config/registry/profiles/{profile_id}/test",
+      "summary": "Test Registry Profile Connection",
       "risk_level": "write"
     },
     {
-      "operation_key": "POST_/llm-config/test-embedding-connection",
-      "summary": "Test Embedding Connection",
+      "operation_key": "POST_/llm-config/registry/providers",
+      "summary": "Create Registry Provider",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/llm-config/registry/providers/{provider_id}/test",
+      "summary": "Test Registry Provider Connection",
       "risk_level": "write"
     },
     {
@@ -723,23 +743,18 @@
       "risk_level": "write"
     },
     {
-      "operation_key": "PUT_/llm-config/agent-config",
-      "summary": "Update Agent Config",
+      "operation_key": "PUT_/llm-config/registry/defaults",
+      "summary": "Update Registry Defaults",
       "risk_level": "write"
     },
     {
-      "operation_key": "PUT_/llm-config/config",
-      "summary": "Update Llm Config",
+      "operation_key": "PUT_/llm-config/registry/profiles/{profile_id}",
+      "summary": "Update Registry Profile",
       "risk_level": "write"
     },
     {
-      "operation_key": "PUT_/llm-config/embedding-config",
-      "summary": "Update Embedding Config",
-      "risk_level": "write"
-    },
-    {
-      "operation_key": "PUT_/llm-config/mini-agent-config",
-      "summary": "Update Mini Agent Config",
+      "operation_key": "PUT_/llm-config/registry/providers/{provider_id}",
+      "summary": "Update Registry Provider",
       "risk_level": "write"
     },
     {

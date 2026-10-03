@@ -123,7 +123,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -194,7 +193,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -238,7 +236,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -307,7 +304,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -348,7 +344,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=-1,  # Use system agent ID
             agent_name="agent_one",
-            model_key="test-model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -389,7 +384,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="test prompt",
         )
         patch_agent_config_manager(stub_config)
@@ -443,7 +437,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="You are a helpful assistant. Respond briefly.",
         )
         patch_agent_config_manager(stub_config)
@@ -456,7 +449,9 @@ class TestAgentConcurrency:
         mock_model = AsyncMock()
         mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
-        with patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model):
+        with patch.object(
+            agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+        ):
             compiled_agent = await agent.compile()
 
             # Simulate 5 concurrent users, each with their own thread
@@ -541,7 +536,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="You are a helpful assistant.",
         )
         patch_agent_config_manager(stub_config)
@@ -569,7 +563,9 @@ class TestAgentConcurrency:
                 }
             }
 
-            with patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model):
+            with patch.object(
+            agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+        ):
                 compiled_agent = await agent.compile()
                 result = await compiled_agent.ainvoke(
                     {"messages": [HumanMessage(id=f"user-msg-{i}", content=f"Hello from thread {i}")]},
@@ -615,7 +611,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="You are a helpful assistant.",
         )
         patch_agent_config_manager(stub_config)
@@ -642,7 +637,9 @@ class TestAgentConcurrency:
                 }
             }
 
-            with patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model):
+            with patch.object(
+            agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+        ):
                 compiled_agent = await agent.compile()
                 result = await compiled_agent.ainvoke(
                     {"messages": [HumanMessage(id=f"user-msg-{i}", content=f"Test from thread {i}")]},
@@ -690,7 +687,6 @@ class TestAgentConcurrency:
         stub_config = agent_stub_config_factory(
             agent_id=runtime_context.agent_id,
             agent_name=runtime_context.agent_name,
-            model_key="test-model",
             system_prompt="You are a helpful assistant.",
         )
         patch_agent_config_manager(stub_config)
@@ -724,7 +720,9 @@ class TestAgentConcurrency:
                 }
             }
 
-            with patch.object(agent._model_binding_manager, "get_or_create", return_value=mock_model):
+            with patch.object(
+            agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
+        ):
                 compiled_agent = await agent.compile()
                 result = await compiled_agent.ainvoke(
                     {"messages": [HumanMessage(id=f"user-msg-{i}", content=f"Test from thread {i}")]},

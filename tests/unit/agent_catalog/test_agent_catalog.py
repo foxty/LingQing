@@ -95,6 +95,21 @@ def test_capability_profile_parses_config():
     assert profile.knowledge_base_ids == [1, 2]
 
 
+def test_capability_profile_round_trips_model_profile_id():
+    profile = AgentCapabilityProfile.from_config(
+        {
+            "default_tools": ["search_documents"],
+            "model_profile_id": 12,
+        }
+    )
+    assert profile.model_profile_id == 12
+    assert profile.to_config()["model_profile_id"] == 12
+
+    default_profile = AgentCapabilityProfile.from_config({"default_tools": []})
+    assert default_profile.model_profile_id is None
+    assert "model_profile_id" not in default_profile.to_config()
+
+
 @pytest.mark.asyncio
 async def test_create_rejects_unreadable_collection(async_db_session, monkeypatch):
     tenant = Tenant(name="agent_cat", slug="agent_cat", config=None)
@@ -239,6 +254,138 @@ def test_runtime_filters_skills_and_tools(monkeypatch):
     )
     skills = manager.get_resolved_skills(runtime)
     assert list(skills.keys()) == ["hr_policy"]
+
+
+async def _seed_llm_profile(async_db_session, tenant_id: int, *, category=None):
+    from apps.shared.llm_providers.domain import ModelProfileCategory
+    from apps.shared.llm_providers.dtos import CreateLLMModelProfileRequest, CreateLLMProviderRequest
+    from apps.shared.llm_providers.service import LLMProviderConfigService
+
+    category = category or ModelProfileCategory.LLM
+    service = LLMProviderConfigService(tenant_id, async_db_session)
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="Test Provider",
+            api_base="https://api.example.com/v1",
+            api_key="secret-key",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="Test Model",
+            category=category,
+            model_id="gpt-test",
+        )
+    )
+    return profile.id
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_invalid_model_profile_id(async_db_session, monkeypatch):
+    tenant = Tenant(name="agent_model", slug="agent_model", config=None)
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+    owner = User(username="owner_model", email=None, hashed_password="hashed", role="member", tenant_id=tenant.id)
+    async_db_session.add(owner)
+    await async_db_session.flush()
+    await seed_default_policies(async_db_session, tenant.id)
+    await async_db_session.commit()
+    await async_db_session.refresh(owner)
+
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agent_catalog.services.TOOL_REGISTRY",
+        {"search_documents": object()},
+    )
+
+    service = AgentCatalogService(tenant_id=tenant.id, db_session=async_db_session)
+    actor = ActorContext(tenant_id=tenant.id, user_id=owner.id, user_role="member")
+    with pytest.raises(ValidationError, match="not found"):
+        await service.create_agent(
+            payload=AgentCreateRequest(
+                name="Model Bot",
+                system_prompt="help",
+                config=AgentCapabilityConfigDTO(
+                    default_tools=["search_documents"],
+                    model_profile_id=999_999,
+                ),
+            ),
+            actor=actor,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_rejects_embedding_model_profile(async_db_session, monkeypatch):
+    from apps.shared.llm_providers.domain import ModelProfileCategory
+
+    tenant = Tenant(name="agent_embed", slug="agent_embed", config=None)
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+    owner = User(username="owner_embed", email=None, hashed_password="hashed", role="member", tenant_id=tenant.id)
+    async_db_session.add(owner)
+    await async_db_session.flush()
+    await seed_default_policies(async_db_session, tenant.id)
+    embedding_profile_id = await _seed_llm_profile(
+        async_db_session,
+        tenant.id,
+        category=ModelProfileCategory.EMBEDDING,
+    )
+    await async_db_session.commit()
+    await async_db_session.refresh(owner)
+
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agent_catalog.services.TOOL_REGISTRY",
+        {"search_documents": object()},
+    )
+
+    service = AgentCatalogService(tenant_id=tenant.id, db_session=async_db_session)
+    actor = ActorContext(tenant_id=tenant.id, user_id=owner.id, user_role="member")
+    with pytest.raises(ValidationError, match="category 'llm'"):
+        await service.create_agent(
+            payload=AgentCreateRequest(
+                name="Embed Bot",
+                system_prompt="help",
+                config=AgentCapabilityConfigDTO(
+                    default_tools=["search_documents"],
+                    model_profile_id=embedding_profile_id,
+                ),
+            ),
+            actor=actor,
+        )
+
+
+@pytest.mark.asyncio
+async def test_create_persists_model_profile_id(async_db_session, monkeypatch):
+    tenant = Tenant(name="agent_save", slug="agent_save", config=None)
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+    owner = User(username="owner_save", email=None, hashed_password="hashed", role="member", tenant_id=tenant.id)
+    async_db_session.add(owner)
+    await async_db_session.flush()
+    await seed_default_policies(async_db_session, tenant.id)
+    profile_id = await _seed_llm_profile(async_db_session, tenant.id)
+    await async_db_session.commit()
+    await async_db_session.refresh(owner)
+
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agent_catalog.services.TOOL_REGISTRY",
+        {"search_documents": object()},
+    )
+
+    service = AgentCatalogService(tenant_id=tenant.id, db_session=async_db_session)
+    actor = ActorContext(tenant_id=tenant.id, user_id=owner.id, user_role="member")
+    created = await service.create_agent(
+        payload=AgentCreateRequest(
+            name="Bound Bot",
+            system_prompt="help",
+            config=AgentCapabilityConfigDTO(
+                default_tools=["search_documents"],
+                model_profile_id=profile_id,
+            ),
+        ),
+        actor=actor,
+    )
+    assert created.config.model_profile_id == profile_id
 
 
 @pytest.mark.asyncio

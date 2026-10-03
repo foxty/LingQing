@@ -103,14 +103,13 @@ def agent_stub_config_factory() -> Callable[[int, str, str, str], Dict[str, Any]
     def _factory(
         agent_id: int = 1,
         agent_name: str = "Test Agent",
-        model_key: str = "qwen-plus",
         system_prompt: str = "You are a helpful assistant.",
+        model_profile_id: int | None = None,
     ) -> Dict[str, Any]:
-        return {
+        config: Dict[str, Any] = {
             "agent_id": agent_id,
             "name": agent_name,
             "system_prompt": system_prompt,
-            "model_key": model_key,
             "roles": {
                 "default": {
                     "system_prompt": system_prompt,
@@ -118,6 +117,9 @@ def agent_stub_config_factory() -> Callable[[int, str, str, str], Dict[str, Any]
                 }
             },
         }
+        if model_profile_id is not None:
+            config["model_profile_id"] = model_profile_id
+        return config
 
     return _factory
 
