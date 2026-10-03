@@ -26,6 +26,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useNotification } from '@/hooks/useNotification'
+import { getApiErrorMessage } from '@/lib/api'
 import {
   createRegistryProfile,
   deleteRegistryProfile,
@@ -65,6 +66,7 @@ export default function SettingsProviderDetailPage() {
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
   const [busy, setBusy] = useState(false)
+  const [testingConnection, setTestingConnection] = useState(false)
 
   const provider = providers.find((item) => item.id === numericProviderId)
   const providerProfiles = useMemo(
@@ -143,14 +145,17 @@ export default function SettingsProviderDetailPage() {
   }
 
   const testConnection = async () => {
-    if (!provider) {
+    if (!provider || testingConnection) {
       return
     }
+    setTestingConnection(true)
     try {
       const result = await testRegistryProviderConnection(provider.id, {})
       showSuccess(result.message || t(modelsRegistryKey('testSuccess')))
     } catch (err) {
-      showError(err instanceof Error ? err.message : t(modelsRegistryKey('testFailed')))
+      showError(getApiErrorMessage(err, t(modelsRegistryKey('testFailed'))))
+    } finally {
+      setTestingConnection(false)
     }
   }
 
@@ -200,8 +205,20 @@ export default function SettingsProviderDetailPage() {
         <Button variant="outline" size="sm" onClick={() => setProviderDialogOpen(true)}>
           {t(modelsRegistryKey('editCredentials'))}
         </Button>
-        <Button variant="outline" size="sm" onClick={() => void testConnection()}>
-          {t(modelsRegistryKey('test'))}
+        <Button
+          variant="outline"
+          size="sm"
+          disabled={testingConnection}
+          onClick={() => void testConnection()}
+        >
+          {testingConnection ? (
+            <>
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              {t(modelsRegistryKey('testingConnection'))}
+            </>
+          ) : (
+            t(modelsRegistryKey('test'))
+          )}
         </Button>
       </div>
 
@@ -263,7 +280,7 @@ export default function SettingsProviderDetailPage() {
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-10">{t(modelsRegistryKey('modelId'))}</TableHead>
                   <TableHead className="h-10 w-28">{t(modelsRegistryKey('category'))}</TableHead>
-                  <TableHead className="h-10 w-40">{t(modelsRegistryKey('usedAsCol'))}</TableHead>
+                  <TableHead className="h-10 w-44">{t(modelsRegistryKey('runtimeDefaultCol'))}</TableHead>
                   <TableHead className="h-10 w-16 text-right">{t('common.operation')}</TableHead>
                 </TableRow>
               </TableHeader>
@@ -278,14 +295,22 @@ export default function SettingsProviderDetailPage() {
                           : t(modelsRegistryKey('categoryLlm'))}
                       </Badge>
                     </TableCell>
-                    <TableCell className="py-2.5">
-                      <div className="flex flex-wrap gap-1">
-                        {defaultBadgesForProfile(profile.id, defaults, t).map((badge) => (
-                          <Badge key={badge} variant="secondary" className="font-normal">
-                            {badge}
-                          </Badge>
-                        ))}
-                      </div>
+                    <TableCell className="py-2.5 text-muted-foreground">
+                      {(() => {
+                        const badges = defaultBadgesForProfile(profile.id, defaults, t)
+                        if (badges.length === 0) {
+                          return <span className="text-xs">—</span>
+                        }
+                        return (
+                          <div className="flex flex-wrap gap-1">
+                            {badges.map((badge) => (
+                              <Badge key={badge} variant="secondary" className="font-normal">
+                                {badge}
+                              </Badge>
+                            ))}
+                          </div>
+                        )
+                      })()}
                     </TableCell>
                     <TableCell className="py-2.5 text-right">
                       <DropdownMenu>

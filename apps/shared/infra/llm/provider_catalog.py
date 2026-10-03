@@ -187,51 +187,57 @@ class ProviderCatalog:
         return sorted(self._presets.values(), key=lambda preset: preset.name)
 
     def list_providers(self) -> list[dict[str, Any]]:
-        """List providers with LLM models (backward-compatible API shape)."""
-        return self._build_providers_list(self._profiles)
+        """List all provider presets with LLM catalog models (models may be empty)."""
+        grouped = self._group_profiles(self._profiles)
+        return [
+            self._preset_entry(preset, grouped.get(preset.key, []))
+            for preset in sorted(self._presets.values(), key=lambda item: item.name)
+        ]
 
     def list_providers_by_category(self, category: ModelCategory) -> list[dict[str, Any]]:
         profiles_map = self._profiles if category == ModelCategory.LLM else self._embedding_profiles
         return self._build_providers_list(profiles_map)
 
-    def _build_providers_list(self, profiles_map: dict[str, ModelProfile]) -> list[dict[str, Any]]:
+    @staticmethod
+    def _group_profiles(profiles_map: dict[str, ModelProfile]) -> dict[str, list[ModelProfile]]:
         grouped: dict[str, list[ModelProfile]] = {}
         for profile in profiles_map.values():
             grouped.setdefault(profile.provider_key or profile.provider, []).append(profile)
+        return grouped
+
+    def _preset_entry(self, preset: ProviderPreset, profiles: list[ModelProfile]) -> dict[str, Any]:
+        first_profile = profiles[0] if profiles else None
+        return {
+            "key": preset.key,
+            "provider": preset.key,
+            "name": preset.name,
+            "type": preset.type,
+            "api_base": preset.api_base or (first_profile.api_base if first_profile else None),
+            "embedding_api_base": preset.embedding_api_base
+            or (getattr(first_profile, "embedding_api_base", None) if first_profile else None),
+            "models": [self._profile_summary(profile) for profile in profiles],
+        }
+
+    @staticmethod
+    def _profile_summary(profile: ModelProfile) -> dict[str, Any]:
+        return {
+            "key": profile.key,
+            "name": profile.name,
+            "model_id": profile.model_id,
+            "default_params": profile.default_params,
+            "metadata": profile.metadata,
+            "category": profile.category,
+        }
+
+    def _build_providers_list(self, profiles_map: dict[str, ModelProfile]) -> list[dict[str, Any]]:
+        grouped = self._group_profiles(profiles_map)
 
         result: list[dict[str, Any]] = []
         for preset_key in sorted(grouped.keys(), key=lambda key: self._presets.get(key, ProviderPreset(key, key, "openai-compatible")).name):
-            profiles = grouped[preset_key]
-            first_profile = profiles[0]
             preset = self._presets.get(preset_key)
-            provider_name = preset.name if preset else first_profile.provider
-            provider_type = preset.type if preset else "openai-compatible"
-            api_base = preset.api_base if preset else first_profile.api_base
-            embedding_api_base = preset.embedding_api_base if preset else getattr(first_profile, "embedding_api_base", None)
-
-            models = [
-                {
-                    "key": profile.key,
-                    "name": profile.name,
-                    "model_id": profile.model_id,
-                    "default_params": profile.default_params,
-                    "metadata": profile.metadata,
-                    "category": profile.category,
-                }
-                for profile in profiles
-            ]
-
-            result.append(
-                {
-                    "key": preset_key,
-                    "provider": preset_key,
-                    "name": provider_name,
-                    "type": provider_type,
-                    "api_base": api_base,
-                    "embedding_api_base": embedding_api_base,
-                    "models": models,
-                }
-            )
+            if preset is None:
+                continue
+            result.append(self._preset_entry(preset, grouped[preset_key]))
 
         return result
 

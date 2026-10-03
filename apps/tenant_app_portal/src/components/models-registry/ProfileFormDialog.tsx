@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -15,6 +16,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { getApiErrorMessage } from '@/lib/api'
 import {
   catalogModelsForProvider,
   createRegistryProfile,
@@ -23,6 +25,7 @@ import {
   type LLMProvider,
   type ModelProfileCategory,
 } from '@/lib/llmConfigApi'
+import { AlertCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { modelsRegistryKey, registerModelsRegistryI18n } from './i18n'
@@ -58,11 +61,13 @@ export default function ProfileFormDialog({
   const [category, setCategory] = useState<ModelProfileCategory>('llm')
   const [form, setForm] = useState(emptyForm('llm', fixedProviderId ? String(fixedProviderId) : ''))
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
       return
     }
+    setError(null)
     setCategory('llm')
     setForm(emptyForm('llm', fixedProviderId ? String(fixedProviderId) : ''))
   }, [open, fixedProviderId])
@@ -76,6 +81,7 @@ export default function ProfileFormDialog({
 
   const save = async () => {
     setBusy(true)
+    setError(null)
     try {
       await createRegistryProfile({
         provider_id: Number(form.provider_id),
@@ -88,6 +94,8 @@ export default function ProfileFormDialog({
       })
       onOpenChange(false)
       await onSaved()
+    } catch (err) {
+      setError(getApiErrorMessage(err, t(modelsRegistryKey('saveFailed'))))
     } finally {
       setBusy(false)
     }
@@ -100,6 +108,12 @@ export default function ProfileFormDialog({
           <DialogTitle>{t(modelsRegistryKey('addModel'))}</DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
           <div className="space-y-2">
             <Label>{t(modelsRegistryKey('category'))}</Label>
             <Select

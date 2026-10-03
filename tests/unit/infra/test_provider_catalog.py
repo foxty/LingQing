@@ -100,6 +100,35 @@ class TestProviderCatalog:
         assert all(provider["provider"] == provider["key"] for provider in providers)
         assert all(provider["name"] for provider in providers)
 
+    def test_list_providers_includes_presets_without_catalog_models(self, tmp_path):
+        config_content = dedent(
+            """
+            providers:
+              - key: ollama
+                name: Ollama (Local)
+                api_base: http://127.0.0.1:11434/v1
+                type: openai-compatible
+                llm_models: []
+                embedding_models: []
+              - key: deepseek
+                name: Deepseek
+                api_base: https://api.deepseek.com
+                type: openai-compatible
+                llm_models:
+                  - deepseek-v4-flash
+            """
+        )
+        config_file = tmp_path / "providers.yaml"
+        config_file.write_text(config_content)
+
+        providers = ProviderCatalog(str(config_file)).list_providers()
+
+        assert len(providers) == 2
+        ollama = next(item for item in providers if item["key"] == "ollama")
+        assert ollama["name"] == "Ollama (Local)"
+        assert ollama["api_base"] == "http://127.0.0.1:11434/v1"
+        assert ollama["models"] == []
+
     def test_list_providers_by_embedding_category(self, test_config_file):
         catalog = ProviderCatalog(test_config_file)
         providers = catalog.list_providers_by_category(ModelCategory.EMBEDDING)

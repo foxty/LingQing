@@ -146,3 +146,10 @@ providers:
       - system.ai.deepseek-v4-1-flash
       - system.ai.glm-5-3-flash
     embedding_models: []
+
+  - key: ollama
+    name: Ollama
+    api_base: http://127.0.0.1:11434/v1
+    type: openai-compatible
+    llm_models: []
+    embedding_models: []

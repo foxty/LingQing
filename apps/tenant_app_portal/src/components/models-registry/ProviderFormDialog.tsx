@@ -1,3 +1,4 @@
+import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -15,12 +16,14 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import { getApiErrorMessage } from '@/lib/api'
 import {
   createRegistryProvider,
   updateRegistryProvider,
   type CatalogProvider,
   type LLMProvider,
 } from '@/lib/llmConfigApi'
+import { AlertCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { modelsRegistryKey, registerModelsRegistryI18n } from './i18n'
@@ -52,11 +55,13 @@ export default function ProviderFormDialog({
   const { t } = useTranslation()
   const [form, setForm] = useState(emptyForm())
   const [busy, setBusy] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) {
       return
     }
+    setError(null)
     if (editingProvider) {
       setForm({
         display_name: editingProvider.display_name,
@@ -85,6 +90,7 @@ export default function ProviderFormDialog({
 
   const save = async () => {
     setBusy(true)
+    setError(null)
     try {
       const payload = {
         display_name: form.display_name.trim(),
@@ -100,10 +106,14 @@ export default function ProviderFormDialog({
       }
       onOpenChange(false)
       await onSaved()
+    } catch (err) {
+      setError(getApiErrorMessage(err, t(modelsRegistryKey('saveFailed'))))
     } finally {
       setBusy(false)
     }
   }
+
+  const isLocalPreset = form.preset_key === 'ollama'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -114,6 +124,12 @@ export default function ProviderFormDialog({
           </DialogTitle>
         </DialogHeader>
         <div className="space-y-4">
+          {error ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{error}</AlertDescription>
+            </Alert>
+          ) : null}
           <div className="space-y-2">
             <Label>{t(modelsRegistryKey('preset'))}</Label>
             <Select value={form.preset_key} onValueChange={applyPreset}>
@@ -161,9 +177,14 @@ export default function ProviderFormDialog({
               placeholder={
                 editingProvider
                   ? t(modelsRegistryKey('currentKey'), { key: editingProvider.api_key_masked })
-                  : undefined
+                  : isLocalPreset
+                    ? 'ollama'
+                    : undefined
               }
             />
+            {isLocalPreset && !editingProvider ? (
+              <p className="text-xs text-muted-foreground">{t(modelsRegistryKey('apiKeyLocalHint'))}</p>
+            ) : null}
           </div>
         </div>
         <DialogFooter>
