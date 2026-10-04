@@ -63,6 +63,8 @@ i18n.addResourceBundle('zh', 'translation', {
 }, true, true)
 
 import AbacPolicyFormModal from '@/components/AbacPolicyFormModal'
+import SettingsPageShell from '@/components/SettingsPageShell'
+import SettingsRowActions from '@/components/SettingsRowActions'
 import SettingsSection from '@/components/SettingsSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -161,7 +163,7 @@ export default function SettingsAbacTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <SettingsPageShell>
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -238,24 +240,14 @@ export default function SettingsAbacTab() {
                     onCheckedChange={() => handleToggle(policy)}
                   />
                 </TableCell>
-                <TableCell className="text-right space-x-2">
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => {
+                <TableCell className="text-right">
+                  <SettingsRowActions
+                    onEdit={() => {
                       setEditTarget(policy)
                       setModalOpen(true)
                     }}
-                  >
-                    {t('settings.abacTab.edit')}
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDeleteTarget(policy)}
-                  >
-                    {t('settings.abacTab.delete')}
-                  </Button>
+                    onDelete={() => setDeleteTarget(policy)}
+                  />
                 </TableCell>
               </TableRow>
             ))}
@@ -294,6 +286,6 @@ export default function SettingsAbacTab() {
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </SettingsPageShell>
   )
 }

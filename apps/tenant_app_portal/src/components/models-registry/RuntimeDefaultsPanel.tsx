@@ -41,11 +41,7 @@ export default function RuntimeDefaultsPanel({
   const { t } = useTranslation()
 
   return (
-    <div className="rounded-lg border bg-card p-4 space-y-4 max-w-2xl">
-      <div className="space-y-1">
-        <h2 className="text-base font-medium">{t(modelsRegistryKey('defaults'))}</h2>
-        <p className="text-sm text-muted-foreground">{t(modelsRegistryKey('defaultsHint'))}</p>
-      </div>
+    <div className="max-w-2xl space-y-4">
       <div className="grid gap-4">
         <DefaultSelect
           label={t(modelsRegistryKey('agentDefault'))}
@@ -69,7 +65,7 @@ export default function RuntimeDefaultsPanel({
           onChange={(value) => onChange({ ...defaults, embedding_profile_id: value })}
         />
       </div>
-      <Button size="sm" onClick={onSave} disabled={busy}>
+      <Button onClick={onSave} disabled={busy}>
         {t(modelsRegistryKey('save'))}
       </Button>
     </div>

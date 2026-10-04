@@ -3,6 +3,7 @@ import { useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
+import SettingsPageShell from '@/components/SettingsPageShell'
 import SettingsSection from '@/components/SettingsSection'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import {
@@ -198,7 +199,7 @@ export default function SettingsUsageTab() {
   )
 
   return (
-    <div className="space-y-4">
+    <SettingsPageShell>
       <SettingsSection
         title={t('settings.usageTab.title')}
         description={t('settings.usageTab.description')}
@@ -294,6 +295,6 @@ export default function SettingsUsageTab() {
           updatedAt={tokenSummary?.period_end}
         />
       )}
-    </div>
+    </SettingsPageShell>
   )
 }

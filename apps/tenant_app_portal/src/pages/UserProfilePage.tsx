@@ -69,6 +69,9 @@ i18n.addResourceBundle('en', 'translation', {
     passwordRequireDigit: 'Password must contain a digit',
     confirmPasswordRequired: 'Please confirm your password',
     passwordMismatch: 'Passwords do not match',
+    loadFailed: 'Failed to load profile',
+    passwordChangeFailed: 'Failed to change password',
+    timezoneUpdateFailed: 'Failed to update timezone',
   }
 }, true, true)
 
@@ -114,6 +117,9 @@ i18n.addResourceBundle('zh', 'translation', {
     passwordRequireDigit: '密码必须包含数字',
     confirmPasswordRequired: '请确认密码',
     passwordMismatch: '两次输入的密码不一致',
+    loadFailed: '加载用户信息失败',
+    passwordChangeFailed: '修改密码失败',
+    timezoneUpdateFailed: '更新时区失败',
   }
 }, true, true)
 
@@ -230,6 +236,13 @@ export default function UserProfilePage() {
         </div>
         <p className="hidden text-sm text-muted-foreground md:block">{t('userProfile.description')}</p>
       </div>
+
+      {error && !profile ? (
+        <Alert variant="destructive">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {/* User Information Card */}
       <Card>

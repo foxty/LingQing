@@ -96,7 +96,7 @@ _When to promote a file to a package:_
 - Use React Query for API data fetching.
 - `lib/*Api.ts`: stateless transport layer (axios) with shared types.
 - **i18n**: Component-level translation resources are defined in the component file via `i18n.addResourceBundle()`. Global/shared translations (e.g., `common.*`, `sidebar.*`) go in `i18n/locales/{lang}/translation.json`. Page-specific translations use `addResourceBundle` at the top of the component file, following the pattern in `KnowledgeBasePage.tsx`.
-- **LingQing UI (`apps/tenant_app_portal`):** Follow `apps/tenant_app_portal/DESIGN.md`. Classify the job, pick one surface type, compose from existing shadcn primitives, pass the lint list. Do not add a route/page inventory to that file.
+- **LingQing UI (`apps/tenant_app_portal`):** Follow `apps/tenant_app_portal/DESIGN.md`. Classify the job, pick one layout surface (Detail views: one `prose` or `metrics` modifier), compose from existing shadcn primitives, pass the lint list. Feedback: one channel per event — `useNotification` for toasts, `getApiErrorMessage` for API errors, inline for validation and diagnostics (§5). Do not add a route/page inventory to that file.
 
 **Error Handling:**
 

@@ -67,6 +67,10 @@ export default function SettingsProviderDetailPage() {
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
+  const [connectionTestResult, setConnectionTestResult] = useState<{
+    ok: boolean
+    message: string
+  } | null>(null)
 
   const provider = providers.find((item) => item.id === numericProviderId)
   const providerProfiles = useMemo(
@@ -149,11 +153,18 @@ export default function SettingsProviderDetailPage() {
       return
     }
     setTestingConnection(true)
+    setConnectionTestResult(null)
     try {
       const result = await testRegistryProviderConnection(provider.id, {})
-      showSuccess(result.message || t(modelsRegistryKey('testSuccess')))
+      setConnectionTestResult({
+        ok: true,
+        message: result.message || t(modelsRegistryKey('testSuccess')),
+      })
     } catch (err) {
-      showError(getApiErrorMessage(err, t(modelsRegistryKey('testFailed'))))
+      setConnectionTestResult({
+        ok: false,
+        message: getApiErrorMessage(err, t(modelsRegistryKey('testFailed'))),
+      })
     } finally {
       setTestingConnection(false)
     }
@@ -221,6 +232,13 @@ export default function SettingsProviderDetailPage() {
           )}
         </Button>
       </div>
+
+      {connectionTestResult ? (
+        <Alert variant={connectionTestResult.ok ? 'default' : 'destructive'}>
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{connectionTestResult.message}</AlertDescription>
+        </Alert>
+      ) : null}
 
       {error ? (
         <Alert variant="destructive">

@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useNotification } from '@/hooks/useNotification'
+import { getApiErrorMessage } from '@/lib/api'
 import {
   AlertCircle,
   Check,
@@ -397,17 +398,10 @@ export default function AgentSlackIntegrationSection({
                 const refreshed = await prepareAgentSlackIntegration(agentId)
                 setIntegration(refreshed)
                 onChanged?.()
-                showSuccess(t('agents.slackIntegration.testSuccess'))
-              } else {
-                showError(result.error || t('agents.slackIntegration.testFailed'))
               }
             } catch (error: unknown) {
-              const detail =
-                typeof error === 'object' && error !== null && 'response' in error
-                  ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
-                  : undefined
-              showError(detail || t('agents.slackIntegration.testFailed'))
-              setTestResult({ ok: false, error: detail || t('agents.slackIntegration.testFailed') })
+              const detail = getApiErrorMessage(error, t('agents.slackIntegration.testFailed'))
+              setTestResult({ ok: false, error: detail })
             } finally {
               setTesting(false)
             }

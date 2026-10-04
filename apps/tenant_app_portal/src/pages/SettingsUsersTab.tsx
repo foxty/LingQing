@@ -22,6 +22,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
+import SettingsPageShell from '@/components/SettingsPageShell'
 import SettingsSection from '@/components/SettingsSection'
 import TagBindingsDialog from '@/components/TagBindingsDialog'
 import TagChips from '@/components/TagChips'
@@ -38,6 +39,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/comp
 import { useAuth } from '@/hooks/useAuth'
 import { useNotification } from '@/hooks/useNotification'
 import { useTenantUsers } from '@/hooks/useTenantUsers'
+import { getApiErrorMessage } from '@/lib/api'
 import { actionRules, PERMISSIONS } from '@/lib/permissionRules'
 import type { TenantUserRole } from '@/lib/tenantUsersApi'
 import {
@@ -47,14 +49,15 @@ import {
   type TagKeyDTO,
   type TagValueDTO,
 } from '@/lib/tagsApi'
-import { Info, RefreshCw, Tag } from 'lucide-react'
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog'
+import { Info, Plus, RefreshCw, Tag } from 'lucide-react'
 import { useEffect, useState } from 'react'
-
-function apiErrorMessage(err: unknown, fallback: string): string {
-  const data = (err as { response?: { data?: { message?: string; detail?: string } } })?.response
-    ?.data
-  return data?.message || data?.detail || fallback
-}
 
 function DeactivateUserButton({
   label,
@@ -250,6 +253,7 @@ export default function SettingsUsersTab() {
 
   const [recoverDialogOpen, setRecoverDialogOpen] = useState(false)
   const [recoverUserId, setRecoverUserId] = useState<number | null>(null)
+  const [createDialogOpen, setCreateDialogOpen] = useState(false)
 
   const canReadTags = hasAny(actionRules.canReadTags())
   const canManageTags = hasAny(actionRules.canManageTags())
@@ -303,9 +307,11 @@ export default function SettingsUsersTab() {
       setUsername('')
       setEmail('')
       setPassword('')
+      setRole('member')
+      setCreateDialogOpen(false)
       showSuccess(t('settings.usersTab.createSuccess'))
     } catch (err: any) {
-      showError(apiErrorMessage(err, t('settings.usersTab.createFailed')))
+      showError(getApiErrorMessage(err, t('settings.usersTab.createFailed')))
     }
   }
 
@@ -319,7 +325,7 @@ export default function SettingsUsersTab() {
       setResetPasswordValue('')
       showSuccess(t('settings.usersTab.passwordReset'))
     } catch (err: any) {
-      showError(apiErrorMessage(err, t('settings.usersTab.passwordResetFailed')))
+      showError(getApiErrorMessage(err, t('settings.usersTab.passwordResetFailed')))
     }
   }
 
@@ -332,7 +338,7 @@ export default function SettingsUsersTab() {
       setDeactivateDialogOpen(false)
       showSuccess(t('settings.usersTab.userDeactivated'))
     } catch (err: any) {
-      showError(apiErrorMessage(err, t('settings.usersTab.deactivateFailed')))
+      showError(getApiErrorMessage(err, t('settings.usersTab.deactivateFailed')))
     }
   }
 
@@ -345,7 +351,7 @@ export default function SettingsUsersTab() {
       setRecoverDialogOpen(false)
       showSuccess(t('settings.usersTab.userReactivated'))
     } catch (err: any) {
-      showError(apiErrorMessage(err, t('settings.usersTab.reactivateFailed')))
+      showError(getApiErrorMessage(err, t('settings.usersTab.reactivateFailed')))
     }
   }
 
@@ -372,7 +378,7 @@ export default function SettingsUsersTab() {
       await updateUserRole(userId, { role: nextRole })
       showSuccess(t('settings.usersTab.roleUpdated'))
     } catch (err: any) {
-      showError(apiErrorMessage(err, t('settings.usersTab.roleUpdateFailed')))
+      showError(getApiErrorMessage(err, t('settings.usersTab.roleUpdateFailed')))
     }
   }
 
@@ -385,12 +391,12 @@ export default function SettingsUsersTab() {
       await setBreakGlass(userId, next)
       showSuccess(t('settings.usersTab.breakGlassUpdated'))
     } catch (err: any) {
-      showError(apiErrorMessage(err, t('settings.usersTab.breakGlassUpdateFailed')))
+      showError(getApiErrorMessage(err, t('settings.usersTab.breakGlassUpdateFailed')))
     }
   }
 
   return (
-    <div className="space-y-6">
+    <SettingsPageShell>
       {error && (
         <Alert variant="destructive">
           <AlertDescription>{error}</AlertDescription>
@@ -401,10 +407,18 @@ export default function SettingsUsersTab() {
         title={t('settings.usersTab.title')}
         description={t('settings.usersTab.description')}
         action={
-          <Button variant="outline" size="sm" onClick={() => fetchUsers()} disabled={loading}>
-            <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            {t('common.refresh')}
-          </Button>
+          <>
+            <Button variant="outline" size="sm" onClick={() => fetchUsers()} disabled={loading}>
+              <RefreshCw className={`mr-2 h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
+              {t('common.refresh')}
+            </Button>
+            {canManageUsers ? (
+              <Button size="sm" onClick={() => setCreateDialogOpen(true)} disabled={loading}>
+                <Plus className="mr-2 h-4 w-4" />
+                {t('settings.usersTab.newUser.createButton')}
+              </Button>
+            ) : null}
+          </>
         }
         contentClassName="p-0"
       >
@@ -587,24 +601,37 @@ export default function SettingsUsersTab() {
           </Table>
       </SettingsSection>
 
-      <SettingsSection
-        title={t('settings.usersTab.newUser.title')}
-        description={t('settings.usersTab.newUser.description')}
+      <Dialog
+        open={createDialogOpen}
+        onOpenChange={(open) => {
+          setCreateDialogOpen(open)
+          if (!open) {
+            setUsername('')
+            setEmail('')
+            setPassword('')
+            setRole('member')
+          }
+        }}
       >
-          <div className="grid gap-4 md:grid-cols-2">
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t('settings.usersTab.newUser.title')}</DialogTitle>
+          </DialogHeader>
+          <p className="text-sm text-muted-foreground">{t('settings.usersTab.newUser.description')}</p>
+          <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="username">{t('settings.usersTab.newUser.username')}</Label>
+              <Label htmlFor="create-username">{t('settings.usersTab.newUser.username')}</Label>
               <Input
-                id="username"
+                id="create-username"
                 value={username}
                 onChange={(event) => setUsername(event.target.value)}
                 placeholder={t('settings.usersTab.newUser.usernamePlaceholder')}
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="email">{t('settings.usersTab.newUser.email')}</Label>
+              <Label htmlFor="create-email">{t('settings.usersTab.newUser.email')}</Label>
               <Input
-                id="email"
+                id="create-email"
                 type="email"
                 value={email}
                 onChange={(event) => setEmail(event.target.value)}
@@ -612,22 +639,22 @@ export default function SettingsUsersTab() {
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="role">{t('settings.usersTab.newUser.role')}</Label>
+              <Label htmlFor="create-role">{t('settings.usersTab.newUser.role')}</Label>
               <Select value={role} onValueChange={(value) => setRole(value as TenantUserRole)}>
-                <SelectTrigger id="role">
+                <SelectTrigger id="create-role">
                   <SelectValue placeholder={t('settings.usersTab.selectRole')} />
                 </SelectTrigger>
                 <SelectContent>
-                <SelectItem value="admin">{t('settings.usersTab.admin')}</SelectItem>
-                <SelectItem value="member">{t('settings.usersTab.member')}</SelectItem>
-                <SelectItem value="viewer">{t('settings.usersTab.viewer')}</SelectItem>
+                  <SelectItem value="admin">{t('settings.usersTab.admin')}</SelectItem>
+                  <SelectItem value="member">{t('settings.usersTab.member')}</SelectItem>
+                  <SelectItem value="viewer">{t('settings.usersTab.viewer')}</SelectItem>
                 </SelectContent>
               </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="password">{t('settings.usersTab.newUser.password')}</Label>
+              <Label htmlFor="create-password">{t('settings.usersTab.newUser.password')}</Label>
               <Input
-                id="password"
+                id="create-password"
                 type="password"
                 value={password}
                 onChange={(event) => setPassword(event.target.value)}
@@ -635,12 +662,16 @@ export default function SettingsUsersTab() {
               />
             </div>
           </div>
-          <div className="flex justify-end mt-4">
-            <Button onClick={handleCreateUser} disabled={loading || !username || !password}>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setCreateDialogOpen(false)}>
+              {t('common.cancel')}
+            </Button>
+            <Button onClick={handleCreateUser} disabled={loading || !username.trim() || !password}>
               {t('settings.usersTab.newUser.createButton')}
             </Button>
-          </div>
-      </SettingsSection>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <AlertDialog open={resetDialogOpen} onOpenChange={setResetDialogOpen}>
         <AlertDialogContent>
@@ -698,6 +729,6 @@ export default function SettingsUsersTab() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-    </div>
+    </SettingsPageShell>
   )
 }
