@@ -1,3 +1,5 @@
+import SettingsPageShell from '@/components/SettingsPageShell'
+import SettingsSection from '@/components/SettingsSection'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -374,28 +376,27 @@ export default function SettingsSystemJobsTab() {
   )
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">{t('settings.systemJobs')}</h1>
-        <p className="text-sm text-muted-foreground mt-1">{t('systemJobs.description')}</p>
-      </div>
-
+    <SettingsPageShell>
+      <SettingsSection
+        title={t('settings.systemJobs')}
+        description={t('systemJobs.description')}
+        contentClassName={!isLoading && !isError && sortedTasks.length > 0 ? 'p-0' : undefined}
+      >
       {isLoading ? (
-        <div className="flex items-center justify-center py-24 text-muted-foreground text-sm">
+        <div className="flex items-center justify-center py-24 text-sm text-muted-foreground">
           {t('common.loading')}
         </div>
       ) : isError ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-3 text-muted-foreground">
-          <LayoutGrid className="w-10 h-10 opacity-30" />
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <LayoutGrid className="h-10 w-10 opacity-30" />
           <p className="text-sm">{t('systemJobs.loadFailed')}</p>
         </div>
       ) : sortedTasks.length === 0 ? (
-        <div className="flex flex-col items-center justify-center py-24 gap-3 text-muted-foreground">
-          <LayoutGrid className="w-10 h-10 opacity-30" />
+        <div className="flex flex-col items-center justify-center gap-3 py-24 text-muted-foreground">
+          <LayoutGrid className="h-10 w-10 opacity-30" />
           <p className="text-sm">{t('systemJobs.noJobs')}</p>
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border bg-card">
           <Table>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
@@ -495,8 +496,8 @@ export default function SettingsSystemJobsTab() {
               ))}
             </TableBody>
           </Table>
-        </div>
       )}
+      </SettingsSection>
 
       <ConfirmationDialog
         open={Boolean(pendingRunTask)}
@@ -510,6 +511,6 @@ export default function SettingsSystemJobsTab() {
       />
 
       {runsTask && <RunsDialog task={runsTask} onClose={() => setRunsTask(null)} />}
-    </div>
+    </SettingsPageShell>
   )
 }

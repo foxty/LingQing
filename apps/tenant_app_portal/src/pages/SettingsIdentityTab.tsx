@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
+import SettingsPageShell from '@/components/SettingsPageShell'
 import SettingsSection from '@/components/SettingsSection'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useNotification } from '@/hooks/useNotification'
@@ -335,7 +336,7 @@ export default function SettingsIdentityTab() {
   }
 
   return (
-    <div className="space-y-4">
+    <SettingsPageShell>
       <Tabs value={activeTab} onValueChange={setActiveTab}>
         <TabsList>
           <TabsTrigger value={TAB_SOURCES}>{t('settings.identityTab.tabSources')}</TabsTrigger>
@@ -446,6 +447,6 @@ export default function SettingsIdentityTab() {
         onConfirm={removeDomain}
         onCancel={removeDomainConfirm.close}
       />
-    </div>
+    </SettingsPageShell>
   )
 }
