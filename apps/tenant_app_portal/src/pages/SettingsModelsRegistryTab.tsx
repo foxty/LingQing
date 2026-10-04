@@ -1,5 +1,7 @@
-import ContainerRowActions from '@/components/ContainerRowActions'
-import ListIndexToolbar from '@/components/ListIndexToolbar'
+import SettingsListToolbar from '@/components/SettingsListToolbar'
+import SettingsPageShell from '@/components/SettingsPageShell'
+import SettingsRowActions from '@/components/SettingsRowActions'
+import SettingsSection from '@/components/SettingsSection'
 import { modelsRegistryKey, registerModelsRegistryI18n } from '@/components/models-registry/i18n'
 import ProviderFormDialog from '@/components/models-registry/ProviderFormDialog'
 import RuntimeDefaultsPanel from '@/components/models-registry/RuntimeDefaultsPanel'
@@ -150,12 +152,7 @@ export default function SettingsModelsRegistryTab() {
   }
 
   return (
-    <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">{t(modelsRegistryKey('pageTitle'))}</h1>
-        <p className="text-sm text-muted-foreground">{t(modelsRegistryKey('pageDescription'))}</p>
-      </div>
-
+    <SettingsPageShell>
       {error ? (
         <Alert variant="destructive">
           <AlertCircle className="h-4 w-4" />
@@ -163,22 +160,33 @@ export default function SettingsModelsRegistryTab() {
         </Alert>
       ) : null}
 
-      <RuntimeDefaultsPanel
-        defaults={defaults}
-        llmProfiles={llmProfiles}
-        embeddingProfiles={embeddingProfiles}
-        providers={providers}
-        busy={busy}
-        onChange={setDefaults}
-        onSave={() => void saveDefaults()}
-      />
+      <SettingsSection
+        title={t(modelsRegistryKey('defaults'))}
+        description={t(modelsRegistryKey('defaultsHint'))}
+      >
+        <RuntimeDefaultsPanel
+          defaults={defaults}
+          llmProfiles={llmProfiles}
+          embeddingProfiles={embeddingProfiles}
+          providers={providers}
+          busy={busy}
+          onChange={setDefaults}
+          onSave={() => void saveDefaults()}
+        />
+      </SettingsSection>
 
-      <div className="space-y-4">
-        <ListIndexToolbar
-          searchQuery={searchQuery}
-          searchPlaceholder={t(modelsRegistryKey('searchProviders'))}
-          onSearchQueryChange={setSearchQuery}
-          onClearSearchQuery={() => setSearchQuery('')}
+      <SettingsSection
+        title={t(modelsRegistryKey('providers'))}
+        description={t(modelsRegistryKey('providersDesc'))}
+        contentClassName="space-y-4 p-4 pt-0"
+      >
+        <SettingsListToolbar
+          search={{
+            query: searchQuery,
+            placeholder: t(modelsRegistryKey('searchProviders')),
+            onQueryChange: setSearchQuery,
+            onClear: () => setSearchQuery(''),
+          }}
           onRefresh={() => void loadAll()}
           refreshing={loading}
           refreshLabel={t('common.refresh')}
@@ -189,13 +197,13 @@ export default function SettingsModelsRegistryTab() {
         />
 
         {filteredProviders.length === 0 ? (
-          <div className="rounded-lg border bg-card py-12 text-center">
+          <div className="rounded-lg border py-12 text-center">
             <p className="text-sm text-muted-foreground">
               {searchQuery ? t('common.noResults') : t(modelsRegistryKey('noProviders'))}
             </p>
           </div>
         ) : (
-          <div className="overflow-hidden rounded-lg border bg-card">
+          <div className="overflow-hidden rounded-lg border">
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
@@ -213,7 +221,7 @@ export default function SettingsModelsRegistryTab() {
                       <button
                         type="button"
                         onClick={() => navigate(`/settings/models/providers/${provider.id}`)}
-                        className="text-sm font-medium hover:underline text-left"
+                        className="text-left text-sm font-medium hover:underline"
                       >
                         {provider.display_name}
                       </button>
@@ -234,7 +242,7 @@ export default function SettingsModelsRegistryTab() {
                       </Badge>
                     </TableCell>
                     <TableCell className="py-2.5 text-right">
-                      <ContainerRowActions
+                      <SettingsRowActions
                         onEdit={() => openEditProvider(provider)}
                         onDelete={() => void removeProvider(provider.id)}
                       />
@@ -245,7 +253,7 @@ export default function SettingsModelsRegistryTab() {
             </Table>
           </div>
         )}
-      </div>
+      </SettingsSection>
 
       <ProviderFormDialog
         open={providerDialogOpen}
@@ -254,6 +262,6 @@ export default function SettingsModelsRegistryTab() {
         editingProvider={editingProvider}
         onSaved={handleProviderSaved}
       />
-    </div>
+    </SettingsPageShell>
   )
 }

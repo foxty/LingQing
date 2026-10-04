@@ -1,6 +1,7 @@
 import i18n from '@/i18n/config'
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { useTranslation } from 'react-i18next'
+import SettingsPageShell from '@/components/SettingsPageShell'
 import SettingsSection from '@/components/SettingsSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -275,7 +276,7 @@ export default function SettingsDocumentSourcesTab() {
   const canSave = clientId.trim().length > 0 && isDirty && !upsertMutation.isPending
 
   return (
-    <div className="space-y-6">
+    <SettingsPageShell>
       <SettingsSection
         title={t('settings.documentSourcesTab.title')}
         description={t('settings.documentSourcesTab.description')}
@@ -375,6 +376,6 @@ export default function SettingsDocumentSourcesTab() {
           </div>
         </div>
       </SettingsSection>
-    </div>
+    </SettingsPageShell>
   )
 }

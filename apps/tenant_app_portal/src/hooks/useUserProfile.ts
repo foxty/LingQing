@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { toast } from 'sonner'
 import {
   getCurrentUserProfile,
   changePassword,
@@ -7,9 +6,12 @@ import {
   ProfileResponse,
   ChangePasswordData,
 } from '@/lib/authApi'
+import { getApiErrorMessage } from '@/lib/api'
+import { useNotification } from '@/hooks/useNotification'
 import i18n from '@/i18n/config'
 
 export function useUserProfile() {
+  const { showSuccess } = useNotification()
   const [profile, setProfile] = useState<ProfileResponse | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -21,10 +23,9 @@ export function useUserProfile() {
       const data = await getCurrentUserProfile()
       setProfile(data)
       return data
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to fetch profile'
+    } catch (err: unknown) {
+      const errorMsg = getApiErrorMessage(err, i18n.t('userProfile.loadFailed'))
       setError(errorMsg)
-      toast.error(errorMsg)
       throw err
     } finally {
       setLoading(false)
@@ -36,11 +37,10 @@ export function useUserProfile() {
     setError(null)
     try {
       await changePassword(data)
-      toast.success(i18n.t('common.updateSuccess'))
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to change password'
+      showSuccess(i18n.t('common.updateSuccess'))
+    } catch (err: unknown) {
+      const errorMsg = getApiErrorMessage(err, i18n.t('userProfile.passwordChangeFailed'))
       setError(errorMsg)
-      toast.error(errorMsg)
       throw err
     } finally {
       setLoading(false)
@@ -53,12 +53,11 @@ export function useUserProfile() {
     try {
       const data = await updateCurrentUserPreferences({ timezone_iana: timezoneIana })
       setProfile(data)
-      toast.success(i18n.t('common.updateSuccess'))
+      showSuccess(i18n.t('common.updateSuccess'))
       return data
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to update timezone'
+    } catch (err: unknown) {
+      const errorMsg = getApiErrorMessage(err, i18n.t('userProfile.timezoneUpdateFailed'))
       setError(errorMsg)
-      toast.error(errorMsg)
       throw err
     } finally {
       setLoading(false)

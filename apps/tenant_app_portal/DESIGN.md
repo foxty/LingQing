@@ -5,48 +5,56 @@
 **Direction:** `tech-utility` (cool paper, ink, one green accent). Tokens bound verbatim.  
 **Stack:** React + Tailwind + shadcn/ui. Do not introduce Ant Design.
 
-This file is the **contract for agents**. It defines how every screen is built. It does not inventory routes, pages, or source files. Classify the job, pick a surface type, compose from component contracts, then pass the lint list.
+Agent **contract**: classify the job → pick layout surface → pick feedback channels → compose from §6 → pass §8 lint. No route inventory. Map to a layout surface — not a product noun.
 
 ---
 
 ## How an agent uses this file
 
-Before writing or restyling UI:
+1. **Classify** (table below).
+2. **Bind tokens** (§2). Never invent hex or shadcn default blue `--primary`.
+3. **One shell** (§3). Embed/unauthenticated = no chrome.
+4. **One layout surface** (§4). Detail views: one modifier (`prose` | `metrics`).
+5. **Feedback** (§5): one channel per event.
+6. **Compose** (§6). No one-off control language.
+7. **Lint** (§8) pass/fail.
 
-1. **Bind tokens** to the existing shadcn CSS variables. Never invent hex. Never keep the shadcn default blue `--primary`.
-2. **Keep one shell.** Authenticated work lives in one chrome (header + rail + canvas). Embed and unauthenticated canvases have no chrome.
-3. **Pick one surface type** for the canvas (section 4). Do not mix densities on one view.
-4. **Compose from component contracts** (section 5). Do not invent a one-off control language.
-5. **Ship only if the lint list passes** (section 7).
+Do not copy screenshot-specific fixes.
 
-Do not copy screenshot-specific fixes. A new screen still maps to a surface type.
+### Classification
+
+| Job | Layout surface | Variant / modifier | Key components |
+|---|---|---|---|
+| Conversation + artifact side-by-side | Workbench | — | composer, split panes |
+| Scan capabilities (card grid) | Catalog | — | drawer for long body |
+| Browse/create containers | Table | list index | `ListIndexToolbar`, `ContainerRowActions` |
+| Operate on records in one container | Table | list detail | `ContainerDetailHeader`, `ListDetailToolbar` |
+| One-off configuration | Form | — | label + help under field |
+| Tenant admin (`/settings/*`) | Settings stack | settings job (§4) | `SettingsPageShell`, `SettingsSection` |
+| Read analysis artifact | Detail view | prose | provenance header, Share |
+| Charts / usage / KPIs | Detail view | metrics | KPI tiles, one chart story |
+| Confirm or short create (≤ ~6 fields) | — | — | Dialog (§5) |
+| Inspect or edit a large object | — | — | Drawer (§5) |
 
 ---
 
-## 1. Product rules (not pixels)
+## 1. Product rules
 
-LingQing is a **workbench that happens to have admin**, not an admin that happens to have chat.
+Workbench that happens to have admin — not admin that happens to have chat.
 
 | Rule | Meaning |
 |---|---|
 | **Job** | Ask → analysis artifact → share / pin / follow up. |
-| **Session** | A conversation may produce a document. The document is what leadership opens. |
-| **Bilingual** | Chrome language is one locale (`i18n`). Data may be another language. Do not mix EN/ZH inside one summary line. |
+| **Session** | Conversation may produce a document; leadership opens the document. |
+| **Bilingual** | Chrome = one locale (`i18n`). Data may differ. No EN/ZH in one summary line. |
 
-**Information architecture (visual weight, not a route dump)**
-
-- **Primary** (operator jobs): conversation, artifacts (reports / dashboards), knowledge & data, skills, search.
-- **Secondary** (tenant keep-alive): settings, users, SSO, usage, subscription, tags/ABAC, model config.
-- Primary items may appear on the rail. Secondary items share **one** Admin / Settings destination. They never compete as many equal rail buttons.
-- A second persistent sidebar inside Settings is forbidden. In-page section nav (tabs or a compact stacked list in the **canvas**) is allowed; it is not a second app rail.
-
-IA collapse can ship later. New UI must not add rail peers for admin tasks.
+**IA:** Primary rail = operator jobs (conversation, artifacts, knowledge, skills, search). Secondary = one Settings destination — never many equal admin rail buttons. No second persistent sidebar in Settings; in-page tabs/list in canvas ok.
 
 ---
 
-## 2. Tokens
+## 2. Visual foundation
 
-Source of truth is OKLch. Bind these verbatim. Append CJK fallbacks to both sans stacks: `"PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei"`.
+OKLch verbatim. Append CJK fallbacks to sans stacks: `"PingFang SC", "Hiragino Sans GB", "Noto Sans SC", "Microsoft YaHei"`.
 
 ```css
 :root {
@@ -73,323 +81,181 @@ Source of truth is OKLch. Bind these verbatim. Append CJK fallbacks to both sans
 }
 ```
 
-**Utility exception:** One sans family for UI and documents. Mono only for SQL, ids, field names, URLs, hashes. Do not add a display serif.
+One sans for UI + documents. Mono for SQL, ids, field names, URLs, hashes. No display serif.
 
-### Bind to shadcn (do not confuse names)
+**shadcn mapping** — product accent = `--primary`; shadcn `--accent` = neutral hover only (`bg-accent` is **not** brand):
 
-The portal binds these as OKLch channels on the existing shadcn slots (`oklch(var(--background) / <alpha-value>)`). Do not revert to leftover HSL blue. Mapping:
+| Token | shadcn slot | Token | shadcn slot |
+|---|---|---|---|
+| `--bg` | `--background` | `--accent` | **`--primary`** |
+| `--surface` | `--card`, `--popover` | `--accent-fg` | `--primary-foreground` |
+| `--fg` | `--foreground` | `--danger` | `--destructive` |
+| `--muted` | `--muted-foreground` | `--focus-ring` | `--ring` |
+| `--border` | `--border`, `--input` | hover wash | `--accent` / `--secondary` |
 
-| System token | shadcn slot | Role |
-|---|---|---|
-| `--bg` | `--background` | Page |
-| `--surface` | `--card`, `--popover` | Panes, menus |
-| `--fg` | `--foreground` | Text |
-| `--muted` | `--muted-foreground` | Meta (not `--muted` wash) |
-| `--border` | `--border`, `--input` | Hairlines |
-| `--accent` | **`--primary`** | Brand / CTA fill |
-| `--accent-fg` | `--primary-foreground` | Text on CTA |
-| Hover wash | shadcn `--accent` / `--secondary` | Quiet fill; **not** the brand color |
-| `--danger` | `--destructive` | Confirm-only destructive fill |
-| `--focus-ring` | `--ring` | Focus |
+Forbidden: Ant `#1890ff`, Tailwind indigo, leftover shadcn blue `--primary`, raw `bg-emerald-*`. If `.dark` exists, derive from the same recipe.
 
-Product accent = `--primary`. shadcn `--accent` stays a neutral hover surface. Using `--accent` (Tailwind class `bg-accent`) as the brand color is a mapping error.
+**Layers:** neutrals 70–90% · accent ≤2 visible hits/screen · semantic 0–5% · no gradient/glow. Charts: `--chart-1`…`--chart-10`; first stop = product accent.
 
-If a `.dark` class exists, derive it from the same recipe. Do not leave leftover blue `--primary`.
+**Type:** scale 1.25, weights 400/500/600 only. CJK: no negative tracking; LH 1.35 for headings/body.
 
-**Forbidden palettes:** Ant `#1890ff`, Tailwind indigo (`#6366f1` and siblings), leftover shadcn blue `--primary: 221.2 83.2% 53.3%`, raw `bg-emerald-*`.
+| Role | Size | Role | Size |
+|---|---|---|---|
+| H1 / H2 / H3 | 32 / 24 / 20px | UI / label / button | 14px |
+| Body | 16px | Help / Caption | 13 / 12px |
 
-### Layers
+Comparing numbers: `tabular-nums` + unit + period.
 
-| Layer | Share | Rule |
-|---|---|---|
-| Neutrals | 70–90% | Page, panes, text, meta, hairlines |
-| Accent | 5–10% | **≤2 visible uses per screen** (typical: active rail + one solid CTA) |
-| Semantic | 0–5% | Validation, destructive **confirm** |
-| Effect | &lt;1% | None. No gradient wash, glow, or blob background |
-
-Charts: `--chart-1`…`--chart-10` is the categorical band (distinct hues, same density). Pie slices and multi-series charts cycle it. Single-series bar charts color each category from the band. No Ant/indigo. First stop is the product accent.
-
-### Type
-
-Scale 1.25, seven sizes max. Three weights only: **400** read · **500** UI/nav · **600** titles and primary buttons. No 700+ for extra emphasis.
-
-| Role | Size | LH Latin | LH CJK | Tracking |
-|---|---|---|---|---|
-| H1 | 32px | 1.15 | **1.35** | Latin −0.02em; CJK 0 |
-| H2 | 24px | 1.2 | **1.35** | CJK 0 |
-| H3 | 20px | 1.25 | 1.35 | 0 |
-| Body | 16px | 1.55 | **1.75** | 0 |
-| UI / label / button | 14px | 1.5 | 1.5 | 0.02em; ALL CAPS 0.08em |
-| Help | 13px | 1.5 | 1.5 | 0.01em |
-| Caption | 12px | 1.5 | 1.5 | 0.02em |
-
-CJK never inherits negative tracking. Numbers that compare: `font-variant-numeric: tabular-nums` plus **unit and period**. Do not present unlike magnitudes as peer KPIs.
-
-### Shape and motion
-
-- Controls: `--radius-control`. Panes/dialogs: `--radius-pane`.
-- Hairline `1px solid var(--border)`. Table row hover: slightly darker `--bg`. No zebra. No rounded card + colored left border.
-- Hover on fills: shift OKLch L by ±0.08. **Never** fade text to `--muted` on hover.
-- Every focusable control: `:focus-visible` with `--focus-ring`.
-- Disabled: opacity ~0.45. Only disabled may drop contrast.
-- Primary hit targets ≥ 44px. Icon-only table actions: 32px icon, 44px hit area.
-- Icons: Lucide (already in the app), 1.5–1.75 stroke, `currentColor`. No emoji as icons.
-
-| Control | Default | Hover |
-|---|---|---|
-| Primary (`Button` default) | accent fill, accent-fg | accent L −0.08 |
-| Secondary / outline | surface, fg, border | bg L −0.06 |
-| Ghost | transparent, fg | quiet wash |
-| Destructive | danger fill — **modal confirm only** | danger L −0.08 |
-| Link / tertiary | fg or muted underline | underline; not a third solid |
+**Shape:** `--radius-control` (controls), `--radius-pane` (panes). Hairline borders. Row hover = darker `--bg`; no zebra. Focus: `:focus-visible` + `--focus-ring`. Disabled ≈45% opacity. Hit targets ≥44px. Icons: Lucide, `currentColor`, no emoji. Button fills: §6.
 
 ---
 
 ## 3. Application shell
 
-One chrome for every authenticated, non-embed page.
+Header (mark, tenant control, locale, user menu with Profile/Settings/Logout) + rail + canvas. Workbench edge-to-edge; other surfaces use page padding. Rail: one active treatment. Search = rail item **or** `⌘K`, not both.
 
-```
-┌──────────────────────────────────────────────┐
-│ Mark · tenant · locale · user menu           │
-├────────┬─────────────────────────────────────┤
-│ Rail   │ Page header (title + purpose)       │
-│        ├─────────────────────────────────────┤
-│        │ List toolbar or canvas body       │
-└────────┴─────────────────────────────────────┘
-```
-
-List index/detail pages put CTAs in the **list toolbar** row below the header, not in the page header (see §4 Table).
-
-**Header**
-
-- Product mark. Subtitle muted. Tenant is a **control** (name + environment), not `user@tenant` concatenated with Logout beside it.
-- Locale is a labeled control.
-- User opens a menu: Profile, Admin/Settings, Logout. Logout is never a header-level button.
-- Product mark is not `text-primary` if the rail already spends an accent hit.
-
-**Rail**
-
-- Icon + label; may collapse to icons.
-- **One** active treatment: filled item (secondary/surface + fg). Not left-border + outline + pill in the same product.
-- Search is either a rail item **or** a header `⌘K` — not both as primary.
-- Workbench canvas is edge-to-edge. Other surfaces use page padding.
-
-**Canvas width**
-
-| Surface | Width |
+| Surface | Canvas width |
 |---|---|
-| Workbench | Full remaining; split panes |
-| Catalog / table / dashboard | Full remaining |
-| Form / settings stack | Full remaining |
-| Document (report) | Full remaining, left-aligned. No prose measure cap and no narrow/wide toggle. |
+| Workbench | Full; split panes |
+| Browse / Configure | Full remaining |
+| Detail view | Full, left-aligned; no prose measure cap |
 
 ---
 
-## 4. Surface types
+## 4. Layout surfaces
 
-Every page is **exactly one** of these. If a view needs two, it is a workbench (panes) or a list+drawer — not two densities stacked.
-
-Example (classification only): a list of capabilities → Catalog. A conversation beside an artifact → Workbench. Do not keep a route table in this file.
+Exactly **one** per page. Two jobs → workbench panes or list+drawer. Six surfaces: Workbench · Catalog · Table · Form · Settings stack · Detail view. Overlays/empty/loading = §5, not surfaces.
 
 ### Workbench
 
-Split workspace: steer on one side, artifact on the other.
-
-- Default split ~40% / ~60% in favor of the artifact. Closed artifact → full remaining single column; reopen from the pane header. Not a leftover strip.
-- Shared session identity in both headers.
-- Composer sticky. **One** solid CTA in the panes (Send). Share on the artifact is outline if Send is solid.
-- Destructive session actions live in overflow, not a danger icon in the header.
+Split ~40/60 toward artifact. Closed artifact → full column; reopen from pane header. Composer sticky; one solid CTA (Send). Share on artifact = outline if Send is solid. Destructive actions in overflow.
 
 ### Catalog
 
-Scan a set of **capabilities or resources**.
-
-- Row/card anatomy: name · one-line job in UI language · scope chip (neutral) · owner/version caption · overflow actions.
-- Long body (prompt, policy, “do not use”) lives in a **drawer**, never in the list.
-- Filters: segmented control. Hide empty segments or omit `(0)` counts that add no information.
-- One page-level primary (Add / Upload).
+Card/row: name · one-line job · scope chip · owner caption · overflow. Long body in **drawer**. Segmented filters; hide empty segments. One page-level primary.
 
 ### Table
 
-Operate on records. Use one of the two **list layouts** below — do not invent a third chrome.
+Record operations. Two layouts only — **list index** and **list detail**.
 
-**Shared table rules**
+**Shared:** identity/status/truncated values/actions columns; ghost or overflow actions; badge **or** switch (not both); 40–44px rows; sticky header; table in `--card` shell; destructive via confirm dialog only; wide tables `table-fixed` + truncate identity col.
 
-- Columns: identity, status, truncated values (`+N`), actions as ghost or overflow.
-- Destructive: overflow → **confirm dialog**. Never `Button variant="destructive"` on every row.
-- Status: one pattern (badge **or** switch), not dots + switches + solids in one row.
-- Rows 40–44px, sticky header. Horizontal scroll for extra columns, never the page.
-- Table shell is `--card` (same as Card). Not transparent on page `--background`.
-- Wide tables: `table-fixed w-full`; identity column gets `max-w-0` + `truncate` or `line-clamp-2` + full text in `title`.
+**List index:** Page header = identity only (`text-2xl` title + muted description, **no buttons**). Toolbar below: search left, refresh outline + one solid Create/Add right (`ListIndexToolbar`). Row actions: `ContainerRowActions` (Share/Tags/Edit/Delete). Optional filter/tabs between toolbar and table.
 
-**List index** — browse/create containers (collections, data sources, API connectors). Reference: knowledge base collections index.
+**List detail:** `ContainerDetailHeader` = breadcrumb + title + meta only (no CTAs). Toolbar: search, batch outline when selected, one solid Upload/Add, ⋯ for infrequent ops (`ListDetailToolbar`). Optional status bar (e.g. Drive sync) between header and toolbar — no duplicate refresh in header and bar. Container catalog actions stay on parent index only.
 
-```
-┌ Title + one-line purpose (identity only — no buttons) ────────────┐
-├ Search (sm:w-72) ──────── [Refresh outline] [Primary: Create/Add] ┤
-├ optional: filters / tabs (segmented, full width)                    ┤
-└ Table in card shell — row click navigates to detail               ┘
-```
+**Parent → child routing:** parent = list index, child = list detail; two routes when table is wide (≥~6 cols). No persistent container sidebar.
 
-- **Page header** = identity only: `text-2xl` title, `text-sm text-muted-foreground` description. No buttons in the header row.
-- **List toolbar** (row below header): search left; **refresh outline** then **one solid primary** (Create / New / Add) on the right. Use **`ListIndexToolbar`**.
-- Container catalog actions (Share, Tags, Edit, Delete) on row via **`ContainerRowActions`** only — not in the page header.
-- Optional filter/tabs row sits between toolbar and table (Skills tabs, scheduled-task status filters).
-
-**List detail** — operate on records inside one container (documents in a collection, assets in a data source). Reference: collection documents page.
-
-```
-┌ Breadcrumb → container name + meta (identity only — no CTAs) ────┐
-├ optional: in-context status bar (e.g. Drive sync — status + ⋯)   ┤
-├ Search ── [Batch outline if selected] [Primary] [⋯ overflow]   ┤
-└ Table in card shell — row ⋯ for record actions                   ┘
-```
-
-- Use **`ContainerDetailHeader`** for breadcrumb + title + meta **only**. No primary button, no refresh, no ⋯ in the header.
-- **List-scoped CTAs** (Upload, Add record, batch delete, re-parse all) live in the **list toolbar** on the same row as search — not in the page header.
-- One solid primary in the toolbar (Upload / Add). Batch actions when rows are selected = **outline** button beside primary.
-- Infrequent collection-level ops (re-parse all, re-index all) → toolbar ⋯ overflow.
-- In-context infra (Drive sync, schema sync banner) = status bar between header and toolbar; its ⋯ holds **only** that infra’s ops (sync now, disconnect) — never duplicate refresh icons in both header and banner.
-- Container Share/Tags/Edit/Delete stay on the **parent index** route only.
-
-**When not to use list layouts**
-
-- **Catalog (cards)** — Skills, agents: card grid + drawer; tabs/filters ok; primary stays in page header.
-- **Workbench, Document, Dashboard** — different surface types; no forced table toolbar.
+**Skip list layouts for:** Catalog card grids, Workbench, Detail view.
 
 ### Form
 
-Configure rarely, fail safely.
-
-- Label above field. Help 13px muted **under** the field.
-- Group related fields. Compact related numerics on one row; do not full-bleed a 40px-high input across the canvas.
-- Secrets: masked value **inside** the control, with reveal / replace. Do not duplicate the mask as adjacent copy.
-- Actions: Save primary · Test outline with **in-form** result · extra operations as text links.
+Label above field; 13px help under field. Group related fields; compact numerics; no full-bleed 40px inputs. Secrets masked in control with reveal/replace. Save primary; Test outline with in-form result (§5).
 
 ### Settings stack
 
-Several admin sections that share a tenant.
+In-page section nav only (tabs/compact list). Policy row: title, consequence, control right. Incomplete/risky counts use `--warn`. One `--card` section chrome: `text-lg` title, muted description, optional header action, body in same card — never loose title + separate card. `text-2xl` reserved for KPI values (Detail metrics) and list index headers only.
 
-- One canvas column. Section nav is **in-page** (tabs or a compact list), never a second app rail.
-- Policy row: title, one-line consequence, control on the right.
-- Incomplete / risky counts use `--warn`, not caption gray.
-- Full remaining canvas. In-page nav lives in **one** `--card` pane; inactive items are not transparent on page `--background`.
-- Tables, cards, and form groups sit on `--card`. Do not mix a transparent table shell with a white card on the same view.
-- **One section chrome:** title `text-lg font-semibold`, description `text-sm text-muted-foreground`, optional action on the same header row, body in that card. Do not put the title outside a card and the table/form in a second card. Do not use `text-2xl` for section titles (that size is KPI values only).
+**Scaffold:** `SettingsPageShell` + one or more `SettingsSection` cards.
 
-### Document
+| Settings job | Layout | Primary | Create flow |
+|---|---|---|---|
+| Record list | section + table (`p-0`) | header or `SettingsListToolbar` | dialog/drawer |
+| Config form | section + form body | Save in card | — |
+| Multi-domain | tabs + sections/tab | one primary/section | dialog |
+| Metrics section | section + Detail metrics modifier | filters in header | — |
 
-Read an analysis artifact.
+**Forbidden on `/settings/*`:** loose `text-2xl` page titles; page-level `ListIndexToolbar`; inline create form below list; bare tables. Table rows: `SettingsRowActions`; status = `Switch` only (+ label in header/`aria-label`).
 
-- Document density: H1/H2, body 16px, tabular money, mono for SQL/fields. Full canvas width, left-aligned — not a centered reading column.
-- Header is title plus provenance (date, author, source session). Do not add a trust / verified chip — AI artifacts are edited by AI or humans as a normal lifecycle.
-- Share = primary on this surface when chat is not in view.
+### Detail view
 
-### Dashboard
+Read or interpret one artifact/dataset. One modifier per view.
 
-Tell **one** quantitative story.
+**Shared:** full width, left-aligned; no list toolbar.
 
-- KPI tiles share a period and a comparable unit family. Incomplete series: hide or label **incomplete** — never a peer tile of zeros / N/A.
-- Chart: enough points to be a trend, or show a number. Time range + refresh live in the **page header**.
-- No invented uptime or multipliers.
+**prose:** H1/H2, 16px body, mono for SQL/fields; provenance header; Share = primary when chat hidden; no trust chip.
 
-### Overlay
+**metrics:** one quantitative story; KPI tiles same period + unit family (`text-2xl tabular-nums` ok); incomplete series hidden or labelled; chart = trend or single number; filters in page/section header; no invented metrics.
 
-| | Dialog | Drawer / sheet |
+---
+
+## 5. Interaction patterns
+
+On top of §4 surfaces — not layout types.
+
+**Overlay:** Dialog = confirm, short create (≤~6 fields), ~400–480px, verb title, primary + Cancel, dismiss Esc / overlay click if non-destructive. Drawer = inspect/edit large object, ~480–560px, object title, Save in footer, list stays visible. No long documents in dialog. No equal-weight Save + Delete.
+
+**Feedback:** **One channel per event** — never toast + inline/banner for the same outcome. Severity: error (`--danger`), warning (inline `--warn`, not toast), info (muted), success (toast ok for mutations). Persistence: transient = toast; contextual = until edit/retry/navigate; page = until refetch/route change.
+
+| Situation | Channel |
+|---|---|
+| Field invalid (client) | Inline under control — 13px `text-destructive`, border `--destructive` |
+| Form submit rejected (server) | `Alert destructive` top of form/dialog |
+| Connection / diagnostic test | Inline next to control — not toast-only |
+| Mutation success | Toast via `useNotification` |
+| Mutation fail (no form anchor) | Toast: `showError(getApiErrorMessage(err, fallback))` |
+| Page/section load fail | `Alert destructive` in canvas |
+| Background job queued | Toast info/success |
+| Recoverable caution | Inline warn text/badge |
+| High-impact / irreversible | `ConfirmationDialog` |
+| Permission denied | Page banner |
+
+API errors: **`getApiErrorMessage` only** — no ad-hoc `response.data.detail`. All strings via **`i18n`**; fallbacks name the failed operation. No stack traces in UI. No direct `sonner` imports. Anti-patterns: toast for field validation; toast-only connection tests; `window.confirm` for destructive work; hardcoded English errors.
+
+**Empty / loading:** empty = what/why/next action (no `"—"`). Loading = reuse shell; one spinner language.
+
+---
+
+## 6. Component lookup
+
+| Component | When | How |
 |---|---|---|
-| Use | Confirm, short create (≤ ~6 fields) | Inspect or edit a large object |
-| Width | ~400–480px | ~480–560px |
-| Title | Verb | Object name |
-| Actions | One primary + Cancel | Save primary in footer |
-| Dismiss | Esc; overlay click if non-destructive | Esc; list stays visible |
+| `Button` | §4 CTAs | One `default`/view; `destructive` = confirm modal only |
+| `Input` / `Select` / `Textarea` / `Checkbox` | forms | label + control + help; invalid = `errorMsg` or rhf message |
+| `useNotification` | §5 transient | success/error/info/warning; + `getApiErrorMessage` before error toast |
+| `Alert` | §5 persistent | `destructive` errors; neutral inline success (e.g. test ok) |
+| `Table` | §4 Table | sticky header; overflow row actions |
+| `Card` | forms, metrics tiles | not every table row |
+| `SettingsSection` / `SettingsPageShell` | §4 Settings | section chrome; `space-y-6` shell |
+| `SettingsListToolbar` | settings searchable lists | in-card; not page-level `ListIndexToolbar` |
+| `SettingsRowActions` | settings table rows | ghost edit/delete |
+| `ListIndexToolbar` / `ListDetailToolbar` | §4 Table layouts | shared toolbar components |
+| `ContainerDetailHeader` | list detail | identity only |
+| `ContainerRowActions` | list index rows | Share/Tags/Edit/Delete |
+| `Badge` / `Switch` / `Tabs` / `Dropdown` | status, peers, overflow | neutral badges; destructive in menu → confirm |
 
-Do not read long documents in a dialog. Do not give Save and Delete equal solid weight.
-
-### Empty / error
-
-- Empty: what it is, why empty, next action. No `"—"`.
-- Error: what failed, what to do. Connection tests write status next to the control, not toast-only.
-- Loading: reuse the shell; do not invent a second spinner language.
-
-### Parent index + Child detail
-
-Default pattern for **container → records** features (knowledge base collections → documents, data sources → assets, API connectors → operations).
-
-- **Parent route** → **List index** layout (section 4, Table).
-- **Child route** → **List detail** layout (section 4, Table).
-- Two routes when the child table is wide (≥ ~6 columns) or needs full canvas width. No persistent left sidebar for container switching.
-
-**Lint (parent-child)**
-
-- Parent index: Create/Add in list toolbar (not page header); Share/Tags/Edit/Delete via **`ContainerRowActions`** on rows only.
-- Child detail: **`ContainerDetailHeader`** identity-only; list toolbar holds Upload/Add + batch + ⋯.
-- Do not duplicate container catalog actions or duplicate refresh/sync controls across header and status bar.
-- Migrate legacy child pages that still put Upload in `ContainerDetailHeader` to the list-detail toolbar pattern when touched.
+**Button fills:** primary = accent fill; outline/secondary = surface+border; ghost = quiet wash; destructive = danger fill confirm-only; link = underline. Hover: OKLch L ±0.08; never fade text to muted on hover.
 
 ---
 
-## 5. Component contracts
+## 7. Content
 
-Use the existing shadcn primitives. Extend variants; do not fork a second button kit.
-
-**Button** — `default` = the one primary per view. `outline` / `secondary` = secondary. `ghost` = row/header utilities. `destructive` = confirm modal only. `link` = tertiary. Adjacent group: at most one `default`.
-
-**Input / Select / Textarea** — label + control + optional help. Invalid: border `--danger` + 13px message, not color-only.
-
-**Table** — table primitive. Overflow menu for row actions. Sticky header.
-
-**Card** — grouping on forms and dashboards, not a wrapper around every table row. Catalog may use a compact card **or** a row; pick one per page.
-
-**Settings section** — one Card: `text-lg` title, muted `text-sm` description, optional header action, body. Table body is flush (`p-0`); form/policy body keeps padding. Not a loose heading above a second surface.
-
-**Badge / chip** — scope and status. Neutral by default. Semantic color only for warn / error. Chips do not consume the accent budget unless they *are* the page’s accent pair (avoid).
-
-**Tabs** — switch peer views of the same object. Not a substitute for IA (do not tab-group unrelated admin products).
-
-**Switch** — instantaneous preference. Policy with consequence uses switch + helper text, not a second explanation heading.
-
-**Dropdown menu** — overflow for ≤ 7 actions. Include destructive as a **menu item**, then confirm.
-
-**Container detail header** — breadcrumb parent link, container title + meta. **Identity only** on list-detail pages — no primary, refresh, or ⋯ (those belong in the list toolbar or an in-context status bar).
-
-**List index toolbar** — search left; refresh outline + one solid Create/Add right. Shared **`ListIndexToolbar`** component.
-
-**List detail toolbar** — search left; optional batch outline + one solid Upload/Add + optional ⋯ right. Shared **`ListDetailToolbar`** component. Infrequent ops (refresh, re-parse, schema sync) go in ⋯ overflow — not in the page header.
-
-**Container row actions** — ghost Share / Tags / Edit / Delete on parent index table rows. Shared component; the only place for container catalog actions in the two-route pattern.
+All user-visible strings via `i18n` (`en` + `zh`). Catalog summaries in UI locale; raw multilingual source in drawer. No lorem/fake metrics. Buttons = verbs; page titles = nouns/short jobs.
 
 ---
 
-## 6. Content
+## 8. Lint list
 
-- User-visible strings go through `i18n` (`en` + `zh` resource bundles). Do not hardcode one language in chrome.
-- Catalog summaries are written in the **UI locale**. Raw multilingual source stays in the drawer.
-- No `lorem`, “feature one”, or fake metrics. Incomplete telemetry stays labelled incomplete.
-- Copy tense: verbs on buttons (`Save`, `Upload`, `Share`). Page titles are nouns or short jobs (`Skills`, `Conversation`).
-
----
-
-## 7. Lint list (pass/fail)
-
-1. ≤2 visible product-accent hits per screen.
-2. ≤1 solid primary button per view (list index + list detail: Create/Upload in list toolbar only; repeat once at end of a long scroll only).
-3. No solid destructive control in a table row.
-4. No raw prompt, policy wall, or secret full value in a list.
+1. ≤2 product-accent hits per screen.
+2. ≤1 solid primary per view (list Create/Upload in toolbar, not page header).
+3. No solid destructive control in table rows.
+4. No raw prompt, policy wall, or secret full value in lists.
 5. No second persistent app sidebar.
-6. One surface type (and one density) per view.
-7. Tabular numbers + unit + period; unlike metrics are not peer KPIs.
-8. No invented metrics.
-9. One active-rail treatment product-wide.
-10. Logout only in the user menu.
-11. `:focus-visible` on every control.
-12. Hover never lowers text contrast.
-13. No emoji icons; Lucide `currentColor`.
-14. No gradient wash; no colored left-bar on rounded cards.
-15. Tokens from this file only — no raw hex in components.
+6. One layout surface per view; Detail = one modifier (`prose` | `metrics`).
+7. Metrics: tabular nums + unit + period; no incomparable or invented KPIs.
+8. One active-rail treatment product-wide.
+9. Logout only in user menu.
+10. `:focus-visible` on every control.
+11. Hover never lowers text contrast.
+12. Lucide icons only; `currentColor`.
+13. No gradient wash or colored left-bar on cards.
+14. Tokens from §2 only — no raw hex.
+15. Settings: `SettingsPageShell` + `SettingsSection`; no loose `text-2xl` titles or page-level `ListIndexToolbar`.
+16. One feedback channel per event; `getApiErrorMessage`; toasts via `useNotification` only.
+17. Field validation and connection tests inline — not toast-only.
 
 ---
 
-## 8. One-sentence system
+## 9. One-sentence system
 
-LingQing is a light, dense, green-accent **analysis workbench**: one shell, one surface type per view, one primary action, two accent hits, long text in drawers, admin on the full remaining canvas.
+LingQing is a light, dense, green-accent **analysis workbench**: one shell, one layout surface per view, one primary action, two accent hits, long text in drawers, admin on the full remaining canvas.

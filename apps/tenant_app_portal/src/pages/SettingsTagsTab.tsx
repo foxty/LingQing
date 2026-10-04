@@ -12,6 +12,7 @@ i18n.addResourceBundle('en', 'translation', {
       valueUpdated: 'Value updated',
       dimensionDeleted: 'Dimension deleted',
       deleteFailed: 'Delete failed',
+      operationFailed: 'Operation failed',
       noPermission: 'You do not have permission to view tags',
       title: 'Tags',
       description: 'Manage tag dimensions and values',
@@ -44,6 +45,7 @@ i18n.addResourceBundle('zh', 'translation', {
       valueUpdated: '值已更新',
       dimensionDeleted: '维度已删除',
       deleteFailed: '删除失败',
+      operationFailed: '操作失败',
       noPermission: '您没有查看标签的权限',
       title: '标签',
       description: '管理标签维度和值',
@@ -67,6 +69,8 @@ i18n.addResourceBundle('zh', 'translation', {
 }, true, true)
 
 import ResourceWhitelistConfigSection from '@/components/ResourceWhitelistConfigSection'
+import SettingsPageShell from '@/components/SettingsPageShell'
+import SettingsRowActions from '@/components/SettingsRowActions'
 import SettingsSection from '@/components/SettingsSection'
 import TagKeyEditorDialog from '@/components/TagKeyEditorDialog'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
@@ -86,6 +90,7 @@ import { useConfirmation } from '@/hooks/useConfirmation'
 import { useNotification } from '@/hooks/useNotification'
 import { useTags } from '@/hooks/useTags'
 import type { ResourceType, TagKeyDTO, TagValueDTO } from '@/lib/tagsApi'
+import { getApiErrorMessage } from '@/lib/api'
 import { actionRules } from '@/lib/permissionRules'
 
 const RESOURCE_TYPES: ResourceType[] = ['user', 'document_collection', 'data_source', 'api_connector']
@@ -173,8 +178,8 @@ export default function SettingsTagsTab() {
       showSuccess(t('settings.tagsTab.dimensionCreated'))
       setCreateKeyOpen(false)
       resetKeyForm()
-    } catch (error: any) {
-      showError(error.response?.data?.detail || t('settings.tagsTab.dimensionCreated'))
+    } catch (error: unknown) {
+      showError(getApiErrorMessage(error, t('settings.tagsTab.operationFailed')))
     }
   }
 
@@ -189,8 +194,8 @@ export default function SettingsTagsTab() {
       showSuccess(t('settings.tagsTab.dimensionUpdated'))
       setEditKey(null)
       resetKeyForm()
-    } catch (error: any) {
-      showError(error.response?.data?.detail || t('settings.tagsTab.dimensionUpdated'))
+    } catch (error: unknown) {
+      showError(getApiErrorMessage(error, t('settings.tagsTab.operationFailed')))
     }
   }
 
@@ -214,8 +219,8 @@ export default function SettingsTagsTab() {
       showSuccess(t('settings.tagsTab.valueCreated'))
       setNewValueText('')
       setNewValueRankText('')
-    } catch (error: any) {
-      showError(error.response?.data?.detail || t('settings.tagsTab.valueCreated'))
+    } catch (error: unknown) {
+      showError(getApiErrorMessage(error, t('settings.tagsTab.operationFailed')))
     }
   }
 
@@ -240,13 +245,15 @@ export default function SettingsTagsTab() {
       setEditingValueText('')
       setEditingValueRankText('')
     } catch (error: any) {
-      showError(error.response?.data?.detail || t('settings.tagsTab.valueUpdated'))
+      showError(getApiErrorMessage(error, t('settings.tagsTab.operationFailed')))
     }
   }
 
   const handleToggleTagKeyStatus = (key: TagKeyDTO, nextActive: boolean) => {
     const action = nextActive ? enableKey : disableKey
-    action(key.id).catch((err) => showError(err.response?.data?.detail || t('settings.tagsTab.dimensionUpdated')))
+    action(key.id).catch((err) =>
+      showError(getApiErrorMessage(err, t('settings.tagsTab.operationFailed')))
+    )
   }
 
   const handleDeleteTagKeyClick = (key: TagKeyDTO) => {
@@ -258,7 +265,7 @@ export default function SettingsTagsTab() {
     deleteKeyConfirm.setLoading(true)
     removeKey(key.id)
       .then(() => showSuccess(t('settings.tagsTab.dimensionDeleted')))
-      .catch((err) => showError(err.response?.data?.detail || t('settings.tagsTab.deleteFailed')))
+      .catch((err) => showError(getApiErrorMessage(err, t('settings.tagsTab.deleteFailed'))))
       .finally(() => {
         deleteKeyConfirm.setLoading(false)
         deleteKeyConfirm.close()
@@ -266,7 +273,7 @@ export default function SettingsTagsTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <SettingsPageShell>
       {!canRead && (
         <Alert variant="destructive">
           <AlertDescription>{t('settings.tagsTab.noPermission')}</AlertDescription>
@@ -318,17 +325,12 @@ export default function SettingsTagsTab() {
                       </div>
                     </TableCell>
                     <TableCell>
-                      <div className="flex items-center gap-2">
-                        <Switch
-                          checked={key.status === 'active'}
-                          onCheckedChange={(checked) => handleToggleTagKeyStatus(key, checked)}
-                          disabled={!canManage || loading}
-                          aria-label={`${t('settings.tagsTab.statusCol')} ${key.name}`}
-                        />
-                        <span className="text-sm text-muted-foreground">
-                          {key.status === 'active' ? t('settings.tagsTab.enabled') : t('settings.tagsTab.disabled')}
-                        </span>
-                      </div>
+                      <Switch
+                        checked={key.status === 'active'}
+                        onCheckedChange={(checked) => handleToggleTagKeyStatus(key, checked)}
+                        disabled={!canManage || loading}
+                        aria-label={`${t('settings.tagsTab.statusCol')} ${key.name}`}
+                      />
                     </TableCell>
                     <TableCell className="text-sm text-muted-foreground">
                       {(tagValuesByKey.get(key.id) || [])
@@ -338,32 +340,20 @@ export default function SettingsTagsTab() {
                       {(tagValuesByKey.get(key.id) || []).length > 4 && '…'}
                     </TableCell>
                     <TableCell className="text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setEditKey(key)
-                            setKeyForm({
-                              name: key.name,
-                              description: key.description || '',
-                              color: key.color || DEFAULT_TAG_COLOR,
-                            })
-                          }}
-                          disabled={!canManage}
-                        >
-                           {t('settings.tagsTab.edit')}
-                          </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => handleDeleteTagKeyClick(key)}
-                          disabled={!canManage}
-                        >
-                          {t('common.delete')}
-                         </Button>
-                       </div>
-                     </TableCell>
+                      <SettingsRowActions
+                        onEdit={() => {
+                          setEditKey(key)
+                          setKeyForm({
+                            name: key.name,
+                            description: key.description || '',
+                            color: key.color || DEFAULT_TAG_COLOR,
+                          })
+                        }}
+                        editDisabled={!canManage}
+                        onDelete={() => handleDeleteTagKeyClick(key)}
+                        deleteDisabled={!canManage}
+                      />
+                    </TableCell>
                   </TableRow>
                 ))
               )}
@@ -432,17 +422,17 @@ export default function SettingsTagsTab() {
         onSaveTagValue={handleSaveTagValue}
         onDisableTagValue={(tagValueId) =>
           disableValue(tagValueId).catch((err) =>
-            showError(err.response?.data?.detail || t('settings.tagsTab.deactivateFailed'))
+            showError(getApiErrorMessage(err, t('settings.tagsTab.deactivateFailed')))
           )
         }
         onEnableTagValue={(tagValueId) =>
           enableValue(tagValueId).catch((err) =>
-            showError(err.response?.data?.detail || t('settings.tagsTab.activateFailed'))
+            showError(getApiErrorMessage(err, t('settings.tagsTab.activateFailed')))
           )
         }
         onDeleteTagValue={(tagValueId) =>
           removeValue(tagValueId).catch((err) =>
-            showError(err.response?.data?.detail || t('settings.tagsTab.deleteFailed'))
+            showError(getApiErrorMessage(err, t('settings.tagsTab.deleteFailed')))
           )
         }
         onEditTagValue={(value) => {
@@ -475,6 +465,6 @@ export default function SettingsTagsTab() {
         onConfirm={handleDeleteTagKeyConfirm}
         onCancel={deleteKeyConfirm.close}
       />
-    </div>
+    </SettingsPageShell>
   )
 }
