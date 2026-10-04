@@ -114,7 +114,6 @@ system_agents:
       - 你好，你能帮我做什么？
       - 分析一下最近的销售数据
       - 查询产品库存情况
-    model_key: null
 mini_agents:
   session_summarizer:
     agent_id: -101

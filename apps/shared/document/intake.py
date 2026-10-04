@@ -23,7 +23,6 @@ from apps.shared.infra.storage import FileStorage
 from apps.shared.infra.storage.paths import normalize_storage_key
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.search.schemas import ResourceIndexCreateDTO
-from apps.shared.tenant.config_loader import load_tenant_config
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -57,8 +56,6 @@ class DocumentIntake:
         self.file_storage = file_storage
         self._document_repo = DBDocumentRepository(db_session)
         self._resource_index_repo = ResourceIndexRepository(db_session)
-        self._tenant_config: dict | None = None
-        self._tenant_config_loaded = False
 
     @staticmethod
     def calculate_file_hash(content: bytes) -> str:
@@ -207,18 +204,11 @@ class DocumentIntake:
             )
         )
 
-    async def _load_tenant_config(self) -> dict | None:
-        if not self._tenant_config_loaded:
-            self._tenant_config = await load_tenant_config(self.db_session, self.tenant_id)
-            self._tenant_config_loaded = True
-        return self._tenant_config
-
     async def _index_service(self):
         from apps.shared.search.indexing_service import ResourceIndexService
 
-        return ResourceIndexService(
+        return await ResourceIndexService.create(
             tenant_id=self.tenant_id,
             db_session=self.db_session,
             file_storage=self.file_storage,
-            tenant_config=await self._load_tenant_config(),
         )

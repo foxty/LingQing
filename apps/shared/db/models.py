@@ -77,6 +77,12 @@ class Tenant(Base):
     api_connectors: Mapped[list["ApiConnector"]] = relationship(
         "ApiConnector", back_populates="tenant", cascade="all, delete-orphan"
     )
+    llm_providers: Mapped[list["LLMProvider"]] = relationship(
+        "LLMProvider", back_populates="tenant", cascade="all, delete-orphan"
+    )
+    llm_model_profiles: Mapped[list["LLMModelProfile"]] = relationship(
+        "LLMModelProfile", back_populates="tenant", cascade="all, delete-orphan"
+    )
 
 
 class User(Base):
@@ -1137,6 +1143,81 @@ class LiveApp(Base):
         "User", back_populates="created_live_apps", foreign_keys=[owner_id]
     )
     data_source: Mapped["DataSource | None"] = relationship("DataSource", back_populates="live_apps", lazy="noload")
+
+
+class LLMProvider(Base):
+    """Tenant-configured LLM provider credentials."""
+
+    __tablename__ = "llm_providers"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "display_name", name="uq_llm_providers_tenant_display_name"),
+        Index("idx_llm_providers_tenant_status", "tenant_id", "status"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(100), nullable=False)
+    preset_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    type: Mapped[str] = mapped_column(String(32), nullable=False, default="openai-compatible", server_default="openai-compatible")
+    api_base: Mapped[str] = mapped_column(String(1024), nullable=False)
+    embedding_api_base: Mapped[str | None] = mapped_column(String(1024), nullable=True)
+    api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="llm_providers", lazy="noload")
+    model_profiles: Mapped[list["LLMModelProfile"]] = relationship(
+        "LLMModelProfile", back_populates="provider", cascade="all, delete-orphan", lazy="noload"
+    )
+
+
+class LLMModelProfile(Base):
+    """Tenant-configured model profile (LLM or embedding)."""
+
+    __tablename__ = "llm_model_profiles"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "name", name="uq_llm_model_profiles_tenant_name"),
+        Index("idx_llm_model_profiles_tenant_category", "tenant_id", "category"),
+        Index("idx_llm_model_profiles_provider", "provider_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    provider_id: Mapped[int] = mapped_column(Integer, ForeignKey("llm_providers.id", ondelete="RESTRICT"), nullable=False)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    category: Mapped[str] = mapped_column(String(20), nullable=False)
+    model_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    catalog_model_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default="preset", server_default="preset")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", back_populates="llm_model_profiles", lazy="noload")
+    provider: Mapped["LLMProvider"] = relationship("LLMProvider", back_populates="model_profiles", lazy="noload")
 
 
 class ApiConnector(Base):

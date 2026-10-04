@@ -247,7 +247,6 @@ def _build_agent(agent_stub_config_factory) -> AgentBase:
     stub_config = agent_stub_config_factory(
         agent_id=999,
         agent_name="Test Agent",
-        model_key="default-model",
         system_prompt="test prompt",
     )
     return AgentBase(stub_config)

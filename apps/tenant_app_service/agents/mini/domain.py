@@ -34,7 +34,6 @@ class MiniAgentConfig(BaseDomainModel):
     agent_id: int
     agent_name: str
     system_prompt: str
-    model_key: str | None = None
     temperature: float | None = None
     max_tokens: int | None = None
     response_format: type | None = None  # Pydantic model for structured output

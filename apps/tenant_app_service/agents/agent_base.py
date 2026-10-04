@@ -348,26 +348,27 @@ class AgentBase(ABC):
                 current_messages, system_messages, config
             )
             self.logger.info("Prompt context stats: %s", asdict(prompt_context_stats))
-            model_key = self.agent_config.model_key()
-
-            # Update tenant config for tenant-scoped LLM usage
-            tenant_config = runtime.tenant.config if runtime.tenant else None
-            self._model_binding_manager.update_tenant_config(tenant_config)
+            model_profile_id = self.agent_config.model_profile_id()
 
             # Resolve tools at runtime for tenant-scoped skills
             tools = self.agent_config.get_tools(loaded_skills, runtime)
 
-            model_with_tools = self._model_binding_manager.get_or_create(
-                model_key=model_key,
+            db_session = config.get("configurable", {}).get("db_session")
+            model_with_tools = await self._model_binding_manager.get_or_create(
+                model_profile_id=model_profile_id,
                 loaded_skills=loaded_skills,
                 tools=tools,
+                tenant_id=runtime.tenant.tenant_id,
+                db=db_session,
             )
 
             response = None
             configured_model_id = self._model_binding_manager.get_configured_model_id()
+            profile_label = self._model_binding_manager.get_profile_label()
+            metrics_model = configured_model_id or profile_label or "unknown"
             max_output_tokens = self._model_binding_manager.get_max_output_tokens()
             async with llm_call_tracker(
-                model_key,
+                metrics_model,
                 runtime,
                 prompt_context_stats=prompt_context_stats,
                 configured_model_id=configured_model_id,

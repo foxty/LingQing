@@ -32,6 +32,7 @@ from apps.shared.domain.types import (
     RESOURCE_TYPE_DOCUMENT_COLLECTION,
     AuthzAction,
 )
+from apps.shared.llm_providers.service import LLMProviderConfigService
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_catalog.adapters import db_agent_to_custom
 from apps.tenant_app_service.agent_catalog.domain import (
@@ -291,6 +292,10 @@ class AgentCatalogService(TenantAwareService):
             resource_ids=profile.api_connector_ids,
             model=ApiConnector,
         )
+        if profile.model_profile_id is not None:
+            await LLMProviderConfigService(self.tenant_id, self.db_session).validate_agent_model_profile(
+                profile.model_profile_id
+            )
 
     async def _require_readable_ids(
         self,
@@ -386,7 +391,7 @@ class AgentCatalogService(TenantAwareService):
             name=yaml_config.get("name") or SYSTEM_AGENT_ONE_NAME,
             description=yaml_config.get("description"),
             system_prompt=yaml_config.get("system_prompt") or "",
-            config=AgentCapabilityConfigDTO(default_tools=tool_names, model_key=yaml_config.get("model_key")),
+            config=AgentCapabilityConfigDTO(default_tools=tool_names),
             tags=list(yaml_config.get("tags") or []),
             example_questions=list(yaml_config.get("example_questions") or []),
             status="active",

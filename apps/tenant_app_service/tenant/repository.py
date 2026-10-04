@@ -124,31 +124,3 @@ class TenantRepository(BaseRepository[Tenant]):
             tenant.status = status
 
         return await self.update(tenant)
-
-    async def update_llm_config(
-        self,
-        tenant_id: int,
-        llm_config: dict,
-    ) -> Tenant | None:
-        """Update only the LLM config portion of tenant.config.
-
-        This method handles SQLAlchemy JSON field mutation detection.
-
-        Args:
-            tenant_id: Tenant ID
-            llm_config: New llm_config dict to merge into existing config
-
-        Returns:
-            Updated tenant or None if not found
-        """
-        tenant = await self.get_by_id(tenant_id)
-        if not tenant:
-            return None
-
-        existing_config = tenant.config or {}
-        tenant.config = {**existing_config, "llm_config": llm_config}
-        # Critical: flag_modified ensures SQLAlchemy detects JSON field changes
-        flag_modified(tenant, "config")
-        await self.db.commit()
-        await self.db.refresh(tenant)
-        return tenant

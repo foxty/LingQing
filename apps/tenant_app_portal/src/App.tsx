@@ -20,8 +20,8 @@ import ReportsPage from './pages/ReportsPage'
 import SearchPage from './pages/SearchPage'
 import SettingsPage from './pages/SettingsPage'
 import SettingsAbacTab from './pages/SettingsAbacTab'
-import SettingsEmbeddingConfigTab from './pages/SettingsEmbeddingConfigTab'
-import SettingsLLMConfigTab from './pages/SettingsLLMConfigTab'
+import SettingsModelsRegistryTab from './pages/SettingsModelsRegistryTab'
+import SettingsProviderDetailPage from './pages/SettingsProviderDetailPage'
 import SettingsSubscriptionTab from './pages/SettingsSubscriptionTab'
 import SettingsTagsTab from './pages/SettingsTagsTab'
 import SettingsUsageTab from './pages/SettingsUsageTab'
@@ -271,8 +271,9 @@ function App() {
           }
         >
           <Route index element={<Navigate to="models" replace />} />
-          <Route path="models" element={<SettingsLLMConfigTab />} />
-          <Route path="embedding" element={<SettingsEmbeddingConfigTab />} />
+          <Route path="models" element={<SettingsModelsRegistryTab />} />
+          <Route path="models/providers/:providerId" element={<SettingsProviderDetailPage />} />
+          <Route path="embedding" element={<Navigate to="/settings/models" replace />} />
           <Route path="tags" element={<SettingsTagsTab />} />
           <Route path="abac" element={<SettingsAbacTab />} />
           <Route path="identity" element={<SettingsIdentityTab />} />

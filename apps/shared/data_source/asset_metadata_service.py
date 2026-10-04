@@ -100,12 +100,15 @@ class AssetMetadataService(TenantAwareService):
             self._resource_index_repo = ResourceIndexRepository(self.db_session)
         return self._resource_index_repo
 
-    def _get_resource_index_service(self) -> "ResourceIndexService":
+    async def _get_resource_index_service(self) -> "ResourceIndexService":
         """Lazy-initialize ResourceIndexService."""
         if self._resource_index_service is None:
             from apps.shared.search.indexing_service import ResourceIndexService
 
-            self._resource_index_service = ResourceIndexService(tenant_id=self.tenant_id, db_session=self.db_session)
+            self._resource_index_service = await ResourceIndexService.create(
+                tenant_id=self.tenant_id,
+                db_session=self.db_session,
+            )
         return self._resource_index_service
 
     async def _ensure_data_source_access_for_actor(
@@ -683,7 +686,7 @@ class AssetMetadataService(TenantAwareService):
         """
         try:
             asset_domain = db_asset_metadata_to_domain(asset_db)
-            resource_index_svc = self._get_resource_index_service()
+            resource_index_svc = await self._get_resource_index_service()
             searchable_text = asset_domain.to_searchable_text()
             raw_content = {
                 "text": searchable_text,
@@ -707,7 +710,7 @@ class AssetMetadataService(TenantAwareService):
     async def _delete_asset_resource_index(self, asset_id: int) -> None:
         """Delete ResourceIndex record for an asset (vector cleanup handled internally by ResourceIndexService)."""
         try:
-            resource_index_svc = self._get_resource_index_service()
+            resource_index_svc = await self._get_resource_index_service()
             await resource_index_svc.delete(RESOURCE_TYPE_ASSET, asset_id)
         except Exception as exc:
             logger.warning("Failed to delete resource index for asset %d: %s", asset_id, exc)

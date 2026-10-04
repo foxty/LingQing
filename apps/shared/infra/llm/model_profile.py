@@ -11,7 +11,7 @@ class ModelProfile:
 
     定义单个 LLM/Embedding 模型的完整配置信息，包括提供商、端点等。
 
-    Note: API key 不再从环境变量获取，而是从 tenant.config 中获取。
+    Note: API keys are resolved from the tenant LLM provider registry at runtime.
 
     Attributes:
         key: 模型引用键，用于在代码中引用此模型（如 "gpt-4", "qwen3.5-plus"）
@@ -31,6 +31,7 @@ class ModelProfile:
     name: str
     provider: str
     model_id: str
+    provider_key: str | None = None
     api_base: str | None = None
     api_base_env: str | None = None
     default_params: dict[str, Any] = field(default_factory=dict)

@@ -23,7 +23,7 @@ from apps.shared.document.manifest import get_storage_uri, is_manifest_pointer, 
 from apps.shared.domain.types import (
     SearchableResourceType,
 )
-from apps.shared.infra.rag.embedding_utils import create_embeddings_from_config
+from apps.shared.llm_providers.embedding_resolver import resolve_tenant_embeddings
 from apps.shared.infra.rag.index_payload import IndexRecordPayload, IndexUpsertPayload
 from apps.shared.infra.rag.metadata_keys import (
     META_CHUNK_INDEX,
@@ -68,25 +68,33 @@ class ResourceIndexService:
         self,
         tenant_id: int,
         db_session: AsyncSession,
-        tenant_config: dict | None = None,
+        embeddings=None,
         file_storage: FileStorage | None = None,
     ):
         self.tenant_id = tenant_id
         self.db_session = db_session
-        self.tenant_config = tenant_config
         self.file_storage = file_storage
 
         self._repo = ResourceIndexRepository(db_session)
         self.asset_repo = AssetMetadataRepository(db_session)
-
-        if tenant_config is None:
-            logger.debug(
-                "ResourceIndexService using default embeddings for tenant_id=%s (no tenant config)",
-                tenant_id,
-            )
-
-        embeddings = create_embeddings_from_config(tenant_config)
+        self._embeddings = embeddings
         self.rag_manager = RAGManager(tenant_id=tenant_id, embeddings=embeddings)
+
+    @classmethod
+    async def create(
+        cls,
+        tenant_id: int,
+        db_session: AsyncSession,
+        *,
+        file_storage: FileStorage | None = None,
+    ) -> "ResourceIndexService":
+        embeddings = await resolve_tenant_embeddings(tenant_id, db_session)
+        return cls(
+            tenant_id=tenant_id,
+            db_session=db_session,
+            embeddings=embeddings,
+            file_storage=file_storage,
+        )
 
     # ==================== CRUD Operations ====================
 

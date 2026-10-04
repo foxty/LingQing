@@ -35,7 +35,7 @@ from apps.shared.domain.types import (
     SearchableResourceType,
 )
 from apps.shared.infra.rag import RAGManager
-from apps.shared.infra.rag.embedding_utils import create_embeddings_from_config
+from langchain_core.embeddings import Embeddings
 from apps.shared.infra.rag.metadata_keys import META_RESOURCE_ID
 from apps.shared.search.parser import prepare_search_queries
 from apps.shared.search.repository import ResourceIndexRepository
@@ -133,7 +133,7 @@ class SearchService(TenantAwareService):
         session: AsyncSession,
         user_id: int,
         user_role: str,
-        tenant_config: dict | None = None,
+        embeddings: Embeddings | None = None,
         allowed_collection_ids: list[int] | None = None,
         allowed_data_source_ids: list[int] | None = None,
         allowed_api_connector_ids: list[int] | None = None,
@@ -143,12 +143,10 @@ class SearchService(TenantAwareService):
         self.session = session
         self.user_id = user_id
         self.user_role = user_role
-        self.tenant_config = tenant_config
         self.allowed_collection_ids = allowed_collection_ids
         self.allowed_data_source_ids = allowed_data_source_ids
         self.allowed_api_connector_ids = allowed_api_connector_ids
         self.delegate = delegate
-        embeddings = create_embeddings_from_config(tenant_config) if tenant_config else None
         self.rag_manager = RAGManager(tenant_id=tenant_id, embeddings=embeddings)
         self.asset_repo = AssetMetadataRepository(session)
         self.data_source_repo = DataSourceRepository(session)

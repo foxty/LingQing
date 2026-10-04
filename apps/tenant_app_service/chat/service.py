@@ -692,8 +692,8 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
             "default_tools": default_tools,
             "example_questions": domain.example_questions,
         }
-        if domain.profile.model_key:
-            preloaded["model_key"] = domain.profile.model_key
+        if domain.profile.model_profile_id is not None:
+            preloaded["model_profile_id"] = domain.profile.model_profile_id
 
         revision = domain.updated_at.isoformat() if domain.updated_at else "0"
         graph = await self.agent_pool.get_or_create_agent(

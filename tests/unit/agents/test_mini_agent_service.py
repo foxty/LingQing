@@ -4,8 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from apps.shared.schemas.tenant import TenantDTO
-from apps.shared.schemas.model_config import TenantLLMConfigDTO
+from apps.shared.schemas.tenant import LLMDefaultsDTO, TenantConfigDTO, TenantDTO
 from apps.tenant_app_service.agents.mini_agent import MiniAgentService
 
 
@@ -20,21 +19,12 @@ def mini_agent_service():
         return_value=MagicMock(
             id=1,
             name="test_tenant",
-            config=TenantLLMConfigDTO(
-                agent_model={
-                    "name": "gpt-4",
-                    "type": "openai",
-                    "api_base": "",
-                    "api_key": "test-key",
-                    "model_id": "gpt-4",
-                },
-                mini_agent_model={
-                    "name": "gpt-3.5",
-                    "type": "openai",
-                    "api_base": "",
-                    "api_key": "test-key",
-                    "model_id": "gpt-3.5",
-                },
+            config=TenantConfigDTO(
+                llm_defaults=LLMDefaultsDTO(
+                    agent_profile_id=1,
+                    mini_agent_profile_id=2,
+                    embedding_profile_id=3,
+                ),
             ),
         )
     )

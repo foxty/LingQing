@@ -85,12 +85,15 @@ class ApiConnectorService:
         self._resource_index_service: ResourceIndexService | None = None
         self._resource_index_repo: ResourceIndexRepository | None = None
 
-    def _get_resource_index_service(self) -> ResourceIndexService:
+    async def _get_resource_index_service(self) -> ResourceIndexService:
         """Lazy-initialize ResourceIndexService."""
         if self._resource_index_service is None:
             from apps.shared.search.indexing_service import ResourceIndexService
 
-            self._resource_index_service = ResourceIndexService(tenant_id=self.tenant_id, db_session=self.db_session)
+            self._resource_index_service = await ResourceIndexService.create(
+                tenant_id=self.tenant_id,
+                db_session=self.db_session,
+            )
         return self._resource_index_service
 
     def _get_resource_index_repo(self) -> ResourceIndexRepository:
@@ -908,7 +911,7 @@ class ApiConnectorService:
             async with self.db_session.begin_nested():
                 domain = operation_entity_to_domain(operation)
                 searchable_text = domain.to_searchable_text()
-                resource_index_svc = self._get_resource_index_service()
+                resource_index_svc = await self._get_resource_index_service()
 
                 raw_content = {
                     "text": searchable_text,
@@ -932,7 +935,7 @@ class ApiConnectorService:
     async def _delete_api_operation_resource_index(self, operation_id: int) -> None:
         """Delete ResourceIndex record for an API operation."""
         try:
-            resource_index_svc = self._get_resource_index_service()
+            resource_index_svc = await self._get_resource_index_service()
             await resource_index_svc.delete(RESOURCE_TYPE_API_CONNECTOR, operation_id)
         except Exception as exc:
             logger.warning("Failed to delete resource index for api operation %d: %s", operation_id, exc)

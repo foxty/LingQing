@@ -39,11 +39,19 @@ import {
 } from '@/lib/agentsApi'
 import { listApiConnectors } from '@/lib/apiConnectorApi'
 import { listDataSources } from '@/lib/dataSourceApi'
+import { listRegistryProfiles, type LLMModelProfile } from '@/lib/llmConfigApi'
 import { listSlackIntegrations, type SlackIntegration } from '@/lib/slackApi'
 import { PERMISSIONS } from '@/lib/permissionRules'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import AgentSlackIntegrationDialog from '@/components/agents/AgentSlackIntegrationDialog'
 import { Badge } from '@/components/ui/badge'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 
 i18n.addResourceBundle(
   'en',
@@ -79,6 +87,9 @@ i18n.addResourceBundle(
       slack: 'Slack',
       slackStatusConnected: 'Slack connected',
       slackStatusDisabled: 'Slack disabled',
+      modelProfile: 'Model profile',
+      modelProfileHint: 'Override the tenant default LLM for this agent.',
+      tenantDefaultModel: 'Tenant default',
     },
   },
   true,
@@ -119,6 +130,9 @@ i18n.addResourceBundle(
       slack: 'Slack',
       slackStatusConnected: 'Slack 已连接',
       slackStatusDisabled: 'Slack 已禁用',
+      modelProfile: '模型配置',
+      modelProfileHint: '覆盖租户默认 LLM，留空则使用租户默认。',
+      tenantDefaultModel: '租户默认',
     },
   },
   true,
@@ -131,7 +145,7 @@ const emptyConfig = (): AgentCapabilityConfig => ({
   knowledge_base_ids: [],
   data_source_ids: [],
   api_connector_ids: [],
-  model_key: null,
+  model_profile_id: null,
 })
 
 export default function AgentsPage() {
@@ -174,6 +188,11 @@ export default function AgentsPage() {
   const [formPrompt, setFormPrompt] = useState('')
   const [formConfig, setFormConfig] = useState<AgentCapabilityConfig>(emptyConfig())
   const [formError, setFormError] = useState<string | null>(null)
+  const { data: llmProfiles = [] } = useQuery({
+    queryKey: ['llm-profiles', 'llm'],
+    queryFn: () => listRegistryProfiles('llm'),
+    enabled: editing !== null,
+  })
 
   const systemAgent = agents.find((agent) => agent.id === SYSTEM_AGENT_ONE_ID)
   const customAgents = agents.filter((agent) => !agent.is_system)
@@ -381,6 +400,35 @@ export default function AgentsPage() {
                 }))
               }
             />
+            <div className="space-y-2">
+              <Label>{t('agents.modelProfile')}</Label>
+              <p className="text-xs text-muted-foreground">{t('agents.modelProfileHint')}</p>
+              <Select
+                value={
+                  formConfig.model_profile_id === null || formConfig.model_profile_id === undefined
+                    ? 'tenant-default'
+                    : String(formConfig.model_profile_id)
+                }
+                onValueChange={(value) =>
+                  setFormConfig((current) => ({
+                    ...current,
+                    model_profile_id: value === 'tenant-default' ? null : Number(value),
+                  }))
+                }
+              >
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="tenant-default">{t('agents.tenantDefaultModel')}</SelectItem>
+                  {llmProfiles.map((profile: LLMModelProfile) => (
+                    <SelectItem key={profile.id} value={String(profile.id)}>
+                      {profile.name} ({profile.model_id})
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
             <DerivedToolsPreview config={formConfig} skills={skills} />
             {formError ? (
               <Alert variant="destructive">

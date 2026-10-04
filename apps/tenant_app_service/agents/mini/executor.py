@@ -7,7 +7,8 @@ Metrics collection via agent_metrics_instrumentation for consistency.
 from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.infra.llm.llm_model_factory import LLMModelFactory
+from apps.shared.infra.llm.llm_model_resolver import create_chat_model
+from apps.shared.llm_providers.service import LLMProviderConfigService
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.domain import AgentRuntimeContext
 from apps.tenant_app_service.agents.metrics.agent_metrics_instrumentation import llm_call_tracker
@@ -17,65 +18,32 @@ logger = get_logger(__name__)
 
 
 class MiniAgentExecutor:
-    """Core executor for stateless LLM calls.
-
-    Design:
-    - Uses LangChain's ChatModel interface (model-agnostic)
-    - No LangGraph/StateGraph (too heavy for single calls)
-    - Automatic retry with exponential backoff
-    - Integrated observability tracking
-    - Dumb executor: just runs LLM with provided prompts
-    - Supports tenant-scoped LLM config (mini_agent_model)
-    """
+    """Core executor for stateless LLM calls."""
 
     def __init__(self, db: AsyncSession):
-        """Initialize executor.
-
-        Args:
-            db: Database session for metrics storage
-        """
         self.db = db
         self.logger = logger
 
     async def execute(self, config: MiniAgentConfig, context: AgentRuntimeContext, user_prompt: str) -> MiniAgentResult:
-        """Execute a single LLM call with observability and retry.
+        if not context.tenant:
+            raise ValueError("Tenant context not available for mini agent execution")
 
-        Requires tenant LLM config to be configured.
-
-        Args:
-            config: MiniAgentConfig with prompts and parameters
-            context: AgentRuntimeContext for tracking
-
-        Returns:
-            MiniAgentResult with response and metrics
-
-        Raises:
-            ValueError: If tenant LLM config is not configured
-        """
-        tenant_config = context.tenant.config if context.tenant else None
-        if not tenant_config:
-            raise ValueError("Tenant config not available for mini agent execution")
-
-        model_factory = LLMModelFactory(tenant_config)
-        if not model_factory.is_configured():
-            raise ValueError(
-                "Tenant LLM config not configured. Please configure LLM in tenant settings before using mini agents."
-            )
+        service = LLMProviderConfigService(context.tenant.tenant_id, self.db)
+        resolved = await service.resolve_default_llm_profile(mini=True)
+        model_key = resolved.profile_name
+        configured_model_id = resolved.model_id
+        model = create_chat_model(resolved)
 
         messages = [
             SystemMessage(content=config.system_prompt),
             HumanMessage(content=user_prompt),
         ]
 
-        model_key = model_factory.get_model_name("mini_agent_model")
-        configured_model_id = model_factory.get_mini_agent_model_id()
         max_retries = 3
         base_delay = 1.0
 
         for attempt in range(max_retries):
             try:
-                model = model_factory.get_mini_agent_model()
-
                 if config.response_format:
                     model = model.with_structured_output(config.response_format)
 
@@ -92,29 +60,44 @@ class MiniAgentExecutor:
                         return MiniAgentResult(
                             structured_data=response.model_dump(),
                         )
-                    else:
-                        return MiniAgentResult(
-                            content=response.content,
-                        )
-            except Exception as e:
-                if attempt < max_retries - 1 and self._is_transient_error(e):
-                    delay = base_delay * (2**attempt)
-                    self.logger.warning(f"Transient error, retrying in {delay}s: {str(e)}")
-                    continue
-                else:
-                    raise
+                    return MiniAgentResult(
+                        content=response.content if hasattr(response, "content") else str(response),
+                    )
 
-    def _is_transient_error(self, error: Exception) -> bool:
-        """Check if error is transient (should retry)."""
-        error_str = str(error).lower()
-        transient_indicators = [
-            "429",  # Rate limit
-            "503",  # Service unavailable
-            "504",  # Gateway timeout
+            except Exception as exc:
+                if not self._is_transient_error(exc) or attempt == max_retries - 1:
+                    logger.error(
+                        "MiniAgent LLM call failed after %s attempts: %s",
+                        attempt + 1,
+                        exc,
+                        exc_info=True,
+                    )
+                    raise
+                delay = base_delay * (2**attempt)
+                logger.warning(
+                    "MiniAgent LLM call failed (attempt %s/%s), retrying in %ss: %s",
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                    exc,
+                )
+                import asyncio
+
+                await asyncio.sleep(delay)
+
+        raise RuntimeError("MiniAgent execution failed unexpectedly")
+
+    @staticmethod
+    def _is_transient_error(exc: Exception) -> bool:
+        message = str(exc).lower()
+        transient_markers = (
+            "429",
+            "503",
+            "504",
             "timeout",
-            "timed out",
             "rate limit",
             "too many requests",
-            "temporarily unavailable",
-        ]
-        return any(indicator in error_str for indicator in transient_indicators)
+            "service unavailable",
+            "gateway timeout",
+        )
+        return any(marker in message for marker in transient_markers)

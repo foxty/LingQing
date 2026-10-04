@@ -42,7 +42,6 @@ class _SearchRuntime(NamedTuple):
     tenant_id: int
     user_id: int
     user_role: str
-    tenant_config: dict | None
     collection_ids: list[int] | None
     data_source_ids: list[int] | None
     api_ids: list[int] | None
@@ -84,7 +83,6 @@ def _get_runtime(config: RunnableConfig) -> _SearchRuntime:
         tenant_id=runtime.user.tenant_id,
         user_id=runtime.user.user_id,
         user_role=runtime.user.role,
-        tenant_config=runtime.tenant.config,
         collection_ids=profile.allowed_collection_ids if profile else None,
         data_source_ids=profile.allowed_data_source_ids if profile else None,
         api_ids=profile.allowed_api_connector_ids if profile else None,
@@ -92,13 +90,16 @@ def _get_runtime(config: RunnableConfig) -> _SearchRuntime:
     )
 
 
-def _search_service(session, runtime: _SearchRuntime) -> SearchService:
+async def _search_service(session, runtime: _SearchRuntime) -> SearchService:
+    from apps.shared.llm_providers.embedding_resolver import resolve_tenant_embeddings
+
+    embeddings = await resolve_tenant_embeddings(runtime.tenant_id, session)
     return SearchService(
         tenant_id=runtime.tenant_id,
         session=session,
         user_id=runtime.user_id,
         user_role=runtime.user_role,
-        tenant_config=runtime.tenant_config,
+        embeddings=embeddings,
         allowed_collection_ids=runtime.collection_ids,
         allowed_data_source_ids=runtime.data_source_ids,
         allowed_api_connector_ids=runtime.api_ids,
@@ -140,7 +141,7 @@ async def _run_search(
     logger.info("%s tenant=%s user_id=%s query=%s", tool_name, runtime.tenant_id, runtime.user_id, query[:80])
 
     async with app_db_session() as session:
-        service = _search_service(session, runtime)
+        service = await _search_service(session, runtime)
         page_items, pagination = await search_fn(service, query, page, page_size)
 
     return ToolResult.success(_search_payload(query, page_items, pagination))
@@ -354,7 +355,7 @@ async def retrieve_resource_context(
     )
 
     async with app_db_session() as session:
-        service = _search_service(session, runtime)
+        service = await _search_service(session, runtime)
 
         if resource_type == RESOURCE_TYPE_DOCUMENT:
             return await _retrieve_document(service, resource_id, chunk_indexes)

@@ -66,9 +66,12 @@ class AgentConfig:
 
     # === Model Settings ===
 
-    def model_key(self) -> str | None:
-        """Get model key from agent config."""
-        return self.get_config().get("model_key")
+    def model_profile_id(self) -> int | None:
+        """Get tenant model profile override for this agent."""
+        value = self.get_config().get("model_profile_id")
+        if value is None:
+            return None
+        return int(value)
 
     @property
     def temperature(self) -> float | None:

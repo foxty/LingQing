@@ -30,6 +30,7 @@ from apps.tenant_app_service.identity.router import router as identity_router
 from apps.tenant_app_service.routers import (
     abac,
     acl_shares,
+    admin_system_tasks,
     api_connectors,
     auth,
     charts,
@@ -48,7 +49,6 @@ from apps.tenant_app_service.routers import (
     notifications,
     observability,
     reports,
-    admin_system_tasks,
     scheduled_tasks,
     search,
     skills,

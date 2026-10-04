@@ -8,7 +8,7 @@ export interface AgentCapabilityConfig {
   knowledge_base_ids: number[]
   data_source_ids: number[]
   api_connector_ids: number[]
-  model_key: string | null
+  model_profile_id?: number | null
 }
 
 export interface CatalogAgent {

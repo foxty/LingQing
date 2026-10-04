@@ -40,7 +40,6 @@ from apps.shared.infra.storage import FileStorage
 from apps.shared.infra.storage.paths import resolve_storage_ref
 from apps.shared.search.indexing_service import ResourceIndexService
 from apps.shared.search.repository import ResourceIndexRepository
-from apps.shared.tenant.config_loader import load_tenant_config
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
 
@@ -67,27 +66,18 @@ class DocumentService(TenantAwareService):
         self._collection_service = DocumentCollectionService(tenant_id, db_session)
         self._resource_index_service: ResourceIndexService | None = None
         self._resource_index_repo: ResourceIndexRepository | None = None
-        self._tenant_config: dict | None = None
-        self._tenant_config_loaded = False
 
     def _get_resource_index_repo(self) -> ResourceIndexRepository:
         if self._resource_index_repo is None:
             self._resource_index_repo = ResourceIndexRepository(self.db_session)
         return self._resource_index_repo
 
-    async def _load_tenant_config(self) -> dict | None:
-        if not self._tenant_config_loaded:
-            self._tenant_config = await load_tenant_config(self.db_session, self.tenant_id)
-            self._tenant_config_loaded = True
-        return self._tenant_config
-
     async def _get_resource_index_service(self) -> ResourceIndexService:
         if self._resource_index_service is None:
-            self._resource_index_service = ResourceIndexService(
+            self._resource_index_service = await ResourceIndexService.create(
                 tenant_id=self.tenant_id,
                 db_session=self.db_session,
                 file_storage=self.file_storage,
-                tenant_config=await self._load_tenant_config(),
             )
         return self._resource_index_service
 

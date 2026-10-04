@@ -16,8 +16,7 @@ from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.db.base_repository import BaseRepository
 from apps.shared.db.models import TenantMembership, User
 from apps.shared.db.session import app_db_session, get_db
-from apps.shared.schemas.model_config import TenantEmbeddingConfigDTO, TenantLLMConfigDTO
-from apps.shared.schemas.tenant import TenantConfigDTO, TenantDTO
+from apps.shared.schemas.tenant import LLMDefaultsDTO, TenantConfigDTO, TenantDTO
 from apps.shared.schemas.user import UserDTO
 from apps.shared.utils.logger import get_logger
 
@@ -307,13 +306,8 @@ async def get_current_tenant(
         )
 
     config = None
-    if tenant.config:
-        llm_config = tenant.config.get("llm_config")
-        embedding_config = tenant.config.get("embedding_config")
-        config = TenantConfigDTO(
-            llm_config=TenantLLMConfigDTO(**llm_config) if llm_config else None,
-            embedding_config=TenantEmbeddingConfigDTO(**embedding_config) if embedding_config else None,
-        )
+    if tenant.config and tenant.config.get("llm_defaults"):
+        config = TenantConfigDTO(llm_defaults=LLMDefaultsDTO(**tenant.config["llm_defaults"]))
 
     return TenantDTO(
         id=tenant.id,

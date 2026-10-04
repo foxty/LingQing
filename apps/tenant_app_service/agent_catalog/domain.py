@@ -77,29 +77,32 @@ class AgentCapabilityProfile(BaseDomainModel):
     knowledge_base_ids: list[int] = field(default_factory=list)
     data_source_ids: list[int] = field(default_factory=list)
     api_connector_ids: list[int] = field(default_factory=list)
-    model_key: str | None = None
+    model_profile_id: int | None = None
 
     @classmethod
     def from_config(cls, config: dict[str, Any] | None) -> AgentCapabilityProfile:
         raw = config or {}
+        model_profile_id = raw.get("model_profile_id")
         return cls(
             default_tools=_as_str_list(raw.get("default_tools")),
             skills=_as_str_list(raw.get("skills")),
             knowledge_base_ids=_as_int_list(raw.get("knowledge_base_ids")),
             data_source_ids=_as_int_list(raw.get("data_source_ids")),
             api_connector_ids=_as_int_list(raw.get("api_connector_ids")),
-            model_key=raw.get("model_key"),
+            model_profile_id=int(model_profile_id) if model_profile_id is not None else None,
         )
 
     def to_config(self) -> dict[str, Any]:
-        return {
+        result = {
             "default_tools": list(self.default_tools),
             "skills": list(self.skills),
             "knowledge_base_ids": list(self.knowledge_base_ids),
             "data_source_ids": list(self.data_source_ids),
             "api_connector_ids": list(self.api_connector_ids),
-            "model_key": self.model_key,
         }
+        if self.model_profile_id is not None:
+            result["model_profile_id"] = self.model_profile_id
+        return result
 
 
 @dataclass

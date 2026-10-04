@@ -11,7 +11,7 @@ class AgentCapabilityConfigDTO(BaseModel):
     knowledge_base_ids: list[int] = Field(default_factory=list)
     data_source_ids: list[int] = Field(default_factory=list)
     api_connector_ids: list[int] = Field(default_factory=list)
-    model_key: str | None = None
+    model_profile_id: int | None = None
 
 
 class AgentResponse(BaseModel):
