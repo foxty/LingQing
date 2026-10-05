@@ -5,7 +5,7 @@ from __future__ import annotations
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -101,16 +101,20 @@ def _document_db(*, doc_id: int = 42) -> SimpleNamespace:
 
 
 @pytest.fixture
-def processing_service() -> DocumentParsePipeline:
+def processing_service(monkeypatch) -> DocumentParsePipeline:
+    monkeypatch.setattr(
+        "apps.shared.document.parse_pipeline.try_read_existing_blocks",
+        AsyncMock(return_value=None),
+    )
     file_storage = AsyncMock()
     file_storage.exists = AsyncMock(return_value=True)
-    service = DocumentParsePipeline(
-        tenant_id=1,
-        db_session=AsyncMock(),
-        file_storage=file_storage,
-    )
+    service = DocumentParsePipeline.__new__(DocumentParsePipeline)
+    service.tenant_id = 1
+    service.db_session = MagicMock()
+    service.file_storage = file_storage
     service._document_repo = AsyncMock()
     service._resource_index_repo = AsyncMock()
+    service._registry = _FakeRegistry(_FakeAsyncParser())
     return service
 
 
