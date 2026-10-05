@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from apps.shared.llm_providers.domain import ModelProfileCategory, ResolvedModelConfig
+from apps.shared.llm_providers.dtos import LLMDefaultsResponseDTO
 from apps.tenant_app_service.agents.model_binding_manager import ModelBindingManager
 
 
@@ -103,3 +104,95 @@ async def test_get_or_create_caches_by_profile_id():
 
     assert first is second
     service_cls.return_value.resolve_for_agent.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_refreshes_when_tenant_default_changes():
+    manager = ModelBindingManager(_agent_config_mock(), MagicMock())
+    first_resolved = _resolved_config(profile_id=5, model_id="qwen-old")
+    second_resolved = _resolved_config(profile_id=9, model_id="deepseek-new")
+    chat_model = MagicMock()
+    chat_model.bind_tools.side_effect = [MagicMock(name="first-bound"), MagicMock(name="second-bound")]
+
+    defaults_responses = [
+        LLMDefaultsResponseDTO(agent_profile_id=5, mini_agent_profile_id=5, embedding_profile_id=1),
+        LLMDefaultsResponseDTO(agent_profile_id=9, mini_agent_profile_id=5, embedding_profile_id=1),
+    ]
+
+    with (
+        patch(
+            "apps.tenant_app_service.agents.model_binding_manager.LLMProviderConfigService"
+        ) as service_cls,
+        patch(
+            "apps.tenant_app_service.agents.model_binding_manager.create_chat_model",
+            return_value=chat_model,
+        ) as create_chat_model,
+    ):
+        service_cls.return_value.get_defaults = AsyncMock(side_effect=defaults_responses)
+        service_cls.return_value.resolve_for_agent = AsyncMock(side_effect=[first_resolved, second_resolved])
+
+        first = await manager.get_or_create(
+            model_profile_id=None,
+            loaded_skills=[],
+            tools=[],
+            tenant_id=1,
+            db=AsyncMock(),
+        )
+        second = await manager.get_or_create(
+            model_profile_id=None,
+            loaded_skills=[],
+            tools=[],
+            tenant_id=1,
+            db=AsyncMock(),
+        )
+
+    assert first is not second
+    assert service_cls.return_value.resolve_for_agent.await_count == 2
+    assert create_chat_model.call_args_list[0].args[0].model_id == "qwen-old"
+    assert create_chat_model.call_args_list[1].args[0].model_id == "deepseek-new"
+    assert manager.get_configured_model_id() == "deepseek-new"
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_scoped_by_tenant_id():
+    manager = ModelBindingManager(_agent_config_mock(), MagicMock())
+    tenant_one = _resolved_config(profile_id=5, model_id="tenant-one-model")
+    tenant_two = _resolved_config(profile_id=5, model_id="tenant-two-model")
+    chat_model = MagicMock()
+    chat_model.bind_tools.side_effect = [MagicMock(name="tenant-one-bound"), MagicMock(name="tenant-two-bound")]
+
+    with (
+        patch(
+            "apps.tenant_app_service.agents.model_binding_manager.LLMProviderConfigService"
+        ) as service_cls,
+        patch(
+            "apps.tenant_app_service.agents.model_binding_manager.create_chat_model",
+            return_value=chat_model,
+        ),
+    ):
+        service_cls.return_value.get_defaults = AsyncMock(
+            return_value=LLMDefaultsResponseDTO(
+                agent_profile_id=5,
+                mini_agent_profile_id=5,
+                embedding_profile_id=1,
+            )
+        )
+        service_cls.return_value.resolve_for_agent = AsyncMock(side_effect=[tenant_one, tenant_two])
+
+        first = await manager.get_or_create(
+            model_profile_id=None,
+            loaded_skills=[],
+            tools=[],
+            tenant_id=1,
+            db=AsyncMock(),
+        )
+        second = await manager.get_or_create(
+            model_profile_id=None,
+            loaded_skills=[],
+            tools=[],
+            tenant_id=2,
+            db=AsyncMock(),
+        )
+
+    assert first is not second
+    assert service_cls.return_value.resolve_for_agent.await_count == 2

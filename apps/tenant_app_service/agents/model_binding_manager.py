@@ -14,7 +14,8 @@ from apps.tenant_app_service.agents.agent_config import AgentConfig
 
 @dataclass(frozen=True)
 class _ModelBindingSignature:
-    model_profile_id: int | None
+    tenant_id: int
+    cache_profile_id: int | None
     temperature: float | None
     top_p: float | None
     max_tokens: int | None
@@ -51,7 +52,17 @@ class ModelBindingManager:
     ):
         """Get or create model with tools binding using the tenant model registry."""
         skills = loaded_skills or []
-        signature = self._build_signature(model_profile_id, skills, tools)
+        cache_profile_id = await self._resolve_cache_profile_id(
+            model_profile_id=model_profile_id,
+            tenant_id=tenant_id,
+            db=db,
+        )
+        signature = self._build_signature(
+            tenant_id=tenant_id,
+            cache_profile_id=cache_profile_id,
+            loaded_skills=skills,
+            tools=tools,
+        )
 
         if self._cached_model is not None and signature == self._cached_signature:
             return self._cached_model
@@ -98,15 +109,33 @@ class ModelBindingManager:
             return self._resolved_max_tokens
         return self._agent_config.max_tokens
 
+    async def _resolve_cache_profile_id(
+        self,
+        *,
+        model_profile_id: int | None,
+        tenant_id: int,
+        db: AsyncSession,
+    ) -> int | None:
+        """Resolve the profile id used for cache keys and model lookup."""
+        if model_profile_id is not None:
+            return model_profile_id
+
+        service = LLMProviderConfigService(tenant_id, db)
+        defaults = await service.get_defaults()
+        return defaults.agent_profile_id
+
     def _build_signature(
         self,
-        model_profile_id: int | None,
+        *,
+        tenant_id: int,
+        cache_profile_id: int | None,
         loaded_skills: list[str],
         tools: Iterable,
     ) -> _ModelBindingSignature:
         tool_names = tuple(sorted(getattr(tool, "name", "") for tool in tools))
         return _ModelBindingSignature(
-            model_profile_id=model_profile_id,
+            tenant_id=tenant_id,
+            cache_profile_id=cache_profile_id,
             temperature=self._agent_config.temperature,
             top_p=self._agent_config.top_p,
             max_tokens=self._agent_config.max_tokens,
