@@ -43,7 +43,6 @@ def _isolate_parser_env() -> None:
 
 _isolate_parser_env()
 
-
 def pytest_configure(config):
     """Configure pytest markers and options."""
     _isolate_parser_env()

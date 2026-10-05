@@ -13,7 +13,10 @@ from apps.shared.db.models import Artifact
 
 @pytest.fixture
 def artifact_repo() -> ArtifactRepository:
-    db = AsyncMock()
+    db = MagicMock()
+    db.add = MagicMock()
+    db.execute = AsyncMock()
+    db.flush = AsyncMock()
     db.begin_nested = MagicMock()
     db.begin_nested.return_value.__aenter__ = AsyncMock(return_value=None)
     db.begin_nested.return_value.__aexit__ = AsyncMock(return_value=None)
