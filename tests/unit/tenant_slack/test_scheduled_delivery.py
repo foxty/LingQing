@@ -131,6 +131,7 @@ async def test_deliver_scheduled_agent_run_posts_to_thread(monkeypatch):
         channel="C123",
         text="Summary complete.",
         thread_ts="1700000000.000100",
+        blocks=None,
     )
 
 

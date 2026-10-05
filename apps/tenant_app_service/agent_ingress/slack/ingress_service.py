@@ -1,4 +1,7 @@
-"""Slack ingress orchestration service."""
+"""Runtime Slack ingress orchestration (events → identity → chat → reply).
+
+Portal admin config lives in ``admin_service``; HTTP webhooks in ``ingress_router``.
+"""
 
 from __future__ import annotations
 
@@ -6,12 +9,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_settings
-from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.exceptions import DomainException
 from apps.shared.db.models import AgentIngressEndpoint
 from apps.shared.external_identity import BindAction
 from apps.shared.schemas.user import UserDTO
 from apps.shared.utils.logger import get_logger
+from apps.tenant_app_service.agent_ingress.slack.access import is_eligible_slack_identity, user_has_chat_access
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, SlackWebClient
 from apps.tenant_app_service.agent_ingress.slack.domain import (
     SlackMessageEvent,
@@ -19,8 +22,11 @@ from apps.tenant_app_service.agent_ingress.slack.domain import (
     format_reply_for_slack,
     slack_mapping_thread_ts,
     slack_reply_thread_ts,
-    split_long_text,
     strip_bot_mention,
+)
+from apps.tenant_app_service.agent_ingress.slack.feedback_delivery import (
+    post_slack_reply_with_feedback,
+    resolve_feedback_message_id,
 )
 from apps.tenant_app_service.agent_ingress.slack.identity_service import SlackIdentityService
 from apps.tenant_app_service.agent_ingress.slack.messages import (
@@ -33,6 +39,7 @@ from apps.tenant_app_service.agent_ingress.slack.messages import (
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.token import JwtTokenIssuer
+from apps.tenant_app_service.chat.message_repository import MessageRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.service import ChatService
 
@@ -82,19 +89,22 @@ class SlackIngressService:
             )
             return
 
-        if result.action in {BindAction.DENY, BindAction.PENDING}:
-            await self._post_ephemeral(
-                bot_token,
-                event,
-                slack_identity_user_message(action=result.action, reason=result.reason),
-            )
+        if not is_eligible_slack_identity(result):
+            if result.action in {BindAction.DENY, BindAction.PENDING}:
+                await self._post_ephemeral(
+                    bot_token,
+                    event,
+                    slack_identity_user_message(action=result.action, reason=result.reason),
+                )
+            elif result.user_id is None:
+                logger.warning(
+                    "Slack bind returned %s with no user_id for tenant %s",
+                    result.action,
+                    tenant_id,
+                )
             return
 
-        if result.user_id is None:
-            logger.warning("Slack bind returned %s with no user_id for tenant %s", result.action, tenant_id)
-            return
-
-        if not await self._user_has_chat_access(tenant_id, result.user_id):
+        if not await user_has_chat_access(self.db, tenant_id, result.user_id):
             await self._post_ephemeral(
                 bot_token, event, slack_user_message(SlackMessageKey.CHAT_PERMISSION_DENIED)
             )
@@ -150,6 +160,8 @@ class SlackIngressService:
         )
         thinking_ts = thinking.get("ts") if thinking else None
 
+        message_id: str | None = None
+        session_id: str | None = None
         try:
             chat_service = ChatService(tenant_id, self.db)
             chat_request = ChatRequest(
@@ -160,6 +172,8 @@ class SlackIngressService:
             )
             settings = get_settings()
             response = await chat_service.chat(chat_request, current_user=user_dto, access_token=access_token)
+            message_id = response.response.message_id
+            session_id = response.response.session_id
             reply_text = format_reply_for_slack(
                 response.response.content
                 if isinstance(response.response.content, str)
@@ -181,21 +195,24 @@ class SlackIngressService:
 
         reply_text = ensure_slack_reply_text(reply_text)
 
-        for chunk in split_long_text(reply_text):
-            if not chunk.strip():
-                continue
-            if thinking_ts:
-                await self.client.chat_update(
-                    bot_token=bot_token, channel=event.channel_id, ts=thinking_ts, text=chunk
-                )
-                thinking_ts = None
-            else:
-                await self.client.chat_post_message(
-                    bot_token=bot_token,
-                    channel=event.channel_id,
-                    text=chunk,
-                    thread_ts=reply_thread_ts,
-                )
+        message_repo = MessageRepository(self.db)
+        message_id = await resolve_feedback_message_id(
+            message_repo,
+            message_id=message_id,
+            session_id=session_id,
+            thread_id=thread_id,
+        )
+        await post_slack_reply_with_feedback(
+            client=self.client,
+            bot_token=bot_token,
+            channel_id=event.channel_id,
+            text=reply_text,
+            message_id=message_id,
+            thread_ts=reply_thread_ts,
+            message_repo=message_repo,
+            db=self.db,
+            update_ts=thinking_ts,
+        )
 
     async def _get_endpoint(self, endpoint_id: int) -> AgentIngressEndpoint | None:
         result = await self.db.execute(
@@ -371,24 +388,3 @@ class SlackIngressService:
             tenant_name,
         )
 
-    async def _user_has_chat_access(self, tenant_id: int, user_id: int) -> bool:
-        from apps.shared.authz.ta_rbac import role_has_permission
-        from apps.tenant_app_service.auth.repository import UserRepository
-
-        user_repo = UserRepository(self.db)
-        membership = await user_repo.get_user_membership(tenant_id, user_id)
-        if not membership:
-            return False
-        user, membership_row = membership
-        if membership_row.status != "active":
-            return False
-        try:
-            return await role_has_permission(
-                db=self.db,
-                tenant_id=tenant_id,
-                role_key=user.role,
-                permission=Permissions.CHAT_ACCESS,
-            )
-        except Exception:
-            logger.exception("Permission check failed for tenant %s user %s", tenant_id, user_id)
-            return False

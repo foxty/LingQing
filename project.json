@@ -73,6 +73,20 @@
                 "cwd": "."
             }
         },
+        "downgrade-db:tenant-app": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run alembic -c apps/tenant_app_service/alembic.ini downgrade {args}",
+                "cwd": "."
+            }
+        },
+        "downgrade-db:tenant-manager": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run alembic -c apps/tenant_manager_service/alembic.ini downgrade {args}",
+                "cwd": "."
+            }
+        },
         "tenant-cli": {
             "executor": "nx:run-commands",
             "options": {

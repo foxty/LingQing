@@ -4,7 +4,7 @@ Records chat.postMessage / users.info / auth.test / conversations.open calls
 and returns canned responses. Also provides a signing-header generator so
 tests can produce valid X-Slack-Signature headers for the webhook.
 
-Patch apps.tenant_app_service.slack.client.SlackWebClient methods (or inject
+Patch apps.tenant_app_service.agent_ingress.slack.client.SlackWebClient methods (or inject
 this via the SlackClientPort) to mock the Slack HTTP boundary without touching
 real network.
 """
@@ -51,14 +51,30 @@ class FakeSlackClient:
             return None
         return {"id": user_id, "name": user.get("name", user_id), "profile": user.get("profile", {})}
 
-    async def chat_post_message(self, *, bot_token: str, channel: str, text: str, thread_ts: str | None = None) -> dict[str, Any]:
+    async def chat_post_message(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        text: str,
+        thread_ts: str | None = None,
+        blocks: list[dict] | None = None,
+    ) -> dict[str, Any]:
         ts = f"{len(self.posted_messages) + 1}.000000"
-        record = {"channel": channel, "text": text, "thread_ts": thread_ts, "ts": ts}
+        record = {"channel": channel, "text": text, "thread_ts": thread_ts, "blocks": blocks, "ts": ts}
         self.posted_messages.append(record)
         return {"ok": True, "ts": ts, "channel": channel}
 
-    async def chat_update(self, *, bot_token: str, channel: str, ts: str, text: str) -> dict[str, Any]:
-        record = {"channel": channel, "ts": ts, "text": text}
+    async def chat_update(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        ts: str,
+        text: str,
+        blocks: list[dict] | None = None,
+    ) -> dict[str, Any]:
+        record = {"channel": channel, "ts": ts, "text": text, "blocks": blocks}
         self.updated_messages.append(record)
         return {"ok": True}
 

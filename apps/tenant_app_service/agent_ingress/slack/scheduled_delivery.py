@@ -7,9 +7,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.config import get_settings
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, SlackWebClient
-from apps.tenant_app_service.agent_ingress.slack.domain import format_reply_for_slack, split_long_text
+from apps.tenant_app_service.agent_ingress.slack.domain import format_reply_for_slack
+from apps.tenant_app_service.agent_ingress.slack.feedback_delivery import (
+    post_slack_reply_with_feedback,
+    resolve_feedback_message_id,
+)
 from apps.tenant_app_service.agent_ingress.slack.messages import SLACK_SCHEDULED_FAILURE_MESSAGE
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
+from apps.tenant_app_service.chat.message_repository import MessageRepository
 
 logger = get_logger(__name__)
 
@@ -32,6 +37,8 @@ async def deliver_scheduled_agent_run_to_slack(
     response_text: str,
     db_session: AsyncSession,
     client: SlackClientPort | None = None,
+    message_id: str | None = None,
+    session_id: str | None = None,
 ) -> bool:
     if not origin_thread_id:
         return False
@@ -67,14 +74,25 @@ async def deliver_scheduled_agent_run_to_slack(
     bot_token = repo.decrypt_bot_token(endpoint)
     slack_client = client or SlackWebClient()
 
+    message_repo = MessageRepository(db_session)
+    message_id = await resolve_feedback_message_id(
+        message_repo,
+        message_id=message_id,
+        session_id=session_id,
+        thread_id=origin_thread_id,
+    )
+
     try:
-        for chunk in split_long_text(formatted_text):
-            await slack_client.chat_post_message(
-                bot_token=bot_token,
-                channel=link.external_channel_id,
-                text=chunk,
-                thread_ts=thread_ts,
-            )
+        await post_slack_reply_with_feedback(
+            client=slack_client,
+            bot_token=bot_token,
+            channel_id=link.external_channel_id,
+            text=formatted_text,
+            message_id=message_id,
+            thread_ts=thread_ts,
+            message_repo=message_repo,
+            db=db_session,
+        )
         logger.info(
             "Slack scheduled delivery succeeded: tenant=%s user=%s thread=%s channel=%s",
             tenant_id,

@@ -27,12 +27,32 @@ class SlackClientPort(Protocol):
         """Fetch a Slack user's profile (email, display_name)."""
         ...
 
-    async def chat_post_message(self, *, bot_token: str, channel: str, text: str, thread_ts: str | None = None) -> dict[str, Any]:
+    async def chat_post_message(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        text: str,
+        thread_ts: str | None = None,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Post a message to a channel, optionally threaded."""
         ...
 
-    async def chat_update(self, *, bot_token: str, channel: str, ts: str, text: str) -> dict[str, Any]:
+    async def chat_update(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        ts: str,
+        text: str,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         """Update a previously posted message (thinking -> final reply)."""
+        ...
+
+    async def views_open(self, *, bot_token: str, trigger_id: str, view: dict[str, Any]) -> dict[str, Any]:
+        """Open a modal view."""
         ...
 
     async def conversations_open(self, *, bot_token: str, users: str) -> dict[str, Any]:
@@ -62,17 +82,43 @@ class SlackWebClient:
             logger.warning("Slack users.info failed for %s: %s", user_id, exc)
             return None
 
-    async def chat_post_message(self, *, bot_token: str, channel: str, text: str, thread_ts: str | None = None) -> dict[str, Any]:
+    async def chat_post_message(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        text: str,
+        thread_ts: str | None = None,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         client = AsyncWebClient(token=bot_token)
         kwargs: dict[str, Any] = {"channel": channel, "text": text}
         if thread_ts:
             kwargs["thread_ts"] = thread_ts
+        if blocks:
+            kwargs["blocks"] = blocks
         resp = await client.chat_postMessage(**kwargs)
         return dict(resp.data or {})
 
-    async def chat_update(self, *, bot_token: str, channel: str, ts: str, text: str) -> dict[str, Any]:
+    async def chat_update(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        ts: str,
+        text: str,
+        blocks: list[dict[str, Any]] | None = None,
+    ) -> dict[str, Any]:
         client = AsyncWebClient(token=bot_token)
-        resp = await client.chat_update(channel=channel, ts=ts, text=text)
+        kwargs: dict[str, Any] = {"channel": channel, "ts": ts, "text": text}
+        if blocks:
+            kwargs["blocks"] = blocks
+        resp = await client.chat_update(**kwargs)
+        return dict(resp.data or {})
+
+    async def views_open(self, *, bot_token: str, trigger_id: str, view: dict[str, Any]) -> dict[str, Any]:
+        client = AsyncWebClient(token=bot_token)
+        resp = await client.views_open(trigger_id=trigger_id, view=view)
         return dict(resp.data or {})
 
     async def conversations_open(self, *, bot_token: str, users: str) -> dict[str, Any]:

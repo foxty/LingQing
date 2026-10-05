@@ -347,8 +347,8 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
     from apps.shared.db.session import get_db
     from apps.shared.db.models import Tenant, TenantMembership, User
     from apps.tenant_app_service.server import app
-    from apps.tenant_app_service.slack.client import SlackWebClient
-    from apps.tenant_app_service.slack.repository import SlackRepository
+    from apps.tenant_app_service.agent_ingress.slack.client import SlackWebClient
+    from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
     from tests.slack.fake_slack import FakeSlackClient
 
     # Reuse the per-test connection so seed commits are SAVEPOINTs that roll back
@@ -380,7 +380,7 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
     # ASGITransport), so a NullPool engine created here is loop-safe.
     from contextlib import asynccontextmanager
 
-    from apps.tenant_app_service.slack import ingress_router as ingress_router_module
+    from apps.tenant_app_service.agent_ingress.slack import ingress_router as ingress_router_module
 
     @asynccontextmanager
     async def _fake_app_db_session():
@@ -407,11 +407,15 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
     async def _fake_users_info(self, *, bot_token, user_id):
         return await fake_slack.users_info(bot_token=bot_token, user_id=user_id)
 
-    async def _fake_chat_post_message(self, *, bot_token, channel, text, thread_ts=None):
-        return await fake_slack.chat_post_message(bot_token=bot_token, channel=channel, text=text, thread_ts=thread_ts)
+    async def _fake_chat_post_message(self, *, bot_token, channel, text, thread_ts=None, blocks=None):
+        return await fake_slack.chat_post_message(
+            bot_token=bot_token, channel=channel, text=text, thread_ts=thread_ts, blocks=blocks
+        )
 
-    async def _fake_chat_update(self, *, bot_token, channel, ts, text):
-        return await fake_slack.chat_update(bot_token=bot_token, channel=channel, ts=ts, text=text)
+    async def _fake_chat_update(self, *, bot_token, channel, ts, text, blocks=None):
+        return await fake_slack.chat_update(
+            bot_token=bot_token, channel=channel, ts=ts, text=text, blocks=blocks
+        )
 
     async def _fake_conversations_open(self, *, bot_token, users):
         return await fake_slack.conversations_open(bot_token=bot_token, users=users)

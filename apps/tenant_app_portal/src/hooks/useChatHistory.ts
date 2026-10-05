@@ -10,6 +10,7 @@ import {
   type ThreadHistoryPage,
 } from '@/lib/chatHistoryMerge'
 import { getSessionMetrics, getThreadHistory, getToolCallDetail } from '@/lib/chatApi'
+import { getThreadFeedback } from '@/lib/feedbackApi'
 
 export type ThreadLoadError = 'forbidden' | 'not_found' | 'unknown'
 
@@ -79,6 +80,15 @@ export function useChatHistory(
     [loadSessionMetrics]
   )
 
+  const loadThreadFeedback = useCallback(async (activeThreadId: string) => {
+    try {
+      const response = await getThreadFeedback(activeThreadId)
+      dispatch({ type: 'patch_feedback', feedbackByMessageId: response.feedback })
+    } catch (feedbackError) {
+      console.error('Failed to load thread feedback:', feedbackError)
+    }
+  }, [])
+
   const loadInitial = useCallback(async () => {
     if (!threadId || !canFetch) {
       dispatch({ type: 'reset' })
@@ -99,12 +109,13 @@ export function useChatHistory(
       )
       dispatch({ type: 'set_initial', page })
       loadMissingMetrics(page.messages)
+      void loadThreadFeedback(threadId)
     } catch (error) {
       setLoadError(resolveThreadLoadError(error))
     } finally {
       setIsLoading(false)
     }
-  }, [canFetch, loadMissingMetrics, threadId])
+  }, [canFetch, loadMissingMetrics, loadThreadFeedback, threadId])
 
   useEffect(() => {
     setIsLoadingMore(false)
@@ -128,6 +139,7 @@ export function useChatHistory(
       )
       dispatch({ type: 'prepend', page })
       loadMissingMetrics(page.messages)
+      void loadThreadFeedback(threadId)
       return page.messages
     } catch (loadMoreError) {
       console.error('Failed to load more chat history from server:', loadMoreError)
@@ -135,7 +147,7 @@ export function useChatHistory(
     } finally {
       setIsLoadingMore(false)
     }
-  }, [canFetch, isLoadingMore, loadMissingMetrics, threadId])
+  }, [canFetch, isLoadingMore, loadMissingMetrics, loadThreadFeedback, threadId])
 
   const refreshTail = useCallback(async () => {
     if (!threadId || !canFetch) return []
@@ -147,8 +159,9 @@ export function useChatHistory(
     )
     dispatch({ type: 'refresh_tail', messages: page.messages })
     loadMissingMetrics(page.messages)
+    void loadThreadFeedback(threadId)
     return page.messages
-  }, [canFetch, loadMissingMetrics, threadId])
+  }, [canFetch, loadMissingMetrics, loadThreadFeedback, threadId])
 
   const updateMessageMetrics = useCallback((sessionId: string, metrics: SessionMetrics) => {
     dispatch({ type: 'patch_metrics', sessionId, metrics })

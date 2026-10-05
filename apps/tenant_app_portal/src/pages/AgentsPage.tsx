@@ -2,7 +2,8 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
-import { Bot, MessageSquare, Plus, Share2, Slack, Trash2 } from 'lucide-react'
+import { Bot, MessageSquare, Plus, Share2, Slack, ThumbsUp, Trash2 } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { Can } from '@/components/Can'
 import ResourceAclShareDialog from '@/components/ResourceAclShareDialog'
 import EmptyState from '@/components/EmptyState'
@@ -28,7 +29,6 @@ import {
   useUpdateAgent,
 } from '@/hooks/useAgents'
 import { useDocumentCollections } from '@/hooks/useDocumentCollections'
-import { actionRules } from '@/lib/permissionRules'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
 import {
   SYSTEM_AGENT_ONE_ID,
@@ -41,7 +41,7 @@ import { listApiConnectors } from '@/lib/apiConnectorApi'
 import { listDataSources } from '@/lib/dataSourceApi'
 import { listRegistryProfiles, type LLMModelProfile } from '@/lib/llmConfigApi'
 import { listSlackIntegrations, type SlackIntegration } from '@/lib/slackApi'
-import { PERMISSIONS } from '@/lib/permissionRules'
+import { actionRules, PERMISSIONS, routeRules } from '@/lib/permissionRules'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import AgentSlackIntegrationDialog from '@/components/agents/AgentSlackIntegrationDialog'
 import { Badge } from '@/components/ui/badge'
@@ -61,6 +61,7 @@ i18n.addResourceBundle(
       pageTitle: 'Agents',
       description: 'Purpose-specific assistants with assigned tools, skills, and knowledge.',
       create: 'New agent',
+      viewFeedback: 'Feedback',
       openChat: 'Open in conversation',
       share: 'Share',
       edit: 'Edit',
@@ -104,6 +105,7 @@ i18n.addResourceBundle(
       pageTitle: '智能体',
       description: '为特定任务分配工具、技能与知识库的助手。',
       create: '新建智能体',
+      viewFeedback: '反馈分析',
       openChat: '在对话中打开',
       share: '共享',
       edit: '编辑',
@@ -180,6 +182,7 @@ export default function AgentsPage() {
   const updateMutation = useUpdateAgent()
   const deleteMutation = useDeleteAgent()
   const canCreate = hasAny(actionRules.canCreateAgent())
+  const canViewFeedback = hasAny(routeRules.canAccessAgentFeedback())
 
   const [editing, setEditing] = useState<CatalogAgent | 'new' | null>(null)
   const [sharing, setSharing] = useState<CatalogAgent | null>(null)
@@ -255,12 +258,22 @@ export default function AgentsPage() {
           <h1 className="text-2xl font-semibold">{t('agents.pageTitle')}</h1>
           <p className="text-sm text-muted-foreground">{t('agents.description')}</p>
         </div>
-        <Can any={actionRules.canCreateAgent()}>
-          <Button onClick={openCreate}>
-            <Plus className="mr-2 h-4 w-4" />
-            {t('agents.create')}
-          </Button>
-        </Can>
+        <div className="flex items-center gap-2">
+          {canViewFeedback ? (
+            <Button variant="outline" asChild>
+              <Link to="/agents/feedback">
+                <ThumbsUp className="mr-2 h-4 w-4" />
+                {t('agents.viewFeedback')}
+              </Link>
+            </Button>
+          ) : null}
+          <Can any={actionRules.canCreateAgent()}>
+            <Button onClick={openCreate}>
+              <Plus className="mr-2 h-4 w-4" />
+              {t('agents.create')}
+            </Button>
+          </Can>
+        </div>
       </div>
 
       {isLoading ? (

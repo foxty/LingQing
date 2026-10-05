@@ -4,8 +4,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from apps.tenant_app_service.slack.domain import SlackMessageEvent
-from apps.tenant_app_service.slack.ingress_service import SlackIngressService
+from apps.tenant_app_service.agent_ingress.slack.domain import SlackMessageEvent
+from apps.tenant_app_service.agent_ingress.slack.ingress_service import SlackIngressService
 
 
 def _message_event(**kwargs) -> SlackMessageEvent:
@@ -44,7 +44,7 @@ async def test_get_or_create_thread_reuses_link_and_uses_endpoint_agent():
 
     with (
         patch(
-            "apps.tenant_app_service.slack.ingress_service.ChatService.get_thread",
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.get_thread",
             new=AsyncMock(return_value=existing_thread),
         ),
         patch.object(service, "_create_slack_thread", new=AsyncMock()) as create_thread,
@@ -83,7 +83,7 @@ async def test_thread_reply_uses_endpoint_agent_from_stale_link():
     existing_thread.agent_id = 1
 
     with patch(
-        "apps.tenant_app_service.slack.ingress_service.ChatService.get_thread",
+        "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.get_thread",
         new=AsyncMock(return_value=existing_thread),
     ):
         result = await service._resolve_thread_id(
@@ -120,7 +120,7 @@ async def test_get_or_create_thread_realigns_when_chat_thread_agent_differs():
 
     with (
         patch(
-            "apps.tenant_app_service.slack.ingress_service.ChatService.get_thread",
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.get_thread",
             new=AsyncMock(return_value=stale_thread),
         ),
         patch.object(service, "_create_slack_thread", new=AsyncMock(return_value=new_thread)) as create_thread,
@@ -164,7 +164,7 @@ async def test_get_or_create_thread_rebinds_when_chat_thread_deleted():
 
     with (
         patch(
-            "apps.tenant_app_service.slack.ingress_service.ChatService.get_thread",
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.get_thread",
             new=AsyncMock(return_value=None),
         ),
         patch.object(service, "_create_slack_thread", new=AsyncMock(return_value=new_thread)) as create_thread,

@@ -6,7 +6,7 @@ but the decision semantics are tested here: an event is a duplicate iff
 the webhook router's dedupe call site cannot silently change behavior.
 """
 
-from apps.tenant_app_service.slack.domain import SlackMessageEvent
+from apps.tenant_app_service.agent_ingress.slack.domain import SlackMessageEvent
 
 
 def _event(event_id: str, user_id: str = "U123", channel_id: str = "D123") -> SlackMessageEvent:

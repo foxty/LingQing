@@ -3,7 +3,7 @@
 import hashlib
 import hmac
 
-from apps.tenant_app_service.slack.domain import (
+from apps.tenant_app_service.agent_ingress.slack.domain import (
     describe_ignored_event,
     slack_signature_failure_reason,
     verify_slack_signature,

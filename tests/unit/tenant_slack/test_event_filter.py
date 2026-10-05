@@ -1,6 +1,6 @@
 """Unit tests for Slack event classification (pure, no DB)."""
 
-from apps.tenant_app_service.slack.domain import (
+from apps.tenant_app_service.agent_ingress.slack.domain import (
     SlackMessageEvent,
     is_processable_message_event,
     parse_app_mention_event,

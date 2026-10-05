@@ -207,7 +207,7 @@ class TestSlackWebhook:
         """Migrated links with legacy agent_id still resolve via endpoint conversation key."""
         from uuid import uuid4
 
-        from apps.tenant_app_service.slack.repository import SlackRepository
+        from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 
         tenant_id = slack_test_setup["tenants"]["tenant_a"]["tenant"].id
         channel_id = f"D_{uuid4().hex[:8]}"
@@ -242,7 +242,7 @@ class TestSlackWebhook:
     async def test_create_thread_link_is_idempotent(self, slack_test_setup, pg_async_db_session):
         """Duplicate create calls for the same endpoint conversation key return one row."""
         from apps.shared.db.models import IngressThreadLink
-        from apps.tenant_app_service.slack.repository import SlackRepository
+        from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 
         tenant_id = slack_test_setup["tenants"]["tenant_a"]["tenant"].id
         channel_id = f"D_{uuid4().hex[:8]}"
@@ -293,7 +293,7 @@ class TestSlackWebhook:
     ):
         """Regression: stale ingress links must rebind to endpoint agent, not reuse legacy threads."""
         from apps.shared.db.models import AgentIngressEndpoint, ChatThread, IngressThreadLink
-        from apps.tenant_app_service.slack.repository import SlackRepository
+        from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 
         client = slack_test_setup["client"]
         tenant = slack_test_setup["tenants"]["tenant_a"]
@@ -344,10 +344,16 @@ class TestSlackWebhook:
         async def fake_chat(self, request, **kwargs):
             captured["thread_id"] = request.thread_id
             captured["agent_id"] = request.agent_id
-            return MagicMock(response=MagicMock(content="reused thread ok"))
+            return MagicMock(
+                response=MagicMock(
+                    content="reused thread ok",
+                    message_id=None,
+                    session_id=None,
+                )
+            )
 
         monkeypatch.setattr(
-            "apps.tenant_app_service.slack.ingress_service.ChatService.chat",
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.chat",
             fake_chat,
         )
 
@@ -400,7 +406,7 @@ class TestSlackWebhook:
 
         from apps.shared.db.models import ChatThread, IngressThreadLink
         from apps.tenant_app_service.chat.service import ChatService
-        from apps.tenant_app_service.slack.repository import SlackRepository
+        from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 
         tenant = slack_test_setup["tenants"]["tenant_a"]
         session_factory = slack_test_setup["session_factory"]

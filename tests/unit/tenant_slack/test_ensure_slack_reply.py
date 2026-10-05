@@ -1,6 +1,6 @@
 """Tests for Slack reply text guards."""
 
-from apps.tenant_app_service.slack.domain import ensure_slack_reply_text
+from apps.tenant_app_service.agent_ingress.slack.domain import ensure_slack_reply_text
 
 
 def test_ensure_slack_reply_text_preserves_non_empty():

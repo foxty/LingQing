@@ -65,7 +65,9 @@ import { copyToClipboard, preprocessMarkdown } from '@/lib/utils'
 import { AiTurn, TurnProcessItem } from '@/lib/chatTurns'
 import ToolCallTimeline from './ToolCallTimeline'
 import HitlApprovalCard from './HitlApprovalCard'
+import MessageFeedbackButtons from './MessageFeedbackButtons'
 import { AuthDocumentImage } from './AuthDocumentImage'
+import type { MessageFeedback } from '@/types'
 
 const markdownComponents = { img: AuthDocumentImage }
 
@@ -175,6 +177,13 @@ export default function AiTurnMessage({
   const [showProcessDetails, setShowProcessDetails] = useState(defaultProcessOpen)
   const [showSessionMetrics, setShowSessionMetrics] = useState(false)
   const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
+  const [localFeedback, setLocalFeedback] = useState<MessageFeedback | undefined>(
+    turn.finalMessage.feedback
+  )
+
+  useEffect(() => {
+    setLocalFeedback(turn.finalMessage.feedback)
+  }, [turn.finalMessage.feedback, turn.finalMessage.message_id])
 
   useEffect(() => {
     setShowProcessDetails(defaultProcessOpen)
@@ -360,18 +369,26 @@ export default function AiTurnMessage({
           <div className="mb-1 flex items-center justify-between gap-2">
             <div className="text-xs font-semibold text-muted-foreground">{t('workbench.finalResponse')}</div>
             {!isStreaming && (
-            <button
-              onClick={handleCopyFinalMessage}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              title={copyStatus === 'copied' ? t('workbench.copied') : t('workbench.copyReply')}
-              aria-label={copyStatus === 'copied' ? t('workbench.copied') : t('workbench.copyReply')}
-            >
-              {copyStatus === 'copied' ? (
-                <Check className="h-3.5 w-3.5" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </button>
+            <div className="inline-flex items-center gap-1">
+              <MessageFeedbackButtons
+                threadId={threadId}
+                messageId={turn.finalMessage.message_id}
+                feedback={localFeedback}
+                onFeedbackChange={setLocalFeedback}
+              />
+              <button
+                onClick={handleCopyFinalMessage}
+                className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
+                title={copyStatus === 'copied' ? t('workbench.copied') : t('workbench.copyReply')}
+                aria-label={copyStatus === 'copied' ? t('workbench.copied') : t('workbench.copyReply')}
+              >
+                {copyStatus === 'copied' ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" />
+                )}
+              </button>
+            </div>
             )}
           </div>
           {hasRealFinalContent ? (

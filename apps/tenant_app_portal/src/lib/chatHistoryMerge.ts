@@ -1,4 +1,4 @@
-import type { Message, SessionMetrics } from '@/types'
+import type { Message, MessageFeedback, SessionMetrics } from '@/types'
 
 export interface ThreadHistoryPage {
   messages: Message[]
@@ -17,6 +17,7 @@ export type HistoryAction =
   | { type: 'prepend'; page: ThreadHistoryPage }
   | { type: 'refresh_tail'; messages: Message[] }
   | { type: 'patch_metrics'; sessionId: string; metrics: SessionMetrics }
+  | { type: 'patch_feedback'; feedbackByMessageId: Record<string, MessageFeedback> }
 
 function isSessionMetrics(metrics: Message['metrics']): metrics is SessionMetrics {
   return (
@@ -51,6 +52,22 @@ export function mergePreservedSessionMetrics(
     }
     const preserved = metricsBySession.get(msg.session_id)
     return preserved ? { ...msg, metrics: preserved } : msg
+  })
+}
+
+export function applyFeedbackToHistory(
+  messages: Message[],
+  feedbackByMessageId: Record<string, MessageFeedback>
+): Message[] {
+  if (Object.keys(feedbackByMessageId).length === 0) {
+    return messages
+  }
+  return messages.map((msg) => {
+    if (!msg.message_id) {
+      return msg
+    }
+    const feedback = feedbackByMessageId[msg.message_id]
+    return feedback ? { ...msg, feedback } : msg
   })
 }
 
@@ -152,6 +169,11 @@ export function reduceHistory(
       return {
         ...state,
         messages: applySessionMetricsToHistory(state.messages, action.sessionId, action.metrics),
+      }
+    case 'patch_feedback':
+      return {
+        ...state,
+        messages: applyFeedbackToHistory(state.messages, action.feedbackByMessageId),
       }
     default:
       return state

@@ -1,6 +1,9 @@
-"""Slack Events API webhook router.
+"""Slack public webhook router (platform-specific).
 
-Public endpoint verified by Slack signing secret (no JWT). Handles:
+URLs use the shared ``/ingress/{endpoint_key}/...`` prefix but this module is
+Slack-only: signing-secret verification, Events API, and Block Kit interactivity.
+
+Handles:
   1. URL verification challenge
   2. Signature verification (X-Slack-Signature + X-Slack-Request-Timestamp)
   3. Endpoint resolution from endpoint_key path param
@@ -29,6 +32,10 @@ from apps.tenant_app_service.agent_ingress.slack.domain import (
     slack_signature_failure_reason,
 )
 from apps.tenant_app_service.agent_ingress.slack.ingress_service import SlackIngressService
+from apps.tenant_app_service.agent_ingress.slack.interactivity_service import (
+    SlackInteractivityService,
+    parse_interactivity_payload,
+)
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 
 logger = get_logger(__name__)
@@ -186,6 +193,43 @@ async def _safe_handle(event: SlackMessageEvent, endpoint_id: int) -> None:
             await ingress.handle_message(event, endpoint_id)
     except Exception:
         logger.exception("Slack ingress background task failed for endpoint %s", endpoint_id)
+
+
+@router.post("/ingress/{endpoint_key}/interactions")
+async def slack_interactions_webhook(
+    endpoint_key: str,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    """Slack interactivity webhook for feedback buttons and modals."""
+    raw_body = await request.body()
+    body_text = raw_body.decode("utf-8")
+    repo = SlackRepository(db)
+    endpoint = await repo.get_endpoint_by_key(endpoint_key)
+    if not endpoint:
+        return JSONResponse(status_code=status.HTTP_404_NOT_FOUND, content={"error": "integration_not_found"})
+
+    signing_secret = repo.decrypt_signing_secret(endpoint)
+    slack_signature = request.headers.get("X-Slack-Signature", "")
+    slack_timestamp = request.headers.get("X-Slack-Request-Timestamp", "")
+
+    signature_failure = slack_signature_failure_reason(
+        signing_secret=signing_secret,
+        timestamp=slack_timestamp,
+        body=body_text,
+        signature=slack_signature,
+    )
+    if signature_failure:
+        return JSONResponse(status_code=status.HTTP_401_UNAUTHORIZED, content={"error": "invalid_signature"})
+
+    payload = parse_interactivity_payload(body_text)
+    if not payload:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content={"error": "invalid_payload"})
+
+    interactivity = SlackInteractivityService(db)
+    response_body = await interactivity.handle_payload(payload, endpoint)
+    await db.commit()
+    return JSONResponse(status_code=status.HTTP_200_OK, content=response_body)
 
 
 async def _safe_notify_disabled(event: SlackMessageEvent, endpoint_id: int) -> None:

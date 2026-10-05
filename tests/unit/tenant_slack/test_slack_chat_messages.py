@@ -1,7 +1,7 @@
 """Unit tests for Slack chat error user-facing messages."""
 
 from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError, ValidationError
-from apps.tenant_app_service.slack.domain import slack_chat_error_message
+from apps.tenant_app_service.agent_ingress.slack.messages import slack_chat_error_message
 
 
 def test_slack_chat_error_message_agent_access_denied():

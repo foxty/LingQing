@@ -1,6 +1,6 @@
 """Unit tests for Slack endpoint scope keys and auth metadata parsing."""
 
-from apps.tenant_app_service.slack.domain import slack_auth_metadata, slack_endpoint_scope_key
+from apps.tenant_app_service.agent_ingress.slack.domain import slack_auth_metadata, slack_endpoint_scope_key
 
 
 def test_slack_endpoint_scope_key_with_app_id():

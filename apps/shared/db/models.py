@@ -579,6 +579,42 @@ class ChatMessage(Base):
     thread: Mapped["ChatThread"] = relationship("ChatThread", back_populates="messages")
 
 
+class MessageFeedback(Base):
+    """User rating (thumbs up/down) for an AI chat message."""
+
+    __tablename__ = "message_feedbacks"
+    __table_args__ = (
+        UniqueConstraint("tenant_id", "message_id", "user_id", name="uq_message_feedbacks_user_message"),
+        Index("idx_message_feedbacks_tenant_created", "tenant_id", "created_at"),
+        Index("idx_message_feedbacks_tenant_agent", "tenant_id", "agent_id", "created_at"),
+        Index("idx_message_feedbacks_thread", "tenant_id", "thread_id"),
+    )
+
+    id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    agent_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    rating: Mapped[str] = mapped_column(String(16), nullable=False, comment="positive or negative")
+    comment: Mapped[str | None] = mapped_column(Text, nullable=True)
+    source: Mapped[str] = mapped_column(String(16), nullable=False, server_default="portal")
+    external_ref: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
 class HitlApproval(Base):
     """HITL approval record for tool calls requiring human confirmation."""
 

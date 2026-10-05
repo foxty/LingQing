@@ -7,7 +7,7 @@ are encrypted at rest and never appear in the decrypted response surface.
 import pytest
 
 from apps.shared.utils.field_cipher import FieldCipher
-from apps.tenant_app_service.slack.dtos import SlackIntegrationResponse
+from apps.tenant_app_service.agent_ingress.slack.dtos import SlackIntegrationResponse
 
 
 @pytest.fixture
@@ -42,6 +42,7 @@ def test_integration_response_masks_secrets():
         enabled=True,
         endpoint_key="abc123",
         events_url="https://example.com/ingress/abc123/events",
+        interactions_url="https://example.com/ingress/abc123/interactions",
     )
     dumped = response.model_dump()
     assert "bot_token" not in dumped

@@ -8,7 +8,7 @@ from apps.tenant_app_service.agents.message_content import (
     extract_output_token_count,
     normalize_message_content,
 )
-from apps.tenant_app_service.slack.domain import ensure_slack_reply_text
+from apps.tenant_app_service.agent_ingress.slack.domain import ensure_slack_reply_text
 
 
 def test_normalize_message_content_string():

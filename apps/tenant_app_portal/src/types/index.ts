@@ -10,9 +10,20 @@ export interface User {
   tenantName: string // Tenant display name
 }
 
+export interface MessageFeedback {
+  message_id: string
+  rating: 'positive' | 'negative'
+  comment?: string | null
+  source?: 'portal' | 'slack'
+  created_at?: string
+  updated_at?: string
+}
+
 export interface Message {
+  message_id?: string
   role: 'human' | 'ai' | 'tool' | 'system' // Aligned with LangChain's standard naming
   content: string
+  feedback?: MessageFeedback
   timestamp?: string
   tool_calls?: Array<{
     // LangChain parsed format (stored in dedicated field)

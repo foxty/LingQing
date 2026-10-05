@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-02T11:58:51.550881+00:00",
+  "generated_at": "2026-10-05T14:36:56.420265+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -85,6 +85,11 @@
     {
       "operation_key": "DELETE_/skills/{name}",
       "summary": "Delete Skill",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/threads/{thread_id}/messages/{message_id}/feedback",
+      "summary": "Delete Message Feedback",
       "risk_level": "write"
     },
     {
@@ -318,6 +323,21 @@
       "risk_level": "read"
     },
     {
+      "operation_key": "GET_/feedback",
+      "summary": "List Feedback",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/feedback/export",
+      "summary": "Export Feedback",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/feedback/stats",
+      "summary": "Get Feedback Stats",
+      "risk_level": "read"
+    },
+    {
       "operation_key": "GET_/hitl/approvals/{proposal_id}",
       "summary": "Get Approval",
       "risk_level": "read"
@@ -425,6 +445,11 @@
     {
       "operation_key": "GET_/skills/{scope}/{name}/env-vars",
       "summary": "List Env Vars",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/threads/{thread_id}/feedback",
+      "summary": "Get Thread Feedback",
       "risk_level": "read"
     },
     {
@@ -765,6 +790,11 @@
     {
       "operation_key": "PUT_/skills/{scope}/{name}/env-vars",
       "summary": "Update Env Vars",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/threads/{thread_id}/messages/{message_id}/feedback",
+      "summary": "Upsert Message Feedback",
       "risk_level": "write"
     }
   ]

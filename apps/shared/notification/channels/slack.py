@@ -9,8 +9,8 @@ from apps.shared.db.models import ExternalIdentity
 from apps.shared.db.session import app_db_session
 from apps.shared.notification.domain import CHANNEL_SLACK, NotificationChannelType, NotificationEvent
 from apps.shared.utils.logger import get_logger
+from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 from apps.tenant_app_service.agent_ingress.slack.source_repository import SlackIdentitySourceRepository
-from apps.tenant_app_service.slack.repository import SlackRepository
 
 logger = get_logger(__name__)
 

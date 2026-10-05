@@ -587,6 +587,7 @@ def slack_auth_metadata(auth_result: dict) -> tuple[str | None, str | None, str 
 def build_slack_app_manifest(
     *,
     events_url: str,
+    interactivity_url: str | None = None,
     app_name: str = DEFAULT_MANIFEST_APP_NAME,
     bot_display_name: str = DEFAULT_MANIFEST_BOT_DISPLAY_NAME,
 ) -> dict:
@@ -625,5 +626,15 @@ def build_slack_app_manifest(
                 "request_url": events_url,
                 "bot_events": list(SLACK_BOT_EVENTS),
             },
+            **(
+                {
+                    "interactivity": {
+                        "is_enabled": True,
+                        "request_url": interactivity_url,
+                    }
+                }
+                if interactivity_url
+                else {}
+            ),
         },
     }
