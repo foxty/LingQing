@@ -4,6 +4,7 @@ import {
   agentApiErrorMessage,
   createCatalogAgent,
   deleteCatalogAgent,
+  getCatalogAgent,
   listAgentSkillCatalog,
   listCatalogAgents,
   updateCatalogAgent,
@@ -23,6 +24,16 @@ export function useAgents() {
   })
 }
 
+export function useAgent(agentId: number | undefined) {
+  const { user } = useAuth()
+
+  return useQuery<CatalogAgent>({
+    queryKey: ['agents', user?.tenantId, agentId],
+    queryFn: () => getCatalogAgent(agentId!),
+    enabled: !!user && agentId !== undefined,
+  })
+}
+
 export function useAgentSkillCatalog() {
   const { user } = useAuth()
   return useQuery({
@@ -34,29 +45,25 @@ export function useAgentSkillCatalog() {
 
 export function useCreateAgent() {
   const queryClient = useQueryClient()
-  const { showError } = useNotification()
+  const { showSuccess } = useNotification()
   return useMutation({
     mutationFn: (payload: AgentWritePayload) => createCatalogAgent(payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
-    },
-    onError: (error: unknown) => {
-      showError(agentApiErrorMessage(error, i18n.t('agents.saveFailed')))
+      showSuccess(i18n.t('agents.saveSuccess'))
     },
   })
 }
 
 export function useUpdateAgent() {
   const queryClient = useQueryClient()
-  const { showError } = useNotification()
+  const { showSuccess } = useNotification()
   return useMutation({
     mutationFn: ({ agentId, payload }: { agentId: number; payload: Partial<AgentWritePayload> }) =>
       updateCatalogAgent(agentId, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['agents'] })
-    },
-    onError: (error: unknown) => {
-      showError(agentApiErrorMessage(error, i18n.t('agents.saveFailed')))
+      showSuccess(i18n.t('agents.saveSuccess'))
     },
   })
 }
