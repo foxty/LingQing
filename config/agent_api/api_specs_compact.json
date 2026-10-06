@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-05T14:36:56.420265+00:00",
+  "generated_at": "2026-10-06T12:47:16.198786+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -175,6 +175,13 @@
             },
             "type": "array",
             "title": "Api Connector Ids"
+          },
+          "platform_capabilities": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Platform Capabilities"
           },
           "model_profile_id": {
             "anyOf": [
