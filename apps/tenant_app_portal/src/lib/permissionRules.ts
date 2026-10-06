@@ -226,6 +226,8 @@ export const routeRules = {
     PERMISSIONS.AGENTS_MANAGE,
   ],
 
+  canAccessAgentFeedback: () => [PERMISSIONS.TENANT_ADMIN, PERMISSIONS.AGENTS_MANAGE],
+
   canAccessSettings: () => [
     PERMISSIONS.TENANT_SETTINGS_READ,
     PERMISSIONS.RBAC_MANAGE,

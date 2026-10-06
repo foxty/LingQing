@@ -9,8 +9,8 @@ from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
 from apps.shared.db.session import get_db
 from apps.shared.schemas.user import UserDTO
+from apps.tenant_app_service.agent_ingress.slack.admin_service import SlackAdminService
 from apps.tenant_app_service.agent_ingress.slack.dtos import SlackIntegrationResponse
-from apps.tenant_app_service.agent_ingress.slack.service import SlackAdminService
 
 router = APIRouter(tags=["slack"], include_in_schema=False)
 

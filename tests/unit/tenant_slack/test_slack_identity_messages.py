@@ -1,6 +1,6 @@
 """Unit tests for Slack identity user-facing messages."""
 
-from apps.tenant_app_service.slack.domain import slack_identity_user_message
+from apps.tenant_app_service.agent_ingress.slack.messages import slack_identity_user_message
 
 
 def test_slack_identity_user_message_reject_unknown():

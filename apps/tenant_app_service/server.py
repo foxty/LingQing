@@ -46,6 +46,7 @@ from apps.tenant_app_service.routers import (
     hitl,
     live_apps,
     llm_config,
+    message_feedback,
     notifications,
     observability,
     reports,
@@ -132,6 +133,7 @@ app.include_router(admin_system_tasks.router)
 app.include_router(scheduled_tasks.router)
 app.include_router(chat.router)
 app.include_router(hitl.router)
+app.include_router(message_feedback.router)
 app.include_router(threads.router)
 app.include_router(acl_shares.router)
 app.include_router(users.router)

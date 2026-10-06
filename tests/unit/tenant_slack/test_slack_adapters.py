@@ -1,6 +1,6 @@
 """Unit tests for Slack adapters and conversation key (pure, no DB)."""
 
-from apps.tenant_app_service.slack.domain import (
+from apps.tenant_app_service.agent_ingress.slack.domain import (
     conversation_key,
     split_long_text,
 )

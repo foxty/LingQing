@@ -1,4 +1,8 @@
-"""Application service for Slack ingress endpoint admin config."""
+"""Portal admin service for Slack integration configuration.
+
+Distinct from ``ingress_service`` (runtime webhook orchestration) and
+``ingress_router`` (public Slack HTTP endpoints).
+"""
 
 from __future__ import annotations
 
@@ -63,6 +67,7 @@ class SlackAdminService:
         events_url = self._events_url(endpoint_key)
         return build_slack_app_manifest(
             events_url=events_url,
+            interactivity_url=self._interactions_url(endpoint_key),
             app_name=f"LingQing {agent_name}"[:35],
             bot_display_name=agent_name[:35],
         )
@@ -297,8 +302,13 @@ class SlackAdminService:
             enabled=endpoint.enabled,
             endpoint_key=endpoint.endpoint_key,
             events_url=self._events_url(endpoint.endpoint_key),
+            interactions_url=self._interactions_url(endpoint.endpoint_key),
         )
 
     def _events_url(self, endpoint_key: str) -> str:
         origin = self.settings.TENANT_APP_API_ORIGIN.rstrip("/")
         return f"{origin}{INGRESS_EVENTS_PATH}/{endpoint_key}/events"
+
+    def _interactions_url(self, endpoint_key: str) -> str:
+        origin = self.settings.TENANT_APP_API_ORIGIN.rstrip("/")
+        return f"{origin}{INGRESS_EVENTS_PATH}/{endpoint_key}/interactions"

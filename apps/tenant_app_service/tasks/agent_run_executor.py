@@ -9,11 +9,11 @@ from apps.shared.db.session import app_db_session
 from apps.shared.tasks.domain import ScheduledTaskDomain, normalize_agent_run_task_config, parse_agent_run_task_config
 from apps.shared.tasks.execution_service import TaskExecutionResult
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.chat.service import ChatService
-from apps.tenant_app_service.slack.scheduled_delivery import (
+from apps.tenant_app_service.agent_ingress.slack.scheduled_delivery import (
     SLACK_SCHEDULED_FAILURE_MESSAGE,
     deliver_scheduled_agent_run_to_slack,
 )
+from apps.tenant_app_service.chat.service import ChatService
 
 logger = get_logger(__name__)
 
@@ -92,6 +92,8 @@ async def execute_agent_run_task(task: ScheduledTaskDomain) -> TaskExecutionResu
                 origin_thread_id=delivery_thread_id,
                 response_text=response_text,
                 db_session=db_session,
+                message_id=response.response.message_id,
+                session_id=response.response.session_id,
             )
 
         logger.info(

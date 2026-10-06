@@ -8,8 +8,8 @@ import pytest
 
 from apps.shared.tasks.domain import ScheduledTaskDomain
 from apps.tenant_app_service.chat.schemas import ChatResponse, Message
-from apps.tenant_app_service.slack.repository import SlackRepository
-from apps.tenant_app_service.slack.scheduled_delivery import (
+from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
+from apps.tenant_app_service.agent_ingress.slack.scheduled_delivery import (
     SLACK_SCHEDULED_FAILURE_MESSAGE,
     deliver_scheduled_agent_run_to_slack,
 )

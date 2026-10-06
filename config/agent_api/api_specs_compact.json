@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-02T13:56:12.931423+00:00",
+  "generated_at": "2026-10-05T14:36:56.420265+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -4774,6 +4774,270 @@
         ],
         "title": "EnvVarUpdateRequest"
       },
+      "FeedbackAgentStats": {
+        "properties": {
+          "agent_id": {
+            "type": "integer",
+            "title": "Agent Id"
+          },
+          "positive_count": {
+            "type": "integer",
+            "title": "Positive Count"
+          },
+          "negative_count": {
+            "type": "integer",
+            "title": "Negative Count"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          }
+        },
+        "type": "object",
+        "required": [
+          "agent_id",
+          "positive_count",
+          "negative_count",
+          "total_count"
+        ],
+        "title": "FeedbackAgentStats"
+      },
+      "FeedbackListItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
+          },
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "agent_id": {
+            "type": "integer",
+            "title": "Agent Id"
+          },
+          "user_id": {
+            "type": "integer",
+            "title": "User Id"
+          },
+          "username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Username"
+          },
+          "rating": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative"
+            ],
+            "title": "Rating"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "slack"
+            ],
+            "title": "Source"
+          },
+          "human_message_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Human Message Preview"
+          },
+          "ai_message_preview": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ai Message Preview"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "thread_id",
+          "session_id",
+          "message_id",
+          "agent_id",
+          "user_id",
+          "rating",
+          "comment",
+          "source",
+          "created_at"
+        ],
+        "title": "FeedbackListItem"
+      },
+      "FeedbackListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackListItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "next_cursor": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Cursor"
+          },
+          "has_more": {
+            "type": "boolean",
+            "title": "Has More",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "FeedbackListResponse"
+      },
+      "FeedbackResponse": {
+        "properties": {
+          "message_id": {
+            "type": "string",
+            "title": "Message Id"
+          },
+          "rating": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative"
+            ],
+            "title": "Rating"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          },
+          "source": {
+            "type": "string",
+            "enum": [
+              "portal",
+              "slack"
+            ],
+            "title": "Source",
+            "default": "portal"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          },
+          "updated_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Updated At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "message_id",
+          "rating",
+          "created_at",
+          "updated_at"
+        ],
+        "title": "FeedbackResponse"
+      },
+      "FeedbackStatsResponse": {
+        "properties": {
+          "positive_count": {
+            "type": "integer",
+            "title": "Positive Count"
+          },
+          "negative_count": {
+            "type": "integer",
+            "title": "Negative Count"
+          },
+          "total_count": {
+            "type": "integer",
+            "title": "Total Count"
+          },
+          "positive_rate": {
+            "type": "number",
+            "title": "Positive Rate"
+          },
+          "by_agent": {
+            "items": {
+              "$ref": "#/components/schemas/FeedbackAgentStats"
+            },
+            "type": "array",
+            "title": "By Agent"
+          }
+        },
+        "type": "object",
+        "required": [
+          "positive_count",
+          "negative_count",
+          "total_count",
+          "positive_rate",
+          "by_agent"
+        ],
+        "title": "FeedbackStatsResponse"
+      },
       "FieldMappingDTO": {
         "properties": {
           "xAxis": {
@@ -6893,6 +7157,10 @@
           "events_url": {
             "type": "string",
             "title": "Events Url"
+          },
+          "interactions_url": {
+            "type": "string",
+            "title": "Interactions Url"
           }
         },
         "type": "object",
@@ -6906,7 +7174,8 @@
           "default_agent_id",
           "enabled",
           "endpoint_key",
-          "events_url"
+          "events_url",
+          "interactions_url"
         ],
         "title": "SlackIntegrationResponse",
         "description": "Slack integration response. Never includes raw secrets."
@@ -6968,6 +7237,35 @@
         ],
         "title": "SlackTestConnectionResponse",
         "description": "Result of a Slack `auth.test` connection check."
+      },
+      "SubmitFeedbackRequest": {
+        "properties": {
+          "rating": {
+            "type": "string",
+            "enum": [
+              "positive",
+              "negative"
+            ],
+            "title": "Rating"
+          },
+          "comment": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 2000
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Comment"
+          }
+        },
+        "type": "object",
+        "required": [
+          "rating"
+        ],
+        "title": "SubmitFeedbackRequest"
       },
       "SyncConnectorResponse": {
         "properties": {
@@ -7768,6 +8066,27 @@
         "type": "object",
         "title": "TestProviderConnectionRequest"
       },
+      "ThreadFeedbackMapResponse": {
+        "properties": {
+          "thread_id": {
+            "type": "string",
+            "title": "Thread Id"
+          },
+          "feedback": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/FeedbackResponse"
+            },
+            "type": "object",
+            "title": "Feedback"
+          }
+        },
+        "type": "object",
+        "required": [
+          "thread_id",
+          "feedback"
+        ],
+        "title": "ThreadFeedbackMapResponse"
+      },
       "TokenUsageDailyPoint": {
         "properties": {
           "date": {
@@ -8314,6 +8633,7 @@
     "DELETE_/reports/{report_id}": "delete_report_reports__report_id__delete",
     "DELETE_/scheduled-tasks/{task_id}": "delete_scheduled_task_scheduled_tasks__task_id__delete",
     "DELETE_/skills/{name}": "delete_skill_skills__name__delete",
+    "DELETE_/threads/{thread_id}/messages/{message_id}/feedback": "delete_message_feedback_threads__thread_id__messages__message_id__feedback_delete",
     "GET_/": "root__get",
     "GET_/acl-shares/{resource_type}/{resource_id}/candidates": "list_share_candidates_acl_shares__resource_type___resource_id__candidates_get",
     "GET_/acl-shares/{resource_type}/{resource_id}/shares": "list_resource_shares_acl_shares__resource_type___resource_id__shares_get",
@@ -8360,6 +8680,9 @@
     "GET_/documents": "list_documents_documents_get",
     "GET_/documents/{document_id}/images/{filename}": "get_document_image_documents__document_id__images__filename__get",
     "GET_/documents/{document_id}/parsed": "get_parsed_document_documents__document_id__parsed_get",
+    "GET_/feedback": "list_feedback_feedback_get",
+    "GET_/feedback/export": "export_feedback_feedback_export_get",
+    "GET_/feedback/stats": "get_feedback_stats_feedback_stats_get",
     "GET_/hitl/approvals/{proposal_id}": "get_approval_hitl_approvals__proposal_id__get",
     "GET_/llm-config/models": "list_models_llm_config_models_get",
     "GET_/llm-config/providers": "list_llm_providers_llm_config_providers_get",
@@ -8382,6 +8705,7 @@
     "GET_/skills": "list_skills_skills_get",
     "GET_/skills/{name}": "get_skill_skills__name__get",
     "GET_/skills/{scope}/{name}/env-vars": "list_env_vars_skills__scope___name__env_vars_get",
+    "GET_/threads/{thread_id}/feedback": "get_thread_feedback_threads__thread_id__feedback_get",
     "PATCH_/admin/system-tasks/{task_id}/pause": "pause_system_task_admin_system_tasks__task_id__pause_patch",
     "PATCH_/admin/system-tasks/{task_id}/resume": "resume_system_task_admin_system_tasks__task_id__resume_patch",
     "PATCH_/admin/system-tasks/{task_id}/run": "run_system_task_admin_system_tasks__task_id__run_patch",
@@ -8449,7 +8773,8 @@
     "PUT_/llm-config/registry/profiles/{profile_id}": "update_registry_profile_llm_config_registry_profiles__profile_id__put",
     "PUT_/llm-config/registry/providers/{provider_id}": "update_registry_provider_llm_config_registry_providers__provider_id__put",
     "PUT_/notifications/preferences": "update_notification_preferences_notifications_preferences_put",
-    "PUT_/skills/{scope}/{name}/env-vars": "update_env_vars_skills__scope___name__env_vars_put"
+    "PUT_/skills/{scope}/{name}/env-vars": "update_env_vars_skills__scope___name__env_vars_put",
+    "PUT_/threads/{thread_id}/messages/{message_id}/feedback": "upsert_message_feedback_threads__thread_id__messages__message_id__feedback_put"
   },
   "operations": {
     "add_dashboard_filter_dashboards__dashboard_id__filters_post": {
@@ -9343,6 +9668,45 @@
         "idempotent": true
       }
     },
+    "delete_message_feedback_threads__thread_id__messages__message_id__feedback_delete": {
+      "operation_key": "DELETE_/threads/{thread_id}/messages/{message_id}/feedback",
+      "method": "DELETE",
+      "path": "/threads/{thread_id}/messages/{message_id}/feedback",
+      "summary": "Delete Message Feedback",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "204",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
     "delete_operation_api_connectors_operations__operation_id__delete": {
       "operation_key": "DELETE_/api-connectors/operations/{operation_id}",
       "method": "DELETE",
@@ -9743,6 +10107,107 @@
         "idempotent": false
       }
     },
+    "export_feedback_feedback_export_get": {
+      "operation_key": "GET_/feedback/export",
+      "method": "GET",
+      "path": "/feedback/export",
+      "summary": "Export Feedback",
+      "description": "",
+      "request": {
+        "query_params": [
+          {
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "rating",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rating"
+            },
+            "description": ""
+          },
+          {
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            },
+            "description": ""
+          },
+          {
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            },
+            "description": ""
+          },
+          {
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
     "get_agent_agents__agent_id__get": {
       "operation_key": "GET_/agents/{agent_id}",
       "method": "GET",
@@ -10123,6 +10588,94 @@
         "success_status": "200",
         "success_schema": {
           "$ref": "#/components/schemas/DrivePickerConfigResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_feedback_stats_feedback_stats_get": {
+      "operation_key": "GET_/feedback/stats",
+      "method": "GET",
+      "path": "/feedback/stats",
+      "summary": "Get Feedback Stats",
+      "description": "",
+      "request": {
+        "query_params": [
+          {
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            },
+            "description": ""
+          },
+          {
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            },
+            "description": ""
+          },
+          {
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/FeedbackStatsResponse"
         },
         "error_statuses": [
           "422"
@@ -11022,6 +11575,39 @@
         "idempotent": true
       }
     },
+    "get_thread_feedback_threads__thread_id__feedback_get": {
+      "operation_key": "GET_/threads/{thread_id}/feedback",
+      "method": "GET",
+      "path": "/threads/{thread_id}/feedback",
+      "summary": "Get Thread Feedback",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/ThreadFeedbackMapResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
     "google_drive_authorize_document_sync_google_authorize_get": {
       "operation_key": "GET_/document-sync/google/authorize",
       "method": "GET",
@@ -11602,6 +12188,138 @@
         "success_status": "200",
         "success_schema": {
           "$ref": "#/components/schemas/EnvVarListResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_feedback_feedback_get": {
+      "operation_key": "GET_/feedback",
+      "method": "GET",
+      "path": "/feedback",
+      "summary": "List Feedback",
+      "description": "",
+      "request": {
+        "query_params": [
+          {
+            "name": "agent_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Agent Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "rating",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Rating"
+            },
+            "description": ""
+          },
+          {
+            "name": "source",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Source"
+            },
+            "description": ""
+          },
+          {
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            },
+            "description": ""
+          },
+          {
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            },
+            "description": ""
+          },
+          {
+            "name": "cursor",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Cursor"
+            },
+            "description": ""
+          },
+          {
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 200,
+              "minimum": 1,
+              "default": 50,
+              "title": "Limit"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/FeedbackListResponse"
         },
         "error_statuses": [
           "422"
@@ -14713,6 +15431,58 @@
         "success_status": "200",
         "success_schema": {
           "$ref": "#/components/schemas/GoogleDriveSourceConfigResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "upsert_message_feedback_threads__thread_id__messages__message_id__feedback_put": {
+      "operation_key": "PUT_/threads/{thread_id}/messages/{message_id}/feedback",
+      "method": "PUT",
+      "path": "/threads/{thread_id}/messages/{message_id}/feedback",
+      "summary": "Upsert Message Feedback",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "thread_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Thread Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "message_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Message Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SubmitFeedbackRequest"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/FeedbackResponse"
         },
         "error_statuses": [
           "422"

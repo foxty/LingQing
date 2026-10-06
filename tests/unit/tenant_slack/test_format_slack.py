@@ -1,6 +1,6 @@
 """Unit tests for markdown → Slack mrkdwn formatting."""
 
-from apps.tenant_app_service.slack.domain import format_reply_for_slack
+from apps.tenant_app_service.agent_ingress.slack.domain import format_reply_for_slack
 
 PORTAL = "https://app.example.com"
 API = "https://api.example.com"

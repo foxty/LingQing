@@ -465,6 +465,7 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
 
                 return ChatResponse(
                     response=Message(
+                        message_id=getattr(last_message, "id", None),
                         role="ai",
                         content=content,
                         agent_id=agent_id,

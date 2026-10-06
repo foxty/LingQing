@@ -17,13 +17,13 @@ from apps.shared.domain.types import ABAC_ACTION_READ, ABAC_ACTION_WRITE
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agent_catalog.domain import SYSTEM_AGENT_ONE_ID
 from apps.tenant_app_service.agent_catalog.services import AgentCatalogService
+from apps.tenant_app_service.agent_ingress.slack.admin_service import SlackAdminService
 from apps.tenant_app_service.agent_ingress.slack.dtos import (
     CreateAgentSlackIntegrationRequest,
     SlackIntegrationResponse,
     SlackTestConnectionResponse,
     UpdateAgentSlackIntegrationRequest,
 )
-from apps.tenant_app_service.agent_ingress.slack.service import SlackAdminService
 
 router = APIRouter(prefix="/agents/{agent_id}/integrations/slack", tags=["slack"])
 

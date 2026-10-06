@@ -14,6 +14,7 @@ export interface SlackIntegration {
   enabled: boolean
   endpoint_key: string
   events_url: string
+  interactions_url: string
 }
 
 export interface CreateAgentSlackIntegrationRequest {

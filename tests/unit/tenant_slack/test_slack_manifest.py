@@ -1,6 +1,6 @@
 """Unit tests for Slack app manifest generation."""
 
-from apps.tenant_app_service.slack.domain import (
+from apps.tenant_app_service.agent_ingress.slack.domain import (
     SLACK_BOT_EVENTS,
     SLACK_BOT_SCOPES,
     build_slack_app_manifest,

@@ -41,6 +41,7 @@ class SlackIntegrationResponse(BaseModel):
     enabled: bool
     endpoint_key: str
     events_url: str
+    interactions_url: str
 
 
 class SlackTestConnectionResponse(BaseModel):

@@ -9,6 +9,8 @@
     "dev:tm": "nx run-many --target=dev --projects=tenant_manager_service,tenant_manager_portal --parallel=2",
     "migrate-db:ta": "nx migrate-db:tenant-app",
     "migrate-db:tm": "nx migrate-db:tenant-manager",
+    "downgrade-db:ta": "nx downgrade-db:tenant-app -- -1",
+    "downgrade-db:tm": "nx downgrade-db:tenant-manager -- -1",
     "test": "nx run root:test",
     "test:unit": "nx run root:test:unit",
     "ci": "nx run root:ci",

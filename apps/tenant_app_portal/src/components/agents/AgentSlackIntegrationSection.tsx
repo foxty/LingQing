@@ -46,6 +46,9 @@ i18n.addResourceBundle(
         botToken: 'Bot User OAuth Token',
         signingSecret: 'Signing Secret',
         eventsUrl: 'Events URL',
+        interactionsUrl: 'Interactivity URL',
+        interactivityNote:
+          'Re-download the manifest (or set Interactivity URL in Slack app settings) so thumbs up/down feedback works on bot replies.',
         testConnection: 'Test connection',
         enable: 'Enable',
         disable: 'Disable',
@@ -93,6 +96,9 @@ i18n.addResourceBundle(
         botToken: 'Bot User OAuth Token',
         signingSecret: 'Signing Secret',
         eventsUrl: 'Events URL',
+        interactionsUrl: '交互 URL',
+        interactivityNote:
+          '重新下载 Manifest（或在 Slack 应用设置中配置 Interactivity URL），以便机器人回复支持点赞/点踩反馈。',
         testConnection: '测试连接',
         enable: '启用',
         disable: '禁用',
@@ -466,7 +472,14 @@ export default function AgentSlackIntegrationSection({
       ) : null}
 
       {integration ? (
-        <CopyableEventsUrl label={t('agents.slackIntegration.eventsUrl')} value={integration.events_url} />
+        <div className="space-y-2">
+          <CopyableEventsUrl label={t('agents.slackIntegration.eventsUrl')} value={integration.events_url} />
+          <CopyableEventsUrl
+            label={t('agents.slackIntegration.interactionsUrl')}
+            value={integration.interactions_url}
+          />
+          <p className="text-xs text-muted-foreground">{t('agents.slackIntegration.interactivityNote')}</p>
+        </div>
       ) : null}
 
       <ConfirmationDialog

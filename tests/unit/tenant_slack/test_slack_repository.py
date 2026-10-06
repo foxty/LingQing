@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from apps.tenant_app_service.slack.repository import SlackRepository
+from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 
 
 @pytest.mark.asyncio

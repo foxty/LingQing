@@ -316,6 +316,30 @@ class MessageRepository:
         message.additional_kwargs = additional_kwargs
         await self.db.flush()
 
+    async def get_message_by_message_id(self, message_id: str) -> ChatMessage | None:
+        """Get a chat message by LangChain message_id."""
+        result = await self.db.execute(select(ChatMessage).where(ChatMessage.message_id == message_id))
+        return result.scalar_one_or_none()
+
+    async def get_latest_ai_message_for_session(self, thread_id: str, session_id: str) -> ChatMessage | None:
+        """Get the most recent AI message for a session."""
+        result = await self.db.execute(
+            select(ChatMessage)
+            .where(
+                ChatMessage.thread_id == thread_id,
+                ChatMessage.session_id == session_id,
+                ChatMessage.type == MESSAGE_TYPE_AI,
+            )
+            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+            .limit(1)
+        )
+        return result.scalar_one_or_none()
+
+    async def update_message_metadata(self, message: ChatMessage, metadata: dict) -> None:
+        """Replace message_metadata for a persisted message."""
+        message.message_metadata = metadata
+        await self.db.flush()
+
     async def get_tool_message_by_call_id(
         self,
         thread_id: str,
