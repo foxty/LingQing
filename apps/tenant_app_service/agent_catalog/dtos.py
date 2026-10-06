@@ -2,7 +2,9 @@
 
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from apps.tenant_app_service.agent_catalog.domain import VALID_PLATFORM_CAPABILITIES
 
 
 class AgentCapabilityConfigDTO(BaseModel):
@@ -11,7 +13,24 @@ class AgentCapabilityConfigDTO(BaseModel):
     knowledge_base_ids: list[int] = Field(default_factory=list)
     data_source_ids: list[int] = Field(default_factory=list)
     api_connector_ids: list[int] = Field(default_factory=list)
+    platform_capabilities: list[str] = Field(default_factory=list)
     model_profile_id: int | None = None
+
+    @field_validator("platform_capabilities")
+    @classmethod
+    def _validate_platform_capabilities(cls, value: list[str]) -> list[str]:
+        invalid = [item for item in value if item not in VALID_PLATFORM_CAPABILITIES]
+        if invalid:
+            supported = ", ".join(sorted(VALID_PLATFORM_CAPABILITIES))
+            raise ValueError(f"Invalid platform capabilities: {invalid}. Supported: {supported}")
+        seen: set[str] = set()
+        normalized: list[str] = []
+        for item in value:
+            if item in seen:
+                continue
+            seen.add(item)
+            normalized.append(item)
+        return normalized
 
 
 class AgentResponse(BaseModel):

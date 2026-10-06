@@ -15,6 +15,21 @@ CORE_SKILL_TOOLS = ("load_skill", "unload_skill", "read_skill_file")
 KNOWLEDGE_TOOLS = ("search_documents", "retrieve_resource_context")
 DATA_SOURCE_TOOLS = ("list_data_sources", "search_data_assets", "retrieve_resource_context")
 API_CONNECTOR_TOOLS = ("search_apis", "retrieve_resource_context", "api_connector")
+SCHEDULER_TOOLS = (
+    "list_scheduled_tasks",
+    "get_scheduled_task",
+    "schedule_task",
+    "update_scheduled_task",
+    "cancel_scheduled_task",
+)
+REPORT_TOOLS = ("create_report", "get_report", "update_report")
+PLATFORM_CAPABILITY_SCHEDULING = "scheduling"
+PLATFORM_CAPABILITY_REPORTS = "reports"
+PLATFORM_CAPABILITY_TOOLS: dict[str, tuple[str, ...]] = {
+    PLATFORM_CAPABILITY_SCHEDULING: SCHEDULER_TOOLS,
+    PLATFORM_CAPABILITY_REPORTS: REPORT_TOOLS,
+}
+VALID_PLATFORM_CAPABILITIES = frozenset(PLATFORM_CAPABILITY_TOOLS)
 SHAREABLE_SKILL_SCOPES = frozenset({"builtin", "tenant"})
 PERSONAL_SKILL_SCOPE = "personal"
 
@@ -39,8 +54,9 @@ def derive_tool_names(
     knowledge_base_ids: list[int],
     data_source_ids: list[int],
     api_connector_ids: list[int],
+    platform_capabilities: list[str] | None = None,
 ) -> list[str]:
-    """Always-on tools from assigned skills and attached resources.
+    """Always-on tools from assigned skills, attached resources, and platform capabilities.
 
     Skill-declared tools are not included; they attach on ``load_skill``.
     """
@@ -65,6 +81,9 @@ def derive_tool_names(
     if api_connector_ids:
         for name in API_CONNECTOR_TOOLS:
             _add(name)
+    for capability in platform_capabilities or []:
+        for name in PLATFORM_CAPABILITY_TOOLS.get(capability, ()):
+            _add(name)
     return names
 
 
@@ -77,6 +96,7 @@ class AgentCapabilityProfile(BaseDomainModel):
     knowledge_base_ids: list[int] = field(default_factory=list)
     data_source_ids: list[int] = field(default_factory=list)
     api_connector_ids: list[int] = field(default_factory=list)
+    platform_capabilities: list[str] = field(default_factory=list)
     model_profile_id: int | None = None
 
     @classmethod
@@ -89,6 +109,7 @@ class AgentCapabilityProfile(BaseDomainModel):
             knowledge_base_ids=_as_int_list(raw.get("knowledge_base_ids")),
             data_source_ids=_as_int_list(raw.get("data_source_ids")),
             api_connector_ids=_as_int_list(raw.get("api_connector_ids")),
+            platform_capabilities=_normalize_platform_capabilities(raw.get("platform_capabilities")),
             model_profile_id=int(model_profile_id) if model_profile_id is not None else None,
         )
 
@@ -99,6 +120,7 @@ class AgentCapabilityProfile(BaseDomainModel):
             "knowledge_base_ids": list(self.knowledge_base_ids),
             "data_source_ids": list(self.data_source_ids),
             "api_connector_ids": list(self.api_connector_ids),
+            "platform_capabilities": list(self.platform_capabilities),
         }
         if self.model_profile_id is not None:
             result["model_profile_id"] = self.model_profile_id
@@ -124,6 +146,18 @@ class CustomAgent(BaseDomainModel):
 
     def is_active(self) -> bool:
         return self.status == "active"
+
+
+def _normalize_platform_capabilities(value: Any) -> list[str]:
+    names = _as_str_list(value)
+    seen: set[str] = set()
+    normalized: list[str] = []
+    for name in names:
+        if name not in VALID_PLATFORM_CAPABILITIES or name in seen:
+            continue
+        seen.add(name)
+        normalized.append(name)
+    return normalized
 
 
 def _as_str_list(value: Any) -> list[str]:
