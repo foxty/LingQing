@@ -2,12 +2,23 @@ import api from './api'
 
 export const SYSTEM_AGENT_ONE_ID = -1
 
+export const PLATFORM_CAPABILITY_SCHEDULING = 'scheduling'
+export const PLATFORM_CAPABILITY_REPORTS = 'reports'
+
+export const PLATFORM_CAPABILITIES = [
+  PLATFORM_CAPABILITY_SCHEDULING,
+  PLATFORM_CAPABILITY_REPORTS,
+] as const
+
+export type PlatformCapability = (typeof PLATFORM_CAPABILITIES)[number]
+
 export interface AgentCapabilityConfig {
   default_tools: string[]
   skills: string[]
   knowledge_base_ids: number[]
   data_source_ids: number[]
   api_connector_ids: number[]
+  platform_capabilities: PlatformCapability[]
   model_profile_id?: number | null
 }
 

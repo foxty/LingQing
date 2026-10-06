@@ -236,6 +236,7 @@ class AgentCatalogService(TenantAwareService):
             knowledge_base_ids=profile.knowledge_base_ids,
             data_source_ids=profile.data_source_ids,
             api_connector_ids=profile.api_connector_ids,
+            platform_capabilities=profile.platform_capabilities,
         )
         return [name for name in names if name in TOOL_REGISTRY]
 

@@ -33,7 +33,11 @@ from apps.tenant_app_service.skills.domain import SkillType
 
 
 def test_derive_tool_names_from_skills_and_context():
-    from apps.tenant_app_service.agent_catalog.domain import derive_tool_names
+    from apps.tenant_app_service.agent_catalog.domain import (
+        PLATFORM_CAPABILITY_REPORTS,
+        PLATFORM_CAPABILITY_SCHEDULING,
+        derive_tool_names,
+    )
 
     assert (
         derive_tool_names(
@@ -55,6 +59,41 @@ def test_derive_tool_names_from_skills_and_context():
     assert "run_sql_query_on_datasource" not in derived
     assert "search_documents" in derived
     assert "retrieve_resource_context" in derived
+
+    scheduled = derive_tool_names(
+        skills=[],
+        knowledge_base_ids=[],
+        data_source_ids=[],
+        api_connector_ids=[],
+        platform_capabilities=[PLATFORM_CAPABILITY_SCHEDULING],
+    )
+    assert "schedule_task" in scheduled
+    assert "list_scheduled_tasks" in scheduled
+
+    reports = derive_tool_names(
+        skills=[],
+        knowledge_base_ids=[],
+        data_source_ids=[],
+        api_connector_ids=[],
+        platform_capabilities=[PLATFORM_CAPABILITY_REPORTS],
+    )
+    assert reports == ["create_report", "get_report", "update_report"]
+
+
+def test_capability_profile_parses_platform_capabilities():
+    profile = AgentCapabilityProfile.from_config(
+        {
+            "platform_capabilities": ["scheduling", "reports", "scheduling", "invalid"],
+        }
+    )
+    assert profile.platform_capabilities == ["scheduling", "reports"]
+
+
+def test_capability_config_rejects_invalid_platform_capabilities():
+    from pydantic import ValidationError as PydanticValidationError
+
+    with pytest.raises(PydanticValidationError):
+        AgentCapabilityConfigDTO(platform_capabilities=["not-a-capability"])
 
 
 def test_allowed_runtime_tool_names_includes_skill_tools(monkeypatch):

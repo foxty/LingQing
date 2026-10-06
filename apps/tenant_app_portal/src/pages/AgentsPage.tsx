@@ -31,11 +31,14 @@ import {
 import { useDocumentCollections } from '@/hooks/useDocumentCollections'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
 import {
+  PLATFORM_CAPABILITY_REPORTS,
+  PLATFORM_CAPABILITY_SCHEDULING,
   SYSTEM_AGENT_ONE_ID,
   agentApiErrorMessage,
   type AgentCapabilityConfig,
   type AgentSkillCatalogItem,
   type CatalogAgent,
+  type PlatformCapability,
 } from '@/lib/agentsApi'
 import { listApiConnectors } from '@/lib/apiConnectorApi'
 import { listDataSources } from '@/lib/dataSourceApi'
@@ -73,8 +76,13 @@ i18n.addResourceBundle(
       name: 'Name',
       prompt: 'System prompt',
       tools: 'Tools',
-      toolsHint: 'Tools are bound from assigned skills plus knowledge bases, data sources, and APIs.',
-      toolsEmpty: 'No tools yet. Assign a skill or a knowledge base, data source, or API.',
+      toolsHint: 'Tools are derived from skills, attached resources, and enabled platform capabilities.',
+      toolsEmpty: 'No tools yet. Assign a skill, resource, or platform capability.',
+      platformCapabilities: 'Platform capabilities',
+      platformScheduling: 'Scheduling',
+      platformSchedulingHint: 'Create and manage scheduled tasks for this agent.',
+      platformReports: 'Reports',
+      platformReportsHint: 'Create and update file-backed reports.',
       skills: 'Skills',
       knowledge: 'Knowledge bases',
       dataSources: 'Data sources',
@@ -117,8 +125,13 @@ i18n.addResourceBundle(
       name: '名称',
       prompt: '系统提示词',
       tools: '工具',
-      toolsHint: '工具由已分配的技能，以及知识库、数据源和 API 自动绑定。',
-      toolsEmpty: '暂无工具。请先分配技能，或选择知识库、数据源、API。',
+      toolsHint: '工具由技能、已绑定资源以及启用的平台能力自动推导。',
+      toolsEmpty: '暂无工具。请分配技能、资源或平台能力。',
+      platformCapabilities: '平台能力',
+      platformScheduling: '定时任务',
+      platformSchedulingHint: '为此智能体创建和管理定时任务。',
+      platformReports: '报告',
+      platformReportsHint: '创建和更新基于文件的报告。',
       skills: '技能',
       knowledge: '知识库',
       dataSources: '数据源',
@@ -147,6 +160,7 @@ const emptyConfig = (): AgentCapabilityConfig => ({
   knowledge_base_ids: [],
   data_source_ids: [],
   api_connector_ids: [],
+  platform_capabilities: [],
   model_profile_id: null,
 })
 
@@ -224,7 +238,11 @@ export default function AgentsPage() {
   const openEdit = (agent: CatalogAgent) => {
     setFormName(agent.name)
     setFormPrompt(agent.system_prompt)
-    setFormConfig({ ...emptyConfig(), ...agent.config })
+    setFormConfig({
+      ...emptyConfig(),
+      ...agent.config,
+      platform_capabilities: agent.config.platform_capabilities ?? [],
+    })
     setFormError(null)
     setEditing(agent)
   }
@@ -380,6 +398,16 @@ export default function AgentsPage() {
                 }))
               }
             />
+            <PlatformCapabilitiesGroup
+              label={t('agents.platformCapabilities')}
+              selected={formConfig.platform_capabilities}
+              onToggle={(capability) =>
+                setFormConfig((current) => ({
+                  ...current,
+                  platform_capabilities: toggleListValue(current.platform_capabilities, capability),
+                }))
+              }
+            />
             <CheckboxGroup
               label={t('agents.knowledge')}
               items={collections.map((collection) => ({ id: String(collection.id), label: collection.name }))}
@@ -502,6 +530,19 @@ const CORE_SKILL_TOOLS = ['load_skill', 'unload_skill', 'read_skill_file']
 const KNOWLEDGE_TOOLS = ['search_documents', 'retrieve_resource_context']
 const DATA_SOURCE_TOOLS = ['list_data_sources', 'search_data_assets', 'retrieve_resource_context']
 const API_CONNECTOR_TOOLS = ['search_apis', 'retrieve_resource_context', 'api_connector']
+const SCHEDULER_TOOLS = [
+  'list_scheduled_tasks',
+  'get_scheduled_task',
+  'schedule_task',
+  'update_scheduled_task',
+  'cancel_scheduled_task',
+]
+const REPORT_TOOLS = ['create_report', 'get_report', 'update_report']
+
+const PLATFORM_CAPABILITY_TOOLS: Record<PlatformCapability, string[]> = {
+  [PLATFORM_CAPABILITY_SCHEDULING]: SCHEDULER_TOOLS,
+  [PLATFORM_CAPABILITY_REPORTS]: REPORT_TOOLS,
+}
 
 function deriveBoundTools(config: AgentCapabilityConfig, skills: AgentSkillCatalogItem[]): string[] {
   const names: string[] = []
@@ -526,7 +567,54 @@ function deriveBoundTools(config: AgentCapabilityConfig, skills: AgentSkillCatal
   if (config.api_connector_ids.length > 0) {
     API_CONNECTOR_TOOLS.forEach(add)
   }
+  for (const capability of config.platform_capabilities ?? []) {
+    PLATFORM_CAPABILITY_TOOLS[capability]?.forEach(add)
+  }
   return names
+}
+
+function PlatformCapabilitiesGroup({
+  label,
+  selected,
+  onToggle,
+}: {
+  label: string
+  selected: PlatformCapability[]
+  onToggle: (capability: PlatformCapability) => void
+}) {
+  const { t } = useTranslation()
+  const items: { id: PlatformCapability; label: string; hint: string }[] = [
+    {
+      id: PLATFORM_CAPABILITY_SCHEDULING,
+      label: t('agents.platformScheduling'),
+      hint: t('agents.platformSchedulingHint'),
+    },
+    {
+      id: PLATFORM_CAPABILITY_REPORTS,
+      label: t('agents.platformReports'),
+      hint: t('agents.platformReportsHint'),
+    },
+  ]
+  return (
+    <div className="space-y-2">
+      <Label>{label}</Label>
+      <div className="space-y-2 rounded-md border p-3">
+        {items.map((item) => (
+          <label key={item.id} className="flex items-start gap-2 text-sm">
+            <Checkbox
+              className="mt-0.5"
+              checked={selected.includes(item.id)}
+              onCheckedChange={() => onToggle(item.id)}
+            />
+            <span>
+              <span className="font-medium">{item.label}</span>
+              <span className="mt-0.5 block text-xs text-muted-foreground">{item.hint}</span>
+            </span>
+          </label>
+        ))}
+      </div>
+    </div>
+  )
 }
 
 function DerivedToolsPreview({
