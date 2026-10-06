@@ -91,7 +91,6 @@ async def deliver_scheduled_agent_run_to_slack(
             message_id=message_id,
             thread_ts=thread_ts,
             message_repo=message_repo,
-            db=db_session,
         )
         logger.info(
             "Slack scheduled delivery succeeded: tenant=%s user=%s thread=%s channel=%s",

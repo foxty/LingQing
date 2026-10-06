@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort
 from apps.tenant_app_service.agent_ingress.slack.domain import split_long_text
 from apps.tenant_app_service.agent_ingress.slack.feedback_blocks import build_feedback_blocks
@@ -35,7 +33,6 @@ async def post_slack_reply_with_feedback(
     message_id: str | None,
     thread_ts: str | None,
     message_repo: MessageRepository,
-    db: AsyncSession,
     update_ts: str | None = None,
 ) -> str | None:
     """Post chunked Slack reply; attach feedback buttons on the final chunk."""
@@ -80,6 +77,5 @@ async def post_slack_reply_with_feedback(
                 "message_ts": posted_ts,
             }
             await message_repo.update_message_metadata(ai_message, metadata)
-            await db.commit()
 
     return posted_ts

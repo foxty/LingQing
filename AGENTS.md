@@ -47,6 +47,22 @@ _Inward Dependency Rule:_ Dependencies always point inward — outer layers depe
   - _DB Entity Models_ — owned by repository adapters; map to persistence schema.
   - _DTOs_ — owned by the interface/service boundary; used in router and service layers for input/output contracts.
 
+**Database Sessions:**
+
+Session lifecycle is owned by the outer boundary — not by repositories or application services.
+
+- **HTTP requests:** inject `AsyncSession = Depends(get_db)`. `get_db` commits on success and rolls back on exception.
+- **Background tasks / scripts:** use `async with app_db_session() as db:` — same commit-on-success, rollback-on-error behavior.
+- **Repositories:** `flush()` only to persist within the current transaction. Never `commit()` or `rollback()`.
+- **Application services:** orchestrate use cases and call repositories; do **not** `commit()` or `rollback()` when the caller supplied the session via `Depends(get_db)` or `app_db_session()`.
+- **Routers:** do not `rollback()` — the dependency handles errors. Avoid `commit()` unless data must be visible to a **new** session before the request ends.
+
+**When explicit `commit()` is allowed:**
+
+- In a router/handler **immediately before** `asyncio.create_task(...)`, so the background task's separate `app_db_session()` can read committed state (e.g. Slack event dedupe).
+- Inside a standalone `app_db_session()` block when later steps in the **same** block need earlier writes persisted first (rare; document why).
+- Do **not** add service-layer commits "just to be safe" — double commits are redundant in production and break savepoint-based integration tests.
+
 **Exception Handling:**
 
 - Domain exceptions (`apps.shared.core.exceptions`) represent business rule violations.

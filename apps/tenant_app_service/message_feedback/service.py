@@ -97,7 +97,6 @@ class MessageFeedbackService:
             external_ref=external_ref,
             now=now,
         )
-        await self.db.commit()
         return _to_response(domain)
 
     async def upsert_feedback(
@@ -161,7 +160,6 @@ class MessageFeedbackService:
         deleted = await self.repository.delete(self.tenant_id, message_id, user_id)
         if not deleted:
             raise ResourceNotFoundError("Feedback not found")
-        await self.db.commit()
 
     async def get_thread_feedback_map(
         self,
@@ -204,7 +202,6 @@ class MessageFeedbackService:
         )
         if domain is None:
             return None
-        await self.db.commit()
         return _to_response(domain)
 
     async def get_stats(

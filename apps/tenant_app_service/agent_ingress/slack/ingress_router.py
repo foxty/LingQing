@@ -228,7 +228,6 @@ async def slack_interactions_webhook(
 
     interactivity = SlackInteractivityService(db)
     response_body = await interactivity.handle_payload(payload, endpoint)
-    await db.commit()
     return JSONResponse(status_code=status.HTTP_200_OK, content=response_body)
 
 

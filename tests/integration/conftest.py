@@ -350,54 +350,21 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
     from apps.tenant_app_service.agent_ingress.slack.client import SlackWebClient
     from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
     from tests.slack.fake_slack import FakeSlackClient
+    from tests.slack.session_factory import build_serializing_savepoint_sessions
 
-    # Reuse the per-test connection so seed commits are SAVEPOINTs that roll back
-    # with pg_async_db_session instead of polluting shared tenant id sequences.
     connection = await pg_async_db_session.connection()
-    TestSessionLocal = async_sessionmaker(
-        bind=connection,
-        class_=AsyncSession,
-        expire_on_commit=False,
-        autoflush=False,
-        join_transaction_mode="create_savepoint",
+    TestSessionLocal, override_get_db, fake_app_db_session = build_serializing_savepoint_sessions(
+        connection
     )
-
-    async def override_get_db():
-        async with TestSessionLocal() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-            finally:
-                await session.close()
 
     app.dependency_overrides[get_db] = override_get_db
 
-    # Patch the background-task session factory used by the Slack ingress
-    # router. Background tasks run on the same event loop as the test (via
-    # ASGITransport), so a NullPool engine created here is loop-safe.
-    from contextlib import asynccontextmanager
-
     from apps.tenant_app_service.agent_ingress.slack import ingress_router as ingress_router_module
 
-    @asynccontextmanager
-    async def _fake_app_db_session():
-        async with TestSessionLocal() as session:
-            try:
-                yield session
-                await session.commit()
-            except Exception:
-                await session.rollback()
-                raise
-
     original_app_db_session = ingress_router_module.__dict__.get("app_db_session")
-    # The ingress router imports app_db_session lazily inside _safe_handle,
-    # so patch the source module function reference it looks up each call.
     from apps.shared.db import session as _db_session_module
 
-    _db_session_module.app_db_session = _fake_app_db_session
+    _db_session_module.app_db_session = fake_app_db_session
 
     fake_slack = FakeSlackClient()
 

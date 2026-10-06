@@ -32,7 +32,6 @@ async def test_post_slack_reply_with_feedback_updates_thinking_message():
     client.chat_update = AsyncMock(return_value={"ok": True})
     message_repo = MagicMock()
     message_repo.get_message_by_message_id = AsyncMock(return_value=None)
-    db = AsyncMock()
 
     posted_ts = await post_slack_reply_with_feedback(
         client=client,
@@ -42,7 +41,6 @@ async def test_post_slack_reply_with_feedback_updates_thinking_message():
         message_id=None,
         thread_ts="1.0",
         message_repo=message_repo,
-        db=db,
         update_ts="1.1",
     )
 

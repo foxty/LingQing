@@ -89,7 +89,7 @@ async def test_upsert_feedback_persists_rating():
 
     assert result.rating == FEEDBACK_RATING_POSITIVE
     service.repository.upsert.assert_awaited_once()
-    db.commit.assert_awaited_once()
+    db.commit.assert_not_called()
 
 
 @pytest.mark.asyncio

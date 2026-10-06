@@ -210,7 +210,6 @@ class SlackIngressService:
             message_id=message_id,
             thread_ts=reply_thread_ts,
             message_repo=message_repo,
-            db=self.db,
             update_ts=thinking_ts,
         )
 

@@ -1,6 +1,6 @@
-"""Shared fixtures for Slack test helpers.
+"""Slack integration test helpers.
 
-The main `slack_test_setup` fixture lives in tests/integration/conftest.py
-so it is auto-loaded for integration tests. This file keeps tests/slack/
-importable as a package for the fake_slack and slack_event_factory helpers.
+The ``slack_test_setup`` fixture lives in ``tests/integration/conftest.py`` so
+integration tests can use it. Session serialization for concurrent Slack
+ingress lives in ``tests/slack/session_factory.py``.
 """
