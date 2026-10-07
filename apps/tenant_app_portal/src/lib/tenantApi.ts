@@ -30,6 +30,8 @@ export interface TenantTokenSummary {
   unique_sessions: number
   unique_threads: number
   unique_users: number
+  avg_llm_duration_ms: number | null
+  avg_tool_duration_ms: number | null
   estimated_cost: number | null
 }
 

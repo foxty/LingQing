@@ -1,4 +1,10 @@
 import api from './api'
+import type {
+  GetTenantUsageEventsParams,
+  TenantTokenSummary,
+  TokenUsageDailyPoint,
+  TokenUsageEventsResponse,
+} from './tenantApi'
 
 export const SYSTEM_AGENT_ONE_ID = -1
 
@@ -97,5 +103,47 @@ export async function deleteCatalogAgent(agentId: number): Promise<void> {
 
 export async function listAgentSkillCatalog(): Promise<AgentSkillCatalogItem[]> {
   const response = await api.get<AgentSkillCatalogItem[]>('/agents/catalog/skills')
+  return response.data
+}
+
+export type {
+  GetTenantUsageEventsParams as GetAgentUsageEventsParams,
+  TenantTokenSummary as AgentUsageSummary,
+  TokenUsageDailyPoint,
+  TokenUsageEventsResponse,
+} from './tenantApi'
+
+export type AgentUsageFilterParams = {
+  days?: number
+  user_id?: number
+}
+
+export async function getAgentUsageSummary(
+  agentId: number,
+  params: AgentUsageFilterParams = {}
+): Promise<TenantTokenSummary> {
+  const response = await api.get<TenantTokenSummary>(`/agents/${agentId}/usage/summary`, {
+    params: { days: params.days ?? 30, user_id: params.user_id },
+  })
+  return response.data
+}
+
+export async function getAgentUsageDaily(
+  agentId: number,
+  params: AgentUsageFilterParams = {}
+): Promise<TokenUsageDailyPoint[]> {
+  const response = await api.get<TokenUsageDailyPoint[]>(`/agents/${agentId}/usage/daily`, {
+    params: { days: params.days ?? 30, user_id: params.user_id },
+  })
+  return response.data
+}
+
+export async function getAgentUsageEvents(
+  agentId: number,
+  params: GetTenantUsageEventsParams = {}
+): Promise<TokenUsageEventsResponse> {
+  const response = await api.get<TokenUsageEventsResponse>(`/agents/${agentId}/usage/events`, {
+    params,
+  })
   return response.data
 }

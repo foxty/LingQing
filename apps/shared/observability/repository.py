@@ -2,12 +2,12 @@
 
 from datetime import datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import AgentMetricsEventDBModel
 from apps.shared.observability.adapters import db_model_to_event, event_to_db_model
-from apps.shared.observability.domain import MetricsEvent
+from apps.shared.observability.domain import CallStatus, EventType, MetricsEvent
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -137,6 +137,181 @@ class MetricsRepository:
         result = await self.db.execute(query)
         db_models = result.scalars().all()
         return [db_model_to_event(m) for m in db_models]
+
+    @staticmethod
+    def _usage_scope_filters(
+        *,
+        tenant_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        agent_id: int | None = None,
+        user_id: int | None = None,
+    ) -> tuple:
+        filters = [
+            AgentMetricsEventDBModel.tenant_id == tenant_id,
+            AgentMetricsEventDBModel.timestamp >= start_time,
+            AgentMetricsEventDBModel.timestamp <= end_time,
+        ]
+        if agent_id is not None:
+            filters.append(AgentMetricsEventDBModel.agent_id == agent_id)
+        if user_id is not None:
+            filters.append(AgentMetricsEventDBModel.user_id == user_id)
+        return tuple(filters)
+
+    async def aggregate_usage_stats(
+        self,
+        *,
+        tenant_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        agent_id: int | None = None,
+        user_id: int | None = None,
+    ) -> tuple[int, int, int, int, int, int, int, int, int, float | None, float | None]:
+        """Aggregate usage counters in SQL (no row limit).
+
+        Returns:
+            Tuple of (
+                total_llm_calls,
+                total_llm_errors,
+                total_tool_calls,
+                total_tool_errors,
+                total_input_tokens,
+                total_output_tokens,
+                unique_sessions,
+                unique_threads,
+                unique_users,
+                avg_llm_duration_ms,
+                avg_tool_duration_ms,
+            )
+        """
+        filters = self._usage_scope_filters(
+            tenant_id=tenant_id,
+            start_time=start_time,
+            end_time=end_time,
+            agent_id=agent_id,
+            user_id=user_id,
+        )
+        llm_count = case((AgentMetricsEventDBModel.event_type == EventType.LLM_CALL, 1), else_=0)
+        llm_error_count = case(
+            (
+                (AgentMetricsEventDBModel.event_type == EventType.LLM_CALL)
+                & (AgentMetricsEventDBModel.status == CallStatus.ERROR),
+                1,
+            ),
+            else_=0,
+        )
+        tool_count = case((AgentMetricsEventDBModel.event_type == EventType.TOOL_CALL, 1), else_=0)
+        tool_error_count = case(
+            (
+                (AgentMetricsEventDBModel.event_type == EventType.TOOL_CALL)
+                & (AgentMetricsEventDBModel.status == CallStatus.ERROR),
+                1,
+            ),
+            else_=0,
+        )
+        input_tokens = case(
+            (
+                AgentMetricsEventDBModel.event_type == EventType.LLM_CALL,
+                func.coalesce(AgentMetricsEventDBModel.input_tokens, 0),
+            ),
+            else_=0,
+        )
+        output_tokens = case(
+            (
+                AgentMetricsEventDBModel.event_type == EventType.LLM_CALL,
+                func.coalesce(AgentMetricsEventDBModel.output_tokens, 0),
+            ),
+            else_=0,
+        )
+        avg_llm_duration = func.avg(
+            case(
+                (AgentMetricsEventDBModel.event_type == EventType.LLM_CALL, AgentMetricsEventDBModel.duration_ms),
+            )
+        )
+        avg_tool_duration = func.avg(
+            case(
+                (AgentMetricsEventDBModel.event_type == EventType.TOOL_CALL, AgentMetricsEventDBModel.duration_ms),
+            )
+        )
+        query = select(
+            func.coalesce(func.sum(llm_count), 0),
+            func.coalesce(func.sum(llm_error_count), 0),
+            func.coalesce(func.sum(tool_count), 0),
+            func.coalesce(func.sum(tool_error_count), 0),
+            func.coalesce(func.sum(input_tokens), 0),
+            func.coalesce(func.sum(output_tokens), 0),
+            func.count(func.distinct(AgentMetricsEventDBModel.session_id)),
+            func.count(func.distinct(AgentMetricsEventDBModel.thread_id)),
+            func.count(func.distinct(AgentMetricsEventDBModel.user_id)),
+            avg_llm_duration,
+            avg_tool_duration,
+        ).where(*filters)
+        result = await self.db.execute(query)
+        row = result.one()
+        return (
+            int(row[0]),
+            int(row[1]),
+            int(row[2]),
+            int(row[3]),
+            int(row[4]),
+            int(row[5]),
+            int(row[6]),
+            int(row[7]),
+            int(row[8]),
+            float(row[9]) if row[9] is not None else None,
+            float(row[10]) if row[10] is not None else None,
+        )
+
+    async def aggregate_daily_token_usage(
+        self,
+        *,
+        tenant_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        agent_id: int | None = None,
+        user_id: int | None = None,
+    ) -> list[tuple[datetime, int, int, int, int]]:
+        """Aggregate daily LLM token usage in SQL (no row limit).
+
+        Returns:
+            List of (day, total_input_tokens, total_output_tokens, llm_calls, llm_errors)
+            ordered by day ascending.
+        """
+        filters = self._usage_scope_filters(
+            tenant_id=tenant_id,
+            start_time=start_time,
+            end_time=end_time,
+            agent_id=agent_id,
+            user_id=user_id,
+        ) + (AgentMetricsEventDBModel.event_type == EventType.LLM_CALL,)
+        day_bucket = func.date_trunc("day", AgentMetricsEventDBModel.timestamp).label("day")
+        llm_error_count = case(
+            (AgentMetricsEventDBModel.status == CallStatus.ERROR, 1),
+            else_=0,
+        )
+        query = (
+            select(
+                day_bucket,
+                func.coalesce(func.sum(func.coalesce(AgentMetricsEventDBModel.input_tokens, 0)), 0),
+                func.coalesce(func.sum(func.coalesce(AgentMetricsEventDBModel.output_tokens, 0)), 0),
+                func.count(),
+                func.coalesce(func.sum(llm_error_count), 0),
+            )
+            .where(*filters)
+            .group_by(day_bucket)
+            .order_by(day_bucket)
+        )
+        result = await self.db.execute(query)
+        return [
+            (
+                row.day,
+                int(row[1]),
+                int(row[2]),
+                int(row[3]),
+                int(row[4]),
+            )
+            for row in result.all()
+        ]
 
     async def count_events_by_filters(
         self,

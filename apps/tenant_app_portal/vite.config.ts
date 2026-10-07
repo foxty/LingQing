@@ -8,6 +8,7 @@ export default defineConfig({
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
+      '@shared/frontend': path.resolve(__dirname, '../shared/frontend'),
     },
   },
   test: {

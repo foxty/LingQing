@@ -80,7 +80,7 @@ async def get_tenant_token_events(
         raise ValidationError("page_size must be between 1 and 100")
 
     period_end = end_time or datetime.now(UTC)
-    period_start = start_time or (period_end - timedelta(days=7))
+    period_start = start_time or (period_end - timedelta(days=30))
 
     service = ObservabilityService.create(db, current_user.tenant_id)
     total, rows = await service.get_tenant_token_events(
