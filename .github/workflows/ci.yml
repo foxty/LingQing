@@ -11,8 +11,47 @@ env:
   TESTCONTAINERS_RYUK_DISABLED: "true"
 
 jobs:
+  changes:
+    name: Detect changes
+    runs-on: ubuntu-latest
+    outputs:
+      backend: ${{ steps.filter.outputs.backend }}
+      tenant-app-portal: ${{ steps.filter.outputs.tenant-app-portal }}
+      tenant-manager-portal: ${{ steps.filter.outputs.tenant-manager-portal }}
+      shared: ${{ steps.filter.outputs.shared }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            backend:
+              - 'apps/tenant_app_service/**'
+              - 'apps/tenant_manager_service/**'
+              - 'apps/scheduler_service/**'
+              - 'apps/sandbox_service/**'
+              - 'apps/shared/**'
+              - 'tests/**'
+              - 'scripts/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - 'config/**'
+            tenant-app-portal:
+              - 'apps/tenant_app_portal/**'
+            tenant-manager-portal:
+              - 'apps/tenant_manager_portal/**'
+            shared:
+              - '.github/**'
+              - 'package.json'
+              - 'package-lock.json'
+              - 'nx.json'
+              - 'project.json'
+
   backend:
     name: Backend
+    needs: changes
+    if: needs.changes.outputs.backend == 'true' || needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -51,6 +90,8 @@ jobs:
 
   tenant-app-portal:
     name: Tenant app portal
+    needs: changes
+    if: needs.changes.outputs.tenant-app-portal == 'true' || needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
@@ -80,6 +121,8 @@ jobs:
 
   tenant-manager-portal:
     name: Tenant manager portal
+    needs: changes
+    if: needs.changes.outputs.tenant-manager-portal == 'true' || needs.changes.outputs.shared == 'true'
     runs-on: ubuntu-latest
     timeout-minutes: 20
     steps:
