@@ -9,17 +9,13 @@ import {
   SheetHeader,
   SheetTitle,
 } from '@/components/ui/sheet'
-import { useAgentSkillCatalog, useCreateAgent } from '@/hooks/useAgents'
-import { useDocumentCollections } from '@/hooks/useDocumentCollections'
+import { useCreateAgent } from '@/hooks/useAgents'
+import { useAgentFormOptions } from '@/hooks/useAgentFormOptions'
 import {
   agentApiErrorMessage,
   type AgentCapabilityConfig,
   type CatalogAgent,
 } from '@/lib/agentsApi'
-import { listApiConnectors } from '@/lib/apiConnectorApi'
-import { listDataSources } from '@/lib/dataSourceApi'
-import { listRegistryProfiles } from '@/lib/llmConfigApi'
-import { useQuery } from '@tanstack/react-query'
 
 type AgentCreateDrawerProps = {
   open: boolean
@@ -36,23 +32,7 @@ export default function AgentCreateDrawer({
 }: AgentCreateDrawerProps) {
   const { t } = useTranslation()
   const createMutation = useCreateAgent()
-  const { data: skills = [] } = useAgentSkillCatalog()
-  const { data: collections = [] } = useDocumentCollections()
-  const { data: dataSources = [] } = useQuery({
-    queryKey: ['agent-data-sources'],
-    queryFn: async () => (await listDataSources(1, 100)).items ?? [],
-    enabled: open,
-  })
-  const { data: connectors = [] } = useQuery({
-    queryKey: ['agent-api-connectors'],
-    queryFn: listApiConnectors,
-    enabled: open,
-  })
-  const { data: llmProfiles = [] } = useQuery({
-    queryKey: ['llm-profiles', 'llm'],
-    queryFn: () => listRegistryProfiles('llm'),
-    enabled: open,
-  })
+  const { skills, collections, dataSources, connectors, llmProfiles } = useAgentFormOptions(open)
 
   const [formName, setFormName] = useState('')
   const [formPrompt, setFormPrompt] = useState('')
