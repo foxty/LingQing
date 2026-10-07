@@ -13,18 +13,11 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent } from '@/components/ui/card'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/hooks/useAuth'
-import {
-  useAgent,
-  useAgentSkillCatalog,
-  useUpdateAgent,
-} from '@/hooks/useAgents'
-import { useDocumentCollections } from '@/hooks/useDocumentCollections'
+import { useAgent, useUpdateAgent } from '@/hooks/useAgents'
+import { useAgentFormOptions } from '@/hooks/useAgentFormOptions'
 import { agentApiErrorMessage, type AgentCapabilityConfig } from '@/lib/agentsApi'
-import { listApiConnectors } from '@/lib/apiConnectorApi'
-import { listDataSources } from '@/lib/dataSourceApi'
-import { listRegistryProfiles } from '@/lib/llmConfigApi'
 import { PERMISSIONS, routeRules } from '@/lib/permissionRules'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useQueryClient } from '@tanstack/react-query'
 import { useFeedbackStats } from '@/hooks/useMessageFeedbackAnalysis'
 
 const TAB_OVERVIEW = 'overview'
@@ -119,20 +112,10 @@ export default function AgentDetailPage() {
   const canViewFeedback = hasAny(routeRules.canAccessAgentFeedback())
 
   const { data: agent, isLoading, isError } = useAgent(Number.isFinite(agentId) ? agentId : undefined)
-  const { data: skills = [] } = useAgentSkillCatalog()
-  const { data: collections = [] } = useDocumentCollections()
-  const { data: dataSources = [] } = useQuery({
-    queryKey: ['agent-data-sources'],
-    queryFn: async () => (await listDataSources(1, 100)).items ?? [],
-  })
-  const { data: connectors = [] } = useQuery({
-    queryKey: ['agent-api-connectors'],
-    queryFn: listApiConnectors,
-  })
-  const { data: llmProfiles = [] } = useQuery({
-    queryKey: ['llm-profiles', 'llm'],
-    queryFn: () => listRegistryProfiles('llm'),
-  })
+  const settingsTabActive = activeTab === TAB_SETTINGS
+  const formOptionsEnabled = settingsTabActive && !!agent && !agent.is_system
+  const { skills, collections, dataSources, connectors, llmProfiles } =
+    useAgentFormOptions(formOptionsEnabled)
   const updateMutation = useUpdateAgent()
 
   const [formName, setFormName] = useState('')
