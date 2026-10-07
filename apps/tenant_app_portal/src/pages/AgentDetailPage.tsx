@@ -45,7 +45,6 @@ i18n.addResourceBundle(
       tabSettings: 'Settings',
       tabIntegrations: 'Integrations',
       tabFeedback: 'Feedback',
-      readOnlySettings: 'Built-in agents cannot be edited here.',
       totalFeedback: 'Total feedback',
       positiveRate: 'Positive rate',
       viewAllFeedback: 'View all feedback',
@@ -71,7 +70,6 @@ i18n.addResourceBundle(
       tabSettings: '设置',
       tabIntegrations: '集成',
       tabFeedback: '反馈',
-      readOnlySettings: '内置智能体无法在此编辑。',
       totalFeedback: '反馈总数',
       positiveRate: '好评率',
       viewAllFeedback: '查看全部反馈',
@@ -86,6 +84,24 @@ i18n.addResourceBundle(
 
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`
+}
+
+function buildVisibleTabIds(
+  agent: { is_system: boolean; can_manage: boolean },
+  canManageTenantSlack: boolean,
+  canViewFeedback: boolean
+): string[] {
+  const canManageSlack = agent.is_system ? canManageTenantSlack : agent.can_manage
+  return [
+    TAB_OVERVIEW,
+    ...(!agent.is_system ? [TAB_SETTINGS] : []),
+    ...(canManageSlack ? [TAB_INTEGRATIONS] : []),
+    ...(canViewFeedback ? [TAB_FEEDBACK] : []),
+  ]
+}
+
+function resolveTab(activeTab: string, visibleTabIds: string[]): string {
+  return visibleTabIds.includes(activeTab) ? activeTab : TAB_OVERVIEW
 }
 
 export default function AgentDetailPage() {
@@ -134,6 +150,24 @@ export default function AgentDetailPage() {
     setFormError(null)
   }, [agent])
 
+  useEffect(() => {
+    if (!agent) {
+      return
+    }
+    const visibleTabIds = buildVisibleTabIds(agent, canManageTenantSlack, canViewFeedback)
+    const resolved = resolveTab(activeTab, visibleTabIds)
+    if (activeTab === resolved) {
+      return
+    }
+    const next = new URLSearchParams(searchParams)
+    if (resolved === TAB_OVERVIEW) {
+      next.delete('tab')
+    } else {
+      next.set('tab', resolved)
+    }
+    setSearchParams(next, { replace: true })
+  }, [agent, activeTab, canManageTenantSlack, canViewFeedback, searchParams, setSearchParams])
+
   if (!Number.isFinite(agentId)) {
     return <Navigate to="/agents" replace />
   }
@@ -164,15 +198,16 @@ export default function AgentDetailPage() {
 
   const canManageSlack = agent.is_system ? canManageTenantSlack : agent.can_manage
   const canEdit = !agent.is_system && agent.can_write
+  const visibleTabIds = buildVisibleTabIds(agent, canManageTenantSlack, canViewFeedback)
+  const resolvedTab = resolveTab(activeTab, visibleTabIds)
 
-  const tabs = [
-    { id: TAB_OVERVIEW, label: t('agentDetail.tabOverview'), visible: true },
-    { id: TAB_SETTINGS, label: t('agentDetail.tabSettings'), visible: true },
-    { id: TAB_INTEGRATIONS, label: t('agentDetail.tabIntegrations'), visible: canManageSlack },
-    { id: TAB_FEEDBACK, label: t('agentDetail.tabFeedback'), visible: canViewFeedback },
-  ].filter((tab) => tab.visible)
-
-  const resolvedTab = tabs.some((tab) => tab.id === activeTab) ? activeTab : TAB_OVERVIEW
+  const tabLabels: Record<string, string> = {
+    [TAB_OVERVIEW]: t('agentDetail.tabOverview'),
+    [TAB_SETTINGS]: t('agentDetail.tabSettings'),
+    [TAB_INTEGRATIONS]: t('agentDetail.tabIntegrations'),
+    [TAB_FEEDBACK]: t('agentDetail.tabFeedback'),
+  }
+  const tabs = visibleTabIds.map((id) => ({ id, label: tabLabels[id] ?? id }))
 
   const setTab = (tab: string) => {
     const next = new URLSearchParams(searchParams)
@@ -198,6 +233,8 @@ export default function AgentDetailPage() {
           config: formConfig,
         },
       })
+      setFormName(updated.name)
+      setFormPrompt(updated.system_prompt)
       setFormConfig(agentConfigFromAgent(updated.config))
     } catch (error) {
       setFormError(agentApiErrorMessage(error, t('agents.saveFailed')))
@@ -230,31 +267,28 @@ export default function AgentDetailPage() {
           <OverviewTab agentId={agent.id} canViewFeedback={canViewFeedback} description={agent.description || agent.system_prompt} />
         </TabsContent>
 
-        <TabsContent value={TAB_SETTINGS} className="mt-4">
-          {agent.is_system ? (
-            <Alert>
-              <AlertDescription>{t('agentDetail.readOnlySettings')}</AlertDescription>
-            </Alert>
-          ) : null}
-          <AgentSettingsForm
-            formName={formName}
-            formPrompt={formPrompt}
-            formConfig={formConfig}
-            formError={formError}
-            skills={skills}
-            collections={collections}
-            dataSources={dataSources}
-            connectors={connectors}
-            llmProfiles={llmProfiles}
-            readOnly={!canEdit}
-            saving={updateMutation.isPending}
-            showActions={canEdit}
-            onNameChange={setFormName}
-            onPromptChange={setFormPrompt}
-            onConfigChange={setFormConfig}
-            onSave={() => void saveSettings()}
-          />
-        </TabsContent>
+        {!agent.is_system ? (
+          <TabsContent value={TAB_SETTINGS} className="mt-4">
+            <AgentSettingsForm
+              formName={formName}
+              formPrompt={formPrompt}
+              formConfig={formConfig}
+              formError={formError}
+              skills={skills}
+              collections={collections}
+              dataSources={dataSources}
+              connectors={connectors}
+              llmProfiles={llmProfiles}
+              readOnly={!canEdit}
+              saving={updateMutation.isPending}
+              showActions={canEdit}
+              onNameChange={setFormName}
+              onPromptChange={setFormPrompt}
+              onConfigChange={setFormConfig}
+              onSave={() => void saveSettings()}
+            />
+          </TabsContent>
+        ) : null}
 
         {canManageSlack ? (
           <TabsContent value={TAB_INTEGRATIONS} className="mt-4">

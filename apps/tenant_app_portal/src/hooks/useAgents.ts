@@ -57,11 +57,15 @@ export function useCreateAgent() {
 
 export function useUpdateAgent() {
   const queryClient = useQueryClient()
+  const { user } = useAuth()
   const { showSuccess } = useNotification()
   return useMutation({
     mutationFn: ({ agentId, payload }: { agentId: number; payload: Partial<AgentWritePayload> }) =>
       updateCatalogAgent(agentId, payload),
-    onSuccess: () => {
+    onSuccess: (updated, { agentId }) => {
+      if (user?.tenantId !== undefined) {
+        queryClient.setQueryData(['agents', user.tenantId, agentId], updated)
+      }
       queryClient.invalidateQueries({ queryKey: ['agents'] })
       showSuccess(i18n.t('agents.saveSuccess'))
     },
