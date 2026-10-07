@@ -14,21 +14,13 @@ import {
   Trash2,
 } from 'lucide-react'
 import { Can } from '@/components/Can'
-import AgentSettingsForm from '@/components/agents/AgentSettingsForm'
-import { emptyAgentConfig } from '@/components/agents/AgentSettingsForm'
+import AgentCreateDrawer from '@/components/agents/AgentCreateDrawer'
 import ResourceAclShareDialog from '@/components/ResourceAclShareDialog'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import EmptyState from '@/components/EmptyState'
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,23 +29,9 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { useAuth } from '@/hooks/useAuth'
-import {
-  useAgentSkillCatalog,
-  useAgents,
-  useCreateAgent,
-  useDeleteAgent,
-} from '@/hooks/useAgents'
-import { useDocumentCollections } from '@/hooks/useDocumentCollections'
+import { useAgents, useDeleteAgent } from '@/hooks/useAgents'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
-import {
-  SYSTEM_AGENT_ONE_ID,
-  agentApiErrorMessage,
-  type AgentCapabilityConfig,
-  type CatalogAgent,
-} from '@/lib/agentsApi'
-import { listApiConnectors } from '@/lib/apiConnectorApi'
-import { listDataSources } from '@/lib/dataSourceApi'
-import { listRegistryProfiles } from '@/lib/llmConfigApi'
+import { SYSTEM_AGENT_ONE_ID, type CatalogAgent } from '@/lib/agentsApi'
 import { listSlackIntegrations, type SlackIntegration } from '@/lib/slackApi'
 import { actionRules, routeRules } from '@/lib/permissionRules'
 import { useQuery } from '@tanstack/react-query'
@@ -120,16 +98,6 @@ export default function AgentsPage() {
   const [searchParams, setSearchParams] = useSearchParams()
   const { hasAny } = useAuth()
   const { data: agents = [], isLoading } = useAgents()
-  const { data: skills = [] } = useAgentSkillCatalog()
-  const { data: collections = [] } = useDocumentCollections()
-  const { data: dataSources = [] } = useQuery({
-    queryKey: ['agent-data-sources'],
-    queryFn: async () => (await listDataSources(1, 100)).items ?? [],
-  })
-  const { data: connectors = [] } = useQuery({
-    queryKey: ['agent-api-connectors'],
-    queryFn: listApiConnectors,
-  })
   const { data: slackIntegrations = [] } = useQuery({
     queryKey: ['slack-integrations'],
     queryFn: listSlackIntegrations,
@@ -138,7 +106,6 @@ export default function AgentsPage() {
     () => new Map(slackIntegrations.map((integration) => [integration.agent_id, integration])),
     [slackIntegrations]
   )
-  const createMutation = useCreateAgent()
   const deleteMutation = useDeleteAgent()
   const canCreate = hasAny(actionRules.canCreateAgent())
   const canViewFeedback = hasAny(routeRules.canAccessAgentFeedback())
@@ -146,24 +113,11 @@ export default function AgentsPage() {
   const [creating, setCreating] = useState(false)
   const [sharing, setSharing] = useState<CatalogAgent | null>(null)
   const deleteConfirm = useConfirmation<CatalogAgent>()
-  const [formName, setFormName] = useState('')
-  const [formPrompt, setFormPrompt] = useState('')
-  const [formConfig, setFormConfig] = useState<AgentCapabilityConfig>(emptyAgentConfig())
-  const [formError, setFormError] = useState<string | null>(null)
-  const { data: llmProfiles = [] } = useQuery({
-    queryKey: ['llm-profiles', 'llm'],
-    queryFn: () => listRegistryProfiles('llm'),
-    enabled: creating,
-  })
 
   const systemAgent = agents.find((agent) => agent.id === SYSTEM_AGENT_ONE_ID)
   const customAgents = agents.filter((agent) => !agent.is_system)
 
   const openCreate = () => {
-    setFormName('')
-    setFormPrompt(systemAgent?.system_prompt || '')
-    setFormConfig(emptyAgentConfig())
-    setFormError(null)
     setCreating(true)
   }
 
@@ -176,22 +130,6 @@ export default function AgentsPage() {
     next.delete('new')
     setSearchParams(next, { replace: true })
   }, [canCreate, searchParams, setSearchParams])
-
-  const saveCreate = async () => {
-    const payload = {
-      name: formName.trim(),
-      system_prompt: formPrompt,
-      config: formConfig,
-    }
-    try {
-      setFormError(null)
-      const created = await createMutation.mutateAsync(payload)
-      setCreating(false)
-      navigate(`/agents/${created.id}?tab=settings`)
-    } catch (error) {
-      setFormError(agentApiErrorMessage(error, t('agents.saveFailed')))
-    }
-  }
 
   return (
     <div className="space-y-4">
@@ -265,40 +203,12 @@ export default function AgentsPage() {
         </div>
       )}
 
-      <Dialog open={creating} onOpenChange={(open) => !open && setCreating(false)}>
-        <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>{t('agents.create')}</DialogTitle>
-          </DialogHeader>
-          <AgentSettingsForm
-            formName={formName}
-            formPrompt={formPrompt}
-            formConfig={formConfig}
-            formError={formError}
-            skills={skills}
-            collections={collections}
-            dataSources={dataSources}
-            connectors={connectors}
-            llmProfiles={llmProfiles}
-            saving={createMutation.isPending}
-            showActions={false}
-            onNameChange={setFormName}
-            onPromptChange={setFormPrompt}
-            onConfigChange={setFormConfig}
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setCreating(false)}>
-              {t('agents.cancel')}
-            </Button>
-            <Button
-              onClick={() => void saveCreate()}
-              disabled={!formName.trim() || createMutation.isPending}
-            >
-              {t('agents.save')}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <AgentCreateDrawer
+        open={creating}
+        onOpenChange={setCreating}
+        defaultPrompt={systemAgent?.system_prompt}
+        onCreated={(agent) => navigate(`/agents/${agent.id}?tab=settings`)}
+      />
 
       {sharing ? (
         <ResourceAclShareDialog
