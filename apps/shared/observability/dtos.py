@@ -28,12 +28,20 @@ class TenantUsageStatsDTO(BaseModel):
     unique_threads: int = Field(description="Number of unique conversation threads")
     unique_users: int = Field(description="Number of unique users")
 
+    # Performance metrics
+    avg_llm_duration_ms: float | None = Field(default=None, description="Average LLM call duration in ms")
+    avg_tool_duration_ms: float | None = Field(default=None, description="Average tool call duration in ms")
+
     # Cost estimation (future)
     estimated_cost: float | None = Field(default=None, description="Estimated cost in USD")
 
 
 class AgentPerformanceDTO(BaseModel):
-    """Agent performance metrics."""
+    """Agent performance metrics.
+
+    Note: summary endpoints return performance fields on TenantUsageStatsDTO instead.
+    Keep this DTO for future dedicated performance/reporting endpoints.
+    """
 
     agent_id: int
     agent_name: str | None = None

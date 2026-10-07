@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -33,6 +33,9 @@ from apps.shared.domain.types import (
     AuthzAction,
 )
 from apps.shared.llm_providers.service import LLMProviderConfigService
+from apps.shared.observability.dtos import TenantUsageStatsDTO
+from apps.shared.observability.service import ObservabilityService
+from apps.tenant_app_service.tenant.schemas import TokenUsageDailyPoint, TokenUsageEventsResponse
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_catalog.adapters import db_agent_to_custom
 from apps.tenant_app_service.agent_catalog.domain import (
@@ -109,6 +112,85 @@ class AgentCatalogService(TenantAwareService):
             return self._system_agent_response(actor=actor)
         domain = await self.require_agent_access(agent_id=agent_id, actor=actor, action=ABAC_ACTION_READ)
         return await self._to_response(domain, actor=actor, assignable_skills=assignable_skills)
+
+    def _observability(self) -> ObservabilityService:
+        return ObservabilityService.create(self.db_session, self.tenant_id)
+
+    @staticmethod
+    def _usage_period(days: int) -> tuple[datetime, datetime]:
+        period_end = datetime.now(UTC)
+        return period_end - timedelta(days=days), period_end
+
+    async def _ensure_agent_usage_access(self, *, agent_id: int, actor: ActorContext) -> None:
+        if agent_id != SYSTEM_AGENT_ONE_ID:
+            await self.require_agent_access(agent_id=agent_id, actor=actor, action=ABAC_ACTION_READ)
+
+    async def get_agent_usage_summary_for_actor(
+        self,
+        *,
+        agent_id: int,
+        actor: ActorContext,
+        days: int,
+        user_id: int | None = None,
+    ) -> TenantUsageStatsDTO:
+        await self._ensure_agent_usage_access(agent_id=agent_id, actor=actor)
+        period_start, period_end = self._usage_period(days)
+        return await self._observability().get_agent_usage_stats(
+            tenant_id=self.tenant_id,
+            agent_id=agent_id,
+            start_time=period_start,
+            end_time=period_end,
+            user_id=user_id,
+        )
+
+    async def get_agent_usage_daily_for_actor(
+        self,
+        *,
+        agent_id: int,
+        actor: ActorContext,
+        days: int,
+        user_id: int | None = None,
+    ) -> list[TokenUsageDailyPoint]:
+        await self._ensure_agent_usage_access(agent_id=agent_id, actor=actor)
+        period_start, period_end = self._usage_period(days)
+        rows = await self._observability().get_tenant_token_daily_usage(
+            tenant_id=self.tenant_id,
+            start_time=period_start,
+            end_time=period_end,
+            agent_id=agent_id,
+            user_id=user_id,
+        )
+        return [TokenUsageDailyPoint(**row) for row in rows]
+
+    async def get_agent_usage_events_for_actor(
+        self,
+        *,
+        agent_id: int,
+        actor: ActorContext,
+        start_time: datetime,
+        end_time: datetime,
+        page: int,
+        page_size: int,
+        user_id: int | None = None,
+    ) -> TokenUsageEventsResponse:
+        await self._ensure_agent_usage_access(agent_id=agent_id, actor=actor)
+        total, rows = await self._observability().get_tenant_token_events(
+            tenant_id=self.tenant_id,
+            start_time=start_time,
+            end_time=end_time,
+            page=page,
+            page_size=page_size,
+            user_id=user_id,
+            agent_id=agent_id,
+        )
+        total_pages = (total + page_size - 1) // page_size if total > 0 else 0
+        return TokenUsageEventsResponse(
+            page=page,
+            page_size=page_size,
+            total=total,
+            total_pages=total_pages,
+            rows=rows,
+        )
 
     async def require_agent_access(
         self,

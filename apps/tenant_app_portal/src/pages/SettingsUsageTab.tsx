@@ -5,7 +5,7 @@ import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import SettingsPageShell from '@/components/SettingsPageShell'
 import SettingsSection from '@/components/SettingsSection'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import {
   Select,
   SelectContent,
@@ -21,9 +21,11 @@ import {
   useTenantUsageEvents,
 } from '@/hooks/useTenantUsage'
 import { useTenantUsersList } from '@/hooks/useTenantUsers'
+import { buildRelativeIsoRange } from '@shared/frontend/format'
 import TokenTrendChart from '@/pages/usage/TokenTrendChart'
 import StorageSnapshotCard from '@/pages/usage/StorageSnapshotCard'
 import TokenTable from '@/pages/usage/TokenTable'
+import UsageSummaryMetrics from '@/pages/usage/UsageSummaryMetrics'
 
 i18n.addResourceBundle('en', 'translation', {
   settings: {
@@ -47,8 +49,17 @@ i18n.addResourceBundle('en', 'translation', {
       inputTokens: 'Input Tokens',
       outputTokens: 'Output Tokens',
       llmCalls: 'LLM Calls',
+      toolCalls: 'Tool Calls',
       activeUsers: 'Active Users',
       currentStorage: 'Current Storage',
+      lastNDays: 'last {{days}} days',
+      tokenBreakdown: '{{input}} input · {{output}} output',
+      reachSection: 'Reach',
+      performanceSection: 'Performance',
+      llmErrorRate: 'LLM Error Rate',
+      toolErrorRate: 'Tool Error Rate',
+      avgLlmDuration: 'Avg LLM Duration',
+      avgToolDuration: 'Avg Tool Duration',
     }
   }
 }, true, true)
@@ -75,25 +86,20 @@ i18n.addResourceBundle('zh', 'translation', {
       inputTokens: '输入令牌',
       outputTokens: '输出令牌',
       llmCalls: 'LLM 调用',
+      toolCalls: '工具调用',
       activeUsers: '活跃用户',
       currentStorage: '当前存储',
+      lastNDays: '最近 {{days}} 天',
+      tokenBreakdown: '{{input}} 输入 · {{output}} 输出',
+      reachSection: '覆盖',
+      performanceSection: '性能',
+      llmErrorRate: 'LLM 错误率',
+      toolErrorRate: '工具错误率',
+      avgLlmDuration: 'LLM 平均耗时',
+      avgToolDuration: '工具平均耗时',
     }
   }
 }, true, true)
-
-function formatNumber(value: number): string {
-  return new Intl.NumberFormat('zh-CN').format(value)
-}
-
-function buildRange(days: number): { start_time: string; end_time: string } {
-  const end = new Date()
-  const start = new Date(end)
-  start.setDate(start.getDate() - days)
-  return {
-    start_time: start.toISOString(),
-    end_time: end.toISOString(),
-  }
-}
 
 export default function SettingsUsageTab() {
   const { t } = useTranslation()
@@ -111,7 +117,7 @@ export default function SettingsUsageTab() {
   const tokenDailyQuery = useTenantTokenDaily(tokenFilter)
   const usersQuery = useTenantUsersList()
 
-  const range = useMemo(() => buildRange(days), [days])
+  const range = useMemo(() => buildRelativeIsoRange(days), [days])
   const selectedUserId = userFilter === 'all' ? undefined : Number(userFilter)
   const selectedUsername = useMemo(() => {
     if (selectedUserId === undefined) {
@@ -224,40 +230,12 @@ export default function SettingsUsageTab() {
             <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
           </div>
         ) : (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <Card>
-              <CardHeader className="p-4 pb-3">
-                <CardDescription>{t('settings.usageTab.totalTokens')}</CardDescription>
-                <CardTitle className="text-2xl font-semibold tabular-nums">
-                  {formatNumber(tokenSummary?.total_tokens || 0)}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="p-4 pb-3">
-                <CardDescription>{t('settings.usageTab.inputTokens')}</CardDescription>
-                <CardTitle className="text-2xl font-semibold tabular-nums">
-                  {formatNumber(tokenSummary?.total_input_tokens || 0)}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="p-4 pb-3">
-                <CardDescription>{t('settings.usageTab.outputTokens')}</CardDescription>
-                <CardTitle className="text-2xl font-semibold tabular-nums">
-                  {formatNumber(tokenSummary?.total_output_tokens || 0)}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-            <Card>
-              <CardHeader className="p-4 pb-3">
-                <CardDescription>{t('settings.usageTab.llmCalls')}</CardDescription>
-                <CardTitle className="text-2xl font-semibold tabular-nums">
-                  {formatNumber(tokenSummary?.total_llm_calls || 0)}
-                </CardTitle>
-              </CardHeader>
-            </Card>
-          </div>
+          <UsageSummaryMetrics
+            summary={tokenSummary}
+            days={days}
+            showReachMetrics={false}
+            embedded
+          />
         )}
       </SettingsSection>
 

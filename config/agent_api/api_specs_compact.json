@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-06T12:47:16.198786+00:00",
+  "generated_at": "2026-10-07T05:03:07.155671+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -7947,6 +7947,30 @@
             "title": "Unique Users",
             "description": "Number of unique users"
           },
+          "avg_llm_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Llm Duration Ms",
+            "description": "Average LLM call duration in ms"
+          },
+          "avg_tool_duration_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Tool Duration Ms",
+            "description": "Average tool call duration in ms"
+          },
           "estimated_cost": {
             "anyOf": [
               {
@@ -8653,6 +8677,9 @@
     "GET_/agents/{agent_id}": "get_agent_agents__agent_id__get",
     "GET_/agents/{agent_id}/integrations/slack": "get_agent_slack_integration_agents__agent_id__integrations_slack_get",
     "GET_/agents/{agent_id}/integrations/slack/manifest": "download_agent_slack_app_manifest_agents__agent_id__integrations_slack_manifest_get",
+    "GET_/agents/{agent_id}/usage/daily": "get_agent_usage_daily_agents__agent_id__usage_daily_get",
+    "GET_/agents/{agent_id}/usage/events": "get_agent_usage_events_agents__agent_id__usage_events_get",
+    "GET_/agents/{agent_id}/usage/summary": "get_agent_usage_summary_agents__agent_id__usage_summary_get",
     "GET_/api-connectors": "list_connectors_api_connectors_get",
     "GET_/api-connectors/operations/search": "search_operations_api_connectors_operations_search_get",
     "GET_/api-connectors/{connector_id}": "get_connector_api_connectors__connector_id__get",
@@ -10271,6 +10298,244 @@
         "success_status": "200",
         "success_schema": {
           "$ref": "#/components/schemas/SlackIntegrationResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_agent_usage_daily_agents__agent_id__usage_daily_get": {
+      "operation_key": "GET_/agents/{agent_id}/usage/daily",
+      "method": "GET",
+      "path": "/agents/{agent_id}/usage/daily",
+      "summary": "Get Agent Usage Daily",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Agent Id"
+            },
+            "description": ""
+          }
+        ],
+        "query_params": [
+          {
+            "name": "days",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 90,
+              "minimum": 1,
+              "default": 30,
+              "title": "Days"
+            },
+            "description": ""
+          },
+          {
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/TokenUsageDailyPoint"
+          },
+          "title": "Response Get Agent Usage Daily Agents  Agent Id  Usage Daily Get"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_agent_usage_events_agents__agent_id__usage_events_get": {
+      "operation_key": "GET_/agents/{agent_id}/usage/events",
+      "method": "GET",
+      "path": "/agents/{agent_id}/usage/events",
+      "summary": "Get Agent Usage Events",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Agent Id"
+            },
+            "description": ""
+          }
+        ],
+        "query_params": [
+          {
+            "name": "start_time",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Start Time"
+            },
+            "description": ""
+          },
+          {
+            "name": "end_time",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "End Time"
+            },
+            "description": ""
+          },
+          {
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            },
+            "description": ""
+          },
+          {
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            },
+            "description": ""
+          },
+          {
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/TokenUsageEventsResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_agent_usage_summary_agents__agent_id__usage_summary_get": {
+      "operation_key": "GET_/agents/{agent_id}/usage/summary",
+      "method": "GET",
+      "path": "/agents/{agent_id}/usage/summary",
+      "summary": "Get Agent Usage Summary",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "agent_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Agent Id"
+            },
+            "description": ""
+          }
+        ],
+        "query_params": [
+          {
+            "name": "days",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 90,
+              "minimum": 1,
+              "default": 30,
+              "title": "Days"
+            },
+            "description": ""
+          },
+          {
+            "name": "user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "User Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/TenantUsageStatsDTO"
         },
         "error_statuses": [
           "422"

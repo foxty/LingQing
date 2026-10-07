@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.observability.domain import (
     AgentSessionMetrics,
     AgentThreadMetrics,
-    CallStatus,
     EventType,
     MetricsEvent,
     SessionMetrics,
@@ -19,6 +18,46 @@ from apps.shared.observability.repository import MetricsRepository
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _aggregate_row_to_usage_dto(
+    *,
+    tenant_id: int,
+    start_time: datetime,
+    end_time: datetime,
+    row: tuple[int, int, int, int, int, int, int, int, int, float | None, float | None],
+) -> TenantUsageStatsDTO:
+    (
+        total_llm_calls,
+        total_llm_errors,
+        total_tool_calls,
+        total_tool_errors,
+        total_input_tokens,
+        total_output_tokens,
+        unique_sessions,
+        unique_threads,
+        unique_users,
+        avg_llm_duration_ms,
+        avg_tool_duration_ms,
+    ) = row
+    return TenantUsageStatsDTO(
+        tenant_id=tenant_id,
+        period_start=start_time,
+        period_end=end_time,
+        total_llm_calls=total_llm_calls,
+        total_llm_errors=total_llm_errors,
+        total_tool_calls=total_tool_calls,
+        total_tool_errors=total_tool_errors,
+        total_input_tokens=total_input_tokens,
+        total_output_tokens=total_output_tokens,
+        total_tokens=total_input_tokens + total_output_tokens,
+        unique_sessions=unique_sessions,
+        unique_threads=unique_threads,
+        unique_users=unique_users,
+        avg_llm_duration_ms=avg_llm_duration_ms,
+        avg_tool_duration_ms=avg_tool_duration_ms,
+        estimated_cost=None,
+    )
 
 
 class ObservabilityService:
@@ -117,6 +156,23 @@ class ObservabilityService:
 
     # ============ Tenant Usage Statistics ============
 
+    async def get_agent_usage_stats(
+        self,
+        tenant_id: int,
+        agent_id: int,
+        start_time: datetime,
+        end_time: datetime,
+        user_id: int | None = None,
+    ) -> TenantUsageStatsDTO:
+        """Get SQL-aggregated usage stats for one agent."""
+        return await self.get_tenant_usage_stats(
+            tenant_id=tenant_id,
+            start_time=start_time,
+            end_time=end_time,
+            user_id=user_id,
+            agent_id=agent_id,
+        )
+
     async def get_tenant_usage_stats(
         self,
         tenant_id: int,
@@ -125,55 +181,19 @@ class ObservabilityService:
         user_id: int | None = None,
         agent_id: int | None = None,
     ) -> TenantUsageStatsDTO:
-        """Get tenant usage statistics for observability and billing.
-
-        Args:
-            tenant_id: Tenant ID
-            start_time: Start of period
-            end_time: End of period
-
-        Returns:
-            Usage statistics DTO
-        """
-        events = await self.repo.get_events_by_filters(
+        """Get SQL-aggregated tenant usage statistics for observability and billing."""
+        row = await self.repo.aggregate_usage_stats(
             tenant_id=tenant_id,
             start_time=start_time,
             end_time=end_time,
             user_id=user_id,
             agent_id=agent_id,
         )
-
-        # Aggregate statistics
-        llm_calls = [e for e in events if e.event_type == EventType.LLM_CALL]
-        llm_errors = [e for e in llm_calls if e.status == CallStatus.ERROR]
-        tool_calls = [e for e in events if e.event_type == EventType.TOOL_CALL]
-        tool_errors = [e for e in tool_calls if e.status == CallStatus.ERROR]
-
-        # Token usage
-        total_input_tokens = sum(e.token_usage.input_tokens for e in llm_calls if e.token_usage)
-        total_output_tokens = sum(e.token_usage.output_tokens for e in llm_calls if e.token_usage)
-        total_tokens = total_input_tokens + total_output_tokens
-
-        # Unique counts
-        unique_sessions = len(set(e.context.session_id for e in events))
-        unique_threads = len(set(e.context.thread_id for e in events if e.context.thread_id is not None))
-        unique_users = len(set(e.context.user_id for e in events if e.context.user_id is not None))
-
-        return TenantUsageStatsDTO(
+        return _aggregate_row_to_usage_dto(
             tenant_id=tenant_id,
-            period_start=start_time,
-            period_end=end_time,
-            total_llm_calls=len(llm_calls),
-            total_llm_errors=len(llm_errors),
-            total_tool_calls=len(tool_calls),
-            total_tool_errors=len(tool_errors),
-            total_input_tokens=total_input_tokens,
-            total_output_tokens=total_output_tokens,
-            total_tokens=total_tokens,
-            unique_sessions=unique_sessions,
-            unique_threads=unique_threads,
-            unique_users=unique_users,
-            estimated_cost=None,  # Future: implement cost calculation
+            start_time=start_time,
+            end_time=end_time,
+            row=row,
         )
 
     async def get_tenant_token_daily_usage(
@@ -194,54 +214,26 @@ class ObservabilityService:
         Returns:
             List of daily usage dictionaries ordered by date ascending
         """
-        events = await self.repo.get_events_by_filters(
+        rows = await self.repo.aggregate_daily_token_usage(
             tenant_id=tenant_id,
             start_time=start_time,
             end_time=end_time,
-            event_types=[EventType.LLM_CALL],
             user_id=user_id,
             agent_id=agent_id,
-            limit=50000,
         )
-
-        daily: dict[str, dict[str, int]] = defaultdict(
-            lambda: {
-                "total_input_tokens": 0,
-                "total_output_tokens": 0,
-                "total_tokens": 0,
-                "llm_calls": 0,
-                "llm_errors": 0,
-            }
-        )
-
-        for event in events:
-            timestamp = event.timestamp
-            if timestamp.tzinfo is None:
-                timestamp = timestamp.replace(tzinfo=UTC)
-            date_key = timestamp.astimezone(UTC).date().isoformat()
-
-            daily_entry = daily[date_key]
-            daily_entry["llm_calls"] += 1
-            if event.status == "error":
-                daily_entry["llm_errors"] += 1
-
-            if event.token_usage:
-                daily_entry["total_input_tokens"] += event.token_usage.input_tokens
-                daily_entry["total_output_tokens"] += event.token_usage.output_tokens
-                daily_entry["total_tokens"] += (
-                    event.token_usage.input_tokens + event.token_usage.output_tokens
-                )
 
         return [
             {
-                "date": date,
-                "total_input_tokens": values["total_input_tokens"],
-                "total_output_tokens": values["total_output_tokens"],
-                "total_tokens": values["total_tokens"],
-                "llm_calls": values["llm_calls"],
-                "llm_errors": values["llm_errors"],
+                "date": day.astimezone(UTC).date().isoformat()
+                if day.tzinfo
+                else day.replace(tzinfo=UTC).date().isoformat(),
+                "total_input_tokens": total_input_tokens,
+                "total_output_tokens": total_output_tokens,
+                "total_tokens": total_input_tokens + total_output_tokens,
+                "llm_calls": llm_calls,
+                "llm_errors": llm_errors,
             }
-            for date, values in sorted(daily.items(), key=lambda item: item[0])
+            for day, total_input_tokens, total_output_tokens, llm_calls, llm_errors in rows
         ]
 
     async def get_tenant_token_events(

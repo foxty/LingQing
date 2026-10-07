@@ -6,6 +6,7 @@ import { Bot, Loader2 } from 'lucide-react'
 import AgentFeedbackPanel from '@/components/agents/AgentFeedbackPanel'
 import AgentSettingsForm, { agentConfigFromAgent } from '@/components/agents/AgentSettingsForm'
 import AgentSlackIntegrationSection from '@/components/agents/AgentSlackIntegrationSection'
+import AgentUsagePanel from '@/components/agents/AgentUsagePanel'
 import ContainerDetailHeader from '@/components/ContainerDetailHeader'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
@@ -21,6 +22,7 @@ import { useQueryClient } from '@tanstack/react-query'
 import { useFeedbackStats } from '@/hooks/useMessageFeedbackAnalysis'
 
 const TAB_OVERVIEW = 'overview'
+const TAB_METRICS = 'metrics'
 const TAB_SETTINGS = 'settings'
 const TAB_INTEGRATIONS = 'integrations'
 const TAB_FEEDBACK = 'feedback'
@@ -35,9 +37,12 @@ i18n.addResourceBundle(
       invalidId: 'Invalid agent ID',
       loadFailed: 'Failed to load agent',
       tabOverview: 'Overview',
+      tabMetrics: 'Metrics',
       tabSettings: 'Settings',
       tabIntegrations: 'Integrations',
       tabFeedback: 'Feedback',
+      metricsThreads: 'Threads',
+      metricsSessions: 'Sessions',
       totalFeedback: 'Total feedback',
       positiveRate: 'Positive rate',
       viewAllFeedback: 'View all feedback',
@@ -60,9 +65,12 @@ i18n.addResourceBundle(
       invalidId: '无效的智能体 ID',
       loadFailed: '加载智能体失败',
       tabOverview: '概览',
+      tabMetrics: '指标',
       tabSettings: '设置',
       tabIntegrations: '集成',
       tabFeedback: '反馈',
+      metricsThreads: '对话线程',
+      metricsSessions: '会话',
       totalFeedback: '反馈总数',
       positiveRate: '好评率',
       viewAllFeedback: '查看全部反馈',
@@ -87,6 +95,7 @@ function buildVisibleTabIds(
   const canManageSlack = agent.is_system ? canManageTenantSlack : agent.can_manage
   return [
     TAB_OVERVIEW,
+    TAB_METRICS,
     ...(!agent.is_system ? [TAB_SETTINGS] : []),
     ...(canManageSlack ? [TAB_INTEGRATIONS] : []),
     ...(canViewFeedback ? [TAB_FEEDBACK] : []),
@@ -184,8 +193,10 @@ export default function AgentDetailPage() {
   const visibleTabIds = buildVisibleTabIds(agent, canManageTenantSlack, canViewFeedback)
   const resolvedTab = resolveTab(activeTab, visibleTabIds)
 
+  const metricsTabActive = activeTab === TAB_METRICS
   const tabLabels: Record<string, string> = {
     [TAB_OVERVIEW]: t('agentDetail.tabOverview'),
+    [TAB_METRICS]: t('agentDetail.tabMetrics'),
     [TAB_SETTINGS]: t('agentDetail.tabSettings'),
     [TAB_INTEGRATIONS]: t('agentDetail.tabIntegrations'),
     [TAB_FEEDBACK]: t('agentDetail.tabFeedback'),
@@ -248,6 +259,10 @@ export default function AgentDetailPage() {
 
         <TabsContent value={TAB_OVERVIEW} className="mt-4 space-y-4">
           <OverviewTab agentId={agent.id} canViewFeedback={canViewFeedback} description={agent.description || agent.system_prompt} />
+        </TabsContent>
+
+        <TabsContent value={TAB_METRICS} className="mt-4">
+          <AgentUsagePanel agentId={agent.id} enabled={metricsTabActive} />
         </TabsContent>
 
         {!agent.is_system ? (

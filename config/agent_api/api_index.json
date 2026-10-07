@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-05T14:36:56.420265+00:00",
+  "generated_at": "2026-10-07T02:36:32.550549+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -150,6 +150,21 @@
     {
       "operation_key": "GET_/agents/{agent_id}/integrations/slack/manifest",
       "summary": "Download Agent Slack App Manifest",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents/{agent_id}/usage/daily",
+      "summary": "Get Agent Usage Daily",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents/{agent_id}/usage/events",
+      "summary": "Get Agent Usage Events",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents/{agent_id}/usage/summary",
+      "summary": "Get Agent Usage Summary",
       "risk_level": "read"
     },
     {

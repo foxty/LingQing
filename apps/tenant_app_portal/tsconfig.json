@@ -24,9 +24,10 @@
     "baseUrl": ".",
     "ignoreDeprecations": "5.0",
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": ["./src/*"],
+      "@shared/frontend/*": ["../shared/frontend/*"]
     }
   },
-  "include": ["src"]
+  "include": ["src", "../shared/frontend"]
 }
 
