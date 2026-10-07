@@ -30,6 +30,7 @@ import {
   type SlackIntegration,
   type SlackTestConnectionResponse,
 } from '@/lib/slackApi'
+import SettingsSection from '@/components/SettingsSection'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { useConfirmation } from '@/hooks/useConfirmation'
 
@@ -76,6 +77,24 @@ i18n.addResourceBundle(
         workspace: 'Workspace',
         appId: 'App ID',
         botUser: 'Bot user',
+        sectionConnection: 'Connection',
+        sectionConnectionDesc: 'Workspace identity and ingress status after credentials are saved.',
+        sectionSetup: 'Slack app setup',
+        sectionSetupDesc: 'Create or open your Slack app, then download the manifest with the URLs below pre-filled.',
+        sectionCredentials: 'Credentials',
+        sectionCredentialsDesc: 'Write-only secrets. Values are never shown after save.',
+        sectionEndpoints: 'Request URLs',
+        sectionEndpointsDesc: 'Paste these into your Slack app Event Subscriptions and Interactivity settings.',
+        configured: 'Configured',
+        notConfigured: 'Not configured',
+        secretStoredHint: 'Stored securely on the server.',
+        replacePlaceholder: 'Paste new value to replace',
+        botTokenPlaceholder: 'xoxb-...',
+        signingSecretPlaceholder: 'Signing secret from Slack app',
+        credentialsSummary: '{{configured}} of 2 credentials saved',
+        connectionTestHint: 'Run Test connection to verify the workspace link.',
+        dangerZone: 'Remove integration',
+        dangerZoneDesc: 'Deletes this agent Slack bot and stops all Slack ingress for this agent.',
       },
     },
   },
@@ -125,6 +144,24 @@ i18n.addResourceBundle(
         workspace: '工作区',
         appId: 'App ID',
         botUser: '机器人用户',
+        sectionConnection: '连接状态',
+        sectionConnectionDesc: '保存凭证后显示工作区身份与入站状态。',
+        sectionSetup: 'Slack 应用配置',
+        sectionSetupDesc: '创建或打开 Slack 应用，下载已预填下方 URL 的 Manifest。',
+        sectionCredentials: '凭证',
+        sectionCredentialsDesc: '仅写入，保存后不会回显明文。',
+        sectionEndpoints: '请求 URL',
+        sectionEndpointsDesc: '填入 Slack 应用的 Event Subscriptions 与 Interactivity 设置。',
+        configured: '已配置',
+        notConfigured: '未配置',
+        secretStoredHint: '已安全存储在服务端。',
+        replacePlaceholder: '粘贴新值以替换',
+        botTokenPlaceholder: 'xoxb-...',
+        signingSecretPlaceholder: 'Slack 应用的 Signing Secret',
+        credentialsSummary: '已保存 {{configured}} / 2 项凭证',
+        connectionTestHint: '运行「测试连接」以验证工作区绑定。',
+        dangerZone: '移除集成',
+        dangerZoneDesc: '删除此智能体的 Slack 机器人，并停止所有 Slack 入站消息。',
       },
     },
   },
@@ -155,6 +192,7 @@ export default function AgentSlackIntegrationSection({
   const [testing, setTesting] = useState(false)
   const [downloadingManifest, setDownloadingManifest] = useState(false)
   const [testResult, setTestResult] = useState<SlackTestConnectionResponse | null>(null)
+  const [saveError, setSaveError] = useState<string | null>(null)
   const deleteConfirm = useConfirmation<SlackIntegration>()
 
   useEffect(() => {
@@ -164,7 +202,9 @@ export default function AgentSlackIntegrationSection({
       .then((existing) => {
         if (active) setIntegration(existing)
       })
-      .catch((error: Error) => showError(error.message))
+      .catch((error: unknown) =>
+        showError(getApiErrorMessage(error, t('agents.slackIntegration.saveFailed')))
+      )
       .finally(() => {
         if (active) setLoading(false)
       })
@@ -189,6 +229,7 @@ export default function AgentSlackIntegrationSection({
 
   const save = async () => {
     setSaving(true)
+    setSaveError(null)
     try {
       if (credentialsConfigured) {
         const payload: Record<string, string> = {}
@@ -198,7 +239,7 @@ export default function AgentSlackIntegrationSection({
         setIntegration(updated)
       } else {
         if (!botToken || !signingSecret) {
-          showError(t('agents.slackIntegration.tokenInvalid'))
+          setSaveError(t('agents.slackIntegration.tokenInvalid'))
           return
         }
         const created = await createAgentSlackIntegration(agentId, {
@@ -213,11 +254,7 @@ export default function AgentSlackIntegrationSection({
       onChanged?.()
       showSuccess(t('agents.slackIntegration.saveSuccess'))
     } catch (error: unknown) {
-      const detail =
-        typeof error === 'object' && error !== null && 'response' in error
-          ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : undefined
-      showError(detail || t('agents.slackIntegration.saveFailed'))
+      setSaveError(getApiErrorMessage(error, t('agents.slackIntegration.saveFailed')))
     } finally {
       setSaving(false)
     }
@@ -234,11 +271,7 @@ export default function AgentSlackIntegrationSection({
       showSuccess(t('agents.slackIntegration.deleteSuccess'))
       deleteConfirm.close()
     } catch (error: unknown) {
-      const detail =
-        typeof error === 'object' && error !== null && 'response' in error
-          ? (error as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : undefined
-      showError(detail || t('agents.slackIntegration.deleteFailed'))
+      showError(getApiErrorMessage(error, t('agents.slackIntegration.deleteFailed')))
       deleteConfirm.setLoading(false)
     }
   }
@@ -251,6 +284,9 @@ export default function AgentSlackIntegrationSection({
       </div>
     )
   }
+
+  const configuredCount =
+    Number(integration?.bot_token_configured) + Number(integration?.signing_secret_configured)
 
   const statusBadge = (
     <Badge
@@ -270,217 +306,260 @@ export default function AgentSlackIntegrationSection({
     </Badge>
   )
 
+  const runConnectionTest = async () => {
+    setTesting(true)
+    setTestResult(null)
+    try {
+      const result = await testAgentSlackConnection(agentId)
+      setTestResult(result)
+      if (result.ok) {
+        const refreshed = await prepareAgentSlackIntegration(agentId)
+        setIntegration(refreshed)
+        onChanged?.()
+      }
+    } catch (error: unknown) {
+      const detail = getApiErrorMessage(error, t('agents.slackIntegration.testFailed'))
+      setTestResult({ ok: false, error: detail })
+    } finally {
+      setTesting(false)
+    }
+  }
+
   return (
     <div className={embedded ? 'space-y-4' : 'space-y-4 rounded-lg border p-4'}>
-      <div className="flex items-start justify-between gap-3">
+      {!embedded ? (
         <div className="space-y-1">
-          {!embedded ? (
-            <h3 className="text-sm font-medium">{t('agents.slackIntegration.title')}</h3>
-          ) : null}
-          <p className={embedded ? 'text-sm text-muted-foreground' : 'text-xs text-muted-foreground'}>
-            {t('agents.slackIntegration.description')}
-          </p>
+          <h3 className="text-sm font-medium">{t('agents.slackIntegration.title')}</h3>
+          <p className="text-xs text-muted-foreground">{t('agents.slackIntegration.description')}</p>
         </div>
-        {statusBadge}
-      </div>
+      ) : (
+        <p className="text-sm text-muted-foreground">{t('agents.slackIntegration.description')}</p>
+      )}
 
-      {credentialsConfigured && integration && !integration.enabled ? (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{t('agents.slackIntegration.disabledNotice')}</AlertDescription>
-        </Alert>
-      ) : null}
+      <SettingsSection
+        title={t('agents.slackIntegration.sectionEndpoints')}
+        description={t('agents.slackIntegration.sectionEndpointsDesc')}
+      >
+        {integration ? (
+          <div className="space-y-3">
+            <CopyableEventsUrl label={t('agents.slackIntegration.eventsUrl')} value={integration.events_url} />
+            <CopyableEventsUrl
+              label={t('agents.slackIntegration.interactionsUrl')}
+              value={integration.interactions_url}
+            />
+            <p className="text-xs text-muted-foreground">{t('agents.slackIntegration.interactivityNote')}</p>
+          </div>
+        ) : null}
+      </SettingsSection>
 
-      {credentialsConfigured && integration && hasConnectedAppMetadata ? (
-        <div className="rounded-md border bg-muted/30 p-3 text-xs">
-          <p className="mb-2 font-medium text-muted-foreground">
-            {t('agents.slackIntegration.connectedApp')}
-          </p>
-          <dl className="grid gap-1 sm:grid-cols-2">
-            <div>
-              <dt className="text-muted-foreground">{t('agents.slackIntegration.workspace')}</dt>
-              <dd className="font-mono">
-                {integration.slack_team_name || '—'}
-                {integration.slack_team_id ? ` (${integration.slack_team_id})` : ''}
-              </dd>
-            </div>
-            <div>
-              <dt className="text-muted-foreground">{t('agents.slackIntegration.appId')}</dt>
-              <dd className="font-mono">{integration.slack_app_id || '—'}</dd>
-            </div>
-            <div className="sm:col-span-2">
-              <dt className="text-muted-foreground">{t('agents.slackIntegration.botUser')}</dt>
-              <dd className="font-mono">{integration.bot_user_id || '—'}</dd>
-            </div>
-          </dl>
-        </div>
-      ) : null}
-
-      <div className="flex flex-wrap gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={downloadingManifest}
-          onClick={async () => {
-            setDownloadingManifest(true)
-            try {
-              await downloadAgentSlackAppManifest(agentId)
-              const refreshed = await prepareAgentSlackIntegration(agentId)
-              setIntegration(refreshed)
-              onChanged?.()
-            } catch {
-              showError(t('agents.slackIntegration.downloadManifestFailed'))
-            } finally {
-              setDownloadingManifest(false)
-            }
-          }}
-        >
-          {downloadingManifest ? (
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="mr-2 h-4 w-4" />
-          )}
-          {t('agents.slackIntegration.downloadManifest')}
-        </Button>
-        <a
-          href="https://api.slack.com/apps"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="inline-flex items-center text-xs text-primary underline-offset-4 hover:underline"
-        >
-          api.slack.com/apps
-          <ExternalLink className="ml-1 h-3 w-3" />
-        </a>
-      </div>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <div className="space-y-2">
-          <Label htmlFor={`slack-bot-token-${agentId}`}>{t('agents.slackIntegration.botToken')}</Label>
-          <Input
-            id={`slack-bot-token-${agentId}`}
-            type="password"
-            value={botToken}
-            onChange={(event) => setBotToken(event.target.value)}
-            placeholder={integration?.bot_token_configured ? '••••••••' : 'xoxb-...'}
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor={`slack-signing-secret-${agentId}`}>
-            {t('agents.slackIntegration.signingSecret')}
-          </Label>
-          <Input
-            id={`slack-signing-secret-${agentId}`}
-            type="password"
-            value={signingSecret}
-            onChange={(event) => setSigningSecret(event.target.value)}
-            placeholder={integration?.signing_secret_configured ? '••••••••' : ''}
-          />
-        </div>
-      </div>
-      {credentialsConfigured ? (
-        <p className="text-xs text-muted-foreground">{t('agents.slackIntegration.emptyTokenKeepsPrevious')}</p>
-      ) : null}
-
-      <div className="flex flex-wrap gap-2">
-        <Button type="button" onClick={save} disabled={saving}>
-          {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {credentialsConfigured
-            ? t('agents.slackIntegration.update')
-            : t('agents.slackIntegration.connect')}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          disabled={testing || !credentialsConfigured}
-          onClick={async () => {
-            setTesting(true)
-            setTestResult(null)
-            try {
-              const result = await testAgentSlackConnection(agentId)
-              setTestResult(result)
-              if (result.ok) {
+      <SettingsSection
+        title={t('agents.slackIntegration.sectionSetup')}
+        description={t('agents.slackIntegration.sectionSetupDesc')}
+      >
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            disabled={downloadingManifest}
+            onClick={async () => {
+              setDownloadingManifest(true)
+              try {
+                await downloadAgentSlackAppManifest(agentId)
                 const refreshed = await prepareAgentSlackIntegration(agentId)
                 setIntegration(refreshed)
                 onChanged?.()
+              } catch {
+                showError(t('agents.slackIntegration.downloadManifestFailed'))
+              } finally {
+                setDownloadingManifest(false)
               }
-            } catch (error: unknown) {
-              const detail = getApiErrorMessage(error, t('agents.slackIntegration.testFailed'))
-              setTestResult({ ok: false, error: detail })
-            } finally {
-              setTesting(false)
-            }
-          }}
-        >
-          {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-          {t('agents.slackIntegration.testConnection')}
-        </Button>
+            }}
+          >
+            {downloadingManifest ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Download className="mr-2 h-4 w-4" />
+            )}
+            {t('agents.slackIntegration.downloadManifest')}
+          </Button>
+          <a
+            href="https://api.slack.com/apps"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
+          >
+            api.slack.com/apps
+            <ExternalLink className="ml-1 h-3.5 w-3.5" />
+          </a>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title={t('agents.slackIntegration.sectionCredentials')}
+        description={t('agents.slackIntegration.sectionCredentialsDesc')}
+        action={
+          <span className="text-xs text-muted-foreground">
+            {t('agents.slackIntegration.credentialsSummary', { configured: configuredCount })}
+          </span>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid gap-4 sm:grid-cols-2">
+            <CredentialField
+              id={`slack-bot-token-${agentId}`}
+              label={t('agents.slackIntegration.botToken')}
+              configured={Boolean(integration?.bot_token_configured)}
+              value={botToken}
+              emptyPlaceholder={t('agents.slackIntegration.botTokenPlaceholder')}
+              onChange={setBotToken}
+            />
+            <CredentialField
+              id={`slack-signing-secret-${agentId}`}
+              label={t('agents.slackIntegration.signingSecret')}
+              configured={Boolean(integration?.signing_secret_configured)}
+              value={signingSecret}
+              emptyPlaceholder={t('agents.slackIntegration.signingSecretPlaceholder')}
+              onChange={setSigningSecret}
+            />
+          </div>
+          {credentialsConfigured ? (
+            <p className="text-xs text-muted-foreground">
+              {t('agents.slackIntegration.emptyTokenKeepsPrevious')}
+            </p>
+          ) : null}
+          {saveError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <div>
+            <Button type="button" onClick={save} disabled={saving}>
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {credentialsConfigured
+                ? t('agents.slackIntegration.update')
+                : t('agents.slackIntegration.connect')}
+            </Button>
+          </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title={t('agents.slackIntegration.sectionConnection')}
+        description={t('agents.slackIntegration.sectionConnectionDesc')}
+        action={statusBadge}
+      >
+        <div className="space-y-4">
+          {credentialsConfigured && integration && !integration.enabled ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>{t('agents.slackIntegration.disabledNotice')}</AlertDescription>
+            </Alert>
+          ) : null}
+
+          {credentialsConfigured && integration && hasConnectedAppMetadata ? (
+            <dl className="grid gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <dt className="text-muted-foreground">{t('agents.slackIntegration.workspace')}</dt>
+                <dd className="font-mono">
+                  {integration.slack_team_name || '—'}
+                  {integration.slack_team_id ? ` (${integration.slack_team_id})` : ''}
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted-foreground">{t('agents.slackIntegration.appId')}</dt>
+                <dd className="font-mono">{integration.slack_app_id || '—'}</dd>
+              </div>
+              <div className="sm:col-span-2">
+                <dt className="text-muted-foreground">{t('agents.slackIntegration.botUser')}</dt>
+                <dd className="font-mono">{integration.bot_user_id || '—'}</dd>
+              </div>
+            </dl>
+          ) : credentialsConfigured ? (
+            <p className="text-sm text-muted-foreground">
+              {t('agents.slackIntegration.connectionTestHint')}
+            </p>
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {t('agents.slackIntegration.statusNotConfigured')}
+            </p>
+          )}
+
+          {testResult?.ok ? (
+            <Alert>
+              <CheckCircle2 className="h-4 w-4" />
+              <AlertDescription>
+                {t('agents.slackIntegration.testSuccessDetail', {
+                  team: testResult.team_name || testResult.team_id || '—',
+                  teamId: testResult.team_id || '—',
+                  botUserId: testResult.bot_user_id || '—',
+                })}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+          {testResult && !testResult.ok ? (
+            <Alert variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertDescription>
+                {testResult.error || t('agents.slackIntegration.testFailed')}
+              </AlertDescription>
+            </Alert>
+          ) : null}
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={testing || !credentialsConfigured}
+              onClick={() => void runConnectionTest()}
+            >
+              {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {t('agents.slackIntegration.testConnection')}
+            </Button>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={!credentialsConfigured || !integration}
+              onClick={async () => {
+                if (!integration) return
+                const updated = integration.enabled
+                  ? await disableAgentSlackIntegration(agentId)
+                  : await enableAgentSlackIntegration(agentId)
+                setIntegration(updated)
+                onChanged?.()
+                showSuccess(
+                  updated.enabled
+                    ? t('agents.slackIntegration.enableSuccess')
+                    : t('agents.slackIntegration.disableSuccess')
+                )
+              }}
+            >
+              {integration?.enabled
+                ? t('agents.slackIntegration.disable')
+                : t('agents.slackIntegration.enable')}
+            </Button>
+          </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title={t('agents.slackIntegration.dangerZone')}
+        description={t('agents.slackIntegration.dangerZoneDesc')}
+      >
         <Button
           type="button"
           variant="outline"
           size="sm"
-          disabled={!credentialsConfigured || !integration}
-          onClick={async () => {
-            if (!integration) return
-            const updated = integration.enabled
-              ? await disableAgentSlackIntegration(agentId)
-              : await enableAgentSlackIntegration(agentId)
-            setIntegration(updated)
-            onChanged?.()
-            showSuccess(
-              updated.enabled
-                ? t('agents.slackIntegration.enableSuccess')
-                : t('agents.slackIntegration.disableSuccess')
-            )
-          }}
-        >
-          {integration?.enabled
-            ? t('agents.slackIntegration.disable')
-            : t('agents.slackIntegration.enable')}
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="sm"
           className="text-destructive hover:text-destructive"
-          disabled={!integration}
+          disabled={!integration || !credentialsConfigured}
           onClick={() => integration && deleteConfirm.open(integration)}
         >
           <Trash2 className="mr-2 h-4 w-4" />
           {t('agents.slackIntegration.deleteIntegration')}
         </Button>
-      </div>
-
-      {testResult?.ok ? (
-        <Alert>
-          <CheckCircle2 className="h-4 w-4" />
-          <AlertDescription>
-            {t('agents.slackIntegration.testSuccessDetail', {
-              team: testResult.team_name || testResult.team_id || '—',
-              teamId: testResult.team_id || '—',
-              botUserId: testResult.bot_user_id || '—',
-            })}
-          </AlertDescription>
-        </Alert>
-      ) : null}
-      {testResult && !testResult.ok ? (
-        <Alert variant="destructive">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{testResult.error || t('agents.slackIntegration.testFailed')}</AlertDescription>
-        </Alert>
-      ) : null}
-
-      {integration ? (
-        <div className="space-y-2">
-          <CopyableEventsUrl label={t('agents.slackIntegration.eventsUrl')} value={integration.events_url} />
-          <CopyableEventsUrl
-            label={t('agents.slackIntegration.interactionsUrl')}
-            value={integration.interactions_url}
-          />
-          <p className="text-xs text-muted-foreground">{t('agents.slackIntegration.interactivityNote')}</p>
-        </div>
-      ) : null}
+      </SettingsSection>
 
       <ConfirmationDialog
         open={deleteConfirm.isOpen}
@@ -492,6 +571,55 @@ export default function AgentSlackIntegrationSection({
         isDangerous
         onConfirm={remove}
         onCancel={deleteConfirm.close}
+      />
+    </div>
+  )
+}
+
+function CredentialField({
+  id,
+  label,
+  configured,
+  value,
+  emptyPlaceholder,
+  onChange,
+}: {
+  id: string
+  label: string
+  configured: boolean
+  value: string
+  emptyPlaceholder: string
+  onChange: (value: string) => void
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="space-y-2 rounded-md border p-3">
+      <div className="flex items-center justify-between gap-2">
+        <Label htmlFor={id}>{label}</Label>
+        <Badge variant={configured ? 'default' : 'outline'} className="gap-1 text-xs font-normal">
+          {configured ? (
+            <>
+              <CheckCircle2 className="h-3 w-3" />
+              {t('agents.slackIntegration.configured')}
+            </>
+          ) : (
+            t('agents.slackIntegration.notConfigured')
+          )}
+        </Badge>
+      </div>
+      {configured ? (
+        <p className="text-xs text-muted-foreground">{t('agents.slackIntegration.secretStoredHint')}</p>
+      ) : null}
+      <Input
+        id={id}
+        type="password"
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={
+          configured ? t('agents.slackIntegration.replacePlaceholder') : emptyPlaceholder
+        }
+        autoComplete="off"
       />
     </div>
   )

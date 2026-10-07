@@ -34,6 +34,7 @@ import ScheduledTaskPage from './pages/ScheduledTaskPage'
 import ScheduledTasksPage from './pages/ScheduledTasksPage'
 import SkillsPage from './pages/SkillsPage'
 import AgentsPage from './pages/AgentsPage'
+import AgentDetailPage from './pages/AgentDetailPage'
 import AgentFeedbackPage from './pages/AgentFeedbackPage'
 import UserProfilePage from './pages/UserProfilePage'
 import WorkbenchPage from './pages/WorkbenchPage'
@@ -170,6 +171,14 @@ function App() {
           element={
             <ProtectedRoute>
               <AgentFeedbackPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/agents/:agentId"
+          element={
+            <ProtectedRoute>
+              <AgentDetailPage />
             </ProtectedRoute>
           }
         />
