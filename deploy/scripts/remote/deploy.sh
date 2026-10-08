@@ -67,7 +67,9 @@ elif [[ -f ~/.ssh/deploy_key ]]; then
 fi
 
 read_env_value() {
-    grep -E "^${2}=" "$1" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '[:space:'$'\r'']' || true
+    local raw
+    raw="$(grep -E "^${2}=" "$1" 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
+    printf '%s' "$raw" | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
 host_from_url() {
