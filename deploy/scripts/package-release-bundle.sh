@@ -48,25 +48,28 @@ cat > "${BUNDLE_ROOT}/README.md" <<EOF
 
 Deploy LingQing on a Linux VM using pre-built container images. **No repository clone required.**
 
-This bundle does **not** include PostgreSQL — provision a managed instance (RDS, Cloud SQL, etc.) first.
+Production: provision external PostgreSQL (RDS, Cloud SQL, etc.) first.
+
+Optional **bundled Postgres** on the same VM: \`./bootstrap.sh --with-postgres\` (demo/internal; see docs/deploy/reference.md).
 
 **Staging and production:** same bundle on **separate VMs**; only \`.env\` differs. Gateway: \`127.0.0.1:8080\`.
 
 ## Quick start
 
-### 1. Initialize PostgreSQL (once, from laptop or bastion)
+### 1. Initialize PostgreSQL
 
-Requires \`psql\` and network access to your database admin account:
+**External database (production):** run once from laptop or bastion (\`psql\` + network to admin account):
 
 \`\`\`bash
 export POSTGRES_HOST=your-db.example.com
 export POSTGRES_USER=postgres
 export PGPASSWORD=your_admin_password
-
 ./init_db.sh 'choose_app_password' 'choose_manager_password'
 \`\`\`
 
-Creates \`lq_tenant_app\` + \`lq_tenant_manager\` databases and users. Use the same passwords in \`.env\` below.
+**Bundled Postgres:** skip this step — use \`./bootstrap.sh --with-postgres\`; bootstrap runs \`init_db.sh\` after Postgres is healthy. Set \`POSTGRES_PASSWORD\` in \`.env\`.
+
+Use the same app/manager passwords in \`.env\` as passed to \`init_db.sh\`.
 
 ### 2. Configure environment
 

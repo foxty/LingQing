@@ -128,6 +128,8 @@ Run PostgreSQL on a dedicated VM or existing cluster (not in the LingQing compos
 
 For local Postgres without TLS, use `TENANT_*_DB_SSL_MODE=prefer` or leave unset; `require` is for managed services that enforce SSL.
 
+**Bundled Postgres (demo / internal VM):** The release bundle `docker-compose.yml` includes an optional Compose profile `bundled-postgres`. Use `./bootstrap.sh --with-postgres` to start Postgres on the same network as the app (`TENANT_*_DB_HOST=postgres`, port `5432`), run `init_db.sh` automatically, then start the rest of the stack. Set `POSTGRES_PASSWORD` in `.env` (superuser for the container). Not a substitute for managed PostgreSQL in production.
+
 ### Connectivity check
 
 From the app VM (or laptop):
