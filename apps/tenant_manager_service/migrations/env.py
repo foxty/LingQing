@@ -9,6 +9,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from apps.tenant_manager_service.db.models import Base
+from apps.shared.db.url import sqlalchemy_url_for_alembic_ini
 from apps.tenant_manager_service.db.session import build_tenant_manager_db_url
 
 config = context.config
@@ -16,7 +17,7 @@ config = context.config
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
-config.set_main_option("sqlalchemy.url", build_tenant_manager_db_url())
+config.set_main_option("sqlalchemy.url", sqlalchemy_url_for_alembic_ini(build_tenant_manager_db_url()))
 
 target_metadata = Base.metadata
 

@@ -19,6 +19,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from apps.config import EnvConfig
+from apps.shared.db.url import build_postgres_asyncpg_url
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -31,14 +32,14 @@ def build_main_db_url() -> str:
         Connection URL for main database (PostgreSQL)
     """
     logger.info(f"Building main DB URL for user: {EnvConfig.TENANT_APP_DB_USER}")
-    # PostgreSQL connection string
-    url = (
-        f"postgresql+asyncpg://{EnvConfig.TENANT_APP_DB_USER}:{EnvConfig.TENANT_APP_DB_PASSWORD}"
-        f"@{EnvConfig.TENANT_APP_DB_HOST}:{EnvConfig.TENANT_APP_DB_PORT}/{EnvConfig.TENANT_APP_DB_NAME}"
+    return build_postgres_asyncpg_url(
+        user=EnvConfig.TENANT_APP_DB_USER,
+        password=EnvConfig.TENANT_APP_DB_PASSWORD,
+        host=EnvConfig.TENANT_APP_DB_HOST,
+        port=EnvConfig.TENANT_APP_DB_PORT,
+        db_name=EnvConfig.TENANT_APP_DB_NAME,
+        ssl_mode=EnvConfig.TENANT_APP_DB_SSL_MODE or None,
     )
-    if EnvConfig.TENANT_APP_DB_SSL_MODE:
-        url += f"?ssl={EnvConfig.TENANT_APP_DB_SSL_MODE}"
-    return url
 
 
 # ========== App Database Setup ==========
@@ -137,7 +138,14 @@ def _get_tenant_engine(tenant_id: int, host: str, port: int, user: str, password
     Returns:
         Async SQLAlchemy engine for tenant database
     """
-    url = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db_name}?ssl={EnvConfig.TENANT_APP_DB_SSL_MODE}"
+    url = build_postgres_asyncpg_url(
+        user=user,
+        password=password,
+        host=host,
+        port=port,
+        db_name=db_name,
+        ssl_mode=EnvConfig.TENANT_APP_DB_SSL_MODE or None,
+    )
 
     engine = create_async_engine(
         url,

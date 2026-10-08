@@ -92,28 +92,70 @@ normalize_env_file() {
     fi
 }
 
+wait_for_gateway_health() {
+    local host="$1"
+    local port="$2"
+    local attempt=1
+    local max_attempts=30
+
+    while [[ "$attempt" -le "$max_attempts" ]]; do
+        if curl -fsS -H "Host: ${host}" "http://127.0.0.1:${port}/health" >/dev/null 2>&1; then
+            return 0
+        fi
+        sleep 2
+        attempt=$((attempt + 1))
+    done
+    return 1
+}
+
 validate_env_file() {
     local env_file="$1"
+    local template="${2:-.env.template}"
     local errors=0
-    local key value
+    local line key template_value value
 
-    echo "Validating ${env_file}..."
-    for key in SECRET_KEY TENANT_APP_DB_HOST TENANT_APP_DB_PASSWORD TENANT_MANAGER_DB_PASSWORD \
-        DATA_ROOT_HOST_PATH APP_PUBLIC_URL MANAGER_PUBLIC_URL; do
+    echo "Validating ${env_file} against ${template}..."
+    if [[ ! -f "$template" ]]; then
+        echo -e "  ${RED}✗${NC} template not found: ${template}"
+        return 1
+    fi
+
+    while IFS= read -r line || [[ -n "$line" ]]; do
+        [[ "$line" =~ ^[[:space:]]*# ]] && continue
+        [[ "$line" =~ ^[A-Za-z_][A-Za-z0-9_]*= ]] || continue
+
+        key="${line%%=*}"
+        template_value="${line#*=}"
+        template_value="$(printf '%s' "$template_value" | tr -d '\r' | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+
+        # Dev/repo templates use generate-env placeholders; release .env.template uses literal values.
+        if [[ "$template_value" =~ ^\<(env|secret): ]]; then
+            continue
+        fi
+
+        if ! grep -q "^${key}=" "$env_file" 2>/dev/null; then
+            echo "  ✗ ${key} (missing from .env — copy from ${template})"
+            errors=$((errors + 1))
+            continue
+        fi
+
         value="$(read_env_value "$env_file" "$key")"
-        if [[ -z "$value" ]]; then
-            echo "  ✗ ${key} (empty)"
+
+        if [[ -z "$template_value" && -z "$value" ]]; then
+            if [[ "$key" == "TENANT_MANAGER_DB_HOST" && -n "$(read_env_value "$env_file" TENANT_APP_DB_HOST)" ]]; then
+                continue
+            fi
+            echo "  ✗ ${key} (empty — set in FILL BEFORE DEPLOY section of ${template})"
             errors=$((errors + 1))
         fi
-    done
 
-    for key in APP_PUBLIC_URL MANAGER_PUBLIC_URL; do
-        value="$(read_env_value "$env_file" "$key")"
-        if [[ "$value" == *example.com* ]]; then
-            echo "  ✗ ${key} still uses example.com — set your domains"
-            errors=$((errors + 1))
+        if [[ "$key" == "APP_PUBLIC_URL" || "$key" == "MANAGER_PUBLIC_URL" ]]; then
+            if [[ "$value" == *example.com* ]]; then
+                echo "  ✗ ${key} still uses example.com — set your domains"
+                errors=$((errors + 1))
+            fi
         fi
-    done
+    done < "$template"
 
     if [[ "$errors" -gt 0 ]]; then
         echo ""
@@ -121,7 +163,7 @@ validate_env_file() {
         return 1
     fi
 
-    echo "  ✓ Required config present"
+    echo "  ✓ .env matches ${template}"
     return 0
 }
 
@@ -144,7 +186,7 @@ Options:
 
 Setup (before deploy):
   cp .env.template .env
-  Edit .env: SECRET_KEY, DB creds, APP_PUBLIC_URL, MANAGER_PUBLIC_URL, DATA_ROOT_HOST_PATH
+  Edit empty variables in .env (bootstrap validates .env against .env.template)
 
 Example:
   ${SCRIPT_NAME} --version v2.0.0 --registry ghcr.io/foxty/lingqing
@@ -231,10 +273,23 @@ fi
 
 normalize_env_file ".env"
 expand_public_urls ".env"
-validate_env_file ".env" || exit 1
+validate_env_file ".env" ".env.template" || exit 1
+
+export COMPOSE_PROJECT_NAME="$PROJECT_NAME"
 
 DATA_ROOT_HOST_PATH="$(read_env_value ".env" DATA_ROOT_HOST_PATH)"
-[[ -n "$DATA_ROOT_HOST_PATH" ]] && mkdir -p "$DATA_ROOT_HOST_PATH"
+if [[ -n "$DATA_ROOT_HOST_PATH" ]]; then
+    mkdir -p "$DATA_ROOT_HOST_PATH"
+    # backend-app runs as uid 1000 (appuser); bind mount must be writable in-container
+    if ! chown 1000:1000 "$DATA_ROOT_HOST_PATH" 2>/dev/null; then
+        if sudo -n chown 1000:1000 "$DATA_ROOT_HOST_PATH" 2>/dev/null; then
+            :
+        else
+            echo -e "${YELLOW}Warning:${NC} could not chown ${DATA_ROOT_HOST_PATH} to 1000:1000."
+            echo "  Run: sudo chown -R 1000:1000 ${DATA_ROOT_HOST_PATH}"
+        fi
+    fi
+fi
 
 export VERSION REGISTRY_URL
 
@@ -268,9 +323,16 @@ echo -e "${YELLOW}Starting services...${NC}"
 compose_cmd -f docker-compose.yml -p "$PROJECT_NAME" up -d
 
 echo ""
-echo -e "${YELLOW}Running smoke checks...${NC}"
-curl -fsS -H "Host: ${APP_HOST}" "http://127.0.0.1:${GATEWAY_PORT}/health" >/dev/null
-curl -fsS -H "Host: ${MANAGER_HOST}" "http://127.0.0.1:${GATEWAY_PORT}/health" >/dev/null
+echo -e "${YELLOW}Running smoke checks (waiting for gateway)...${NC}"
+if ! wait_for_gateway_health "$APP_HOST" "$GATEWAY_PORT"; then
+    echo -e "${RED}Gateway health check failed for Host: ${APP_HOST}${NC}" >&2
+    echo "Check: docker compose -p ${PROJECT_NAME} logs gateway-service tenant-app-service" >&2
+    exit 1
+fi
+if ! wait_for_gateway_health "$MANAGER_HOST" "$GATEWAY_PORT"; then
+    echo -e "${RED}Gateway health check failed for Host: ${MANAGER_HOST}${NC}" >&2
+    exit 1
+fi
 
 echo -e "${GREEN}Deployment completed successfully.${NC}"
 echo ""

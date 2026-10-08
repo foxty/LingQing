@@ -11,6 +11,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 # Import models and session config
 from apps.shared.db.models import Base
 from apps.shared.db.session import build_main_db_url
+from apps.shared.db.url import sqlalchemy_url_for_alembic_ini
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -23,7 +24,7 @@ if config.config_file_name is not None:
 
 # Set database URL from our dynamic configuration
 # This supports both SQLite and PostgreSQL based on EnvConfig.DB_TYPE
-config.set_main_option("sqlalchemy.url", build_main_db_url())
+config.set_main_option("sqlalchemy.url", sqlalchemy_url_for_alembic_ini(build_main_db_url()))
 
 # add your model's MetaData object here
 # for 'autogenerate' support

@@ -29,16 +29,18 @@ echo ""
 run_migrations() {
     if [ "$APP_MODULE" = "tenant_app_service" ]; then
         echo "Running database migrations..."
-        if ! uv run --no-dev alembic -c apps/tenant_app_service/alembic.ini upgrade head; then
+        if uv run --no-dev alembic -c apps/tenant_app_service/alembic.ini upgrade head; then
+            echo "✓ Migrations completed"
+        else
             echo "Warning: Migration failed, but continuing startup"
         fi
-        echo "✓ Migrations completed"
-        elif [ "$APP_MODULE" = "tenant_manager_service" ]; then
+    elif [ "$APP_MODULE" = "tenant_manager_service" ]; then
         echo "Running tenant manager database migrations..."
-        if ! uv run --no-dev alembic -c apps/tenant_manager_service/alembic.ini upgrade head; then
+        if uv run --no-dev alembic -c apps/tenant_manager_service/alembic.ini upgrade head; then
+            echo "✓ Tenant manager migrations completed"
+        else
             echo "Warning: Tenant manager migration failed, but continuing startup"
         fi
-        echo "✓ Tenant manager migrations completed"
     fi
 }
 

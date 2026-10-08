@@ -19,6 +19,9 @@
 # Resource caps are sized for 1 tenant / ~50 users on a single host. Scale up mem_limit/cpus
 # (or split Docling/Chroma) before adding tenants or heavy concurrent agent load.
 
+# Fixed project name so `docker compose up` from any bundle directory does not fork a second stack.
+name: lingqing
+
 services:
   sandbox-controller:
     image: ${REGISTRY_URL}/sandbox-controller:${VERSION}
