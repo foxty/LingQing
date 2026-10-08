@@ -143,6 +143,7 @@ resolve_infra_services() {
 }
 
 infra_up() {
+    (cd "$PROJECT_ROOT" && npm run -s link-dev-skills)
     resolve_infra_services "$ENV_FILE_DEV"
     run_compose_dev build sandbox-runner-image
     ensure_sandbox_runner_image

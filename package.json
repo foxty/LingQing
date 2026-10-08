@@ -5,7 +5,8 @@
   "description": "LingQing - Enterprise multi-tenant AI agent platform",
   "scripts": {
     "prepare": "husky",
-    "dev:ta": "nx run-many --target=dev --projects=tenant_app_service,tenant_app_portal,scheduler_service,sandbox_service --parallel=4",
+    "link-dev-skills": "dotenv -e .env.local -- sh -c 'ln -sfn \"$PWD/config/skills\" \"$DATA_ROOT_PATH/skills\"'",
+    "dev:ta": "npm run link-dev-skills && nx run-many --target=dev --projects=tenant_app_service,tenant_app_portal,scheduler_service,sandbox_service --parallel=4",
     "dev:tm": "nx run-many --target=dev --projects=tenant_manager_service,tenant_manager_portal --parallel=2",
     "migrate-db:ta": "nx migrate-db:tenant-app",
     "migrate-db:tm": "nx migrate-db:tenant-manager",

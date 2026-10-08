@@ -72,11 +72,10 @@ cd apps/tenant_app_portal && npm install && cd ../..
 npm run dev:ta                          # API + frontend + scheduler + sandbox
 ```
 
-**First-time setup:** create a tenant and symlink skills (see [dev guide](docs/dev-guide.md)):
+**First-time setup:** create a tenant (`npm run dev:ta` links skills automatically — see [dev guide](docs/dev-guide.md)):
 
 ```bash
 npm run tenant-cli -- --name demo --slug demo
-ln -sfn "$(pwd)/config/skills" "<DATA_ROOT_PATH>/skills"   # DATA_ROOT_PATH in .env.local
 ```
 
 **Open in browser:**

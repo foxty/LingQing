@@ -82,16 +82,15 @@ npm run dev:ta   # frontend, tenant backend, scheduler, sandbox
 npm run tenant-cli -- --name test --slug test
 ```
 
-**One-time: skills directory symlink (required for local dev)**
+**Skills symlink (local dev)**
 
-Local dev does not use `entrypoint.sh`; symlink skills so the sandbox can read `config/skills`:
+Local dev skips `entrypoint.sh`, so link repo skills into storage (`DATA_ROOT_PATH` from `.env.local`):
 
 ```bash
-# Replace with DATA_ROOT_PATH from .env.local, e.g. /your/data/root
-ln -sfn "$(pwd)/config/skills" "<DATA_ROOT_PATH>/skills"
+ln -sfn "$(pwd)/config/skills" "$DATA_ROOT_PATH/skills"
 ```
 
-> Docker modes (`local-stack.sh infra-up` / `stack-up`) copy skills automatically at `tenant-app-service` startup — no symlink needed.
+`npm run dev:ta` runs the same via `npm run link-dev-skills`. Full Docker (`stack-up`) copies skills at startup instead.
 
 **Benefits:**
 
