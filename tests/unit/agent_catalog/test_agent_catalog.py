@@ -36,6 +36,7 @@ def test_derive_tool_names_from_skills_and_context():
     from apps.tenant_app_service.agent_catalog.domain import (
         PLATFORM_CAPABILITY_REPORTS,
         PLATFORM_CAPABILITY_SCHEDULING,
+        PLATFORM_CAPABILITY_WORKSPACE,
         derive_tool_names,
     )
 
@@ -79,6 +80,15 @@ def test_derive_tool_names_from_skills_and_context():
     )
     assert reports == ["create_report", "get_report", "update_report"]
 
+    workspace = derive_tool_names(
+        skills=[],
+        knowledge_base_ids=[],
+        data_source_ids=[],
+        api_connector_ids=[],
+        platform_capabilities=[PLATFORM_CAPABILITY_WORKSPACE],
+    )
+    assert workspace == ["run_bash_script"]
+
 
 def test_capability_profile_parses_platform_capabilities():
     profile = AgentCapabilityProfile.from_config(
@@ -88,12 +98,32 @@ def test_capability_profile_parses_platform_capabilities():
     )
     assert profile.platform_capabilities == ["scheduling", "reports"]
 
+    workspace_profile = AgentCapabilityProfile.from_config(
+        {"platform_capabilities": ["workspace", "scheduling"]}
+    )
+    assert workspace_profile.platform_capabilities == ["workspace", "scheduling"]
+
 
 def test_capability_config_rejects_invalid_platform_capabilities():
     from pydantic import ValidationError as PydanticValidationError
 
     with pytest.raises(PydanticValidationError):
         AgentCapabilityConfigDTO(platform_capabilities=["not-a-capability"])
+
+
+def test_sorted_platform_capabilities():
+    from apps.tenant_app_service.agent_catalog.domain import (
+        PLATFORM_CAPABILITY_REPORTS,
+        PLATFORM_CAPABILITY_SCHEDULING,
+        PLATFORM_CAPABILITY_WORKSPACE,
+        sorted_platform_capabilities,
+    )
+
+    assert sorted_platform_capabilities() == [
+        PLATFORM_CAPABILITY_REPORTS,
+        PLATFORM_CAPABILITY_SCHEDULING,
+        PLATFORM_CAPABILITY_WORKSPACE,
+    ]
 
 
 def test_allowed_runtime_tool_names_includes_skill_tools(monkeypatch):

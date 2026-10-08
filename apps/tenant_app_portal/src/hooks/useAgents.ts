@@ -7,6 +7,7 @@ import {
   getCatalogAgent,
   listAgentSkillCatalog,
   listCatalogAgents,
+  listPlatformCapabilities,
   updateCatalogAgent,
   type AgentWritePayload,
   type CatalogAgent,
@@ -39,6 +40,15 @@ export function useAgentSkillCatalog() {
   return useQuery({
     queryKey: ['agent-skill-catalog', user?.tenantId],
     queryFn: listAgentSkillCatalog,
+    enabled: !!user,
+  })
+}
+
+export function usePlatformCapabilities() {
+  const { user } = useAuth()
+  return useQuery({
+    queryKey: ['agent-platform-capabilities', user?.tenantId],
+    queryFn: listPlatformCapabilities,
     enabled: !!user,
   })
 }

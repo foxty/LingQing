@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-07T02:36:32.550549+00:00",
+  "generated_at": "2026-10-08T07:49:00.790556+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -130,6 +130,11 @@
     {
       "operation_key": "GET_/agents",
       "summary": "List Agents",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/agents/catalog/platform-capabilities",
+      "summary": "List Platform Capabilities",
       "risk_level": "read"
     },
     {

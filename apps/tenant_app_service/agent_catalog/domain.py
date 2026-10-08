@@ -23,13 +23,23 @@ SCHEDULER_TOOLS = (
     "cancel_scheduled_task",
 )
 REPORT_TOOLS = ("create_report", "get_report", "update_report")
+WORKSPACE_TOOLS = ("run_bash_script",)
 PLATFORM_CAPABILITY_SCHEDULING = "scheduling"
 PLATFORM_CAPABILITY_REPORTS = "reports"
+PLATFORM_CAPABILITY_WORKSPACE = "workspace"
 PLATFORM_CAPABILITY_TOOLS: dict[str, tuple[str, ...]] = {
     PLATFORM_CAPABILITY_SCHEDULING: SCHEDULER_TOOLS,
     PLATFORM_CAPABILITY_REPORTS: REPORT_TOOLS,
+    PLATFORM_CAPABILITY_WORKSPACE: WORKSPACE_TOOLS,
 }
 VALID_PLATFORM_CAPABILITIES = frozenset(PLATFORM_CAPABILITY_TOOLS)
+
+
+def sorted_platform_capabilities() -> list[str]:
+    """Stable catalog order for platform capability ids."""
+    return sorted(VALID_PLATFORM_CAPABILITIES)
+
+
 SHAREABLE_SKILL_SCOPES = frozenset({"builtin", "tenant"})
 PERSONAL_SKILL_SCOPE = "personal"
 

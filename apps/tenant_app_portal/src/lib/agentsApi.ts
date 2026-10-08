@@ -8,23 +8,13 @@ import type {
 
 export const SYSTEM_AGENT_ONE_ID = -1
 
-export const PLATFORM_CAPABILITY_SCHEDULING = 'scheduling'
-export const PLATFORM_CAPABILITY_REPORTS = 'reports'
-
-export const PLATFORM_CAPABILITIES = [
-  PLATFORM_CAPABILITY_SCHEDULING,
-  PLATFORM_CAPABILITY_REPORTS,
-] as const
-
-export type PlatformCapability = (typeof PLATFORM_CAPABILITIES)[number]
-
 export interface AgentCapabilityConfig {
   default_tools: string[]
   skills: string[]
   knowledge_base_ids: number[]
   data_source_ids: number[]
   api_connector_ids: number[]
-  platform_capabilities: PlatformCapability[]
+  platform_capabilities: string[]
   model_profile_id?: number | null
 }
 
@@ -103,6 +93,11 @@ export async function deleteCatalogAgent(agentId: number): Promise<void> {
 
 export async function listAgentSkillCatalog(): Promise<AgentSkillCatalogItem[]> {
   const response = await api.get<AgentSkillCatalogItem[]>('/agents/catalog/skills')
+  return response.data
+}
+
+export async function listPlatformCapabilities(): Promise<string[]> {
+  const response = await api.get<string[]>('/agents/catalog/platform-capabilities')
   return response.data
 }
 
