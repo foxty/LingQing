@@ -18,6 +18,9 @@ RUN npm ci --verbose
 # Copy source code
 COPY apps/tenant_app_portal/ ./
 
+# Monorepo path aliases (@shared/frontend → ../shared/frontend from /app)
+COPY apps/shared/frontend /shared/frontend
+
 # Build for production
 RUN npm run build 2>&1
 
