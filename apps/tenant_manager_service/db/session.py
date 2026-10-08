@@ -5,6 +5,7 @@ from typing import AsyncGenerator
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 from apps.config import EnvConfig
+from apps.shared.db.url import build_postgres_asyncpg_url
 
 
 def build_tenant_manager_db_url() -> str:
@@ -18,11 +19,15 @@ def build_tenant_manager_db_url() -> str:
     password = EnvConfig.TENANT_MANAGER_DB_PASSWORD
     db_name = EnvConfig.TENANT_MANAGER_DB_NAME
 
-    url = f"postgresql+asyncpg://{user}:{password}@{host}:{port}/{db_name}"
     ssl_mode = getattr(EnvConfig, "TENANT_MANAGER_DB_SSL_MODE", "") or EnvConfig.TENANT_APP_DB_SSL_MODE
-    if ssl_mode:
-        url += f"?ssl={ssl_mode}"
-    return url
+    return build_postgres_asyncpg_url(
+        user=user,
+        password=password,
+        host=host,
+        port=port,
+        db_name=db_name,
+        ssl_mode=ssl_mode or None,
+    )
 
 
 tenant_manager_engine = create_async_engine(

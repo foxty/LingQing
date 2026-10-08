@@ -122,6 +122,14 @@ Enable automated backups and point-in-time recovery in production.
 
 Run PostgreSQL on a dedicated VM or existing cluster (not in the LingQing compose stack). Same `init_db.sh` flow; ensure the app VM can reach the host on `5432`.
 
+**Hostname rule:** `TENANT_*_DB_HOST` must resolve from **inside** `tenant-app-service` / `tenant-manager-service`, not only from the VM shell. Use the VM IP, DNS name, or managed-service endpoint for production.
+
+**Postgres in Docker on the same host:** Prefer the **same Docker network** as the LingQing stack (e.g. E2E `full-stack.yml`: service name `postgres`, port `5432`). Do not reuse a container name such as `lingqing-postgres` unless that container is attached to the stack network; otherwise DNS from backend services will fail. If Postgres must stay on another network, either `docker network connect` it to the stack network or use a host-reachable address (published port + `host.docker.internal` on remote stack, which sets `extra_hosts`).
+
+For local Postgres without TLS, use `TENANT_*_DB_SSL_MODE=prefer` or leave unset; `require` is for managed services that enforce SSL.
+
+**Bundled Postgres (demo / internal VM):** The release bundle `docker-compose.yml` includes an optional Compose profile `bundled-postgres`. Use `./bootstrap.sh --with-postgres` to start Postgres on the same network as the app (`TENANT_*_DB_HOST=postgres`, port `5432`), run `init_db.sh` automatically, then start the rest of the stack. Set `POSTGRES_PASSWORD` in `.env` (superuser for the container). Not a substitute for managed PostgreSQL in production.
+
 ### Connectivity check
 
 From the app VM (or laptop):
