@@ -14,6 +14,7 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.observability.dtos import TenantUsageStatsDTO
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agent_catalog.adapters import resolve_assignable_skills
+from apps.tenant_app_service.agent_catalog.domain import sorted_platform_capabilities
 from apps.tenant_app_service.agent_catalog.dtos import (
     AgentCreateRequest,
     AgentResponse,
@@ -64,6 +65,14 @@ async def list_assignable_skills(
         for skill in _assignable_skills(current_user)
         if skill.is_shareable
     ]
+
+
+@router.get("/catalog/platform-capabilities", response_model=list[str])
+async def list_platform_capabilities(
+    current_user: UserDTO = Depends(require_permission(Permissions.AGENTS_READ)),
+):
+    _ = current_user
+    return sorted_platform_capabilities()
 
 
 @router.get("/{agent_id}", response_model=AgentResponse)

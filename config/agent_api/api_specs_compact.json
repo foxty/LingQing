@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-07T05:03:07.155671+00:00",
+  "generated_at": "2026-10-08T07:49:00.790556+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -8673,6 +8673,7 @@
     "GET_/admin/system-tasks/{task_id}/runs": "list_system_task_runs_admin_system_tasks__task_id__runs_get",
     "GET_/admin/system-tasks/{task_id}/runs/{run_id}/logs": "get_system_task_run_logs_admin_system_tasks__task_id__runs__run_id__logs_get",
     "GET_/agents": "list_agents_agents_get",
+    "GET_/agents/catalog/platform-capabilities": "list_platform_capabilities_agents_catalog_platform_capabilities_get",
     "GET_/agents/catalog/skills": "list_assignable_skills_agents_catalog_skills_get",
     "GET_/agents/{agent_id}": "get_agent_agents__agent_id__get",
     "GET_/agents/{agent_id}/integrations/slack": "get_agent_slack_integration_agents__agent_id__integrations_slack_get",
@@ -12903,6 +12904,28 @@
         "error_statuses": [
           "422"
         ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_platform_capabilities_agents_catalog_platform_capabilities_get": {
+      "operation_key": "GET_/agents/catalog/platform-capabilities",
+      "method": "GET",
+      "path": "/agents/catalog/platform-capabilities",
+      "summary": "List Platform Capabilities",
+      "description": "",
+      "request": {},
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "items": {
+            "type": "string"
+          },
+          "type": "array",
+          "title": "Response List Platform Capabilities Agents Catalog Platform Capabilities Get"
+        }
       },
       "constraints": {
         "side_effect": false,

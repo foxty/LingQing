@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Navigate, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -131,16 +131,37 @@ export default function AgentDetailPage() {
   const [formPrompt, setFormPrompt] = useState('')
   const [formConfig, setFormConfig] = useState<AgentCapabilityConfig>(agentConfigFromAgent(undefined))
   const [formError, setFormError] = useState<string | null>(null)
+  const formHydratedAt = useRef<string | null>(null)
 
   useEffect(() => {
-    if (!agent) {
+    formHydratedAt.current = null
+  }, [agentId])
+
+  useEffect(() => {
+    if (!agent || agent.id !== agentId) {
       return
     }
+    const hydrationKey = `${agent.id}:${agent.updated_at ?? ''}`
+    if (formHydratedAt.current === hydrationKey) {
+      return
+    }
+    formHydratedAt.current = hydrationKey
     setFormName(agent.name)
     setFormPrompt(agent.system_prompt)
     setFormConfig(agentConfigFromAgent(agent.config))
     setFormError(null)
-  }, [agent])
+  }, [agent, agentId])
+
+  const resetSettingsForm = () => {
+    if (!agent) {
+      return
+    }
+    formHydratedAt.current = `${agent.id}:${agent.updated_at ?? ''}`
+    setFormName(agent.name)
+    setFormPrompt(agent.system_prompt)
+    setFormConfig(agentConfigFromAgent(agent.config))
+    setFormError(null)
+  }
 
   useEffect(() => {
     if (!agent) {
@@ -227,6 +248,7 @@ export default function AgentDetailPage() {
           config: formConfig,
         },
       })
+      formHydratedAt.current = `${updated.id}:${updated.updated_at ?? ''}`
       setFormName(updated.name)
       setFormPrompt(updated.system_prompt)
       setFormConfig(agentConfigFromAgent(updated.config))
@@ -284,6 +306,7 @@ export default function AgentDetailPage() {
               onPromptChange={setFormPrompt}
               onConfigChange={setFormConfig}
               onSave={() => void saveSettings()}
+              onCancel={resetSettingsForm}
             />
           </TabsContent>
         ) : null}
