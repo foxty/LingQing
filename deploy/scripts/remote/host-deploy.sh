@@ -42,7 +42,10 @@ infer_github_repo() {
 read_env_value() {
     local env_file="$1"
     local key="$2"
-    grep -E "^${key}=" "$env_file" 2>/dev/null | tail -n 1 | cut -d= -f2- | tr -d '[:space:'$'\r'']' || true
+    local raw
+    raw="$(grep -E "^${key}=" "$env_file" 2>/dev/null | tail -n 1 | cut -d= -f2- || true)"
+    # Trim CR and leading/trailing whitespace only (do not use broken tr '[:space:'… — it deletes "a")
+    printf '%s' "$raw" | sed -e 's/\r$//' -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
 }
 
 set_env_value() {
