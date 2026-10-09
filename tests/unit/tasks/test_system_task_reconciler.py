@@ -72,3 +72,22 @@ async def test_reconcile_for_tenant_is_idempotent(async_db_session, patch_reconc
         select(func.count()).select_from(ScheduledTask).where(ScheduledTask.tenant_id == tenant.id)
     )
     assert count_result.scalar_one() == len(SYSTEM_TASK_DEFINITIONS)
+
+
+@pytest.mark.asyncio
+async def test_reconcile_for_tenant_uses_caller_session_before_commit(async_db_session):
+    """Provisioning must reconcile inside the same transaction as tenant insert."""
+    tenant = Tenant(name="Uncommitted Tenant", slug="uncommitted_tenant")
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+    await async_db_session.refresh(tenant)
+
+    count = await reconcile_for_tenant(tenant.id, session=async_db_session)
+
+    assert count == len(SYSTEM_TASK_DEFINITIONS)
+    await async_db_session.commit()
+
+    system_user_result = await async_db_session.execute(
+        select(User).where(User.tenant_id == tenant.id, User.username == SYSTEM_USER_USERNAME)
+    )
+    assert system_user_result.scalar_one_or_none() is not None

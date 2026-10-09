@@ -172,7 +172,7 @@ class TenantProvisioningService:
         )
         await seed_default_tags(self.db, tenant.id)
         await seed_default_policies(self.db, tenant.id)
-        task_count = await reconcile_for_tenant(tenant.id)
+        task_count = await reconcile_for_tenant(tenant.id, session=self.db)
         logger.info(
             "Successfully provisioned tenant %s with %s system scheduled tasks",
             tenant.id,

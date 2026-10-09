@@ -28,8 +28,9 @@ async def test_provision_tenant_calls_default_seeders(async_db_session, monkeypa
     async def _fake_seed_default_policies(db, tenant_id: int):
         calls.append(("policies", tenant_id))
 
-    async def _fake_reconcile_for_tenant(tenant_id: int) -> int:
+    async def _fake_reconcile_for_tenant(tenant_id: int, *, session=None) -> int:
         calls.append(("system_tasks", tenant_id))
+        assert session is async_db_session
         return 6
 
     monkeypatch.setattr(
