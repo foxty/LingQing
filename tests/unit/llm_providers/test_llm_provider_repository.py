@@ -79,6 +79,26 @@ async def test_create_and_list_model_profile(async_db_session):
     assert len(embedding_profiles) == 0
 
 
+async def test_update_provider_clears_embedding_api_base(async_db_session):
+    tenant = await _make_tenant(async_db_session)
+    repo = LLMProviderRepository(async_db_session)
+    created = await repo.create_provider(
+        tenant_id=tenant.id,
+        display_name="Ollama",
+        preset_key="ollama",
+        type="openai-compatible",
+        api_base="http://127.0.0.1:11434/v1",
+        embedding_api_base="http://127.0.0.1:11434/v1/embeddings",
+        api_key_encrypted="encrypted-key",
+    )
+    await async_db_session.commit()
+
+    updated = await repo.update_provider(created, embedding_api_base=None)
+    await async_db_session.commit()
+
+    assert updated.embedding_api_base is None
+
+
 async def test_count_profiles_for_provider(async_db_session):
     tenant = await _make_tenant(async_db_session)
     provider = LLMProvider(

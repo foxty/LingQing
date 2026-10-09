@@ -44,7 +44,9 @@
     "saveSuccess": "保存成功",
     "createSuccess": "创建成功",
     "updateSuccess": "更新成功",
-    "action": "操作"
+    "action": "操作",
+    "connectionTestSuccess": "连接测试成功",
+    "connectionTestFailed": "连接测试失败"
   },
   "sidebar": {
     "conversation": "对话",

@@ -12,6 +12,8 @@ const en = {
   displayName: 'Display name',
   apiBase: 'API base',
   embeddingApiBase: 'Embedding API base',
+  embeddingApiBaseHint:
+    'Optional. Use the same OpenAI-compatible base URL as chat (e.g. …/v1). Do not append /embeddings — the client adds that path.',
   apiKey: 'API key',
   provider: 'Provider',
   profileName: 'Profile name',
@@ -79,6 +81,8 @@ const zh = {
   displayName: '显示名称',
   apiBase: 'API Base',
   embeddingApiBase: 'Embedding API Base',
+  embeddingApiBaseHint:
+    '可选。与 Chat 使用相同的 OpenAI 兼容 Base URL（如 …/v1），不要加 /embeddings，客户端会自动拼接该路径。',
   apiKey: 'API 密钥',
   provider: '提供商',
   profileName: '配置名称',

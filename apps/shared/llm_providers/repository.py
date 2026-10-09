@@ -15,6 +15,8 @@ from apps.shared.llm_providers.domain import (
     ModelProfileSource,
 )
 
+_UNSET: object = object()
+
 
 def to_provider_domain(row: LLMProvider) -> LLMProviderDomain:
     return LLMProviderDomain(
@@ -128,7 +130,7 @@ class LLMProviderRepository:
         preset_key: str | None = None,
         type: str | None = None,
         api_base: str | None = None,
-        embedding_api_base: str | None = None,
+        embedding_api_base: str | None | object = _UNSET,
         api_key_encrypted: str | None = None,
         status: str | None = None,
     ) -> LLMProviderDomain:
@@ -150,8 +152,8 @@ class LLMProviderRepository:
             row.type = type
         if api_base is not None:
             row.api_base = api_base
-        if embedding_api_base is not None:
-            row.embedding_api_base = embedding_api_base
+        if embedding_api_base is not _UNSET:
+            row.embedding_api_base = embedding_api_base  # type: ignore[assignment]
         if api_key_encrypted is not None:
             row.api_key_encrypted = api_key_encrypted
         if status is not None:
