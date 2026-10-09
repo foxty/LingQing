@@ -1,5 +1,6 @@
 import ContainerDetailHeader from '@/components/ContainerDetailHeader'
 import ListDetailToolbar from '@/components/ListDetailToolbar'
+import ConnectionTestFeedback, { type ConnectionTestResult } from '@/components/ConnectionTestFeedback'
 import { modelsRegistryKey, registerModelsRegistryI18n } from '@/components/models-registry/i18n'
 import ProfileFormDialog from '@/components/models-registry/ProfileFormDialog'
 import ProviderFormDialog from '@/components/models-registry/ProviderFormDialog'
@@ -67,10 +68,7 @@ export default function SettingsProviderDetailPage() {
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
   const [busy, setBusy] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
-  const [connectionTestResult, setConnectionTestResult] = useState<{
-    ok: boolean
-    message: string
-  } | null>(null)
+  const [connectionTestResult, setConnectionTestResult] = useState<ConnectionTestResult | null>(null)
 
   const provider = providers.find((item) => item.id === numericProviderId)
   const providerProfiles = useMemo(
@@ -212,8 +210,15 @@ export default function SettingsProviderDetailPage() {
         }
       />
 
-      <div className="flex flex-wrap gap-2">
-        <Button variant="outline" size="sm" onClick={() => setProviderDialogOpen(true)}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={() => {
+            setConnectionTestResult(null)
+            setProviderDialogOpen(true)
+          }}
+        >
           {t(modelsRegistryKey('editCredentials'))}
         </Button>
         <Button
@@ -231,14 +236,10 @@ export default function SettingsProviderDetailPage() {
             t(modelsRegistryKey('test'))
           )}
         </Button>
+        {connectionTestResult ? (
+          <ConnectionTestFeedback result={connectionTestResult} errorOnNewLine />
+        ) : null}
       </div>
-
-      {connectionTestResult ? (
-        <Alert variant={connectionTestResult.ok ? 'default' : 'destructive'}>
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{connectionTestResult.message}</AlertDescription>
-        </Alert>
-      ) : null}
 
       {error ? (
         <Alert variant="destructive">

@@ -44,7 +44,9 @@
     "saveSuccess": "Saved successfully",
     "createSuccess": "Created successfully",
     "updateSuccess": "Updated successfully",
-    "action": "Actions"
+    "action": "Actions",
+    "connectionTestSuccess": "Connection test successful",
+    "connectionTestFailed": "Connection test failed"
   },
   "sidebar": {
     "conversation": "Conversation",

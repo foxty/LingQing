@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import ConnectionTestFeedback from '@/components/ConnectionTestFeedback'
 
 i18n.addResourceBundle('en', 'translation', {
   components: {
@@ -16,6 +16,7 @@ i18n.addResourceBundle('en', 'translation', {
       testing: 'Testing...',
       connectSuccess: 'Connection successful',
       connectFailed: 'Connection failed',
+      completeRequiredFields: 'Fill in all required connection fields before testing.',
       hint: 'Enter your Databricks connection details. Required fields are marked with *.',
     },
   },
@@ -35,6 +36,7 @@ i18n.addResourceBundle('zh', 'translation', {
       testing: '测试中...',
       connectSuccess: '连接成功',
       connectFailed: '连接失败',
+      completeRequiredFields: '请先填写所有必填连接字段再测试。',
       hint: '输入你的 Databricks 连接详情。必填字段标有 *。',
     },
   },
@@ -43,7 +45,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { testConnection } from '@/lib/dataSourceApi'
-import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import type { FieldErrors, UseFormRegister } from 'react-hook-form'
 import * as z from 'zod'
@@ -94,7 +96,12 @@ export default function DatabricksConnectionForm({
   const [connectionTested, setConnectionTested] = useState(false)
   const [connectionSuccess, setConnectionSuccess] = useState(false)
   const [connectionMessage, setConnectionMessage] = useState('')
-  const [testError, setTestError] = useState('')
+
+  const setConnectionTestResult = (ok: boolean, message: string) => {
+    setConnectionTested(true)
+    setConnectionSuccess(ok)
+    setConnectionMessage(message)
+  }
 
   const handleTestConnection = async () => {
     if (!getFormData) return
@@ -103,12 +110,11 @@ export default function DatabricksConnectionForm({
 
     // Validate required fields
     if (!formData.host || !formData.password || !formData.warehouse_id) {
-      setTestError(t('common.failedToLoad'))
+      setConnectionTestResult(false, t('components.databricksForm.completeRequiredFields'))
       return
     }
 
     setTestingConnection(true)
-    setTestError('')
     setConnectionTested(false)
     setConnectionMessage('')
 
@@ -152,7 +158,6 @@ export default function DatabricksConnectionForm({
       setConnectionTested(false)
       setConnectionSuccess(false)
       setConnectionMessage('')
-      setTestError('')
     }
     onFieldChange?.()
   }
@@ -293,35 +298,14 @@ export default function DatabricksConnectionForm({
         </Button>
       </div>
 
-      {/* Test Error Message */}
-      {testError && (
-        <Alert variant="destructive" className="py-2">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription className="text-sm">{testError}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Connection Test Result */}
-      {connectionTested && (
-        <Alert
-          variant={connectionSuccess ? 'default' : 'destructive'}
-          className={connectionSuccess ? 'py-2 border-green-200' : 'py-2'}
-        >
-          <div className="flex items-start gap-2">
-            {connectionSuccess ? (
-              <CheckCircle2 className="h-4 w-4 text-green-600 mt-0.5" />
-            ) : (
-              <AlertCircle className="h-4 w-4 mt-0.5" />
-            )}
-            <AlertDescription className="text-sm">
-              <div className={connectionSuccess ? 'font-medium text-green-700' : 'font-medium'}>
-                {connectionSuccess ? t('components.databricksForm.connectSuccess') : t('components.databricksForm.connectFailed')}
-              </div>
-              <div className="text-xs text-muted-foreground mt-0.5">{connectionMessage}</div>
-            </AlertDescription>
-          </div>
-        </Alert>
-      )}
+      {connectionTested ? (
+        <ConnectionTestFeedback
+          className="text-xs"
+          result={{ ok: connectionSuccess, message: connectionMessage }}
+          successFallback={t('components.databricksForm.connectSuccess')}
+          failureFallback={t('components.databricksForm.connectFailed')}
+        />
+      ) : null}
 
       {/* Help Text */}
       <p className="text-xs text-muted-foreground pt-1">

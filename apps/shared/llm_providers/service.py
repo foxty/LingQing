@@ -116,16 +116,18 @@ class LLMProviderConfigService:
         provider = await self._require_provider(provider_id)
         encrypted_key = self._cipher.encrypt(request.api_key) if request.api_key else None
 
-        updated = await self._provider_repo.update_provider(
-            provider,
-            display_name=request.display_name,
-            preset_key=request.preset_key,
-            type=request.type,
-            api_base=request.api_base,
-            embedding_api_base=request.embedding_api_base,
-            api_key_encrypted=encrypted_key,
-            status=request.status,
-        )
+        update_kwargs: dict[str, object] = {
+            "display_name": request.display_name,
+            "preset_key": request.preset_key,
+            "type": request.type,
+            "api_base": request.api_base,
+            "api_key_encrypted": encrypted_key,
+            "status": request.status,
+        }
+        if "embedding_api_base" in request.model_fields_set:
+            update_kwargs["embedding_api_base"] = request.embedding_api_base
+
+        updated = await self._provider_repo.update_provider(provider, **update_kwargs)
         await self.db.commit()
         return self._provider_to_dto(updated)
 

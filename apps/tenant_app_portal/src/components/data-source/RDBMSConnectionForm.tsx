@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import ConnectionTestFeedback from '@/components/ConnectionTestFeedback'
 
 i18n.addResourceBundle('en', 'translation', {
   components: {
@@ -17,6 +17,7 @@ i18n.addResourceBundle('en', 'translation', {
       testing: 'Testing...',
       connectSuccess: 'Connection successful',
       connectFailed: 'Connection failed',
+      completeRequiredFields: 'Fill in all required connection fields before testing.',
     },
   },
 }, true, true)
@@ -36,6 +37,7 @@ i18n.addResourceBundle('zh', 'translation', {
       testing: '测试中...',
       connectSuccess: '连接成功',
       connectFailed: '连接失败',
+      completeRequiredFields: '请先填写所有必填连接字段再测试。',
     },
   },
 }, true, true)
@@ -44,7 +46,7 @@ import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { testConnection } from '@/lib/dataSourceApi'
-import { AlertCircle, CheckCircle2, Loader2 } from 'lucide-react'
+import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import type { FieldErrors, UseFormRegister } from 'react-hook-form'
 import * as z from 'zod'
@@ -109,7 +111,12 @@ export default function RDBMSConnectionForm({
   const [connectionTested, setConnectionTested] = useState(false)
   const [connectionSuccess, setConnectionSuccess] = useState(false)
   const [connectionMessage, setConnectionMessage] = useState('')
-  const [testError, setTestError] = useState('')
+
+  const setConnectionTestResult = (ok: boolean, message: string) => {
+    setConnectionTested(true)
+    setConnectionSuccess(ok)
+    setConnectionMessage(message)
+  }
 
   const handleTestConnection = async () => {
     if (!getFormData) return
@@ -124,12 +131,11 @@ export default function RDBMSConnectionForm({
       !formData.username ||
       !formData.password
     ) {
-      setTestError(t('common.failedToLoad'))
+      setConnectionTestResult(false, t('components.rdbmsForm.completeRequiredFields'))
       return
     }
 
     setTestingConnection(true)
-    setTestError('')
     setConnectionTested(false)
     setConnectionMessage('')
 
@@ -172,7 +178,6 @@ export default function RDBMSConnectionForm({
       setConnectionTested(false)
       setConnectionSuccess(false)
       setConnectionMessage('')
-      setTestError('')
     }
     onFieldChange?.()
   }
@@ -307,29 +312,14 @@ export default function RDBMSConnectionForm({
         )}
       </Button>
 
-      {/* Connection Test Status */}
-      {connectionTested && (
-        <Alert
-          variant={connectionSuccess ? 'default' : 'destructive'}
-          className={connectionSuccess ? 'border-green-600 bg-green-50 text-xs' : 'text-xs'}
-        >
-          {connectionSuccess ? (
-            <CheckCircle2 className="h-4 w-4 text-green-600" />
-          ) : (
-            <AlertCircle className="h-4 w-4" />
-          )}
-          <AlertDescription className={connectionSuccess ? 'text-green-800' : ''}>
-            {connectionMessage}
-          </AlertDescription>
-        </Alert>
-      )}
-
-      {testError && (
-        <Alert variant="destructive" className="text-xs">
-          <AlertCircle className="h-4 w-4" />
-          <AlertDescription>{testError}</AlertDescription>
-        </Alert>
-      )}
+      {connectionTested ? (
+        <ConnectionTestFeedback
+          className="text-xs"
+          result={{ ok: connectionSuccess, message: connectionMessage }}
+          successFallback={t('components.rdbmsForm.connectSuccess')}
+          failureFallback={t('components.rdbmsForm.connectFailed')}
+        />
+      ) : null}
     </div>
   )
 }

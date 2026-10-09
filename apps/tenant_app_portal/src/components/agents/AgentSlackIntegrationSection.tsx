@@ -1,6 +1,7 @@
 import i18n from '@/i18n/config'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import ConnectionTestFeedback from '@/components/ConnectionTestFeedback'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -306,6 +307,19 @@ export default function AgentSlackIntegrationSection({
     </Badge>
   )
 
+  const slackConnectionTestFeedback = testResult
+    ? {
+        ok: testResult.ok,
+        message: testResult.ok
+          ? t('agents.slackIntegration.testSuccessDetail', {
+              team: testResult.team_name || testResult.team_id || '—',
+              teamId: testResult.team_id || '—',
+              botUserId: testResult.bot_user_id || '—',
+            })
+          : testResult.error || '',
+      }
+    : null
+
   const runConnectionTest = async () => {
     setTesting(true)
     setTestResult(null)
@@ -485,28 +499,7 @@ export default function AgentSlackIntegrationSection({
             </p>
           )}
 
-          {testResult?.ok ? (
-            <Alert>
-              <CheckCircle2 className="h-4 w-4" />
-              <AlertDescription>
-                {t('agents.slackIntegration.testSuccessDetail', {
-                  team: testResult.team_name || testResult.team_id || '—',
-                  teamId: testResult.team_id || '—',
-                  botUserId: testResult.bot_user_id || '—',
-                })}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-          {testResult && !testResult.ok ? (
-            <Alert variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                {testResult.error || t('agents.slackIntegration.testFailed')}
-              </AlertDescription>
-            </Alert>
-          ) : null}
-
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Button
               type="button"
               variant="outline"
@@ -517,6 +510,13 @@ export default function AgentSlackIntegrationSection({
               {testing ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
               {t('agents.slackIntegration.testConnection')}
             </Button>
+            {slackConnectionTestFeedback ? (
+              <ConnectionTestFeedback
+                result={slackConnectionTestFeedback}
+                errorOnNewLine
+                failureFallback={t('agents.slackIntegration.testFailed')}
+              />
+            ) : null}
             <Button
               type="button"
               variant="outline"

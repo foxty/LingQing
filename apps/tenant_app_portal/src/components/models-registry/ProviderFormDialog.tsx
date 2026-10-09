@@ -167,6 +167,7 @@ export default function ProviderFormDialog({
                 setForm((current) => ({ ...current, embedding_api_base: event.target.value }))
               }
             />
+            <p className="text-xs text-muted-foreground">{t(modelsRegistryKey('embeddingApiBaseHint'))}</p>
           </div>
           <div className="space-y-2">
             <Label>{t(modelsRegistryKey('apiKey'))}</Label>
