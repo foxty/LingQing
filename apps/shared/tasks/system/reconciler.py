@@ -149,23 +149,32 @@ async def _upsert_task_for_definition(
             )
 
 
-async def reconcile_for_tenant(tenant_id: int) -> int:
+async def reconcile_for_tenant(tenant_id: int, *, session: AsyncSession | None = None) -> int:
     """Upsert all enabled system task definitions for a single tenant.
+
+    When ``session`` is provided, work runs in that transaction (caller commits).
+    Use this from tenant provisioning so the tenant row is visible before FK inserts.
 
     Returns the number of tasks created or updated.
     """
+    if session is not None:
+        return await _reconcile_for_tenant_in_session(session, tenant_id)
+
+    async with app_db_session() as owned_session:
+        return await _reconcile_for_tenant_in_session(owned_session, tenant_id)
+
+
+async def _reconcile_for_tenant_in_session(session: AsyncSession, tenant_id: int) -> int:
+    system_user = await _get_or_create_system_user(session, tenant_id)
     count = 0
-    async with app_db_session() as session:
-        system_user = await _get_or_create_system_user(session, tenant_id)
-        for definition in SYSTEM_TASK_DEFINITIONS:
-            await _upsert_task_for_definition(
-                session=session,
-                definition=definition,
-                tenant_id=tenant_id,
-                system_user_id=system_user.id,
-            )
-            count += 1
-        await session.commit()
+    for definition in SYSTEM_TASK_DEFINITIONS:
+        await _upsert_task_for_definition(
+            session=session,
+            definition=definition,
+            tenant_id=tenant_id,
+            system_user_id=system_user.id,
+        )
+        count += 1
     return count
 
 
