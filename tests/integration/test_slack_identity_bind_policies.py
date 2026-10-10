@@ -8,7 +8,11 @@ from uuid import uuid4
 import pytest
 
 from tests.integration.conftest import make_auth_headers
-from tests.integration.helpers.ingress_helpers import post_slack_dm, set_workspace_bind_policy
+from tests.integration.helpers.ingress_helpers import (
+    post_slack_dm,
+    set_workspace_bind_policy,
+    wait_until_background,
+)
 
 
 class TestSlackBindPolicies:
@@ -83,11 +87,14 @@ class TestSlackBindPolicies:
         fake.register_user(slack_user, email=f"blocked_{uuid4().hex[:8]}@not-allowed.example")
         fake.posted_messages.clear()
 
-        await post_slack_dm(slack_test_setup, slack_user=slack_user)
+        await post_slack_dm(slack_test_setup, slack_user=slack_user, wait_seconds=0)
 
-        assert any(
-            "email domain is not allowed" in m["text"] for m in fake.posted_messages
-        )
+        async def _assert_domain_rejection() -> None:
+            assert any(
+                "email domain is not allowed" in m["text"] for m in fake.posted_messages
+            )
+
+        await wait_until_background(_assert_domain_rejection())
 
     @pytest.mark.asyncio
     async def test_missing_email_rejects_user(self, slack_test_setup):
@@ -96,9 +103,13 @@ class TestSlackBindPolicies:
         fake.register_user(slack_user, email=None)
         fake.posted_messages.clear()
 
-        await post_slack_dm(slack_test_setup, slack_user=slack_user)
+        await post_slack_dm(slack_test_setup, slack_user=slack_user, wait_seconds=0)
 
-        assert any(
-            "email domain is not allowed" in m["text"] or "could not read an email" in m["text"].lower()
-            for m in fake.posted_messages
-        )
+        async def _assert_missing_email_rejection() -> None:
+            assert any(
+                "email domain is not allowed" in m["text"]
+                or "could not read an email" in m["text"].lower()
+                for m in fake.posted_messages
+            )
+
+        await wait_until_background(_assert_missing_email_rejection())
