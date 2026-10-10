@@ -29,6 +29,11 @@ Usage:
     # On-demand per-tenant observability (no scheduled task)
     uv run scripts/vector_sync_cli.py observability
     uv run scripts/vector_sync_cli.py observability --tenant-id 1 --format json
+
+    # Drop tenant Chroma collection (e.g. embedding dimension change) and mark DB rows stale
+    uv run scripts/vector_sync_cli.py reset-collection --tenant-id 1
+    uv run scripts/vector_sync_cli.py reset-collection --tenant-id 1 --dry-run
+    uv run scripts/vector_sync_cli.py reset-collection --tenant-id 1 --no-mark-stale
 """
 
 import argparse
@@ -45,7 +50,8 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import case, func, select
 
-from apps.config import EnvConfig
+from apps.config import EnvConfig, get_file_storage
+from apps.shared.search.indexing_service import ResourceIndexService
 from apps.shared.db.models import AssetMetadata, DataSource, Document, ResourceIndex, TaskRun
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.types import RESOURCE_TYPE_ASSET, RESOURCE_TYPE_DOCUMENT
@@ -277,6 +283,100 @@ async def handle_cleanup(args):
     print(json.dumps(result, indent=2, default=str))
 
     return 0 if result.get("status") in {"completed", "partial_failed"} else 1
+
+
+def _collection_name_for_tenant(tenant_id: int) -> str:
+    return f"{EnvConfig.CHROMA_COLLECTION_PREFIX}{tenant_id}"
+
+
+def _is_chroma_collection_missing_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    return "does not exist" in message or "not found" in message or "invalid collection" in message
+
+
+async def handle_reset_collection(args):
+    """Delete a tenant's Chroma collection and optionally mark resource_index rows stale."""
+    tenant_id = args.tenant_id
+    dry_run = args.dry_run
+    mark_stale = args.mark_stale
+
+    if tenant_id is None:
+        print("❌ Error: reset-collection requires --tenant-id (safety measure)")
+        return 1
+
+    collection_name = _collection_name_for_tenant(tenant_id)
+    chroma_stats, chroma_error = await _load_chroma_tenant_stats()
+    tenant_chroma = chroma_stats.get(tenant_id, {})
+    vector_count = int(tenant_chroma.get("chroma_vector_count", 0) or 0)
+    collection_exists = bool(tenant_chroma.get("chroma_collection_exists"))
+
+    if chroma_error:
+        print(f"⚠️  Could not load Chroma stats: {chroma_error}")
+        print(f"   Will still attempt delete for collection: {collection_name}")
+
+    print(f"\n🎯 Tenant {tenant_id} | collection={collection_name}")
+    if collection_exists:
+        print(f"   Chroma vectors (approx): {vector_count}")
+    elif not chroma_error:
+        print("   Chroma collection: not found (delete may be a no-op)")
+    print(f"   Mark resource_index stale: {'yes' if mark_stale else 'no'}")
+
+    if dry_run:
+        print("\n🔍 [DRY RUN] No changes made")
+        print("   Run without --dry-run to delete the collection and mark rows stale")
+        return 0
+
+    print("\n⚠️  WARNING: This deletes the entire Chroma collection for this tenant.")
+    print("   Required after embedding model dimension changes. Press Ctrl+C to cancel...")
+    await asyncio.sleep(3)
+
+    chroma_deleted = False
+    chroma_skipped = False
+    chroma_error_detail: str | None = None
+    stale_count = 0
+
+    try:
+        async with app_db_session() as session:
+            file_storage = get_file_storage()
+            index_service = await ResourceIndexService.create(
+                tenant_id=tenant_id,
+                db_session=session,
+                file_storage=file_storage,
+            )
+
+            try:
+                await index_service.rag_manager.clear_collection()
+                chroma_deleted = True
+            except Exception as exc:
+                if _is_chroma_collection_missing_error(exc):
+                    chroma_skipped = True
+                else:
+                    chroma_error_detail = str(exc)
+                    raise
+
+            if mark_stale:
+                stale_count = await index_service.mark_all_vectors_stale()
+
+            await session.commit()
+    except Exception as exc:
+        logger.error("reset-collection failed for tenant %s: %s", tenant_id, exc, exc_info=True)
+        print(f"\n❌ reset-collection failed: {exc}")
+        return 1
+
+    print("\n" + "=" * 60)
+    if chroma_deleted:
+        print(f"✅ Deleted Chroma collection: {collection_name}")
+    elif chroma_skipped:
+        print(f"ℹ️  Chroma collection not present (skipped): {collection_name}")
+    else:
+        print(f"⚠️  Chroma collection state unknown: {collection_name}")
+        if chroma_error_detail:
+            print(f"   Detail: {chroma_error_detail}")
+
+    if mark_stale:
+        print(f"   Marked stale in resource_index: {stale_count} row(s)")
+    print("\n💡 Next: uv run scripts/vector_sync_cli.py sync --mode incremental --tenant-id", tenant_id)
+    return 0
 
 
 async def handle_status(args):
@@ -610,6 +710,27 @@ def main():
         help="Output format (default: table)",
     )
 
+    reset_collection_parser = subparsers.add_parser(
+        "reset-collection",
+        help="Delete tenant Chroma collection (embedding dimension reset)",
+    )
+    reset_collection_parser.add_argument(
+        "--tenant-id",
+        type=int,
+        required=True,
+        help="Tenant whose Chroma collection will be deleted (required)",
+    )
+    reset_collection_parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Show planned actions without deleting or updating DB",
+    )
+    reset_collection_parser.add_argument(
+        "--no-mark-stale",
+        action="store_true",
+        help="Only delete Chroma collection; do not mark resource_index rows stale",
+    )
+
     args = parser.parse_args()
 
     if args.command == "status":
@@ -618,6 +739,9 @@ def main():
             args.tenant_id = positional_tid
         elif args.tenant_id is not None and positional_tid is not None and args.tenant_id != positional_tid:
             parser.error("Conflicting tenant values: use either --tenant-id or positional tenant id, not both")
+
+    if args.command == "reset-collection":
+        args.mark_stale = not args.no_mark_stale
 
     if not args.command:
         parser.print_help()
@@ -633,6 +757,8 @@ def main():
             exit_code = asyncio.run(handle_status(args))
         elif args.command == "observability":
             exit_code = asyncio.run(handle_observability(args))
+        elif args.command == "reset-collection":
+            exit_code = asyncio.run(handle_reset_collection(args))
         else:
             parser.print_help()
             exit_code = 1
