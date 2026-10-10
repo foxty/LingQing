@@ -33,6 +33,12 @@ router = APIRouter(prefix="/threads", tags=["threads"], include_in_schema=False)
 
 logger = get_logger(__name__)
 
+
+def _assert_user_owns_thread(thread, current_user: UserDTO) -> None:
+    if thread.tenant_id != current_user.tenant_id or thread.user_id != current_user.id:
+        raise AuthorizationError("Access denied")
+
+
 # ============================================================================
 # Thread Metadata Operations
 # ============================================================================
@@ -136,9 +142,7 @@ async def get_thread(
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
 
-    # Verify user owns this thread
-    if thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    _assert_user_owns_thread(thread, current_user)
 
     return ThreadResponse(
         id=thread.id,
@@ -179,8 +183,7 @@ async def update_thread(
     thread = await chat_service.get_thread(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
-    if thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    _assert_user_owns_thread(thread, current_user)
 
     # Update title
     updated_thread = await chat_service.update_thread_title(thread_id, request.title)
@@ -229,8 +232,7 @@ async def delete_thread(
     thread = await chat_service.get_thread(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
-    if thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    _assert_user_owns_thread(thread, current_user)
 
     # Delete thread and all associated data
     success = await chat_service.delete_thread(thread_id)
@@ -280,8 +282,9 @@ async def get_thread_messages(
 
     # Verify thread exists and user owns it
     thread = await chat_service.get_thread(thread_id)
-    if thread and thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    if not thread:
+        raise ResourceNotFoundError(f"Thread {thread_id} not found")
+    _assert_user_owns_thread(thread, current_user)
 
     # Get conversation history (loads messages from checkpointer)
     # Note: We pass agent_id from thread metadata
@@ -334,8 +337,7 @@ async def get_sub_agent_messages(
     thread = await chat_service.get_thread(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
-    if thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    _assert_user_owns_thread(thread, current_user)
     logger.info(f"Fetching messages for sub-agent {sub_agent_id} in thread {thread_id} with session {session_id}")
     return await chat_service.get_conversation_history(
         agent_id=sub_agent_id,
@@ -362,8 +364,7 @@ async def get_tool_call_detail(
     thread = await chat_service.get_thread(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
-    if thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    _assert_user_owns_thread(thread, current_user)
 
     message = await chat_service.get_tool_call_detail(
         thread_id=thread_id,
@@ -388,8 +389,7 @@ async def get_thread_session_status(
     thread = await chat_service.get_thread(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
-    if thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    _assert_user_owns_thread(thread, current_user)
 
     return await chat_service.get_session_status(thread_id=thread_id, agent_id=thread.agent_id)
 
@@ -431,8 +431,7 @@ async def list_linked_artifacts(
     thread = await thread_repo.get_by_id(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
-    if thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    _assert_user_owns_thread(thread, current_user)
 
     # Get artifacts
     artifact_repo = ArtifactRepository(db)
@@ -492,8 +491,7 @@ async def unlink_artifact_link(
     thread = await thread_repo.get_by_id(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
-    if thread.user_id != current_user.id:
-        raise AuthorizationError("Access denied")
+    _assert_user_owns_thread(thread, current_user)
 
     artifact_repo = ArtifactRepository(db)
     success = await artifact_repo.unlink_by_id(artifact_id, thread_id)

@@ -24,6 +24,13 @@ from apps.shared.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _sandbox_controller_headers() -> dict[str, str]:
+    token = EnvConfig.SANDBOX_CONTROLLER_API_TOKEN
+    if not token:
+        return {}
+    return {"X-Sandbox-Token": token}
+
+
 @dataclass
 class SandboxExecutionContext:
     """Caller identity and tracing context for sandbox operations.
@@ -313,7 +320,11 @@ class SandboxClient:
         client = await self._get_client(controller_timeout)
 
         try:
-            async with client.post(url=controller_url, json=request_payload) as response:
+            async with client.post(
+                url=controller_url,
+                json=request_payload,
+                headers=_sandbox_controller_headers(),
+            ) as response:
                 raw_text = await response.text()
                 try:
                     payload = json.loads(raw_text) if raw_text else {}

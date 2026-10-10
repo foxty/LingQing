@@ -12,6 +12,13 @@ from typing import Literal
 from urllib.parse import urlparse
 
 
+def _env_bool(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name, "").strip().lower()
+    if not raw:
+        return default
+    return raw in {"1", "true", "yes", "on"}
+
+
 def parse_chroma_http_url(url: str) -> tuple[str, int, bool]:
     """Parse CHROMA_URL into chromadb.HttpClient host, port, and ssl flag."""
     parsed = urlparse(url.strip())
@@ -62,6 +69,8 @@ class EnvConfig:
     # ============ Shared Settings ============
 
     SECRET_KEY: str = os.getenv("SECRET_KEY")
+    AUTH_COOKIE_SECURE: bool = _env_bool("AUTH_COOKIE_SECURE", default=False)
+    SANDBOX_CONTROLLER_API_TOKEN: str = os.getenv("SANDBOX_CONTROLLER_API_TOKEN", "").strip()
     CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "*").split(",")
     CHART_SERVICE_URL: str = os.getenv("CHART_SERVICE_URL")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
@@ -337,6 +346,7 @@ def get_settings():
     class Settings:
         # Merge AppConfig and EnvConfig for backward compatibility
         SECRET_KEY = EnvConfig.SECRET_KEY
+        AUTH_COOKIE_SECURE = EnvConfig.AUTH_COOKIE_SECURE
         ALGORITHM = AppConfig.JWT_ALGORITHM
         ACCESS_TOKEN_EXPIRE_MINUTES = AppConfig.ACCESS_TOKEN_EXPIRE_MINUTES
         API_TITLE = AppConfig.API_TITLE

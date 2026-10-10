@@ -56,6 +56,25 @@ const DEFAULT_PAYLOAD_TOO_LARGE_MESSAGE =
   'The file is too large for upload. Please use a smaller file or split the document.'
 
 export function normalizeApiErrorPayload(data: unknown, status?: number): ApiErrorEnvelope {
+  if (status === 429) {
+    const payload = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+    const rawMessage =
+      typeof payload.message === 'string'
+        ? payload.message
+        : typeof payload.detail === 'string'
+          ? payload.detail
+          : 'Too many requests. Please try again later.'
+    return {
+      code: 'RATE_LIMITED',
+      message: sanitizeUserFacingMessage(rawMessage, 'Too many requests. Please try again later.'),
+      details:
+        payload.details && typeof payload.details === 'object'
+          ? (payload.details as Record<string, unknown>)
+          : {},
+      request_id: typeof payload.request_id === 'string' ? payload.request_id : '',
+    }
+  }
+
   if (status === 413) {
     const payload = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
     const rawMessage =

@@ -53,8 +53,7 @@ async def _validate_and_get_thread(
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
 
-    # Verify user owns this thread
-    if thread.user_id != current_user.id:
+    if thread.tenant_id != current_user.tenant_id or thread.user_id != current_user.id:
         raise AuthorizationError(f"Access denied. Thread {thread_id} does not belong to you")
 
     return chat_thread_to_domain(thread)
