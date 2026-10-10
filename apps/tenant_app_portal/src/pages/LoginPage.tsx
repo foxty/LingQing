@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
@@ -18,8 +18,6 @@ import { AlertCircle, Loader2 } from 'lucide-react'
 import { getApiErrorMessage } from '@/lib/api'
 import { convertApiUserToUser } from '@/types'
 
-const SSO_REDIRECT_DELAY_MS = 500
-
 i18n.addResourceBundle('en', 'translation', {
   login: {
     resolve: 'Work email or account',
@@ -27,7 +25,6 @@ i18n.addResourceBundle('en', 'translation', {
     resolveButton: 'Continue',
     signInTo: 'Sign in to {{name}}',
     continueWith: 'Continue with {{provider}}',
-    redirectingTo: 'Redirecting to {{provider}}…',
     usePasswordInstead: 'Sign in with password instead',
     adminSignIn: 'Administrator sign-in',
     orDivider: 'or',
@@ -50,7 +47,6 @@ i18n.addResourceBundle('zh', 'translation', {
     resolveButton: '继续',
     signInTo: '登录到 {{name}}',
     continueWith: '使用 {{provider}} 继续',
-    redirectingTo: '正在跳转到 {{provider}}…',
     usePasswordInstead: '改用密码登录',
     adminSignIn: '管理员应急登录',
     orDivider: '或',
@@ -65,7 +61,7 @@ i18n.addResourceBundle('zh', 'translation', {
   },
 }, true, true)
 
-type LoginStep = 'credentials' | 'signin' | 'redirecting'
+type LoginStep = 'credentials' | 'signin'
 
 export default function LoginPage() {
   const { t } = useTranslation()
@@ -80,9 +76,6 @@ export default function LoginPage() {
   const [resolvedUsername, setResolvedUsername] = useState<string>('')
   const [showPassword, setShowPassword] = useState(false)
   const [emergencyPasswordAvailable, setEmergencyPasswordAvailable] = useState(false)
-  const [pendingRedirectMethod, setPendingRedirectMethod] = useState<LoginMethod | null>(null)
-  const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-  const tenantIdRef = useRef<number | null>(null)
 
   const resolveSchema = useCallback(
     () =>
@@ -124,19 +117,6 @@ export default function LoginPage() {
     resolver: zodResolver(loginSchema()),
   })
 
-  useEffect(() => {
-    return () => {
-      if (redirectTimerRef.current) clearTimeout(redirectTimerRef.current)
-    }
-  }, [])
-
-  const clearRedirectTimer = () => {
-    if (redirectTimerRef.current) {
-      clearTimeout(redirectTimerRef.current)
-      redirectTimerRef.current = null
-    }
-  }
-
   const mapResolveError = (err: any): string => {
     const data = err?.response?.data
     const code = data?.code
@@ -166,40 +146,21 @@ export default function LoginPage() {
 
   const providerLabel = (method: LoginMethod) => method.display_name || method.type
 
-  const startSso = async (method: LoginMethod, resolvedTenantId?: number) => {
-    const activeTenantId = resolvedTenantId ?? tenantIdRef.current ?? tenantId
-    if (!activeTenantId || !method.provider_id) {
+  const startSso = async (method: LoginMethod) => {
+    if (!tenantId || !method.provider_id) {
       setError(t('login.loginFailed'))
-      setStep('signin')
       return
     }
-    clearRedirectTimer()
     setIsLoading(true)
     setError(null)
     try {
-      const res = await ssoStart(activeTenantId, method.provider_id)
+      const res = await ssoStart(tenantId, method.provider_id)
       window.location.href = res.authorize_url
     } catch (err: any) {
       setError(mapSsoError(err))
-      setStep('signin')
     } finally {
       setIsLoading(false)
     }
-  }
-
-  const scheduleAutoRedirect = (method: LoginMethod, resolvedTenantId: number) => {
-    setPendingRedirectMethod(method)
-    setStep('redirecting')
-    clearRedirectTimer()
-    redirectTimerRef.current = setTimeout(() => {
-      startSso(method, resolvedTenantId)
-    }, SSO_REDIRECT_DELAY_MS)
-  }
-
-  const cancelRedirect = () => {
-    clearRedirectTimer()
-    setPendingRedirectMethod(null)
-    setStep('signin')
   }
 
   const onResolve = async (data: ResolveFormData) => {
@@ -209,22 +170,14 @@ export default function LoginPage() {
     try {
       const result = await resolveTenantMethods(data.username)
       setResolvedUsername(data.username)
-      tenantIdRef.current = result.tenant_id
       setTenantId(result.tenant_id)
       setTenantName(result.tenant_name)
       setMethods(result.login_methods)
       setEmergencyPasswordAvailable(result.emergency_password_available)
 
-      const ssoMethods = result.login_methods.filter((m) => m.type !== 'native')
-
-      if (ssoMethods.length === 1) {
-        scheduleAutoRedirect(ssoMethods[0], result.tenant_id)
-      } else if (ssoMethods.length === 0) {
-        setShowPassword(true)
-        setStep('signin')
-      } else {
-        setStep('signin')
-      }
+      const hasSso = result.login_methods.some((m) => m.type !== 'native')
+      setShowPassword(!hasSso)
+      setStep('signin')
     } catch (err: any) {
       setError(mapResolveError(err))
     } finally {
@@ -250,9 +203,6 @@ export default function LoginPage() {
   }
 
   const backToCredentials = () => {
-    clearRedirectTimer()
-    setPendingRedirectMethod(null)
-    tenantIdRef.current = null
     setTenantId(null)
     setStep('credentials')
     setShowPassword(false)
@@ -263,10 +213,10 @@ export default function LoginPage() {
   const ssoMethods = methods.filter((m) => m.type !== 'native')
   const canUsePassword = Boolean(nativeMethod) || emergencyPasswordAvailable
 
-  const renderSsoButton = (method: LoginMethod, primary = true) => (
+  const renderSsoButton = (method: LoginMethod) => (
     <Button
       key={method.provider_id}
-      variant={primary ? 'default' : 'outline'}
+      variant="default"
       className="w-full"
       onClick={() => startSso(method)}
       disabled={isLoading}
@@ -276,9 +226,8 @@ export default function LoginPage() {
     </Button>
   )
 
-  const renderPasswordFallback = () => {
-    if (showPassword) return null
-    if (!canUsePassword) return null
+  const renderPasswordChoice = () => {
+    if (showPassword || !canUsePassword) return null
     return (
       <div className="space-y-3">
         <div className="relative">
@@ -291,8 +240,8 @@ export default function LoginPage() {
         </div>
         {nativeMethod && (
           <Button
-            variant="link"
-            className="w-full text-muted-foreground"
+            variant="outline"
+            className="w-full"
             onClick={() => setShowPassword(true)}
             disabled={isLoading}
           >
@@ -301,8 +250,8 @@ export default function LoginPage() {
         )}
         {!nativeMethod && emergencyPasswordAvailable && (
           <Button
-            variant="link"
-            className="w-full text-muted-foreground"
+            variant="outline"
+            className="w-full"
             onClick={() => setShowPassword(true)}
             disabled={isLoading}
           >
@@ -355,55 +304,13 @@ export default function LoginPage() {
             </form>
           )}
 
-          {step === 'redirecting' && pendingRedirectMethod && (
-            <div className="space-y-4 text-center">
-              <div className="flex flex-col items-center gap-3 py-4">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-                <p className="font-medium">
-                  {t('login.redirectingTo', { provider: providerLabel(pendingRedirectMethod) })}
-                </p>
-              </div>
-              <div className="space-y-2">
-                {nativeMethod && (
-                  <Button
-                    variant="link"
-                    className="w-full text-muted-foreground"
-                    onClick={() => {
-                      cancelRedirect()
-                      setShowPassword(true)
-                    }}
-                    disabled={isLoading}
-                  >
-                    {t('login.usePasswordInstead')}
-                  </Button>
-                )}
-                {!nativeMethod && emergencyPasswordAvailable && (
-                  <Button
-                    variant="link"
-                    className="w-full text-muted-foreground"
-                    onClick={() => {
-                      cancelRedirect()
-                      setShowPassword(true)
-                    }}
-                    disabled={isLoading}
-                  >
-                    {t('login.adminSignIn')}
-                  </Button>
-                )}
-                <Button variant="ghost" className="w-full" onClick={cancelRedirect} disabled={isLoading}>
-                  {t('login.back')}
-                </Button>
-              </div>
-            </div>
-          )}
-
           {step === 'signin' && (
             <div className="space-y-4">
               {ssoMethods.length > 0 && (
                 <div className="space-y-2">{ssoMethods.map((m) => renderSsoButton(m))}</div>
               )}
 
-              {renderPasswordFallback()}
+              {renderPasswordChoice()}
 
               {showPassword && (
                 <form onSubmit={handleLoginSubmit(onSubmit)} className="space-y-4">
