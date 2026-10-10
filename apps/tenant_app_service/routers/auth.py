@@ -1,10 +1,15 @@
-"""Authentication router."""
+"""Authentication router (native login, profile, and public SSO login flow)."""
+
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.config import get_settings
 from apps.shared.authz.ta_rbac import get_effective_rbac
-from apps.shared.core.auth import get_current_user
+from apps.shared.core.auth import get_current_user, set_access_token_cookie
+from apps.shared.core.rate_limit import rate_limiter
 from apps.shared.db.session import get_db
 from apps.shared.domain.types import RESOURCE_TYPE_USER
 from apps.shared.schemas.user import UserDTO
@@ -25,12 +30,38 @@ from apps.tenant_app_service.auth.schemas import (
     UpdateProfilePreferencesRequest,
 )
 from apps.tenant_app_service.auth.service import AuthService
+from apps.tenant_app_service.sso.dtos import (
+    ResolveTenantMethodsRequest,
+    ResolveTenantMethodsResponse,
+    SsoExchangeRequest,
+    SsoExchangeResponse,
+    SsoStartResponse,
+)
+from apps.tenant_app_service.sso.login_service import SsoLoginService
+from apps.tenant_app_service.sso.services import SsoAdminService
 
 router = APIRouter(prefix="/auth", tags=["authentication"], include_in_schema=False)
 
+_PUBLIC_AUTH_MAX_EVENTS = 20
+_PUBLIC_AUTH_WINDOW_SECONDS = 900
+_TOO_MANY_REQUESTS = "Too many requests. Please try again later."
+_TOO_MANY_LOGIN = "Too many login attempts. Please try again later."
 
-@router.post("/login", response_model=LoginResponse)
-async def login(credentials: LoginRequest, response: Response, db: AsyncSession = Depends(get_db)):
+
+def _public_auth_limit(name: str, *, detail: str = _TOO_MANY_REQUESTS):
+    return Depends(rate_limiter(name, _PUBLIC_AUTH_MAX_EVENTS, _PUBLIC_AUTH_WINDOW_SECONDS, detail=detail))
+
+
+@router.post(
+    "/login",
+    response_model=LoginResponse,
+    dependencies=[_public_auth_limit("auth.login", detail=_TOO_MANY_LOGIN)],
+)
+async def login(
+    credentials: LoginRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
     """Authenticate user and return JWT token.
 
     Args:
@@ -42,15 +73,7 @@ async def login(credentials: LoginRequest, response: Response, db: AsyncSession 
     """
     auth_service = AuthService(db=db)
     login_response = await auth_service.authenticate(credentials)
-    response.set_cookie(
-        key="access_token",
-        value=login_response.access_token,
-        httponly=True,
-        secure=False,
-        samesite="lax",
-        max_age=7 * 24 * 60 * 60,
-        path="/",
-    )
+    set_access_token_cookie(response, login_response.access_token)
     return login_response
 
 
@@ -143,15 +166,87 @@ async def change_password(
     )
 
 
-@router.post("/invite/accept", response_model=InviteAcceptResponse)
+@router.post(
+    "/invite/accept",
+    response_model=InviteAcceptResponse,
+    dependencies=[_public_auth_limit("auth.invite.accept")],
+)
 async def accept_invite(request: InviteAcceptRequest, db: AsyncSession = Depends(get_db)):
     """Accept invite and set password (Phase 0 stub)."""
     auth_service = AuthService(db=db)
     return await auth_service.accept_invite(request.token, request.password)
 
 
-@router.post("/password/reset", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/password/reset",
+    status_code=status.HTTP_204_NO_CONTENT,
+    dependencies=[_public_auth_limit("auth.password.reset")],
+)
 async def reset_password(request: ResetPasswordRequest, db: AsyncSession = Depends(get_db)):
     """Reset password with token (Phase 0 stub)."""
     auth_service = AuthService(db=db)
     await auth_service.reset_password_with_token(request.token, request.new_password)
+
+
+# ============ Public SSO login (unauthenticated) ============
+
+
+@router.post(
+    "/resolve-tenant-methods",
+    response_model=ResolveTenantMethodsResponse,
+    dependencies=[_public_auth_limit("auth.resolve_tenant_methods")],
+)
+async def resolve_tenant_methods(request: ResolveTenantMethodsRequest, db: AsyncSession = Depends(get_db)):
+    service = SsoAdminService(db)
+    return await service.resolve_tenant_methods(request.identifier)
+
+
+@router.get(
+    "/sso/{provider_id}/start",
+    response_model=SsoStartResponse,
+    dependencies=[_public_auth_limit("auth.sso.start")],
+)
+async def sso_start(
+    provider_id: int,
+    tenant_id: int,
+    db: AsyncSession = Depends(get_db),
+):
+    service = SsoLoginService(db)
+    return await service.start(tenant_id=tenant_id, provider_id=provider_id)
+
+
+@router.get("/sso/callback", dependencies=[_public_auth_limit("auth.sso.callback")])
+async def sso_callback(
+    state: str,
+    code: str,
+    provider_id: int | None = None,
+    db: AsyncSession = Depends(get_db),
+):
+    service = SsoLoginService(db)
+    result = await service.handle_callback(state=state, code=code, provider_id=provider_id)
+
+    settings = get_settings()
+    portal = settings.PORTAL_ORIGIN.rstrip("/")
+    if result.status == "success" and result.ticket:
+        return RedirectResponse(f"{portal}/login/sso?ticket={result.ticket}")
+    if result.status == "pending":
+        return RedirectResponse(f"{portal}/login/sso?status=pending")
+
+    reason = quote(result.reason or "unknown", safe="")
+    return RedirectResponse(f"{portal}/login/sso?status=denied&reason={reason}")
+
+
+@router.post(
+    "/sso/exchange",
+    response_model=SsoExchangeResponse,
+    dependencies=[_public_auth_limit("auth.sso.exchange")],
+)
+async def sso_exchange(
+    request: SsoExchangeRequest,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+):
+    service = SsoLoginService(db)
+    result = await service.exchange_ticket(request.ticket)
+    set_access_token_cookie(response, result.access_token)
+    return result

@@ -15,6 +15,7 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, Loader2 } from 'lucide-react'
+import { getApiErrorMessage } from '@/lib/api'
 import { convertApiUserToUser } from '@/types'
 
 const SSO_REDIRECT_DELAY_MS = 500
@@ -38,6 +39,7 @@ i18n.addResourceBundle('en', 'translation', {
     identifierInvalid: 'Enter your work email (e.g. you@company.com) or account@tenant-slug.',
     ssoRequired: 'Password sign-in is disabled for this organization. Use SSO instead.',
     ssoDiscoveryFailed: 'Could not reach the sign-in provider. Contact your administrator.',
+    rateLimitExceeded: 'Too many sign-in attempts. Please wait a few minutes and try again.',
   },
 }, true, true)
 
@@ -59,6 +61,7 @@ i18n.addResourceBundle('zh', 'translation', {
     identifierInvalid: '请输入工作邮箱（例如 you@company.com）或 账号@租户标识。',
     ssoRequired: '该组织已禁用密码登录，请使用 SSO。',
     ssoDiscoveryFailed: '无法连接登录提供商，请联系管理员。',
+    rateLimitExceeded: '登录尝试过于频繁，请稍后再试。',
   },
 }, true, true)
 
@@ -137,15 +140,21 @@ export default function LoginPage() {
   const mapResolveError = (err: any): string => {
     const data = err?.response?.data
     const code = data?.code
+    if (err?.response?.status === 429 || code === 'RATE_LIMITED') {
+      return getApiErrorMessage(err, t('login.rateLimitExceeded'))
+    }
     if (code === 'AUTH_TENANT_NOT_FOUND') return t('login.tenantNotFound')
     if (code === 'AUTH_IDENTIFIER_INVALID') return t('login.identifierInvalid')
-    return t('login.loginFailed')
+    return getApiErrorMessage(err, t('login.loginFailed'))
   }
 
   const mapLoginError = (err: any): string => {
     const data = err?.response?.data
+    if (err?.response?.status === 429 || data?.code === 'RATE_LIMITED') {
+      return getApiErrorMessage(err, t('login.rateLimitExceeded'))
+    }
     if (data?.code === 'AUTH_SSO_REQUIRED') return t('login.ssoRequired')
-    return data?.message || data?.detail || t('login.loginFailed')
+    return getApiErrorMessage(err, t('login.loginFailed'))
   }
 
   const mapSsoError = (err: any): string => {

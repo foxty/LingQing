@@ -52,7 +52,7 @@ def register_exception_handlers(app):
     @app.exception_handler(ResourceNotFoundError)
     async def handle_not_found(request: Request, exc: ResourceNotFoundError):
         ctx = format_request_context(request)
-        logger.warning(f"Not found: {exc.message} ({ctx})", exc_info=True)
+        logger.warning(f"Not found: {exc.message} ({ctx})")
         return _contract_error_response(
             request=request,
             status_code=404,
@@ -76,7 +76,7 @@ def register_exception_handlers(app):
     @app.exception_handler(ValidationError)
     async def handle_validation(request: Request, exc: ValidationError):
         ctx = format_request_context(request)
-        logger.warning(f"Validation error: {exc.message} ({ctx})", exc_info=True)
+        logger.warning(f"Validation error: {exc.message} ({ctx})")
         return _contract_error_response(
             request=request,
             status_code=400,

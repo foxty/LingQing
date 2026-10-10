@@ -2,13 +2,15 @@
 
 from types import SimpleNamespace
 
-from fastapi import Depends, FastAPI
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.auth import get_current_user
 from apps.shared.db.session import get_db
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.auth.schemas import LoginResponse
+from apps.tenant_app_service.auth.schemas import LoginRequest, LoginResponse
+from apps.tenant_app_service.auth.service import AuthService
 from apps.tenant_app_service.routers import auth as auth_router
 
 
@@ -27,7 +29,17 @@ async def _fake_db():
 
 
 def _fake_user():
-    return SimpleNamespace(tenant_id=9, preferences={"timezone_iana": "UTC"}, status="active")
+    return SimpleNamespace(
+        tenant_id=9,
+        username="u1",
+        role="admin",
+        preferences={"timezone_iana": "UTC"},
+        status="active",
+    )
+
+
+def _fake_tenant():
+    return SimpleNamespace(id=9, name="t9")
 
 
 def _fake_token_payload():
@@ -41,9 +53,12 @@ def _fake_token_payload():
 
 
 def test_get_current_user_supports_cookie_fallback_for_preview_routes(monkeypatch):
-    async def _fake_get_by_id(self, user_id: int):
-        assert user_id == 7
-        return _fake_user()
+    async def _fake_get_by_id(self, record_id: int):
+        if record_id == 7:
+            return _fake_user()
+        if record_id == 9:
+            return _fake_tenant()
+        return None
 
     monkeypatch.setattr("apps.shared.core.auth.jwt.decode", lambda *args, **kwargs: _fake_token_payload())
     monkeypatch.setattr("apps.shared.core.auth.BaseRepository.get_by_id", _fake_get_by_id)
@@ -63,9 +78,12 @@ def test_get_current_user_supports_cookie_fallback_for_preview_routes(monkeypatc
 
 
 def test_get_current_user_supports_cookie_fallback_for_app_asset_routes(monkeypatch):
-    async def _fake_get_by_id(self, user_id: int):
-        assert user_id == 7
-        return _fake_user()
+    async def _fake_get_by_id(self, record_id: int):
+        if record_id == 7:
+            return _fake_user()
+        if record_id == 9:
+            return _fake_tenant()
+        return None
 
     monkeypatch.setattr("apps.shared.core.auth.jwt.decode", lambda *args, **kwargs: _fake_token_payload())
     monkeypatch.setattr("apps.shared.core.auth.BaseRepository.get_by_id", _fake_get_by_id)
@@ -96,9 +114,12 @@ def test_get_current_user_rejects_deactivated_membership(monkeypatch):
     async def _inactive_db():
         yield _InactiveDb()
 
-    async def _fake_get_by_id(self, user_id: int):
-        assert user_id == 7
-        return _fake_user()
+    async def _fake_get_by_id(self, record_id: int):
+        if record_id == 7:
+            return _fake_user()
+        if record_id == 9:
+            return _fake_tenant()
+        return None
 
     monkeypatch.setattr("apps.shared.core.auth.jwt.decode", lambda *args, **kwargs: _fake_token_payload())
     monkeypatch.setattr("apps.shared.core.auth.BaseRepository.get_by_id", _fake_get_by_id)
@@ -134,6 +155,50 @@ def test_get_current_user_rejects_cookie_fallback_on_non_preview_routes(monkeypa
     response = client.get("/me")
     assert response.status_code == 401
     assert response.json()["detail"] == "Not authenticated"
+
+
+def test_login_rate_limited_by_ip(monkeypatch):
+    from fastapi import Depends
+
+    from apps.shared.core import rate_limit as rl
+
+    async def _empty_db():
+        yield object()
+
+    async def _fake_authenticate(self, credentials):
+        _ = credentials
+        return LoginResponse(
+            access_token="jwt-token-abc",
+            token_type="bearer",
+            user=UserDTO(id=11, username="u1", role="admin", tenant_id=9, tenant_name="t9"),
+        )
+
+    isolated = rl.RateLimiter(store=rl.InMemoryRateLimitStore())
+    monkeypatch.setattr(rl, "get_rate_limiter", lambda: isolated)
+    monkeypatch.setattr("apps.tenant_app_service.auth.service.AuthService.authenticate", _fake_authenticate)
+
+    tight_policy = rl.RateLimitPolicy(name="auth.login", max_events=2, window_seconds=60)
+    login_rate_limit = rl.rate_limit_dependency(tight_policy)
+
+    login_router = APIRouter(prefix="/auth")
+
+    @login_router.post("/login", response_model=LoginResponse, dependencies=[Depends(login_rate_limit)])
+    async def login_endpoint(
+        credentials: LoginRequest,
+        db: AsyncSession = Depends(get_db),
+    ):
+        auth_service = AuthService(db=db)
+        return await auth_service.authenticate(credentials)
+
+    app = FastAPI()
+    app.include_router(login_router)
+    app.dependency_overrides[get_db] = _empty_db
+
+    client = TestClient(app, raise_server_exceptions=False)
+    payload = {"username": "u1@t9", "password": "pwd"}
+    assert client.post("/auth/login", json=payload).status_code == 200
+    assert client.post("/auth/login", json=payload).status_code == 200
+    assert client.post("/auth/login", json=payload).status_code == 429
 
 
 def test_login_sets_access_token_cookie(monkeypatch):

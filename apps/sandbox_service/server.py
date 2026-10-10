@@ -6,13 +6,14 @@ import asyncio
 import logging
 import os
 import re
+import secrets
 import time
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException
+from fastapi import Depends, FastAPI, HTTPException, Request
 
 from apps.sandbox_service.skill_packages import SkillPackageInstaller, build_skill_pythonpath_preamble
 from apps.shared.sandbox.paths import (
@@ -74,6 +75,7 @@ WORKSPACE_DATA_ROOT = _read_env("DATA_ROOT_PATH", required=True)
 RUNNER_PASSTHROUGH_ENV: list[tuple[str, str]] = [
     ("SSL_NO_VERIFY", _read_env("SANDBOX_RUNNER_SSL_NO_VERIFY", default="")),
 ]
+SANDBOX_CONTROLLER_API_TOKEN = _read_env("SANDBOX_CONTROLLER_API_TOKEN", default="").strip()
 
 
 def _expand_optional_absolute_host_path(raw: str) -> str:
@@ -445,8 +447,19 @@ async def health() -> SandboxHealthResponse:
     )
 
 
+async def _require_sandbox_controller_auth(request: Request) -> None:
+    if not SANDBOX_CONTROLLER_API_TOKEN:
+        return
+    provided = (request.headers.get("X-Sandbox-Token") or "").strip()
+    if not provided or not secrets.compare_digest(provided, SANDBOX_CONTROLLER_API_TOKEN):
+        raise HTTPException(status_code=401, detail="Unauthorized sandbox controller request.")
+
+
 @app.post("/execute/bash", response_model=SandboxExecuteResponse)
-async def execute_bash(req: SandboxExecuteRequest) -> SandboxExecuteResponse:
+async def execute_bash(
+    req: SandboxExecuteRequest,
+    _: None = Depends(_require_sandbox_controller_auth),
+) -> SandboxExecuteResponse:
     """Execute bash command in ephemeral sandbox container."""
     _validate_request(req)
     request_id = uuid4().hex

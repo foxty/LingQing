@@ -13,7 +13,20 @@ _BLOCKED_SQL_PATTERN = re.compile(
     flags=re.IGNORECASE,
 )
 
+_SQL_IDENTIFIER_PATTERN = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_]*$")
+
 _SUPPORTED_SQL_DIALECTS: tuple[str | None, ...] = (None, "postgres", "mysql", "databricks")
+
+
+def validate_sql_identifier(name: str, *, field_name: str = "identifier") -> str:
+    """Validate a single SQL identifier (table/column name) for safe interpolation."""
+    text = (name or "").strip()
+    if not text or not _SQL_IDENTIFIER_PATTERN.match(text):
+        raise ValidationError(
+            f"Invalid SQL {field_name}.",
+            details={"field": field_name, "value": name},
+        )
+    return text
 
 
 def strip_sql_comments(sql: str) -> str:

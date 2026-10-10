@@ -34,6 +34,7 @@ from apps.shared.infra.analytics_db.errors import (
     TableNotFoundError,
 )
 from apps.shared.utils.logger import get_logger
+from apps.shared.utils.sql_utils import validate_sql_identifier
 
 
 class RelationalDBManager(AnalyticsDBManager):
@@ -162,10 +163,11 @@ class RelationalDBManager(AnalyticsDBManager):
             PermissionError: If database is unmanaged
         """
         self._check_write_permission("drop_table")
+        safe_name = validate_sql_identifier(table_name, field_name="table_name")
         try:
             engine = self._get_engine()
             async with engine.begin() as conn:
-                await conn.execute(text(f"DROP TABLE IF EXISTS {table_name}"))
+                await conn.execute(text(f"DROP TABLE IF EXISTS {safe_name}"))
             self.logger.info(f"Dropped table '{table_name}'")
         except SQLAlchemyError as e:
             self.logger.error(f"Failed to drop table: {e}")

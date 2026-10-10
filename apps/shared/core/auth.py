@@ -18,6 +18,7 @@ from apps.shared.db.models import TenantMembership, User
 from apps.shared.db.session import app_db_session, get_db
 from apps.shared.schemas.tenant import LLMDefaultsDTO, TenantConfigDTO, TenantDTO
 from apps.shared.schemas.user import UserDTO
+from apps.shared.tenant.repository import TenantRepository
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -26,6 +27,21 @@ logger = get_logger(__name__)
 security = HTTPBearer(auto_error=False)
 
 AUTH_COOKIE_NAME = "access_token"
+
+
+def set_access_token_cookie(response, token: str) -> None:
+    """Set HttpOnly access token cookie using environment-aware security flags."""
+    settings = get_settings()
+    max_age = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
+    response.set_cookie(
+        key=AUTH_COOKIE_NAME,
+        value=token,
+        httponly=True,
+        secure=settings.AUTH_COOKIE_SECURE,
+        samesite="lax",
+        max_age=max_age,
+        path="/",
+    )
 # Allow cookie auth fallback for read-only render routes and static asset files.
 _COOKIE_AUTH_RENDER_PATH = re.compile(
     r"^(/api)?/apps/\d+/[A-Za-z0-9_-]+/(entry|embed|.+\.[A-Za-z0-9]+)$"
@@ -128,6 +144,39 @@ async def _resolve_current_user(
             )
             raise credentials_exception
 
+        if db_user.username != username:
+            logger.warning(
+                "Token username mismatch: user_id=%s token_sub=%s db_username=%s",
+                user_id,
+                username,
+                db_user.username,
+            )
+            raise credentials_exception
+
+        if db_user.role != role:
+            logger.warning(
+                "Token role mismatch: user_id=%s tenant_id=%s token_role=%s db_role=%s",
+                user_id,
+                tenant_id,
+                role,
+                db_user.role,
+            )
+            raise credentials_exception
+
+        tenant = await TenantRepository(db).get_by_id(tenant_id)
+        if not tenant:
+            logger.warning("Token tenant not found: tenant_id=%s", tenant_id)
+            raise credentials_exception
+
+        if tenant.name != tenant_name:
+            logger.warning(
+                "Token tenant_name mismatch: tenant_id=%s token_name=%s db_name=%s",
+                tenant_id,
+                tenant_name,
+                tenant.name,
+            )
+            raise credentials_exception
+
         timezone_pref: str | None = None
         if isinstance(db_user.preferences, dict):
             maybe_timezone = db_user.preferences.get("timezone_iana")
@@ -136,10 +185,10 @@ async def _resolve_current_user(
 
         return UserDTO(
             id=user_id,
-            username=username,
-            role=role,
+            username=db_user.username,
+            role=db_user.role,
             tenant_id=tenant_id,
-            tenant_name=tenant_name,
+            tenant_name=tenant.name,
             timezone_iana=timezone_pref,
         )
 
@@ -294,11 +343,7 @@ async def get_current_tenant(
     Returns:
         TenantDTO for the current tenant context
     """
-    from apps.shared.db.base_repository import BaseRepository
-    from apps.shared.db.models import Tenant
-
-    tenant_repo = BaseRepository(Tenant, db)
-    tenant = await tenant_repo.get_by_id(current_user.tenant_id)
+    tenant = await TenantRepository(db).get_by_id(current_user.tenant_id)
     if not tenant:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
