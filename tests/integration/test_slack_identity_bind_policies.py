@@ -94,7 +94,7 @@ class TestSlackBindPolicies:
                 "email domain is not allowed" in m["text"] for m in fake.posted_messages
             )
 
-        await wait_until_background(_assert_domain_rejection())
+        await wait_until_background(_assert_domain_rejection)
 
     @pytest.mark.asyncio
     async def test_missing_email_rejects_user(self, slack_test_setup):
@@ -112,4 +112,4 @@ class TestSlackBindPolicies:
                 for m in fake.posted_messages
             )
 
-        await wait_until_background(_assert_missing_email_rejection())
+        await wait_until_background(_assert_missing_email_rejection)
