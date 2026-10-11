@@ -5,6 +5,7 @@ Used by tenant settings APIs and agent runtime resolution (Phase 2).
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -282,6 +283,16 @@ class LLMProviderConfigService:
             api_base=api_base,
             api_key=self._cipher.decrypt(provider.api_key_encrypted),
         )
+
+    async def get_profile_binding_timestamps(self, profile_id: int) -> tuple[datetime, datetime]:
+        """Profile and provider ``updated_at`` for in-process LLM client cache keys.
+
+        When either timestamp changes (e.g. provider API key update), callers should
+        rebuild the bound chat model instead of reusing a cached client.
+        """
+        profile = await self._require_profile(profile_id)
+        provider = await self._require_provider(profile.provider_id)
+        return profile.updated_at, provider.updated_at
 
     async def resolve_default_llm_profile(self, *, mini: bool = False) -> ResolvedModelConfig:
         defaults = await self._load_defaults()
