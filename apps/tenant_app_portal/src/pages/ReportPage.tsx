@@ -1,4 +1,6 @@
 import DocumentProse from '@/components/DocumentProse'
+import ReportHtmlContent from '@/components/ReportHtmlContent'
+import { ReportImage } from '@/components/ReportImage'
 import EmptyState from '@/components/EmptyState'
 import ResourceAclShareDialog from '@/components/ResourceAclShareDialog'
 import { Button } from '@/components/ui/button'
@@ -100,6 +102,7 @@ function createMarkdownComponents(pageTitle: string) {
       }
       return <h1 {...props}>{children}</h1>
     },
+    img: ({ src, alt }: { src?: string; alt?: string }) => <ReportImage src={src} alt={alt} />,
   }
 }
 
@@ -155,7 +158,7 @@ function renderReportContent(content: string, format: string, pageTitle: string)
         ALLOWED_ATTR: ['href', 'src', 'alt', 'title', 'class', 'id'],
       })
       const html = stripDuplicateTitleFromHtml(sanitizedHtml, pageTitle)
-      return <DocumentProse dangerouslySetInnerHTML={{ __html: html }} />
+      return <ReportHtmlContent html={html} />
     case 'plaintext':
       return <pre className="document-plain">{content}</pre>
     case 'markdown':

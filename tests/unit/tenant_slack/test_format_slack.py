@@ -1,6 +1,6 @@
 """Unit tests for markdown → Slack mrkdwn formatting."""
 
-from apps.tenant_app_service.agent_ingress.slack.domain import format_reply_for_slack
+from apps.tenant_app_service.agent_ingress.slack.domain import _resolve_url, format_reply_for_slack
 
 PORTAL = "https://app.example.com"
 API = "https://api.example.com"
@@ -72,3 +72,9 @@ def test_converts_markdown_report_link():
 def test_replaces_common_emoji_shortcodes():
     text = "Done :white_check_mark: with :chart_with_downwards_trend:"
     assert format_reply_for_slack(text) == "Done ✅ with 📉"
+
+
+def test_resolve_url_maps_document_images_to_api_origin():
+    image_name = "e" * 64
+    path = f"/documents/1/images/{image_name}.png"
+    assert _resolve_url(path, portal_origin=PORTAL, api_origin=API) == f"{API}{path}"

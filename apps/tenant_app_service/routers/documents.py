@@ -131,11 +131,17 @@ async def get_document_image(
 ):
     """Return one stored parse image for a document the caller can read."""
     document_service = _create_document_service(db, current_user.tenant_id, file_storage)
+    from apps.shared.domain.actor import ActorContext
+
+    actor = ActorContext(
+        tenant_id=current_user.tenant_id,
+        user_id=current_user.id,
+        user_role=current_user.role,
+    )
     image = await document_service.read_document_image(
         document_id,
         filename,
-        requester_id=current_user.id,
-        requester_role=current_user.role,
+        actor=actor,
     )
     return Response(
         content=image.content, media_type=image.media_type, headers={"Cache-Control": "private, max-age=3600"}

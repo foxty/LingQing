@@ -86,3 +86,50 @@ async def test_block_actions_upserts_and_updates_message(endpoint, monkeypatch):
     positive_btn = update_kwargs["blocks"][1]["elements"][0]
     assert positive_btn["style"] == "primary"
     assert result == {}
+
+
+@pytest.mark.asyncio
+async def test_block_actions_preserves_table_and_image(endpoint, monkeypatch):
+    db = AsyncMock()
+    service = SlackInteractivityService(db)
+    service.repo = MagicMock()
+    service.repo.decrypt_bot_token = MagicMock(return_value="xoxb-test")
+    service.client = MagicMock()
+    service.client.chat_update = AsyncMock(return_value={"ok": True})
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agent_ingress.slack.interactivity_service.resolve_eligible_slack_user_id",
+        AsyncMock(return_value=42),
+    )
+    feedback_service = MagicMock()
+    feedback_service.upsert_feedback_for_message_id = AsyncMock()
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agent_ingress.slack.interactivity_service.MessageFeedbackService",
+        lambda *_args, **_kwargs: feedback_service,
+    )
+    table = {"type": "table", "rows": [[{"type": "raw_text", "text": "A"}]]}
+    image = {"type": "image", "image_url": "https://cdn.example.com/plot.png", "alt_text": "Plot"}
+
+    await service._handle_block_actions(
+        {
+            "actions": [{"action_id": ACTION_FEEDBACK_POSITIVE, "value": "msg_1"}],
+            "user": {"id": "U1"},
+            "channel": {"id": "C123"},
+            "message": {
+                "ts": "123.456",
+                "text": "Intro",
+                "blocks": [
+                    {"type": "section", "text": {"type": "mrkdwn", "text": "Intro"}},
+                    table,
+                    image,
+                    {"type": "actions", "block_id": "feedback_msg_1", "elements": []},
+                ],
+            },
+        },
+        endpoint,
+    )
+
+    updated = service.client.chat_update.await_args.kwargs["blocks"]
+    assert updated[1] == table
+    assert updated[2] == image
+    assert updated[3]["type"] == "actions"
+    assert updated[3]["elements"][0]["style"] == "primary"

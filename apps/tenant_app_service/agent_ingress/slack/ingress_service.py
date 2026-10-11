@@ -19,7 +19,6 @@ from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, 
 from apps.tenant_app_service.agent_ingress.slack.domain import (
     SlackMessageEvent,
     ensure_slack_reply_text,
-    format_reply_for_slack,
     slack_mapping_thread_ts,
     slack_reply_thread_ts,
     strip_bot_mention,
@@ -84,9 +83,7 @@ class SlackIngressService:
             endpoint=endpoint,
         )
         if result is None:
-            await self._post_ephemeral(
-                bot_token, event, slack_user_message(SlackMessageKey.SLACK_VERIFY_FAILED)
-            )
+            await self._post_ephemeral(bot_token, event, slack_user_message(SlackMessageKey.SLACK_VERIFY_FAILED))
             return
 
         if not is_eligible_slack_identity(result):
@@ -105,9 +102,7 @@ class SlackIngressService:
             return
 
         if not await user_has_chat_access(self.db, tenant_id, result.user_id):
-            await self._post_ephemeral(
-                bot_token, event, slack_user_message(SlackMessageKey.CHAT_PERMISSION_DENIED)
-            )
+            await self._post_ephemeral(bot_token, event, slack_user_message(SlackMessageKey.CHAT_PERMISSION_DENIED))
             return
 
         resolved = await self._resolve_thread_id(
@@ -120,22 +115,14 @@ class SlackIngressService:
             return
         thread_id, agent_id = resolved
 
-        message_text = (
-            strip_bot_mention(event.text, event.bot_user_id)
-            if event.source == "app_mention"
-            else event.text
-        )
+        message_text = strip_bot_mention(event.text, event.bot_user_id) if event.source == "app_mention" else event.text
         if not message_text.strip():
-            await self._post_ephemeral(
-                bot_token, event, slack_user_message(SlackMessageKey.EMPTY_MENTION_MESSAGE)
-            )
+            await self._post_ephemeral(bot_token, event, slack_user_message(SlackMessageKey.EMPTY_MENTION_MESSAGE))
             return
 
         user_dto, tenant_name = await self._build_user_dto(tenant_id, result.user_id)
         if user_dto is None:
-            await self._post_ephemeral(
-                bot_token, event, slack_user_message(SlackMessageKey.LINKED_ACCOUNT_NOT_FOUND)
-            )
+            await self._post_ephemeral(bot_token, event, slack_user_message(SlackMessageKey.LINKED_ACCOUNT_NOT_FOUND))
             return
 
         access_token = self.token_issuer.issue(
@@ -170,17 +157,11 @@ class SlackIngressService:
                 message=SimpleMessage(role="human", content=message_text),
                 thread_id=thread_id,
             )
-            settings = get_settings()
             response = await chat_service.chat(chat_request, current_user=user_dto, access_token=access_token)
             message_id = response.response.message_id
             session_id = response.response.session_id
-            reply_text = format_reply_for_slack(
-                response.response.content
-                if isinstance(response.response.content, str)
-                else str(response.response.content),
-                portal_origin=settings.PORTAL_ORIGIN,
-                api_origin=settings.TENANT_APP_API_ORIGIN,
-            )
+            content = response.response.content
+            reply_text = content if isinstance(content, str) else str(content)
         except DomainException as exc:
             logger.warning(
                 "Slack chat failed for tenant %s user %s: %s",
@@ -194,6 +175,7 @@ class SlackIngressService:
             reply_text = slack_user_message(SlackMessageKey.CHAT_GENERIC_FAILURE)
 
         reply_text = ensure_slack_reply_text(reply_text)
+        settings = get_settings()
 
         message_repo = MessageRepository(self.db)
         message_id = await resolve_feedback_message_id(
@@ -211,12 +193,19 @@ class SlackIngressService:
             thread_ts=reply_thread_ts,
             message_repo=message_repo,
             update_ts=thinking_ts,
+            portal_origin=settings.PORTAL_ORIGIN,
+            api_origin=settings.TENANT_APP_API_ORIGIN,
+            slack_user_id=event.user_id,
+            channel_type=event.channel_type,
+            db_session=self.db,
+            tenant_id=tenant_id,
+            requester_user_id=user_dto.id,
+            requester_role=user_dto.role,
+            agent_id=agent_id,
         )
 
     async def _get_endpoint(self, endpoint_id: int) -> AgentIngressEndpoint | None:
-        result = await self.db.execute(
-            select(AgentIngressEndpoint).where(AgentIngressEndpoint.id == endpoint_id)
-        )
+        result = await self.db.execute(select(AgentIngressEndpoint).where(AgentIngressEndpoint.id == endpoint_id))
         return result.scalar_one_or_none()
 
     async def _post_ephemeral(self, bot_token: str, event: SlackMessageEvent, text: str) -> None:
@@ -386,4 +375,3 @@ class SlackIngressService:
             ),
             tenant_name,
         )
-

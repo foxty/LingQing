@@ -42,9 +42,7 @@ class SlackAdminService:
         self.client = client or SlackWebClient()
         self.settings = get_settings()
 
-    async def get_integration_optional(
-        self, tenant_id: int, agent_id: int
-    ) -> SlackIntegrationResponse | None:
+    async def get_integration_optional(self, tenant_id: int, agent_id: int) -> SlackIntegrationResponse | None:
         endpoint = await self.repo.get_endpoint_by_agent(tenant_id, agent_id)
         if not endpoint:
             return None
@@ -60,9 +58,7 @@ class SlackAdminService:
         endpoints = await self.repo.list_endpoints(tenant_id)
         return [self._to_response(endpoint) for endpoint in endpoints]
 
-    async def build_app_manifest_for_agent(
-        self, tenant_id: int, agent_id: int, endpoint_key: str
-    ) -> dict:
+    async def build_app_manifest_for_agent(self, tenant_id: int, agent_id: int, endpoint_key: str) -> dict:
         agent_name = await self._agent_display_name(tenant_id, agent_id)
         events_url = self._events_url(endpoint_key)
         return build_slack_app_manifest(
@@ -72,9 +68,7 @@ class SlackAdminService:
             bot_display_name=agent_name[:35],
         )
 
-    async def ensure_provisioned_endpoint(
-        self, tenant_id: int, agent_id: int
-    ) -> AgentIngressEndpoint:
+    async def ensure_provisioned_endpoint(self, tenant_id: int, agent_id: int) -> AgentIngressEndpoint:
         """Ensure an ingress endpoint row exists so manifest Events URL is stable."""
         endpoint = await self.repo.get_endpoint_by_agent(tenant_id, agent_id)
         if endpoint:

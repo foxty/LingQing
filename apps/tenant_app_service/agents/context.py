@@ -24,6 +24,10 @@ def delegated_api_connector_ids(profile: AgentCapabilityProfile | None) -> list[
     return None if profile is None else profile.delegated(profile.allowed_api_connector_ids)
 
 
+def delegated_collection_ids(profile: AgentCapabilityProfile | None) -> list[int] | None:
+    return None if profile is None else profile.delegated(profile.allowed_collection_ids)
+
+
 def extract_runtime_context(config: RunnableConfig) -> AgentRuntimeContext:
     """Extract runtime context from LangGraph config.
 
@@ -143,6 +147,9 @@ def create_thread_id(user_id: int, tenant_id: int, agent_id: int) -> str:
 __all__ = [
     "AgentUserContext",
     "AgentRuntimeContext",
+    "delegated_api_connector_ids",
+    "delegated_collection_ids",
+    "delegated_data_source_ids",
     "extract_runtime_context",
     "create_agent_runtime_user_context",
     "create_agent_runtime_context",

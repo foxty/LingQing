@@ -1,9 +1,9 @@
 """Unit tests for centralized Slack user message catalog."""
 
 from apps.tenant_app_service.agent_ingress.slack.messages import (
+    _CATALOG,
     DEFAULT_LOCALE,
     SlackMessageKey,
-    _CATALOG,
     slack_user_message,
 )
 

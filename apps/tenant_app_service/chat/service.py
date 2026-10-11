@@ -639,7 +639,6 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
         from apps.shared.domain.types import ABAC_ACTION_READ
         from apps.tenant_app_service.agent_catalog.domain import SYSTEM_AGENT_ONE_ID
         from apps.tenant_app_service.agent_catalog.services import AgentCatalogService
-        from apps.tenant_app_service.agents.domain import AgentCapabilityProfile
         from apps.tenant_app_service.agents.system_agent_config import load_yaml_agent_config
 
         if agent_id <= SYSTEM_AGENT_ONE_ID or agent_id < 0:
@@ -701,21 +700,14 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
             preloaded,
             cache_revision=revision,
         )
-        from apps.shared.authz.delegation import has_agent_delegation
+        from apps.tenant_app_service.agents.runtime_capability import build_agent_capability_profile
 
-        profile = AgentCapabilityProfile(
-            allowed_tool_names=list(allowed_tool_names),
-            allowed_skill_names=list(domain.profile.skills),
-            allowed_collection_ids=list(domain.profile.knowledge_base_ids),
-            allowed_data_source_ids=list(domain.profile.data_source_ids),
-            allowed_api_connector_ids=list(domain.profile.api_connector_ids),
-            delegate=await has_agent_delegation(
-                self.db,
-                tenant_id=self.tenant_id,
-                agent_id=domain.id,
-                user_id=current_user.id,
-                owner_id=domain.owner_id,
-            ),
+        profile = await build_agent_capability_profile(
+            self.db,
+            tenant_id=self.tenant_id,
+            actor=actor,
+            agent_id=agent_id,
+            assignable_skills=assignable_skills,
         )
         return graph, profile
 
