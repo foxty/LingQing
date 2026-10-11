@@ -19,6 +19,8 @@ from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+DISCOVERY_MIN_QUERY_LENGTH = 2
+
 
 class AnalyticsDBManager(ABC):
     def __init__(self, tenant_id: int, connection: DatabaseConnectionVO, managed: bool = False):
@@ -76,6 +78,19 @@ class AnalyticsDBManager(ABC):
             True if connected, False otherwise
         """
         return self._is_connected
+
+    def requires_search_query(self) -> bool:
+        """Whether asset listing waits for a search query instead of scanning everything.
+
+        Engines with a large namespace (for example Unity Catalog) return True.
+        Connected databases that can list their tables on open return False.
+        """
+        return False
+
+    @staticmethod
+    def search_query_is_runnable(query: str | None) -> bool:
+        """True when a discovery query is long enough to run against the engine."""
+        return query is not None and len(query.strip()) >= DISCOVERY_MIN_QUERY_LENGTH
 
     def _check_write_permission(self, operation: str) -> None:
         """Enforce write permission based on managed flag.

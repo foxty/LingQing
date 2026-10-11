@@ -2,45 +2,49 @@ import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 import ConnectionTestFeedback from '@/components/ConnectionTestFeedback'
 
-i18n.addResourceBundle('en', 'translation', {
-  components: {
-    databricksForm: {
-      serverHostname: 'Server Hostname',
-      accessToken: 'Access Token',
-      httpPath: 'HTTP Path',
-      catalog: 'Catalog',
-      catalogPlaceholder: 'e.g. main',
-      schema: 'Schema',
-      schemaPlaceholder: 'e.g. default',
-      testConnection: 'Test Connection',
-      testing: 'Testing...',
-      connectSuccess: 'Connection successful',
-      connectFailed: 'Connection failed',
-      completeRequiredFields: 'Fill in all required connection fields before testing.',
-      hint: 'Enter your Databricks connection details. Required fields are marked with *.',
+i18n.addResourceBundle(
+  'en',
+  'translation',
+  {
+    components: {
+      databricksForm: {
+        serverHostname: 'Server Hostname',
+        accessToken: 'Access Token',
+        httpPath: 'HTTP Path',
+        testConnection: 'Test Connection',
+        testing: 'Testing...',
+        connectSuccess: 'Connection successful',
+        connectFailed: 'Connection failed',
+        completeRequiredFields: 'Fill in all required connection fields before testing.',
+        hint: 'Enter your Databricks connection details. Required fields are marked with *. After saving, search for tables across catalogs and schemas.',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 
-i18n.addResourceBundle('zh', 'translation', {
-  components: {
-    databricksForm: {
-      serverHostname: '服务器主机名',
-      accessToken: '访问令牌',
-      httpPath: 'HTTP 路径',
-      catalog: '目录',
-      catalogPlaceholder: '例如 main',
-      schema: '模式',
-      schemaPlaceholder: '例如 default',
-      testConnection: '测试连接',
-      testing: '测试中...',
-      connectSuccess: '连接成功',
-      connectFailed: '连接失败',
-      completeRequiredFields: '请先填写所有必填连接字段再测试。',
-      hint: '输入你的 Databricks 连接详情。必填字段标有 *。',
+i18n.addResourceBundle(
+  'zh',
+  'translation',
+  {
+    components: {
+      databricksForm: {
+        serverHostname: '服务器主机名',
+        accessToken: '访问令牌',
+        httpPath: 'HTTP 路径',
+        testConnection: '测试连接',
+        testing: '测试中...',
+        connectSuccess: '连接成功',
+        connectFailed: '连接失败',
+        completeRequiredFields: '请先填写所有必填连接字段再测试。',
+        hint: '输入 Databricks 连接详情。必填字段标有 *。保存后可按目录、模式或表名搜索。',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -56,8 +60,6 @@ export const databricksConnectionSchema = z.object({
   password: z.string().min(1, 'Access token is required'),
   warehouse_id: z.string().min(1, 'Warehouse ID is required'),
   http_path: z.string().optional(),
-  catalog: z.string().optional(),
-  schema: z.string().optional(),
 })
 
 // Helper to build Databricks config from form data
@@ -70,8 +72,6 @@ export function buildDatabricksConfig(data: any): Record<string, any> {
   config.extra_params = {
     warehouse_id: data.warehouse_id,
     ...(data.http_path && { http_path: data.http_path }),
-    ...(data.catalog && { catalog: data.catalog }),
-    ...(data.schema && { schema: data.schema }),
   }
   return config
 }
@@ -125,8 +125,6 @@ export default function DatabricksConnectionForm({
         extra_params: {
           warehouse_id: formData.warehouse_id,
           ...(formData.http_path && { http_path: formData.http_path }),
-          ...(formData.catalog && { catalog: formData.catalog }),
-          ...(formData.schema && { schema: formData.schema }),
         },
       }
 
@@ -137,7 +135,12 @@ export default function DatabricksConnectionForm({
 
       setConnectionTested(true)
       setConnectionSuccess(result.success)
-      setConnectionMessage(result.message || (result.success ? t('components.databricksForm.connectSuccess') : t('components.databricksForm.connectFailed')))
+      setConnectionMessage(
+        result.message ||
+          (result.success
+            ? t('components.databricksForm.connectSuccess')
+            : t('components.databricksForm.connectFailed'))
+      )
 
       if (!result.success && result.error) {
         setConnectionMessage(result.error)
@@ -146,7 +149,9 @@ export default function DatabricksConnectionForm({
       setConnectionTested(true)
       setConnectionSuccess(false)
       setConnectionMessage(
-        error.response?.data?.detail || error.message || t('components.databricksForm.connectFailed')
+        error.response?.data?.detail ||
+          error.message ||
+          t('components.databricksForm.connectFailed')
       )
     } finally {
       setTestingConnection(false)
@@ -167,7 +172,8 @@ export default function DatabricksConnectionForm({
       <div className="space-y-2.5">
         <div className="flex items-center gap-2">
           <Label htmlFor="host" className="min-w-fit">
-            {t('components.databricksForm.serverHostname')} <span className="text-destructive">*</span>
+            {t('components.databricksForm.serverHostname')}{' '}
+            <span className="text-destructive">*</span>
           </Label>
           <Input
             id="host"
@@ -185,7 +191,7 @@ export default function DatabricksConnectionForm({
 
         <div className="flex items-center gap-2">
           <Label htmlFor="password" className="min-w-fit">
-             {t('components.databricksForm.accessToken')} <span className="text-destructive">*</span>
+            {t('components.databricksForm.accessToken')} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="password"
@@ -237,44 +243,6 @@ export default function DatabricksConnectionForm({
             errorMsg={errors?.http_path?.message as string}
           />
         </div>
-
-        <div className="grid grid-cols-2 gap-3">
-          <div className="flex items-center gap-2">
-            <Label htmlFor="catalog" className="min-w-fit">
-               {t('components.databricksForm.catalog')}
-            </Label>
-            <Input
-              id="catalog"
-              {...register('catalog')}
-              placeholder={t('components.databricksForm.catalogPlaceholder')}
-              disabled={disabled}
-              className="h-8 text-sm flex-1"
-              onChange={(e) => {
-                register('catalog').onChange(e)
-                resetConnectionStatus()
-              }}
-              errorMsg={errors?.catalog?.message as string}
-            />
-          </div>
-
-          <div className="flex items-center gap-2">
-            <Label htmlFor="schema" className="min-w-fit">
-               {t('components.databricksForm.schema')}
-            </Label>
-            <Input
-              id="schema"
-              {...register('schema')}
-              placeholder={t('components.databricksForm.schemaPlaceholder')}
-              disabled={disabled}
-              className="h-8 text-sm flex-1"
-              onChange={(e) => {
-                register('schema').onChange(e)
-                resetConnectionStatus()
-              }}
-              errorMsg={errors?.schema?.message as string}
-            />
-          </div>
-        </div>
       </div>
 
       {/* Test Connection Button */}
@@ -308,9 +276,7 @@ export default function DatabricksConnectionForm({
       ) : null}
 
       {/* Help Text */}
-      <p className="text-xs text-muted-foreground pt-1">
-        {t('components.databricksForm.hint')}
-      </p>
+      <p className="text-xs text-muted-foreground pt-1">{t('components.databricksForm.hint')}</p>
     </div>
   )
 }

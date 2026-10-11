@@ -1,53 +1,74 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 
-i18n.addResourceBundle('en', 'translation', {
-  components: {
-    selectAssetsDialog: {
-      title: 'Select Assets',
-      description: 'Select assets for {{name}}',
-      searchPlaceholder: 'Search assets...',
-      allTypes: 'All',
-      table: 'Table',
-      view: 'View',
-      selectAll: 'Select All',
-      selectedCount: '{{selected}} of {{total}} selected',
-      loading: 'Searching...',
-      noAssets: 'No assets found',
-      noMatching: 'No matching assets',
-      materializedView: 'Materialized View',
-      rows: '{{count}} rows',
-      columns: '{{count}} columns',
-      hint: 'Select the assets you want to import. You can search by name or filter by type.',
-      save: 'Import Selected',
+i18n.addResourceBundle(
+  'en',
+  'translation',
+  {
+    components: {
+      selectAssetsDialog: {
+        title: 'Select Assets',
+        description: 'Select assets for {{name}}',
+        searchPlaceholder: 'Search assets...',
+        allTypes: 'All',
+        table: 'Table',
+        view: 'View',
+        selectAll: 'Select All',
+        resultsHeading: 'Results',
+        selectedHeading: 'Selected',
+        selectedEmpty: 'Checked assets appear here.',
+        selectedCount: '{{selected}} selected',
+        resultCap: 'Showing {{shown}} of {{total}}. Refine the search to see more.',
+        searchPrompt: 'Type at least 2 characters to search by catalog, schema, or table.',
+        loading: 'Searching...',
+        noAssets: 'No assets found',
+        noMatching: 'No matching assets',
+        materializedView: 'Materialized View',
+        rows: '{{count}} rows',
+        columns: '{{count}} columns',
+        save: 'Import Selected',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 
-i18n.addResourceBundle('zh', 'translation', {
-  components: {
-    selectAssetsDialog: {
-      title: '选择数据资产',
-      description: '为 {{name}} 选择数据资产',
-      searchPlaceholder: '搜索资产...',
-      allTypes: '全部',
-      table: '表',
-      view: '视图',
-      selectAll: '全选',
-      selectedCount: '已选 {{selected}} / {{total}}',
-      loading: '搜索中...',
-      noAssets: '暂无资产',
-      noMatching: '没有匹配的资产',
-      materializedView: '物化视图',
-      rows: '{{count}} 行',
-      columns: '{{count}} 列',
-      hint: '选择要导入的数据资产，你可以按名称搜索或按类型筛选。',
-      save: '导入所选',
+i18n.addResourceBundle(
+  'zh',
+  'translation',
+  {
+    components: {
+      selectAssetsDialog: {
+        title: '选择数据资产',
+        description: '为 {{name}} 选择数据资产',
+        searchPlaceholder: '搜索资产...',
+        allTypes: '全部',
+        table: '表',
+        view: '视图',
+        selectAll: '全选',
+        resultsHeading: '搜索结果',
+        selectedHeading: '已选',
+        selectedEmpty: '在左侧勾选资产。',
+        selectedCount: '已选 {{selected}}',
+        resultCap: '显示 {{shown}} / {{total}}。缩小搜索范围可查看更多。',
+        searchPrompt: '输入至少 2 个字符，按目录、模式或表名搜索。',
+        loading: '搜索中...',
+        noAssets: '暂无资产',
+        noMatching: '没有匹配的资产',
+        materializedView: '物化视图',
+        rows: '{{count}} 行',
+        columns: '{{count}} 列',
+        save: '导入所选',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 import { discoverAssets, updateAssetSelection } from '@/lib/dataSourceApi'
+import { loadImportedSelection } from '@/lib/importedAssetSelection'
 import { useNotification } from '@/hooks/useNotification'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -62,8 +83,58 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Database, Loader2, Search, AlertCircle } from 'lucide-react'
+import { Loader2, Search, AlertCircle } from 'lucide-react'
 import type { DiscoveredAsset } from '@/lib/dataSourceApi'
+
+function assetTypeLabel(type: DiscoveredAsset['type'], t: (key: string) => string): string {
+  if (type === 'table') return t('components.selectAssetsDialog.table')
+  if (type === 'view') return t('components.selectAssetsDialog.view')
+  return t('components.selectAssetsDialog.materializedView')
+}
+
+function AssetCheckList({
+  assets,
+  selectedNames,
+  onToggle,
+  idPrefix,
+  disabled = false,
+}: {
+  assets: DiscoveredAsset[]
+  selectedNames: Set<string>
+  onToggle: (asset: DiscoveredAsset) => void
+  idPrefix: string
+  disabled?: boolean
+}) {
+  const { t } = useTranslation()
+
+  return (
+    <div className="divide-y">
+      {assets.map((asset) => (
+        <div
+          key={asset.name}
+          className="flex items-center gap-3 px-3 py-2 transition-colors hover:bg-muted/50"
+        >
+          <Checkbox
+            id={`${idPrefix}-${asset.name}`}
+            checked={selectedNames.has(asset.name)}
+            onCheckedChange={() => onToggle(asset)}
+            disabled={disabled}
+          />
+          <Label
+            htmlFor={`${idPrefix}-${asset.name}`}
+            className={`min-w-0 flex-1 truncate text-sm font-normal ${disabled ? 'cursor-not-allowed' : 'cursor-pointer'}`}
+            title={asset.name}
+          >
+            {asset.name}
+          </Label>
+          <span className="shrink-0 text-xs text-muted-foreground">
+            {assetTypeLabel(asset.type, t)}
+          </span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface SelectAssetsDialogProps {
   open: boolean
@@ -84,19 +155,45 @@ export default function SelectAssetsDialog({
   const { t } = useTranslation()
   const { showSuccess, showError } = useNotification()
   const [discoveredAssets, setDiscoveredAssets] = useState<DiscoveredAsset[]>([])
-  const [selectedAssets, setSelectedAssets] = useState<Set<string>>(new Set())
+  const [resultTotal, setResultTotal] = useState(0)
+  const [selectedByName, setSelectedByName] = useState<Record<string, DiscoveredAsset>>({})
   const [loading, setLoading] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string>('')
   const [assetSearchQuery, setAssetSearchQuery] = useState('')
   const [assetTypeFilter, setAssetTypeFilter] = useState<'all' | 'table' | 'view'>('all')
-  const initialLoadRef = useRef(true)
+  const [requiresQuery, setRequiresQuery] = useState(false)
+  const [selectionReady, setSelectionReady] = useState(false)
 
   useEffect(() => {
-    if (open) {
-      initialLoadRef.current = true
+    if (!open) return
+    let cancelled = false
+    setSelectionReady(false)
+    setSelectedByName({})
+    setResultTotal(0)
+    setAssetSearchQuery('')
+    setAssetTypeFilter('all')
+    setRequiresQuery(false)
+    setDiscoveredAssets([])
+    setError('')
+
+    loadImportedSelection(dataSourceId)
+      .then((selected) => {
+        if (!cancelled) {
+          setSelectedByName(selected)
+          setSelectionReady(true)
+        }
+      })
+      .catch((err: any) => {
+        if (!cancelled) {
+          setError(err.response?.data?.detail || err.message || t('common.failedToLoad'))
+        }
+      })
+
+    return () => {
+      cancelled = true
     }
-  }, [open, dataSourceId])
+  }, [open, dataSourceId, t])
 
   // Discovery (light) with server-side search
   useEffect(() => {
@@ -104,6 +201,9 @@ export default function SelectAssetsDialog({
 
     const query = assetSearchQuery.trim()
     const delay = query ? 300 : 0
+    if (!query) {
+      setLoading(true)
+    }
 
     const handle = window.setTimeout(async () => {
       setLoading(true)
@@ -115,14 +215,9 @@ export default function SelectAssetsDialog({
           query: query || undefined,
         })
         setDiscoveredAssets(result.assets)
-        if (initialLoadRef.current) {
-          setSelectedAssets(new Set(result.assets.map((a) => a.name)))
-          initialLoadRef.current = false
-        } else {
-          setSelectedAssets(
-            (prev) =>
-              new Set([...prev].filter((name) => result.assets.some((a) => a.name === name)))
-          )
+        setResultTotal(Number(result.total) || result.assets.length)
+        if (result.requires_query) {
+          setRequiresQuery(true)
         }
       } catch (err: any) {
         setError(err.response?.data?.detail || err.message || t('common.failedToLoad'))
@@ -143,28 +238,51 @@ export default function SelectAssetsDialog({
     })
   }, [discoveredAssets, assetTypeFilter])
 
-  const toggleAsset = (assetName: string) => {
-    setSelectedAssets((prev) => {
-      const newSet = new Set(prev)
-      if (newSet.has(assetName)) {
-        newSet.delete(assetName)
+  const selectedAssets = useMemo(
+    () => Object.values(selectedByName).sort((left, right) => left.name.localeCompare(right.name)),
+    [selectedByName]
+  )
+  const selectedNames = useMemo(
+    () => new Set(selectedAssets.map((asset) => asset.name)),
+    [selectedAssets]
+  )
+
+  const toggleAsset = (asset: DiscoveredAsset) => {
+    if (saving || !selectionReady) return
+    setSelectedByName((prev) => {
+      const next = { ...prev }
+      if (next[asset.name]) {
+        delete next[asset.name]
       } else {
-        newSet.add(assetName)
+        next[asset.name] = asset
       }
-      return newSet
+      return next
     })
   }
 
+  const visibleNames = filteredAssets.map((asset) => asset.name)
+  const allVisibleSelected =
+    visibleNames.length > 0 && visibleNames.every((name) => selectedNames.has(name))
+  const showSearchPrompt = requiresQuery && assetSearchQuery.trim().length < 2
+  const resultsTruncated = !showSearchPrompt && resultTotal > discoveredAssets.length
+
   const toggleAllAssets = () => {
-    if (selectedAssets.size === filteredAssets.length) {
-      setSelectedAssets(new Set())
-    } else {
-      setSelectedAssets(new Set(filteredAssets.map((a) => a.name)))
-    }
+    if (saving || !selectionReady) return
+    setSelectedByName((prev) => {
+      const next = { ...prev }
+      if (allVisibleSelected) {
+        for (const name of visibleNames) delete next[name]
+      } else {
+        for (const asset of filteredAssets) next[asset.name] = asset
+      }
+      return next
+    })
   }
 
+  const panelLocked = saving || !selectionReady
+
   const handleSave = async () => {
-    if (selectedAssets.size === 0) {
+    if (!selectionReady || selectedAssets.length === 0) {
       setError(t('common.noData'))
       return
     }
@@ -173,7 +291,10 @@ export default function SelectAssetsDialog({
     setError('')
 
     try {
-      await updateAssetSelection(dataSourceId, Array.from(selectedAssets))
+      await updateAssetSelection(
+        dataSourceId,
+        selectedAssets.map((asset) => asset.name)
+      )
       showSuccess(t('common.uploadSuccess'))
       onSuccess?.()
       onOpenChange(false)
@@ -194,155 +315,161 @@ export default function SelectAssetsDialog({
 
   return (
     <Dialog open={open} onOpenChange={handleClose}>
-      <DialogContent className="sm:max-w-[600px] max-h-[80vh] flex flex-col">
-        <DialogHeader>
+      <DialogContent className="flex h-[70vh] max-h-[80vh] w-full flex-col overflow-hidden sm:max-w-[960px]">
+        <DialogHeader className="shrink-0">
           <DialogTitle>{t('components.selectAssetsDialog.title')}</DialogTitle>
-          <DialogDescription>{t('components.selectAssetsDialog.description', { name: dataSourceName })}</DialogDescription>
+          <DialogDescription>
+            {t('components.selectAssetsDialog.description', { name: dataSourceName })}
+          </DialogDescription>
         </DialogHeader>
 
-        <div className="flex-1 overflow-auto py-4 space-y-4">
-          {/* Search and Filter */}
-          <div className="space-y-3">
+        <div
+          className={`flex min-h-0 flex-1 flex-col gap-3 ${panelLocked ? 'pointer-events-none opacity-60' : ''}`}
+          aria-busy={panelLocked}
+        >
+          <div className="shrink-0 space-y-3">
             <div className="flex gap-2">
               <div className="relative flex-1">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
+                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   placeholder={t('components.selectAssetsDialog.searchPlaceholder')}
                   value={assetSearchQuery}
                   onChange={(e) => setAssetSearchQuery(e.target.value)}
-                  className="pl-9 h-9"
+                  className="h-9 pl-9"
+                  disabled={panelLocked}
                 />
               </div>
-              <div className="flex gap-1 border rounded-md p-1">
+              <div className="flex gap-1 rounded-md border p-1">
                 {(['all', 'table', 'view'] as const).map((type) => (
                   <button
                     key={type}
+                    type="button"
                     onClick={() => setAssetTypeFilter(type)}
-                    className={`px-3 py-1.5 text-xs rounded transition-colors ${
+                    disabled={panelLocked}
+                    className={`rounded px-3 py-1.5 text-xs transition-colors disabled:cursor-not-allowed ${
                       assetTypeFilter === type
                         ? 'bg-primary text-primary-foreground'
                         : 'hover:bg-muted'
                     }`}
                   >
-                    {type === 'all' ? t('components.selectAssetsDialog.allTypes') : type === 'table' ? t('components.selectAssetsDialog.table') : t('components.selectAssetsDialog.view')}
+                    {type === 'all'
+                      ? t('components.selectAssetsDialog.allTypes')
+                      : type === 'table'
+                        ? t('components.selectAssetsDialog.table')
+                        : t('components.selectAssetsDialog.view')}
                   </button>
                 ))}
               </div>
             </div>
-
-            {/* Select All */}
-            <div className="flex items-center justify-between py-2 px-3 bg-muted/50 rounded-md">
-              <div className="flex items-center space-x-2">
-                <Checkbox
-                  id="select-all"
-                  checked={
-                    filteredAssets.length > 0 && selectedAssets.size === filteredAssets.length
-                  }
-                  onCheckedChange={toggleAllAssets}
-                />
-                  <Label htmlFor="select-all" className="font-medium cursor-pointer text-sm">
-                   {t('components.selectAssetsDialog.selectAll')}
-                 </Label>
-              </div>
-              <span className="text-xs text-muted-foreground">
-                {t('components.selectAssetsDialog.selectedCount', { selected: selectedAssets.size, total: discoveredAssets.length })}
-              </span>
-            </div>
           </div>
 
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <Loader2 className="w-6 h-6 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">{t('components.selectAssetsDialog.loading')}</span>
-            </div>
-          ) : discoveredAssets.length === 0 ? (
-            <div className="text-center py-12">
-              <Database className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-              <p className="text-sm text-muted-foreground">{t('components.selectAssetsDialog.noAssets')}</p>
-            </div>
-          ) : (
-            <>
-              {/* Asset List */}
-              <div className="border rounded-lg max-h-64 overflow-auto">
-                {filteredAssets.length === 0 ? (
-                    <div className="text-center py-6 text-sm text-muted-foreground">
-                     {t('components.selectAssetsDialog.noMatching')}
-                    </div>
-                ) : (
-                  <div className="divide-y">
-                    {filteredAssets.map((asset) => (
-                      <div
-                        key={asset.name}
-                        className="flex items-center space-x-3 p-3 hover:bg-muted/50 transition-colors"
-                      >
-                        <Checkbox
-                          id={`asset-${asset.name}`}
-                          checked={selectedAssets.has(asset.name)}
-                          onCheckedChange={() => toggleAsset(asset.name)}
-                        />
-                        <div className="flex-1 min-w-0">
-                          <Label
-                            htmlFor={`asset-${asset.name}`}
-                            className="font-medium cursor-pointer text-sm truncate block"
-                          >
-                            {asset.name}
-                          </Label>
-                          <div className="flex items-center gap-2 mt-0.5">
-                            <span className="text-xs text-muted-foreground">
-                              {asset.type === 'table'
-                                ? t('components.selectAssetsDialog.table')
-                                : asset.type === 'view'
-                                  ? t('components.selectAssetsDialog.view')
-                                  : t('components.selectAssetsDialog.materializedView')}
-                            </span>
-                            {asset.row_count != null && (
-                              <>
-                                <span className="text-xs text-muted-foreground">•</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {t('components.selectAssetsDialog.rows', { count: asset.row_count })}
-                                </span>
-                              </>
-                            )}
-                            {asset.columns && (
-                              <>
-                                <span className="text-xs text-muted-foreground">•</span>
-                                <span className="text-xs text-muted-foreground">
-                                  {t('components.selectAssetsDialog.columns', { count: asset.columns.length })}
-                                </span>
-                              </>
-                            )}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
+          <div className="grid min-h-0 flex-1 grid-cols-2 gap-3">
+            <section className="flex min-h-0 min-w-0 flex-col gap-2">
+              <div className="flex shrink-0 items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                <span className="text-sm font-medium">
+                  {t('components.selectAssetsDialog.resultsHeading')}
+                </span>
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="select-all"
+                    checked={allVisibleSelected}
+                    onCheckedChange={toggleAllAssets}
+                    disabled={panelLocked || visibleNames.length === 0}
+                  />
+                  <Label htmlFor="select-all" className="cursor-pointer text-sm font-normal">
+                    {t('components.selectAssetsDialog.selectAll')}
+                  </Label>
+                </div>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
+                {loading ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                    <span className="ml-2 text-sm text-muted-foreground">
+                      {t('components.selectAssetsDialog.loading')}
+                    </span>
                   </div>
+                ) : filteredAssets.length === 0 ? (
+                  <div className="px-4 py-10 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {showSearchPrompt
+                        ? t('components.selectAssetsDialog.searchPrompt')
+                        : discoveredAssets.length === 0
+                          ? t('components.selectAssetsDialog.noAssets')
+                          : t('components.selectAssetsDialog.noMatching')}
+                    </p>
+                  </div>
+                ) : (
+                  <AssetCheckList
+                    assets={filteredAssets}
+                    selectedNames={selectedNames}
+                    onToggle={toggleAsset}
+                    idPrefix="result"
+                    disabled={panelLocked}
+                  />
                 )}
               </div>
+              {resultsTruncated ? (
+                <p className="shrink-0 text-xs text-muted-foreground">
+                  {t('components.selectAssetsDialog.resultCap', {
+                    shown: discoveredAssets.length,
+                    total: resultTotal,
+                  })}
+                </p>
+              ) : null}
+            </section>
 
-              {/* Info */}
-              <Alert>
-                <AlertCircle className="h-4 w-4" />
-              <AlertDescription className="text-xs">
-                {t('components.selectAssetsDialog.hint')}
-              </AlertDescription>
-              </Alert>
-            </>
-          )}
+            <section className="flex min-h-0 min-w-0 flex-col gap-2">
+              <div className="flex shrink-0 items-center justify-between rounded-md bg-muted/50 px-3 py-2">
+                <span className="text-sm font-medium">
+                  {t('components.selectAssetsDialog.selectedHeading')}
+                </span>
+                <span className="text-xs text-muted-foreground">
+                  {t('components.selectAssetsDialog.selectedCount', {
+                    selected: selectedAssets.length,
+                  })}
+                </span>
+              </div>
+              <div className="min-h-0 flex-1 overflow-auto rounded-lg border">
+                {!selectionReady ? (
+                  <div className="flex items-center justify-center py-10">
+                    <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
+                  </div>
+                ) : selectedAssets.length === 0 ? (
+                  <div className="px-4 py-10 text-center">
+                    <p className="text-sm text-muted-foreground">
+                      {t('components.selectAssetsDialog.selectedEmpty')}
+                    </p>
+                  </div>
+                ) : (
+                  <AssetCheckList
+                    assets={selectedAssets}
+                    selectedNames={selectedNames}
+                    onToggle={toggleAsset}
+                    idPrefix="selected"
+                    disabled={panelLocked}
+                  />
+                )}
+              </div>
+            </section>
+          </div>
 
-          {/* Error */}
-          {error && (
-            <Alert variant="destructive">
+          {error ? (
+            <Alert variant="destructive" className="shrink-0">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription className="text-xs">{error}</AlertDescription>
             </Alert>
-          )}
+          ) : null}
         </div>
 
         <DialogFooter className="mt-4">
           <Button variant="outline" onClick={handleClose} disabled={saving || loading}>
             {t('common.cancel')}
           </Button>
-          <Button onClick={handleSave} disabled={saving || loading || selectedAssets.size === 0}>
+          <Button
+            onClick={handleSave}
+            disabled={panelLocked || loading || selectedAssets.length === 0}
+          >
             {saving ? t('common.loading') : t('components.selectAssetsDialog.save')}
           </Button>
         </DialogFooter>
