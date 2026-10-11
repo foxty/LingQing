@@ -11,12 +11,14 @@ from apps.shared.db.models import AgentIngressEndpoint
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_ingress.slack.access import resolve_eligible_slack_user_id
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, SlackWebClient
+from apps.tenant_app_service.agent_ingress.slack.domain import ensure_slack_reply_text
 from apps.tenant_app_service.agent_ingress.slack.feedback_blocks import (
     ACTION_FEEDBACK_NEGATIVE,
     ACTION_FEEDBACK_POSITIVE,
     VIEW_FEEDBACK_COMMENT,
     build_feedback_blocks,
     build_feedback_comment_modal,
+    replace_feedback_actions,
 )
 from apps.tenant_app_service.agent_ingress.slack.identity_service import SlackIdentityService
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
@@ -93,8 +95,12 @@ class SlackInteractivityService:
         )
 
         message = payload.get("message") or {}
-        original_text = _extract_text_from_blocks(message.get("blocks")) or message.get("text", "")
-        updated_blocks = build_feedback_blocks(original_text, message_id, current_rating=rating)
+        existing_blocks = message.get("blocks") or []
+        fallback_text = message.get("text") or _extract_text_from_blocks(existing_blocks)
+        if existing_blocks:
+            updated_blocks = replace_feedback_actions(existing_blocks, message_id, current_rating=rating)
+        else:
+            updated_blocks = build_feedback_blocks(fallback_text, message_id, current_rating=rating)
 
         bot_token = self.repo.decrypt_bot_token(endpoint)
         if channel and message_ts:
@@ -103,7 +109,7 @@ class SlackInteractivityService:
                     bot_token=bot_token,
                     channel=channel,
                     ts=message_ts,
-                    text=original_text,
+                    text=ensure_slack_reply_text(fallback_text),
                     blocks=updated_blocks,
                 )
             except Exception:

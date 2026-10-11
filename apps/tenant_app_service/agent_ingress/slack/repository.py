@@ -64,9 +64,7 @@ class SlackRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_endpoint_by_team_id(
-        self, team_id: str, *, app_id: str | None = None
-    ) -> AgentIngressEndpoint | None:
+    async def get_endpoint_by_team_id(self, team_id: str, *, app_id: str | None = None) -> AgentIngressEndpoint | None:
         if app_id:
             scope_key = slack_endpoint_scope_key(team_id=team_id, app_id=app_id, tenant_id=0)
             result = await self.db.execute(
@@ -126,9 +124,7 @@ class SlackRepository:
             agent_id=agent_id,
             platform=PLATFORM_SLACK,
             endpoint_key=secrets.token_urlsafe(32),
-            external_scope_key=slack_endpoint_scope_key(
-                team_id=team_id, app_id=app_id, tenant_id=tenant_id
-            ),
+            external_scope_key=slack_endpoint_scope_key(team_id=team_id, app_id=app_id, tenant_id=tenant_id),
             enabled=enabled,
             identity_source_id=identity_source_id,
             platform_config=platform_config,
@@ -232,9 +228,7 @@ class SlackRepository:
         )
         return result.scalar_one_or_none()
 
-    async def get_thread_link_by_chat_thread_id(
-        self, tenant_id: int, chat_thread_id: str
-    ) -> IngressThreadLink | None:
+    async def get_thread_link_by_chat_thread_id(self, tenant_id: int, chat_thread_id: str) -> IngressThreadLink | None:
         result = await self.db.execute(
             select(IngressThreadLink).where(
                 IngressThreadLink.tenant_id == tenant_id,
@@ -305,8 +299,6 @@ class SlackRepository:
 
     async def cleanup_old_processed_events(self, hours: int = _DEDUPE_TTL_HOURS) -> int:
         cutoff = datetime.now(UTC) - timedelta(hours=hours)
-        result = await self.db.execute(
-            delete(SlackProcessedEvent).where(SlackProcessedEvent.created_at < cutoff)
-        )
+        result = await self.db.execute(delete(SlackProcessedEvent).where(SlackProcessedEvent.created_at < cutoff))
         await self.db.flush()
         return result.rowcount or 0

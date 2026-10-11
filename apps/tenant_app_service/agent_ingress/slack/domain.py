@@ -86,9 +86,7 @@ def verify_slack_signature(
         return False
 
     base = f"v0:{timestamp}:{body}"
-    computed = "v0=" + hmac.new(
-        signing_secret.encode("utf-8"), base.encode("utf-8"), hashlib.sha256
-    ).hexdigest()
+    computed = "v0=" + hmac.new(signing_secret.encode("utf-8"), base.encode("utf-8"), hashlib.sha256).hexdigest()
     return hmac.compare_digest(computed, signature)
 
 
@@ -433,15 +431,11 @@ def _convert_images_and_links(
         text,
     )
     text = _LINK_PATTERN.sub(
-        lambda m: _store_link(
-            _slack_link(_resolve_url(m.group(2), portal_origin, api_origin), m.group(1))
-        ),
+        lambda m: _store_link(_slack_link(_resolve_url(m.group(2), portal_origin, api_origin), m.group(1))),
         text,
     )
     text = _SLACK_RELATIVE_LINK_PATTERN.sub(
-        lambda m: _store_link(
-            _slack_link(_resolve_url(m.group(1), portal_origin, api_origin), m.group(2))
-        ),
+        lambda m: _store_link(_slack_link(_resolve_url(m.group(1), portal_origin, api_origin), m.group(2))),
         text,
     )
     return text, link_spans
@@ -468,6 +462,8 @@ def _resolve_url(url: str, portal_origin: str | None, api_origin: str | None) ->
         return _rewrite_localhost_origin(cleaned, api_origin, portal_origin)
     if cleaned.startswith("/reports"):
         return _join_origin(portal_origin, cleaned)
+    if cleaned.startswith("/documents/"):
+        return _join_origin(api_origin, cleaned)
     if cleaned.startswith(("/static/", "/api/static/", "/api/")):
         path = cleaned.removeprefix("/api") if cleaned.startswith("/api/") else cleaned
         return _join_origin(api_origin, path)
@@ -547,6 +543,9 @@ SLACK_BOT_SCOPES: tuple[str, ...] = (
     "mpim:history",
     "channels:read",
     "groups:read",
+    "files:read",
+    "files:write",
+    "canvases:write",
 )
 
 SLACK_BOT_EVENTS: tuple[str, ...] = (
@@ -557,10 +556,12 @@ SLACK_BOT_EVENTS: tuple[str, ...] = (
     "message.mpim",
 )
 
+
 def ensure_slack_reply_text(text: str, *, fallback: str = SLACK_EMPTY_REPLY_FALLBACK) -> str:
     """Ensure Slack post/update payloads always include non-empty text."""
     cleaned = text.strip()
     return cleaned if cleaned else fallback
+
 
 DEFAULT_MANIFEST_APP_NAME = "LingQing Agent"
 DEFAULT_MANIFEST_BOT_DISPLAY_NAME = "LingQing"

@@ -59,6 +59,38 @@ class SlackClientPort(Protocol):
         """Open a DM channel with one or more users."""
         ...
 
+    async def upload_file(self, *, bot_token: str, filename: str, content: bytes) -> str:
+        """Upload image bytes and return the Slack file id.
+
+        The file is not shared into a channel here. Sharing via
+        files.completeUploadExternal would also post a file message. The image
+        block references the file id instead.
+        """
+        ...
+
+    async def create_canvas(self, *, bot_token: str, title: str, markdown: str) -> str:
+        """Create a Slack Canvas from GFM Markdown and return its id."""
+        ...
+
+    async def grant_canvas_read(
+        self,
+        *,
+        bot_token: str,
+        canvas_id: str,
+        channel_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        """Grant read access to a Canvas for one channel or one user."""
+        ...
+
+    async def canvas_permalink(self, *, bot_token: str, canvas_id: str) -> str:
+        """Return the permalink for a Canvas file."""
+        ...
+
+    async def file_permalink(self, *, bot_token: str, file_id: str) -> str | None:
+        """Return a Slack file permalink suitable for Canvas markdown."""
+        ...
+
 
 class SlackWebClient:
     """Production Slack Web API adapter backed by slack-sdk AsyncWebClient."""
@@ -125,3 +157,67 @@ class SlackWebClient:
         client = AsyncWebClient(token=bot_token)
         resp = await client.conversations_open(users=users)
         return dict(resp.data or {})
+
+    async def upload_file(self, *, bot_token: str, filename: str, content: bytes) -> str:
+        client = AsyncWebClient(token=bot_token)
+        resp = await client.files_upload_v2(filename=filename, content=content)
+        return _file_id(dict(resp.data or {}))
+
+    async def create_canvas(self, *, bot_token: str, title: str, markdown: str) -> str:
+        client = AsyncWebClient(token=bot_token)
+        resp = await client.canvases_create(
+            title=title,
+            document_content={"type": "markdown", "markdown": markdown},
+        )
+        data = dict(resp.data or {})
+        canvas_id = data.get("canvas_id")
+        if not canvas_id:
+            raise SlackApiError("canvas_id missing", data)
+        return str(canvas_id)
+
+    async def grant_canvas_read(
+        self,
+        *,
+        bot_token: str,
+        canvas_id: str,
+        channel_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        client = AsyncWebClient(token=bot_token)
+        if user_id:
+            await client.canvases_access_set(canvas_id=canvas_id, access_level="read", user_ids=[user_id])
+            return
+        if not channel_id:
+            raise SlackApiError("canvas access target missing", {"error": "invalid_arguments"})
+        await client.canvases_access_set(canvas_id=canvas_id, access_level="read", channel_ids=[channel_id])
+
+    async def canvas_permalink(self, *, bot_token: str, canvas_id: str) -> str:
+        client = AsyncWebClient(token=bot_token)
+        resp = await client.files_info(file=canvas_id)
+        data = dict(resp.data or {})
+        permalink = (data.get("file") or {}).get("permalink")
+        if not permalink:
+            raise SlackApiError("canvas permalink missing", data)
+        return str(permalink)
+
+    async def file_permalink(self, *, bot_token: str, file_id: str) -> str | None:
+        client = AsyncWebClient(token=bot_token)
+        try:
+            resp = await client.files_info(file=file_id)
+        except SlackApiError as exc:
+            logger.warning("Slack files.info failed for %s: %s", file_id, exc)
+            return None
+        file_obj = dict(resp.data or {}).get("file") or {}
+        return file_obj.get("permalink") or file_obj.get("url_private")
+
+
+def _file_id(data: dict[str, Any]) -> str:
+    file_obj = data.get("file") or {}
+    file_id = file_obj.get("id")
+    if not file_id:
+        files = data.get("files") or []
+        if files:
+            file_id = files[0].get("id")
+    if not file_id:
+        raise SlackApiError("file id missing", data)
+    return str(file_id)

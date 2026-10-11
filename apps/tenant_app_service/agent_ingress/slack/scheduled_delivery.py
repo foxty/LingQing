@@ -7,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.config import get_settings
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, SlackWebClient
-from apps.tenant_app_service.agent_ingress.slack.domain import format_reply_for_slack
 from apps.tenant_app_service.agent_ingress.slack.feedback_delivery import (
     post_slack_reply_with_feedback,
     resolve_feedback_message_id,
@@ -52,9 +51,7 @@ async def deliver_scheduled_agent_run_to_slack(
 
     from apps.shared.db.models import AgentIngressEndpoint
 
-    result = await db_session.execute(
-        select(AgentIngressEndpoint).where(AgentIngressEndpoint.id == link.endpoint_id)
-    )
+    result = await db_session.execute(select(AgentIngressEndpoint).where(AgentIngressEndpoint.id == link.endpoint_id))
     endpoint = result.scalar_one_or_none()
     if not endpoint or not endpoint.enabled:
         logger.debug(
@@ -65,11 +62,6 @@ async def deliver_scheduled_agent_run_to_slack(
         return False
 
     settings = get_settings()
-    formatted_text = format_reply_for_slack(
-        response_text,
-        portal_origin=settings.PORTAL_ORIGIN,
-        api_origin=settings.TENANT_APP_API_ORIGIN,
-    )
     thread_ts = slack_delivery_thread_ts(link.external_thread_key)
     bot_token = repo.decrypt_bot_token(endpoint)
     slack_client = client or SlackWebClient()
@@ -82,15 +74,29 @@ async def deliver_scheduled_agent_run_to_slack(
         thread_id=origin_thread_id,
     )
 
+    from apps.tenant_app_service.auth.repository import UserRepository
+
+    requester_role: str | None = None
+    membership = await UserRepository(db_session).get_user_membership(tenant_id, user_id)
+    if membership is not None:
+        requester_role = membership[0].role
+
     try:
         await post_slack_reply_with_feedback(
             client=slack_client,
             bot_token=bot_token,
             channel_id=link.external_channel_id,
-            text=formatted_text,
+            text=response_text,
             message_id=message_id,
             thread_ts=thread_ts,
             message_repo=message_repo,
+            portal_origin=settings.PORTAL_ORIGIN,
+            api_origin=settings.TENANT_APP_API_ORIGIN,
+            db_session=db_session,
+            tenant_id=tenant_id,
+            requester_user_id=user_id,
+            requester_role=requester_role,
+            agent_id=endpoint.agent_id,
         )
         logger.info(
             "Slack scheduled delivery succeeded: tenant=%s user=%s thread=%s channel=%s",

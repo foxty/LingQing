@@ -1,16 +1,6 @@
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
-
-const DOCUMENT_IMAGE_PATH =
-  /^(?:\/api)?\/documents\/\d+\/images\/[a-f0-9]{64}\.(?:png|jpe?g|gif|webp|tiff?|bmp)$/
-
-function documentImageApiPath(src: string): string | null {
-  const path = src.startsWith('http') ? new URL(src).pathname : src
-  if (!DOCUMENT_IMAGE_PATH.test(path)) {
-    return null
-  }
-  return path.replace(/^\/api/, '')
-}
+import { documentImageApiPath } from '@/lib/documentImagePath'
 
 export function AuthDocumentImage({ src, alt }: { src?: string; alt?: string }) {
   const [objectUrl, setObjectUrl] = useState<string | null>(null)

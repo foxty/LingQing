@@ -89,13 +89,17 @@ class SlackIdentitySourceRepository:
             .values(identity_source_id=team_source.id)
         )
         placeholder_identities = (
-            await self.db.execute(
-                select(ExternalIdentity).where(
-                    ExternalIdentity.tenant_id == tenant_id,
-                    ExternalIdentity.identity_source_id == placeholder.id,
+            (
+                await self.db.execute(
+                    select(ExternalIdentity).where(
+                        ExternalIdentity.tenant_id == tenant_id,
+                        ExternalIdentity.identity_source_id == placeholder.id,
+                    )
                 )
             )
-        ).scalars().all()
+            .scalars()
+            .all()
+        )
         for identity in placeholder_identities:
             conflict = (
                 await self.db.execute(

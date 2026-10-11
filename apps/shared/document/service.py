@@ -356,8 +356,9 @@ class DocumentService(TenantAwareService):
         self,
         document_id: int,
         filename: str,
-        requester_id: int,
-        requester_role: str,
+        *,
+        actor: ActorContext,
+        delegated_ids: list[int] | None = None,
     ) -> DocumentImageFile:
         document_db = await self.document_repo.get_by_id_and_tenant(document_id, self.tenant_id)
         if not document_db:
@@ -365,8 +366,9 @@ class DocumentService(TenantAwareService):
 
         await self._collection_service.require_collection_access(
             collection_id=document_db.collection_id,
-            actor=self._actor(requester_id, requester_role, self.tenant_id),
+            actor=actor,
             action=ABAC_ACTION_READ,
+            delegated_ids=delegated_ids,
         )
 
         relative_key = document_image_relative_key(document_id, filename)

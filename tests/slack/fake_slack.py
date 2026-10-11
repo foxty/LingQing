@@ -24,10 +24,15 @@ class FakeSlackClient:
         self.posted_messages: list[dict[str, Any]] = []
         self.updated_messages: list[dict[str, Any]] = []
         self.opened_conversations: list[dict[str, Any]] = []
+        self.uploaded_files: list[dict[str, Any]] = []
+        self.canvases: list[dict[str, Any]] = []
+        self.canvas_grants: list[dict[str, Any]] = []
         self.auth_test_results: dict[str, dict[str, Any]] = {}
         self.users: dict[str, dict[str, Any]] = {}
         # default auth.test success
         self.default_auth_ok = True
+        self.fail_canvas = False
+        self.fail_upload = False
 
     # ---------- SlackClientPort implementation ----------
 
@@ -82,6 +87,36 @@ class FakeSlackClient:
         channel_id = f"D_{users}"
         self.opened_conversations.append({"users": users, "channel": channel_id})
         return {"ok": True, "channel": {"id": channel_id}}
+
+    async def upload_file(self, *, bot_token: str, filename: str, content: bytes) -> str:
+        if self.fail_upload:
+            raise RuntimeError("upload failed")
+        file_id = f"F{len(self.uploaded_files) + 1}"
+        self.uploaded_files.append({"filename": filename, "content": content, "file_id": file_id})
+        return file_id
+
+    async def create_canvas(self, *, bot_token: str, title: str, markdown: str) -> str:
+        if self.fail_canvas:
+            raise RuntimeError("canvas failed")
+        canvas_id = f"FCANVAS{len(self.canvases) + 1}"
+        self.canvases.append({"title": title, "markdown": markdown, "canvas_id": canvas_id})
+        return canvas_id
+
+    async def grant_canvas_read(
+        self,
+        *,
+        bot_token: str,
+        canvas_id: str,
+        channel_id: str | None = None,
+        user_id: str | None = None,
+    ) -> None:
+        self.canvas_grants.append({"canvas_id": canvas_id, "channel_id": channel_id, "user_id": user_id})
+
+    async def canvas_permalink(self, *, bot_token: str, canvas_id: str) -> str:
+        return f"https://slack.example/docs/{canvas_id}"
+
+    async def file_permalink(self, *, bot_token: str, file_id: str) -> str | None:
+        return f"https://slack.example/files/{file_id}"
 
     # ---------- Test helpers ----------
 

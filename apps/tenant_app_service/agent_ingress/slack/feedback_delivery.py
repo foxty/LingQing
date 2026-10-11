@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
+from sqlalchemy.ext.asyncio import AsyncSession
+
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort
-from apps.tenant_app_service.agent_ingress.slack.domain import split_long_text
-from apps.tenant_app_service.agent_ingress.slack.feedback_blocks import build_feedback_blocks
+from apps.tenant_app_service.agent_ingress.slack.markdown_blocks import SlackMarkdownPolicy
+from apps.tenant_app_service.agent_ingress.slack.markdown_delivery import deliver_markdown_to_slack
+from apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher import ImageFetcher
 from apps.tenant_app_service.chat.message_repository import MessageRepository
 
 
@@ -34,38 +37,39 @@ async def post_slack_reply_with_feedback(
     thread_ts: str | None,
     message_repo: MessageRepository,
     update_ts: str | None = None,
+    portal_origin: str | None = None,
+    api_origin: str | None = None,
+    slack_user_id: str | None = None,
+    channel_type: str | None = None,
+    policy: SlackMarkdownPolicy | None = None,
+    image_fetcher: ImageFetcher | None = None,
+    db_session: AsyncSession | None = None,
+    tenant_id: int | None = None,
+    requester_user_id: int | None = None,
+    requester_role: str | None = None,
+    agent_id: int | None = None,
 ) -> str | None:
-    """Post chunked Slack reply; attach feedback buttons on the final chunk."""
-    chunks = [chunk for chunk in split_long_text(text) if chunk.strip()]
-    if not chunks:
-        return None
-
-    posted_ts: str | None = None
-    pending_update_ts = update_ts
-
-    for index, chunk in enumerate(chunks):
-        is_last = index == len(chunks) - 1
-        blocks = build_feedback_blocks(chunk, message_id) if is_last and message_id else None
-
-        if pending_update_ts:
-            await client.chat_update(
-                bot_token=bot_token,
-                channel=channel_id,
-                ts=pending_update_ts,
-                text=chunk,
-                blocks=blocks,
-            )
-            posted_ts = pending_update_ts
-            pending_update_ts = None
-        else:
-            post_result = await client.chat_post_message(
-                bot_token=bot_token,
-                channel=channel_id,
-                text=chunk,
-                thread_ts=thread_ts,
-                blocks=blocks,
-            )
-            posted_ts = post_result.get("ts") if post_result else posted_ts
+    """Render agent Markdown to Slack blocks and attach feedback on the last message."""
+    posted_ts = await deliver_markdown_to_slack(
+        client=client,
+        bot_token=bot_token,
+        channel_id=channel_id,
+        markdown=text,
+        message_id=message_id,
+        thread_ts=thread_ts,
+        update_ts=update_ts,
+        portal_origin=portal_origin,
+        api_origin=api_origin,
+        slack_user_id=slack_user_id,
+        channel_type=channel_type,
+        policy=policy,
+        image_fetcher=image_fetcher,
+        db_session=db_session,
+        tenant_id=tenant_id,
+        requester_user_id=requester_user_id,
+        requester_role=requester_role,
+        agent_id=agent_id,
+    )
 
     if message_id and posted_ts:
         ai_message = await message_repo.get_message_by_message_id(message_id)

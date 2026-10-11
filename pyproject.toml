@@ -22,6 +22,7 @@ dependencies = [
     "bcrypt>=4.1.0",
     "python-dotenv>=1.0.1",
     "slack-sdk>=3.44.0",
+    "markdown-it-py>=4.0.0",
 ]
 
 

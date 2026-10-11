@@ -39,73 +39,45 @@ class SlackMessageKey(enum.StrEnum):
 _CATALOG: dict[str, dict[SlackMessageKey, str]] = {
     "en": {
         SlackMessageKey.INTEGRATION_DISABLED: (
-            "This agent's Slack integration is currently disabled. "
-            "Contact your admin to re-enable it in LingQing."
+            "This agent's Slack integration is currently disabled. Contact your admin to re-enable it in LingQing."
         ),
-        SlackMessageKey.SLACK_VERIFY_FAILED: (
-            "Could not reach Slack to verify your account. Please try again."
-        ),
-        SlackMessageKey.CHAT_PERMISSION_DENIED: (
-            "You don't have permission to chat with the agent."
-        ),
-        SlackMessageKey.EMPTY_MENTION_MESSAGE: (
-            "Please include a message after mentioning the bot."
-        ),
-        SlackMessageKey.LINKED_ACCOUNT_NOT_FOUND: (
-            "Your linked account could not be found."
-        ),
+        SlackMessageKey.SLACK_VERIFY_FAILED: ("Could not reach Slack to verify your account. Please try again."),
+        SlackMessageKey.CHAT_PERMISSION_DENIED: ("You don't have permission to chat with the agent."),
+        SlackMessageKey.EMPTY_MENTION_MESSAGE: ("Please include a message after mentioning the bot."),
+        SlackMessageKey.LINKED_ACCOUNT_NOT_FOUND: ("Your linked account could not be found."),
         SlackMessageKey.IDENTITY_PENDING: (
-            "Your Slack account is pending admin approval. "
-            "You'll be able to chat once an admin links it."
+            "Your Slack account is pending admin approval. You'll be able to chat once an admin links it."
         ),
-        SlackMessageKey.IDENTITY_DENIAL_GENERIC: (
-            "Your Slack account cannot be linked. Contact your admin."
-        ),
+        SlackMessageKey.IDENTITY_DENIAL_GENERIC: ("Your Slack account cannot be linked. Contact your admin."),
         SlackMessageKey.IDENTITY_MISSING_EMAIL: (
-            "We could not read an email address from your Slack profile. "
-            "Contact your admin."
+            "We could not read an email address from your Slack profile. Contact your admin."
         ),
         SlackMessageKey.IDENTITY_DOMAIN_NOT_ALLOWED: (
-            "Your Slack email domain is not allowed for this workspace. "
-            "Contact your admin."
+            "Your Slack email domain is not allowed for this workspace. Contact your admin."
         ),
         SlackMessageKey.IDENTITY_REJECT_UNKNOWN: (
-            "No LingQing account matches your Slack email. "
-            "Ask your admin to invite you with the same email address."
+            "No LingQing account matches your Slack email. Ask your admin to invite you with the same email address."
         ),
         SlackMessageKey.IDENTITY_EMAIL_COLLISION: (
-            "Your Slack email matches multiple LingQing accounts. "
-            "Contact your admin."
+            "Your Slack email matches multiple LingQing accounts. Contact your admin."
         ),
-        SlackMessageKey.IDENTITY_SUBJECT_REJECTED: (
-            "Your Slack account was previously rejected. Contact your admin."
-        ),
+        SlackMessageKey.IDENTITY_SUBJECT_REJECTED: ("Your Slack account was previously rejected. Contact your admin."),
         SlackMessageKey.CHAT_AGENT_ACCESS_DENIED: (
-            "You don't have permission to use this agent in LingQing. "
-            "Ask your admin to grant you access to this agent."
+            "You don't have permission to use this agent in LingQing. Ask your admin to grant you access to this agent."
         ),
         SlackMessageKey.CHAT_AUTHORIZATION_DENIED: (
-            "You don't have permission to complete this request. "
-            "Contact your admin if you believe this is a mistake."
+            "You don't have permission to complete this request. Contact your admin if you believe this is a mistake."
         ),
         SlackMessageKey.CHAT_AGENT_NOT_FOUND: (
-            "This agent is no longer available. "
-            "Ask your admin to check the Slack integration configuration."
+            "This agent is no longer available. Ask your admin to check the Slack integration configuration."
         ),
-        SlackMessageKey.CHAT_RESOURCE_NOT_FOUND: (
-            "The requested resource could not be found. Contact your admin."
-        ),
+        SlackMessageKey.CHAT_RESOURCE_NOT_FOUND: ("The requested resource could not be found. Contact your admin."),
         SlackMessageKey.CHAT_VALIDATION_FAILED: (
-            "Your request could not be processed. "
-            "Please check your message and try again, or contact your admin."
+            "Your request could not be processed. Please check your message and try again, or contact your admin."
         ),
-        SlackMessageKey.CHAT_GENERIC_FAILURE: (
-            "Sorry, I couldn't process that request. Please try again."
-        ),
+        SlackMessageKey.CHAT_GENERIC_FAILURE: ("Sorry, I couldn't process that request. Please try again."),
         SlackMessageKey.THINKING_PLACEHOLDER: "🤔 …",
-        SlackMessageKey.EMPTY_REPLY_FALLBACK: (
-            "The model returned no visible text. Please try again."
-        ),
+        SlackMessageKey.EMPTY_REPLY_FALLBACK: ("The model returned no visible text. Please try again."),
     },
 }
 
