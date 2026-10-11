@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Iterable
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +17,8 @@ from apps.tenant_app_service.agents.agent_config import AgentConfig
 class _ModelBindingSignature:
     tenant_id: int
     cache_profile_id: int | None
+    profile_updated_at: datetime | None
+    provider_updated_at: datetime | None
     temperature: float | None
     top_p: float | None
     max_tokens: int | None
@@ -57,9 +60,18 @@ class ModelBindingManager:
             tenant_id=tenant_id,
             db=db,
         )
+        profile_updated_at: datetime | None = None
+        provider_updated_at: datetime | None = None
+        if cache_profile_id is not None:
+            binding_service = LLMProviderConfigService(tenant_id, db)
+            profile_updated_at, provider_updated_at = await binding_service.get_profile_binding_timestamps(
+                cache_profile_id
+            )
         signature = self._build_signature(
             tenant_id=tenant_id,
             cache_profile_id=cache_profile_id,
+            profile_updated_at=profile_updated_at,
+            provider_updated_at=provider_updated_at,
             loaded_skills=skills,
             tools=tools,
         )
@@ -129,6 +141,8 @@ class ModelBindingManager:
         *,
         tenant_id: int,
         cache_profile_id: int | None,
+        profile_updated_at: datetime | None,
+        provider_updated_at: datetime | None,
         loaded_skills: list[str],
         tools: Iterable,
     ) -> _ModelBindingSignature:
@@ -136,6 +150,8 @@ class ModelBindingManager:
         return _ModelBindingSignature(
             tenant_id=tenant_id,
             cache_profile_id=cache_profile_id,
+            profile_updated_at=profile_updated_at,
+            provider_updated_at=provider_updated_at,
             temperature=self._agent_config.temperature,
             top_p=self._agent_config.top_p,
             max_tokens=self._agent_config.max_tokens,

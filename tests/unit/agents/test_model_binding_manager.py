@@ -1,5 +1,6 @@
 """Tests for ModelBindingManager registry resolution."""
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -43,6 +44,8 @@ async def test_get_or_create_resolves_profile_override():
     chat_model = MagicMock()
     chat_model.bind_tools.return_value = bound_model
 
+    binding_ts = (datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC))
+
     with (
         patch(
             "apps.tenant_app_service.agents.model_binding_manager.LLMProviderConfigService"
@@ -52,6 +55,7 @@ async def test_get_or_create_resolves_profile_override():
             return_value=chat_model,
         ) as create_chat_model,
     ):
+        service_cls.return_value.get_profile_binding_timestamps = AsyncMock(return_value=binding_ts)
         service_cls.return_value.resolve_for_agent = AsyncMock(return_value=resolved)
         result = await manager.get_or_create(
             model_profile_id=7,
@@ -77,6 +81,8 @@ async def test_get_or_create_caches_by_profile_id():
     chat_model = MagicMock()
     chat_model.bind_tools.return_value = MagicMock()
 
+    binding_ts = (datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC))
+
     with (
         patch(
             "apps.tenant_app_service.agents.model_binding_manager.LLMProviderConfigService"
@@ -86,6 +92,7 @@ async def test_get_or_create_caches_by_profile_id():
             return_value=chat_model,
         ),
     ):
+        service_cls.return_value.get_profile_binding_timestamps = AsyncMock(return_value=binding_ts)
         service_cls.return_value.resolve_for_agent = AsyncMock(return_value=resolved)
         first = await manager.get_or_create(
             model_profile_id=7,
@@ -104,6 +111,7 @@ async def test_get_or_create_caches_by_profile_id():
 
     assert first is second
     service_cls.return_value.resolve_for_agent.assert_awaited_once()
+    assert service_cls.return_value.get_profile_binding_timestamps.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -119,6 +127,8 @@ async def test_get_or_create_refreshes_when_tenant_default_changes():
         LLMDefaultsResponseDTO(agent_profile_id=9, mini_agent_profile_id=5, embedding_profile_id=1),
     ]
 
+    binding_ts = (datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC))
+
     with (
         patch(
             "apps.tenant_app_service.agents.model_binding_manager.LLMProviderConfigService"
@@ -128,6 +138,7 @@ async def test_get_or_create_refreshes_when_tenant_default_changes():
             return_value=chat_model,
         ) as create_chat_model,
     ):
+        service_cls.return_value.get_profile_binding_timestamps = AsyncMock(return_value=binding_ts)
         service_cls.return_value.get_defaults = AsyncMock(side_effect=defaults_responses)
         service_cls.return_value.resolve_for_agent = AsyncMock(side_effect=[first_resolved, second_resolved])
 
@@ -154,12 +165,56 @@ async def test_get_or_create_refreshes_when_tenant_default_changes():
 
 
 @pytest.mark.asyncio
+async def test_get_or_create_refreshes_when_provider_credentials_change():
+    manager = ModelBindingManager(_agent_config_mock(), MagicMock())
+    resolved = _resolved_config()
+    chat_model = MagicMock()
+    chat_model.bind_tools.side_effect = [MagicMock(name="first-bound"), MagicMock(name="second-bound")]
+    binding_responses = [
+        (datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC)),
+        (datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 3, tzinfo=UTC)),
+    ]
+
+    with (
+        patch(
+            "apps.tenant_app_service.agents.model_binding_manager.LLMProviderConfigService"
+        ) as service_cls,
+        patch(
+            "apps.tenant_app_service.agents.model_binding_manager.create_chat_model",
+            return_value=chat_model,
+        ) as create_chat_model,
+    ):
+        service_cls.return_value.get_profile_binding_timestamps = AsyncMock(side_effect=binding_responses)
+        service_cls.return_value.resolve_for_agent = AsyncMock(return_value=resolved)
+        first = await manager.get_or_create(
+            model_profile_id=7,
+            loaded_skills=[],
+            tools=[],
+            tenant_id=1,
+            db=AsyncMock(),
+        )
+        second = await manager.get_or_create(
+            model_profile_id=7,
+            loaded_skills=[],
+            tools=[],
+            tenant_id=1,
+            db=AsyncMock(),
+        )
+
+    assert first is not second
+    assert service_cls.return_value.resolve_for_agent.await_count == 2
+    assert create_chat_model.call_count == 2
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_scoped_by_tenant_id():
     manager = ModelBindingManager(_agent_config_mock(), MagicMock())
     tenant_one = _resolved_config(profile_id=5, model_id="tenant-one-model")
     tenant_two = _resolved_config(profile_id=5, model_id="tenant-two-model")
     chat_model = MagicMock()
     chat_model.bind_tools.side_effect = [MagicMock(name="tenant-one-bound"), MagicMock(name="tenant-two-bound")]
+
+    binding_ts = (datetime(2026, 1, 1, tzinfo=UTC), datetime(2026, 1, 2, tzinfo=UTC))
 
     with (
         patch(
@@ -170,6 +225,7 @@ async def test_get_or_create_scoped_by_tenant_id():
             return_value=chat_model,
         ),
     ):
+        service_cls.return_value.get_profile_binding_timestamps = AsyncMock(return_value=binding_ts)
         service_cls.return_value.get_defaults = AsyncMock(
             return_value=LLMDefaultsResponseDTO(
                 agent_profile_id=5,
