@@ -4,55 +4,67 @@ import DatabricksConnectionForm, {
   databricksConnectionSchema,
 } from '@/components/data-source/DatabricksConnectionForm'
 
-i18n.addResourceBundle('en', 'translation', {
-  components: {
-    addDataSourceDialog: {
-      title: 'Add Data Source',
-      editTitle: 'Edit Data Source',
-      createDescription: 'Connect a new data source for querying',
-      editDescription: 'Edit data source {{name}}',
-      typeChangeDisabled: 'Data source type cannot be changed after creation',
-      basicInfo: 'Basic Information',
-      name: 'Name',
-      namePlaceholder: 'My Data Source',
-      description: 'Description',
-      descPlaceholder: 'Optional description',
-      connectionConfig: 'Connection Configuration',
-      updateSuccess: 'Data source {{name}} updated successfully',
-      createSuccess: 'Data source created successfully',
-      saveFailed: 'Failed to save data source',
-      cancelConfirmTitle: 'Discard changes?',
-      cancelConfirmDesc: 'You have unsaved changes. Are you sure you want to discard them?',
-      continueEditing: 'Continue Editing',
-      discard: 'Discard',
+i18n.addResourceBundle(
+  'en',
+  'translation',
+  {
+    components: {
+      addDataSourceDialog: {
+        title: 'Add Data Source',
+        editTitle: 'Edit Data Source',
+        createDescription: 'Connect a new data source for querying',
+        editDescription: 'Edit data source {{name}}',
+        typeChangeDisabled: 'Data source type cannot be changed after creation',
+        basicInfo: 'Basic Information',
+        name: 'Name',
+        namePlaceholder: 'My Data Source',
+        description: 'Description',
+        descPlaceholder: 'Optional description',
+        connectionConfig: 'Connection Configuration',
+        updateSuccess: 'Data source {{name}} updated successfully',
+        createSuccess: 'Data source created successfully',
+        saveFailed: 'Failed to save data source',
+        cancelConfirmTitle: 'Discard changes?',
+        cancelConfirmDesc: 'You have unsaved changes. Are you sure you want to discard them?',
+        continueEditing: 'Continue Editing',
+        discard: 'Discard',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 
-i18n.addResourceBundle('zh', 'translation', {
-  components: {
-    addDataSourceDialog: {
-      title: '添加数据源',
-      editTitle: '编辑数据源',
-      createDescription: '连接新的数据源进行查询',
-      editDescription: '编辑数据源 {{name}}',
-      typeChangeDisabled: '数据源类型创建后不可更改',
-      basicInfo: '基本信息',
-      name: '名称',
-      namePlaceholder: '我的数据源',
-      description: '描述',
-      descPlaceholder: '可选描述',
-      connectionConfig: '连接配置',
-      updateSuccess: '数据源 {{name}} 更新成功',
-      createSuccess: '数据源创建成功',
-      saveFailed: '保存数据源失败',
-      cancelConfirmTitle: '放弃更改？',
-      cancelConfirmDesc: '你有未保存的更改，确定要放弃吗？',
-      continueEditing: '继续编辑',
-      discard: '放弃',
+i18n.addResourceBundle(
+  'zh',
+  'translation',
+  {
+    components: {
+      addDataSourceDialog: {
+        title: '添加数据源',
+        editTitle: '编辑数据源',
+        createDescription: '连接新的数据源进行查询',
+        editDescription: '编辑数据源 {{name}}',
+        typeChangeDisabled: '数据源类型创建后不可更改',
+        basicInfo: '基本信息',
+        name: '名称',
+        namePlaceholder: '我的数据源',
+        description: '描述',
+        descPlaceholder: '可选描述',
+        connectionConfig: '连接配置',
+        updateSuccess: '数据源 {{name}} 更新成功',
+        createSuccess: '数据源创建成功',
+        saveFailed: '保存数据源失败',
+        cancelConfirmTitle: '放弃更改？',
+        cancelConfirmDesc: '你有未保存的更改，确定要放弃吗？',
+        continueEditing: '继续编辑',
+        discard: '放弃',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 import RDBMSConnectionForm, {
   buildRDBMSConfig,
   rdbmsConnectionSchema,
@@ -116,8 +128,6 @@ const baseSchema = z.object({
   ssl: z.any().optional(),
   warehouse_id: z.any().optional(),
   http_path: z.any().optional(),
-  catalog: z.any().optional(),
-  schema: z.any().optional(),
 })
 
 // Helper function to get only base schema (parent only validates base fields)
@@ -143,8 +153,6 @@ const getDefaultValues = (dataSource?: DataSource | null) => {
       // Databricks fields
       warehouse_id: '',
       http_path: '',
-      catalog: '',
-      schema: '',
     }
   }
 
@@ -163,8 +171,6 @@ const getDefaultValues = (dataSource?: DataSource | null) => {
     // Databricks fields
     warehouse_id: dataSource.config?.extra_params?.warehouse_id || '',
     http_path: dataSource.config?.extra_params?.http_path || '',
-    catalog: dataSource.config?.extra_params?.catalog || '',
-    schema: dataSource.config?.extra_params?.schema || '',
   }
 }
 
@@ -256,8 +262,6 @@ export default function AddDataSourceDialog({
               password: '',
               warehouse_id: '',
               http_path: '',
-              catalog: '',
-              schema: '',
               // Clear RDBMS fields
               port: undefined,
               database: undefined,
@@ -275,8 +279,6 @@ export default function AddDataSourceDialog({
               // Clear Databricks fields
               warehouse_id: undefined,
               http_path: undefined,
-              catalog: undefined,
-              schema: undefined,
             }),
       },
       { keepDirty: false }
@@ -363,7 +365,11 @@ export default function AddDataSourceDialog({
       }
     } catch (error: any) {
       console.error('[AddDataSourceDialog] Submit error:', error)
-      showError(error.response?.data?.detail || error.message || t('components.addDataSourceDialog.saveFailed'))
+      showError(
+        error.response?.data?.detail ||
+          error.message ||
+          t('components.addDataSourceDialog.saveFailed')
+      )
     } finally {
       setSaving(false)
     }
@@ -403,7 +409,11 @@ export default function AddDataSourceDialog({
       <Dialog open={open} onOpenChange={handleCloseWithConfirm}>
         <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col">
           <DialogHeader>
-            <DialogTitle>{dataSource ? t('components.addDataSourceDialog.editTitle') : t('components.addDataSourceDialog.title')}</DialogTitle>
+            <DialogTitle>
+              {dataSource
+                ? t('components.addDataSourceDialog.editTitle')
+                : t('components.addDataSourceDialog.title')}
+            </DialogTitle>
             <DialogDescription>
               {dataSource
                 ? t('components.addDataSourceDialog.editDescription', { name: dataSource.name })
@@ -439,24 +449,27 @@ export default function AddDataSourceDialog({
                 ))}
               </div>
               {dataSource && (
-                <p className="text-xs text-muted-foreground">{t('components.addDataSourceDialog.typeChangeDisabled')}</p>
+                <p className="text-xs text-muted-foreground">
+                  {t('components.addDataSourceDialog.typeChangeDisabled')}
+                </p>
               )}
 
               {/* Basic Information */}
               <div className="space-y-2.5">
-                  <h3 className="text-sm font-semibold flex items-center gap-2">
-                    <InfoIcon className="w-4 h-4" />
-                    {t('components.addDataSourceDialog.basicInfo')}
-                  </h3>
+                <h3 className="text-sm font-semibold flex items-center gap-2">
+                  <InfoIcon className="w-4 h-4" />
+                  {t('components.addDataSourceDialog.basicInfo')}
+                </h3>
 
                 <div className="flex items-center gap-2">
                   <Label htmlFor="name" className="min-w-fit">
-                     {t('components.addDataSourceDialog.name')} <span className="text-destructive">*</span>
-                   </Label>
-                   <Input
-                     id="name"
-                     {...register('name')}
-                     placeholder={t('components.addDataSourceDialog.namePlaceholder')}
+                    {t('components.addDataSourceDialog.name')}{' '}
+                    <span className="text-destructive">*</span>
+                  </Label>
+                  <Input
+                    id="name"
+                    {...register('name')}
+                    placeholder={t('components.addDataSourceDialog.namePlaceholder')}
                     disabled={isSubmitting}
                     className="h-8 text-sm flex-1"
                     errorMsg={errors.name?.message as string}
@@ -465,12 +478,12 @@ export default function AddDataSourceDialog({
 
                 <div className="flex items-center gap-2">
                   <Label htmlFor="description" className="min-w-fit">
-                     {t('components.addDataSourceDialog.description')}
-                   </Label>
-                   <Input
-                     id="description"
-                     {...register('description')}
-                     placeholder={t('components.addDataSourceDialog.descPlaceholder')}
+                    {t('components.addDataSourceDialog.description')}
+                  </Label>
+                  <Input
+                    id="description"
+                    {...register('description')}
+                    placeholder={t('components.addDataSourceDialog.descPlaceholder')}
                     disabled={isSubmitting}
                     multiple
                     className="text-sm flex-1"
@@ -538,13 +551,17 @@ export default function AddDataSourceDialog({
       <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('components.addDataSourceDialog.cancelConfirmTitle')}</AlertDialogTitle>
+            <AlertDialogTitle>
+              {t('components.addDataSourceDialog.cancelConfirmTitle')}
+            </AlertDialogTitle>
             <AlertDialogDescription>
               {t('components.addDataSourceDialog.cancelConfirmDesc')}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('components.addDataSourceDialog.continueEditing')}</AlertDialogCancel>
+            <AlertDialogCancel>
+              {t('components.addDataSourceDialog.continueEditing')}
+            </AlertDialogCancel>
             <AlertDialogAction
               onClick={handleConfirmClose}
               className={buttonVariants({ variant: 'destructive' })}

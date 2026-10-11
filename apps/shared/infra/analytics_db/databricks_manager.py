@@ -97,12 +97,12 @@ class DatabricksManager(RelationalDBManager):
                 raise ConnectionError(f"Databricks API error: {message}")
             return data
 
-    async def _execute_sql(self, statement: str) -> list[list[Any]]:
-        response = await self._execute_sql_response(statement)
+    async def _execute_sql(self, statement: str, *, apply_session_namespace: bool = True) -> list[list[Any]]:
+        response = await self._execute_sql_response(statement, apply_session_namespace=apply_session_namespace)
         result = response.get("result", {})
         return result.get("data_array", [])
 
-    async def _execute_sql_response(self, statement: str) -> dict[str, Any]:
+    async def _execute_sql_response(self, statement: str, *, apply_session_namespace: bool = True) -> dict[str, Any]:
         if not self._warehouse_id:
             raise ConnectionError("Databricks warehouse_id is required to execute statements")
         payload: dict[str, Any] = {
@@ -111,10 +111,11 @@ class DatabricksManager(RelationalDBManager):
             "wait_timeout": "30s",
             "on_wait_timeout": "CONTINUE",
         }
-        if self._catalog:
-            payload["catalog"] = self._catalog
-        if self._schema:
-            payload["schema"] = self._schema
+        if apply_session_namespace:
+            if self._catalog:
+                payload["catalog"] = self._catalog
+            if self._schema:
+                payload["schema"] = self._schema
 
         response = await self._request("POST", "/api/2.0/sql/statements", payload)
         status = response.get("status", {})
@@ -286,6 +287,67 @@ class DatabricksManager(RelationalDBManager):
         escaped = str(value).replace("'", "''")
         return f"'{escaped}'"
 
+    def requires_search_query(self) -> bool:
+        return True
+
+    @staticmethod
+    def _contains_like(expression: str, token: str) -> str:
+        """Case-insensitive contains predicate with LIKE wildcards escaped.
+
+        The LIKE escape character is ``!``. A backslash escape would be consumed by
+        Databricks string literals and the following AND would fail to parse.
+        Backslashes in the token are doubled so they remain literal in the statement.
+        """
+        lowered = token.lower()
+        escaped = (
+            lowered.replace("\\", "\\\\").replace("!", "!!").replace("%", "!%").replace("_", "!_").replace("'", "''")
+        )
+        return f"LOWER({expression}) LIKE '%{escaped}%' ESCAPE '!'"
+
+    @classmethod
+    def _discovery_match_clause(cls, query: str | None) -> str | None:
+        """Match catalog, schema, and table. None means the query is too short to scan.
+
+        A single token matches any name part or the table comment.
+        Two dotted parts bind catalog then schema. Three or more bind catalog, schema, and table.
+        """
+        if not cls.search_query_is_runnable(query):
+            return None
+        assert query is not None
+        parts = [part for part in query.strip().split(".") if part]
+        if not parts:
+            return None
+        if len(parts) >= 3:
+            catalog, schema, table = parts[0], parts[1], ".".join(parts[2:])
+            return " AND ".join(
+                [
+                    cls._contains_like("table_catalog", catalog),
+                    cls._contains_like("table_schema", schema),
+                    cls._contains_like("table_name", table),
+                ]
+            )
+        if len(parts) == 2:
+            catalog, schema = parts
+            return " AND ".join(
+                [
+                    cls._contains_like("table_catalog", catalog),
+                    cls._contains_like("table_schema", schema),
+                ]
+            )
+        token = parts[0]
+        return (
+            "("
+            + " OR ".join(
+                [
+                    cls._contains_like("table_catalog", token),
+                    cls._contains_like("table_schema", token),
+                    cls._contains_like("table_name", token),
+                    cls._contains_like("COALESCE(comment, '')", token),
+                ]
+            )
+            + ")"
+        )
+
     async def discover_assets(
         self,
         query: str | None = None,
@@ -293,12 +355,12 @@ class DatabricksManager(RelationalDBManager):
     ) -> tuple[list[DiscoveredAsset], int]:
         """Discover tables and views from Unity Catalog.
 
-        Queries INFORMATION_SCHEMA.TABLES via the Statement Execution API to discover all
-        accessible tables and views. Returns fully qualified names in
-        catalog.schema.table format.
+        Searches INFORMATION_SCHEMA.TABLES across catalogs and schemas. A query shorter
+        than two characters returns no rows and does not scan the metastore. Results use
+        catalog.schema.table names. Stored connection catalog and schema are not filters.
 
         Args:
-            query: Optional search query
+            query: Search text matched against catalog, schema, table, and comment
             include_schema: Whether to include schema metadata
 
         Returns:
@@ -307,25 +369,17 @@ class DatabricksManager(RelationalDBManager):
         Raises:
             ValueError: If discovery fails
         """
+        match_clause = self._discovery_match_clause(query)
+        if match_clause is None:
+            return [], 0
+
         try:
-            catalog_filter = self.connection.extra_params.get("catalog") if self.connection.extra_params else None
-            schema_filter = self.connection.extra_params.get("schema") if self.connection.extra_params else None
-
-            where_clauses = ["table_type IN ('BASE TABLE', 'MANAGED', 'EXTERNAL', 'VIEW')"]
-
-            if catalog_filter:
-                safe_catalog = catalog_filter.replace("'", "''")
-                where_clauses.append(f"table_catalog = '{safe_catalog}'")
-            if schema_filter:
-                safe_schema = schema_filter.replace("'", "''")
-                where_clauses.append(f"table_schema = '{safe_schema}'")
-
-            if query:
-                safe_query = query.replace("'", "''").lower()
-                where_clauses.append(
-                    f"(LOWER(table_name) LIKE '%{safe_query}%' OR LOWER(COALESCE(comment, '')) LIKE '%{safe_query}%')"
-                )
-
+            where_clauses = [
+                "table_type IN ('BASE TABLE', 'MANAGED', 'EXTERNAL', 'VIEW')",
+                "table_catalog NOT IN ('system')",
+                "table_schema NOT IN ('information_schema')",
+                match_clause,
+            ]
             where_clause = " AND ".join(where_clauses)
 
             count_query = f"""
@@ -333,7 +387,7 @@ class DatabricksManager(RelationalDBManager):
             FROM system.information_schema.tables
             WHERE {where_clause}
             """
-            count_rows = await self._execute_sql(count_query)
+            count_rows = await self._execute_sql(count_query, apply_session_namespace=False)
             total = count_rows[0][0] if count_rows else 0
 
             limit_clause = f"LIMIT {EnvConfig.DISCOVERY_ASSET_LIMIT}"
@@ -351,7 +405,7 @@ class DatabricksManager(RelationalDBManager):
             {limit_clause}
             """
 
-            rows = await self._execute_sql(query_sql)
+            rows = await self._execute_sql(query_sql, apply_session_namespace=False)
 
             assets: list[DiscoveredAsset] = []
             for row in rows:
@@ -430,7 +484,7 @@ class DatabricksManager(RelationalDBManager):
             LIMIT 1
             """
 
-            rows = await self._execute_sql(query_sql)
+            rows = await self._execute_sql(query_sql, apply_session_namespace=False)
             if not rows:
                 return None
 
@@ -461,9 +515,7 @@ class DatabricksManager(RelationalDBManager):
 
         except Exception as e:
             self.logger.error(f"Databricks asset discovery failed for '{asset_name}': {e}")
-            raise ValueError(
-                f"Failed to discover asset '{asset_name}': {self._format_exception_message(e)}"
-            )
+            raise ValueError(f"Failed to discover asset '{asset_name}': {self._format_exception_message(e)}")
 
     @staticmethod
     def _format_exception_message(exc: Exception) -> str:
@@ -517,7 +569,7 @@ class DatabricksManager(RelationalDBManager):
 
             column_query = column_query.replace("WHERE table_name = :table_name", "WHERE " + " AND ".join(column_where))
 
-            column_rows = await self._execute_sql(column_query)
+            column_rows = await self._execute_sql(column_query, apply_session_namespace=False)
 
             # Get row count for tables only (skip for views - can be expensive)
             row_count = None

@@ -423,9 +423,7 @@ class DataSourceService(TenantAwareService):
 
         return get_db_manager_for_datasource(data_source)
 
-    async def create_data_source(
-        self, data_source_data: DataSourceCreate, owner_id: int
-    ) -> DataSourceResponse:
+    async def create_data_source(self, data_source_data: DataSourceCreate, owner_id: int) -> DataSourceResponse:
         """Create a new data source for the tenant.
 
         Args:
@@ -571,31 +569,35 @@ class DataSourceService(TenantAwareService):
         actor: ActorContext,
         query: str | None = None,
         include_schema: bool = True,
-    ) -> tuple[list[DiscoveredAsset], int]:
-        await self.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    ) -> tuple[list[DiscoveredAsset], int, bool]:
         """Discover available assets from a data source.
 
         Args:
             data_source_id: Data source ID
+            actor: Caller used for tenant access checks
             query: Optional search query
             include_schema: Whether to include schema metadata
 
         Returns:
-            Tuple of (assets, total)
+            Tuple of (assets, total, requires_query). requires_query is true when the
+            engine refuses an unscoped list and the query is too short to run.
 
         Raises:
             ValueError: If data source not found or discovery fails
         """
+        await self.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
         data_source = await self._get_data_source_domain(data_source_id)
         if not data_source:
             raise ValueError(f"Data source {data_source_id} not found")
 
         async with get_db_manager_for_datasource(data_source) as manager:
+            if manager.requires_search_query() and not manager.search_query_is_runnable(query):
+                return [], 0, True
             assets, total = await manager.discover_assets(
                 query=query,
                 include_schema=include_schema,
             )
-            return assets, total
+            return assets, total, False
 
     async def discover_assets_by_names_for_actor(
         self,

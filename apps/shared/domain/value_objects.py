@@ -144,11 +144,11 @@ class DatabaseConnectionVO:
         For Databricks:
         - host: Databricks workspace hostname (e.g., adb-xxx.azuredatabricks.net)
         - password: Personal access token for authentication
-        - extra_params: {warehouse_id or http_path, catalog, schema}
+        - extra_params: {warehouse_id or http_path, catalog (optional), schema (optional)}
             - warehouse_id: SQL warehouse ID (required for REST Statement API)
             - http_path: SQL warehouse HTTP path (required for SQLAlchemy URL)
-            - catalog: Optional default catalog name
-            - schema: Optional default schema name
+            - catalog: Optional session default catalog. Discovery searches across catalogs.
+            - schema: Optional session default schema. Discovery searches across schemas.
 
     One mode must be provided. If both exist, connection_url takes precedence.
     """
@@ -187,16 +187,14 @@ class DatabaseConnectionVO:
         - host: Databricks workspace hostname
         - password: Personal access token
         - extra_params['warehouse_id'] or extra_params['http_path']
-        - extra_params['catalog'] and extra_params['schema']
+
+        Catalog and schema are optional session defaults. Asset discovery is not limited to them.
         """
         if not self.password:
             raise ValueError("Databricks connection requires password (access token)")
 
         if not self.extra_params or not (self.extra_params.get("warehouse_id") or self.extra_params.get("http_path")):
             raise ValueError("Databricks connection requires extra_params with 'warehouse_id' or 'http_path'")
-
-        if not self.extra_params.get("catalog") or not self.extra_params.get("schema"):
-            raise ValueError("Databricks connection requires extra_params with 'catalog' and 'schema'")
 
     def _validate_standard_credentials(self) -> None:
         """Validate standard SQL database connection requirements.

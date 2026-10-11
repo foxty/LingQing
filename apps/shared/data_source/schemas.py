@@ -121,6 +121,10 @@ class DiscoverAssetsResponse(BaseModel):
 
     assets: list[DiscoveredAsset] = Field(..., description="List of discovered assets")
     total: int = Field(..., description="Total number of assets")
+    requires_query: bool = Field(
+        default=False,
+        description="True when the engine will not list assets until the caller searches",
+    )
 
 
 class DiscoverAssetsLightResponse(BaseModel):
@@ -204,5 +208,3 @@ class AssetSchemaResponse(BaseModel):
     columns: list[dict[str, Any]]
     row_count: int | None
     data_source_id: int
-
-

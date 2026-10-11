@@ -130,6 +130,7 @@ export interface DiscoverAssetsRequest {
 export interface DiscoverAssetsResponse {
   assets: DiscoveredAsset[]
   total: number
+  requires_query?: boolean
 }
 
 /**

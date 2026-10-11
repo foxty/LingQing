@@ -157,7 +157,7 @@ async def discover_assets(
         service = _create_data_source_service(db, current_user.tenant_id)
         actor = _actor_from_user(current_user)
 
-        assets, total = await service.discover_assets_for_actor(
+        assets, total, requires_query = await service.discover_assets_for_actor(
             data_source_id=data_source_id,
             actor=actor,
             query=query,
@@ -167,6 +167,7 @@ async def discover_assets(
         return DiscoverAssetsResponse(
             assets=assets,
             total=total,
+            requires_query=requires_query,
         )
 
     except ValueError as e:
