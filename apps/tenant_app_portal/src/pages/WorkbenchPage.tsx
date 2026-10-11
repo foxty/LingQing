@@ -25,6 +25,10 @@ import { PanelRight } from 'lucide-react'
 i18n.addResourceBundle('en', 'translation', {
   workbench: {
     createThreadFailed: 'Failed to create chat thread. Please try again.',
+    streamDisconnected:
+      'Connection lost while the agent was working. Waiting for the response…',
+    streamFailed: 'The agent could not finish this turn. Please try again.',
+    authRequired: 'Your session expired. Sign in again and retry.',
     openArtifacts: 'Open artifacts',
     untitledThread: 'Conversation',
     selectAgent: 'Agent',
@@ -36,6 +40,9 @@ i18n.addResourceBundle('en', 'translation', {
 i18n.addResourceBundle('zh', 'translation', {
   workbench: {
     createThreadFailed: '创建对话失败，请重试。',
+    streamDisconnected: '连接中断，智能体仍在后台处理，正在等待回复…',
+    streamFailed: '智能体未能完成本轮对话，请重试。',
+    authRequired: '登录已过期，请重新登录后再试。',
     openArtifacts: '打开产物',
     untitledThread: '对话',
     selectAgent: '智能体',

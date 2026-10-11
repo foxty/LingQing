@@ -5,6 +5,8 @@ import { useActiveSessionPoll } from '@/hooks/useActiveSessionPoll'
 import { useChatHistory } from '@/hooks/useChatHistory'
 import { useChatStream } from '@/hooks/useChatStream'
 import { shouldNavigateAfterStreamStart } from '@/lib/chatStream'
+import { SESSION_STATUS } from '@/lib/chatApi'
+import { isStreamTransportError } from '@/lib/streamErrors'
 import {
   getLatestMessageTimestamp,
   getLatestSessionWindow,
@@ -77,7 +79,13 @@ export function useWorkbenchChat({
     onEvent: (data, activeThreadId) => handleStreamEventRef.current(data, activeThreadId),
   })
 
-  const { isAgentWorking, notifyStreamStarted, notifyStreamFinished } = useActiveSessionPoll({
+  const {
+    isAgentWorking,
+    notifyStreamStarted,
+    notifyStreamFinished,
+    refreshStatus,
+    resumeSessionWatch,
+  } = useActiveSessionPoll({
     threadId: threadId || undefined,
     enabled: !!threadId,
     onHistoryRefresh: async () => {
@@ -85,6 +93,26 @@ export function useWorkbenchChat({
     },
     onHitlApprovedContinue: (proposalId) => handleHitlApprovedContinueRef.current(proposalId),
   })
+
+  const recoverFromStreamTransportLoss = useCallback(async () => {
+    resetStreamState()
+    const status = await refreshStatus()
+    if (status?.status === SESSION_STATUS.RUNNING) {
+      resumeSessionWatch()
+      return
+    }
+    notifyStreamFinished()
+    failStream(t('workbench.streamDisconnected'))
+    void refreshTail()
+  }, [
+    failStream,
+    notifyStreamFinished,
+    refreshStatus,
+    refreshTail,
+    resetStreamState,
+    resumeSessionWatch,
+    t,
+  ])
 
   handleStreamEventRef.current = async (data, activeThreadId) => {
     switch (data.type) {
@@ -129,8 +157,12 @@ export function useWorkbenchChat({
       }
       case 'error': {
         console.error('Stream error:', data.message)
+        if (isStreamTransportError(data.message ?? '')) {
+          await recoverFromStreamTransportLoss()
+          return
+        }
         notifyStreamFinished()
-        failStream(t('workbench.createThreadFailed'))
+        failStream(data.message?.trim() || t('workbench.streamFailed'))
         void refreshTail()
         return
       }
@@ -174,7 +206,7 @@ export function useWorkbenchChat({
 
       const token = localStorage.getItem('token')
       if (!token) {
-        failStream(t('workbench.createThreadFailed'))
+        failStream(t('workbench.authRequired'))
         return
       }
 
@@ -224,6 +256,11 @@ export function useWorkbenchChat({
         )
       } catch (error) {
         console.error('Error sending message:', error)
+        const message = error instanceof Error ? error.message : String(error)
+        if (isStreamTransportError(message)) {
+          await recoverFromStreamTransportLoss()
+          return
+        }
         notifyStreamFinished()
         resetStreamState()
       }
@@ -237,6 +274,7 @@ export function useWorkbenchChat({
       navigate,
       notifyStreamFinished,
       notifyStreamStarted,
+      recoverFromStreamTransportLoss,
       resetStreamState,
       runStream,
       showWorkingIndicator,

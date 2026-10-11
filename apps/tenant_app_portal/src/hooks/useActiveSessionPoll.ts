@@ -22,6 +22,7 @@ export function useActiveSessionPoll({
   const [isAgentWorking, setIsAgentWorking] = useState(false)
   const pollTimeoutRef = useRef<number | null>(null)
   const pollDelayRef = useRef(INITIAL_POLL_MS)
+  const pollLoopRef = useRef<(() => void) | null>(null)
   const autoContinueRef = useRef<string | null>(null)
   const lastStatusRef = useRef<SessionStatus | null>(null)
   const onHistoryRefreshRef = useRef(onHistoryRefresh)
@@ -130,13 +131,22 @@ export function useActiveSessionPoll({
       }
     }
 
+    pollLoopRef.current = () => {
+      void poll()
+    }
     void poll()
 
     return () => {
       cancelled = true
+      pollLoopRef.current = null
       clearPollTimeout()
     }
   }, [clearPollTimeout, enabled, refreshStatus, threadId])
+
+  const resumeSessionWatch = useCallback(() => {
+    pollDelayRef.current = INITIAL_POLL_MS
+    pollLoopRef.current?.()
+  }, [])
 
   const notifyStreamStarted = useCallback(() => {
     setIsAgentWorking(true)
@@ -157,5 +167,6 @@ export function useActiveSessionPoll({
     refreshStatus,
     notifyStreamStarted,
     notifyStreamFinished,
+    resumeSessionWatch,
   }
 }
