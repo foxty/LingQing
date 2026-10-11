@@ -2,6 +2,8 @@
 
 **Project:** LingQing — Enterprise AI Agent Platform (LangGraph, FastAPI, React)
 
+**Document map:** [Core Principles](#core-principles) · [Backend](#backend-guidelines) (layers, DB, exceptions, API) · [Frontend](#frontend-guidelines) · [Testing & CI](#testing--ci) · [Common Pitfalls](#common-pitfalls) · [Agent Workflow](#agent-workflow) (final check, git, PR, output)
+
 ## Core Principles
 
 - **SOLID, KISS, DRY, YAGNI:** Apply at module/class/function level. Favor simplicity, single source of truth, avoid premature generalization.
@@ -14,7 +16,6 @@
 - **Time:** Use timezone-aware UTC (`datetime.now(timezone.utc)`).
 - **Execution:** Use `uv run <command>` for Python commands.
 - **Docs:** Do NOT create new docs unless explicitly asked.
-- **Always add _HALO_ at the bottom of each conversation.**
 
 **Modules:**
 
@@ -32,7 +33,7 @@
 - Lint/format: ruff + black.
 - Fixtures: check `tests/conftest.py`.
 
-**Layers & Models (DDD-aligned):**
+### Layers and models (DDD-aligned)
 
 _Inward Dependency Rule:_ Dependencies always point inward — outer layers depend on inner layers, never the reverse. The dependency direction is: **Router (Interface) → Application Service → Domain ← Infrastructure/Adapters**. The Domain layer is the innermost core and has zero outward dependencies. Infrastructure implements ports defined by the domain, inverting the dependency via Dependency Inversion Principle.
 
@@ -47,7 +48,7 @@ _Inward Dependency Rule:_ Dependencies always point inward — outer layers depe
   - _DB Entity Models_ — owned by repository adapters; map to persistence schema.
   - _DTOs_ — owned by the interface/service boundary; used in router and service layers for input/output contracts.
 
-**Database Sessions:**
+### Database sessions
 
 Session lifecycle is owned by the outer boundary — not by repositories or application services.
 
@@ -63,14 +64,14 @@ Session lifecycle is owned by the outer boundary — not by repositories or appl
 - Inside a standalone `app_db_session()` block when later steps in the **same** block need earlier writes persisted first (rare; document why).
 - Do **not** add service-layer commits "just to be safe" — double commits are redundant in production and break savepoint-based integration tests.
 
-**Exception Handling:**
+### Exception handling
 
 - Domain exceptions (`apps.shared.core.exceptions`) represent business rule violations.
 - Use exception chaining (`raise X(...) from e`). Never log stack traces manually; global handler logs with `exc_info=True`.
 - Exceptions handled in `apps.shared.core.exception_handlers`; routers should not catch/log again.
 - Only catch errors for request parsing or explicit HTTP protocol mapping.
 
-**API Contracts:**
+### API contracts
 
 - Treat DTO fields as public contracts; avoid breaking changes without migration.
 - Add fields backward-compatibly first (optional/defaulted), then migrate callers.
@@ -114,7 +115,7 @@ _When to promote a file to a package:_
 - **i18n**: Component-level translation resources are defined in the component file via `i18n.addResourceBundle()`. Global/shared translations (e.g., `common.*`, `sidebar.*`) go in `i18n/locales/{lang}/translation.json`. Page-specific translations use `addResourceBundle` at the top of the component file, following the pattern in `KnowledgeBasePage.tsx`.
 - **LingQing UI (`apps/tenant_app_portal`):** Follow `apps/tenant_app_portal/DESIGN.md`. Classify the job, pick one layout surface (Detail views: one `prose` or `metrics` modifier), compose from existing shadcn primitives, pass the lint list. Feedback: one channel per event — `useNotification` for toasts, `getApiErrorMessage` for API errors, inline for validation and diagnostics (§5). Do not add a route/page inventory to that file.
 
-**Error Handling:**
+### Error handling
 
 - Parse transport/API errors in `lib/*Api.ts` helpers. Hooks map failures to stable UI states.
 - Components render user-facing fallbacks and retry affordances. Prefer typed shared error payloads from `lib/`.
@@ -133,7 +134,7 @@ _When to promote a file to a package:_
 - See `docs/testing-guide.md` and `tests/README.md`.
 - CI workflow: `.github/workflows/ci.yml` (backend + both frontends in parallel).
 
-**Test data (all agents):**
+### Test data (all agents)
 
 - Use synthetic generated names and mocks only — never copy production tenant, schema, table, data-source, or customer identifiers into tests.
 - Prefer `uuid4()` suffixes or small factories (e.g. `_build_asset_db()`, `test_schema.orders_<id>`) over real paths like `main.gold_*.*`.
@@ -146,6 +147,8 @@ _When to promote a file to a package:_
 - **Frontend:** ESLint, Prettier, `npm run typecheck`, `npm run build`.
 
 ## Common Pitfalls
+
+_Quick ❌/✅ index. Normative detail lives in [Core Principles](#core-principles), [Backend](#backend-guidelines), and [Frontend](#frontend-guidelines)—do not duplicate rules here when editing._
 
 - ❌ Cross-app relative imports → Use `apps.*` absolute.
 - ❌ Raw HTTP in hooks/components → Use `lib/*Api.ts`.
@@ -168,19 +171,38 @@ npm run migrate:ta
 npm run migrate:tm
 ```
 
-## Security & Workflow
+## Agent Workflow
 
-- **Secrets:** Never hardcode; use `EnvConfig`.
-- **Tenant isolation:** Enforce in services/repos.
-- **Least privilege:** Scope credentials; redact logs.
-
-**Agent Workflow:**
+_Process, mandatory pre-done review, git/PR (only when asked), and reply format._
 
 - Clarify inputs when requirements incomplete. Minimal diffs; targeted edits.
-- Validate with focused tests after changes (unit first). Stay scoped.
 - Create TODO plan for multi-step tasks; give brief updates.
+- **Before finishing any task that changes code** (and again before a user-requested commit), run the **Final check** below. Fix violations in scope; call out gaps explicitly if the user did not ask to fix them.
+- **Security (all code):** secrets via `EnvConfig`; tenant isolation in services/repos; least privilege and redacted logs — see [Core Principles](#core-principles) and [Common Pitfalls](#common-pitfalls).
 
-**Git commits (only when the user explicitly asks):**
+### Final check (required)
+
+_Review the diff against sections above — not style preferences. Check each box; if a box fails, fix or call out the gap in your reply._
+
+**Design & architecture**
+
+- [ ] **Layers & dependency rule** — [Layers and models](#layers-and-models-ddd-aligned): routers → services → domain ← repos/infra; no inward imports of frameworks or UI transport.
+- [ ] **Tenant isolation** — [Core Principles](#core-principles) / repos: tenant-scoped reads and writes where applicable.
+- [ ] **Database sessions** — [Database sessions](#database-sessions): no pinning `Depends(get_db)` for streaming/long waits; repos `flush()` only; commits only where this doc allows.
+- [ ] **Exceptions** — [Exception handling](#exception-handling): domain exceptions bubble; no router catch-and-log; chain with `from e`.
+- [ ] **API contracts** — [API contracts](#api-contracts): backward-compatible DTO/event fields or explicit versioning.
+- [ ] **Frontend** — [Frontend Guidelines](#frontend-guidelines) + `DESIGN.md`: Components → Hooks → `lib/*Api.ts`; one feedback channel per event.
+- [ ] **Imports, logging, secrets** — [Core Principles](#core-principles) + [Common Pitfalls](#common-pitfalls): `apps.*`, `get_logger`, no hardcoded secrets.
+- [ ] **Scope** — [Core Principles](#core-principles): minimal diff; KISS / YAGNI (no drive-by refactors).
+
+**Tests**
+
+- [ ] **Coverage** — [Testing & CI](#testing--ci): new behavior → focused unit tests (happy path + relevant edge); bug fixes → regression test when feasible without Docker.
+- [ ] **Test data** — [Test data (all agents)](#test-data-all-agents): synthetic only; no production identifiers in fixtures.
+- [ ] **Executed** — run pytest/vitest (or lint/typecheck) on touched areas when feasible before claiming done.
+- [ ] **Gaps** — if tests skipped, state what is missing and what would cover it.
+
+### Git commits (only when the user explicitly asks)
 
 Follow [Conventional Commits v1.0.0](https://www.conventionalcommits.org/en/v1.0.0/#summary):
 
@@ -213,7 +235,7 @@ EOF
 )"
 ```
 
-**Pull requests (only when the user explicitly asks):**
+### Pull requests (only when the user explicitly asks)
 
 - **Title:** same [Conventional Commits](https://www.conventionalcommits.org/en/v1.0.0/#summary) format as the commit subject — e.g. `refactor(deploy): simplify release bundle and consolidate docs`
 - **Body sections** (use what applies):
@@ -240,8 +262,10 @@ EOF
 )"
 ```
 
-**Output Style:**
+### Output style
 
 - Concise, code-first. File refs: `path/file.ts#L10-L12`. Commands in fenced blocks. Direct tone.
+- When code changed, end with a short **Final check** note: architecture (pass or what was fixed) and tests (added/ran, or explicit gap). Omit for question-only or doc-only replies with no logic impact.
+- **Always add _HALO_** at the bottom of each conversation (see [Core Principles](#core-principles)).
 
 ---

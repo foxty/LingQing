@@ -10,6 +10,7 @@ from uuid import uuid4
 
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from apps.shared.core.exceptions import DomainException
 from apps.shared.db.session import app_db_session
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.context import extract_runtime_context
@@ -18,6 +19,66 @@ from apps.tenant_app_service.chat.schemas import ChatRequest
 
 if TYPE_CHECKING:
     from apps.tenant_app_service.chat.service import ChatService
+
+# Keep bytes flowing during long LLM/tool gaps so proxies and browsers do not idle-close SSE.
+SSE_HEARTBEAT_INTERVAL_SECONDS = 20
+SSE_HEARTBEAT_PAYLOAD = ": ping\n\n"
+
+STREAM_ERROR_KIND_DOMAIN = "domain"
+STREAM_ERROR_KIND_RATE_LIMIT = "rate_limit"
+STREAM_ERROR_KIND_AUTH = "auth"
+STREAM_ERROR_KIND_TIMEOUT = "timeout"
+STREAM_ERROR_KIND_CONNECTION = "connection"
+STREAM_ERROR_KIND_INTERNAL = "internal"
+
+STREAM_ERROR_GENERIC_MESSAGE = "Something went wrong while processing your request. Please try again."
+
+
+def format_user_stream_error(error: BaseException) -> str:
+    """Map an exception to a short, user-safe stream error message."""
+    if isinstance(error, DomainException):
+        return error.message
+
+    error_message = str(error)
+    lowered = error_message.lower()
+    if "rate limit" in lowered:
+        return "Rate limit exceeded. Please try again in a moment."
+    if "api key" in lowered or "authentication" in lowered:
+        return "Configuration error: Invalid API credentials."
+    if "timeout" in lowered:
+        return "Request timed out. Please try again."
+    if "connection" in lowered:
+        return "Connection error. Please check your network and try again."
+    if error_message.strip():
+        return f"An error occurred: {error_message}"
+    return STREAM_ERROR_GENERIC_MESSAGE
+
+
+def stream_error_kind(error: BaseException) -> str:
+    """Stable category for clients that map errors to i18n (optional)."""
+    if isinstance(error, DomainException):
+        return STREAM_ERROR_KIND_DOMAIN
+
+    lowered = str(error).lower()
+    if "rate limit" in lowered:
+        return STREAM_ERROR_KIND_RATE_LIMIT
+    if "api key" in lowered or "authentication" in lowered:
+        return STREAM_ERROR_KIND_AUTH
+    if "timeout" in lowered:
+        return STREAM_ERROR_KIND_TIMEOUT
+    if "connection" in lowered:
+        return STREAM_ERROR_KIND_CONNECTION
+    return STREAM_ERROR_KIND_INTERNAL
+
+
+def user_stream_error_sse_payload(error: BaseException) -> dict[str, str]:
+    """Build SSE error event fields for a failed stream turn."""
+    return {
+        "type": "error",
+        "message": format_user_stream_error(error),
+        "error_code": type(error).__name__,
+        "error_kind": stream_error_kind(error),
+    }
 
 
 @dataclass
@@ -134,18 +195,7 @@ class ChatStreamingMixin:
             return f"data: {json.dumps(data)}\n\n"
         return None
 
-    @staticmethod
-    def _format_user_stream_error(error: Exception) -> str:
-        error_message = str(error)
-        if "rate limit" in error_message.lower():
-            return "Rate limit exceeded. Please try again in a moment."
-        if "api key" in error_message.lower() or "authentication" in error_message.lower():
-            return "Configuration error: Invalid API credentials."
-        if "timeout" in error_message.lower():
-            return "Request timed out. Please try again."
-        if "connection" in error_message.lower():
-            return "Connection error. Please check your network and try again."
-        return f"An error occurred: {error_message}"
+    _format_user_stream_error = staticmethod(format_user_stream_error)
 
     async def run_stream_turn(
         self: ChatService,
@@ -245,11 +295,7 @@ class ChatStreamingMixin:
                 exc,
                 exc_info=True,
             )
-            error_data = {
-                "type": "error",
-                "message": self._format_user_stream_error(exc),
-                "error_code": type(exc).__name__,
-            }
+            error_data = user_stream_error_sse_payload(exc)
             await event_queue.put(f"data: {json.dumps(error_data)}\n\n")
         finally:
             done_data = {"type": "done", "session_id": session_id}
@@ -343,7 +389,14 @@ class ChatStreamingMixin:
 
         try:
             while True:
-                item = await event_queue.get()
+                try:
+                    item = await asyncio.wait_for(
+                        event_queue.get(),
+                        timeout=SSE_HEARTBEAT_INTERVAL_SECONDS,
+                    )
+                except TimeoutError:
+                    yield SSE_HEARTBEAT_PAYLOAD
+                    continue
                 if item is None:
                     break
                 yield item
@@ -365,9 +418,7 @@ class ChatStreamingMixin:
         try:
             prepared = await self.prepare_chat_stream(request, current_user, access_token)
             session_id = prepared.session_id
-            async for item in self.iter_prepared_chat_stream(
-                request, current_user, prepared, access_token
-            ):
+            async for item in self.iter_prepared_chat_stream(request, current_user, prepared, access_token):
                 yield item
         except asyncio.CancelledError:
             raise
@@ -377,11 +428,7 @@ class ChatStreamingMixin:
                 f"Error streaming from agent {request.agent_id} for tenant {self.tenant_id}: {error_message}",
                 exc_info=True,
             )
-            error_data = {
-                "type": "error",
-                "message": self._format_user_stream_error(e),
-                "error_code": type(e).__name__,
-            }
+            error_data = user_stream_error_sse_payload(e)
             yield f"data: {json.dumps(error_data)}\n\n"
             done_data = {"type": "done", "session_id": session_id}
             yield f"data: {json.dumps(done_data)}\n\n"

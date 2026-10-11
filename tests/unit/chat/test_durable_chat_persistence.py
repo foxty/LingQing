@@ -12,10 +12,30 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 
+from apps.shared.core.exceptions import ValidationError
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.service import ChatService
 from apps.tenant_app_service.chat.session_status import resolve_session_status
+from apps.tenant_app_service.chat.streaming import (
+    PreparedChatStream,
+    SSE_HEARTBEAT_PAYLOAD,
+    STREAM_ERROR_KIND_DOMAIN,
+    STREAM_ERROR_KIND_RATE_LIMIT,
+    STREAM_ERROR_KIND_TIMEOUT,
+    format_user_stream_error,
+    stream_error_kind,
+    user_stream_error_sse_payload,
+)
+
+
+def _parse_sse_data_payloads(chunks: list[str]) -> list[dict]:
+    payloads: list[dict] = []
+    for item in chunks:
+        if not item.startswith("data: "):
+            continue
+        payloads.append(json.loads(item.removeprefix("data: ").strip()))
+    return payloads
 
 
 @pytest.fixture
@@ -63,9 +83,7 @@ async def test_cancel_superseded_hitl_on_normal_send(chat_service, chat_request)
     with patch("apps.tenant_app_service.hitl.service.HitlApprovalService") as svc_cls:
         svc_cls.return_value.cancel_superseded_pending_for_thread = AsyncMock(return_value=1)
         await chat_service._cancel_superseded_hitl_if_needed(chat_request)
-        svc_cls.return_value.cancel_superseded_pending_for_thread.assert_awaited_once_with(
-            chat_request.thread_id
-        )
+        svc_cls.return_value.cancel_superseded_pending_for_thread.assert_awaited_once_with(chat_request.thread_id)
 
 
 @pytest.mark.asyncio
@@ -471,14 +489,87 @@ async def test_chat_stream_delivers_background_events(chat_service, chat_request
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
         patch.object(chat_service, "_run_agent_and_emit", side_effect=fake_run_agent_and_emit),
     ):
-        events = []
+        chunks = []
         async for item in chat_service.chat_stream(chat_request, current_user):
-            events.append(json.loads(item.removeprefix("data: ").strip()))
+            chunks.append(item)
 
         await asyncio.wait_for(background_started.wait(), timeout=1)
 
+    events = _parse_sse_data_payloads(chunks)
     assert events[0]["type"] == "session_started"
     assert any(event["type"] == "done" for event in events)
+
+
+@pytest.mark.asyncio
+async def test_chat_stream_emits_heartbeat_while_agent_is_idle(chat_service, chat_request, current_user):
+    prepared = PreparedChatStream(
+        session_id="session-heartbeat",
+        agent_id=-1,
+        agent_name="AgentOne",
+        initial_messages=[],
+        thread_title=None,
+    )
+
+    async def fake_run_agent_and_emit(**kwargs):
+        await asyncio.Event().wait()
+
+    chunks: list[str] = []
+
+    async def collect_stream():
+        async for item in chat_service.iter_prepared_chat_stream(
+            chat_request,
+            current_user,
+            prepared,
+        ):
+            chunks.append(item)
+
+    with (
+        patch.object(chat_service, "_run_agent_and_emit", side_effect=fake_run_agent_and_emit),
+        patch(
+            "apps.tenant_app_service.chat.streaming.SSE_HEARTBEAT_INTERVAL_SECONDS",
+            0.05,
+        ),
+    ):
+        consumer = asyncio.create_task(collect_stream())
+        await asyncio.sleep(0.12)
+        consumer.cancel()
+        await consumer
+
+    assert SSE_HEARTBEAT_PAYLOAD in chunks
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_message"),
+    [
+        (ValidationError("Thread is locked"), "Thread is locked"),
+        (RuntimeError("429 rate limit exceeded for model"), "Rate limit exceeded. Please try again in a moment."),
+        (RuntimeError("Connection timeout while calling provider"), "Request timed out. Please try again."),
+        (RuntimeError(""), "Something went wrong while processing your request. Please try again."),
+    ],
+)
+def test_format_user_stream_error_maps_known_failures(error, expected_message):
+    assert format_user_stream_error(error) == expected_message
+
+
+@pytest.mark.parametrize(
+    ("error", "expected_kind"),
+    [
+        (ValidationError("nope"), STREAM_ERROR_KIND_DOMAIN),
+        (RuntimeError("rate limit"), STREAM_ERROR_KIND_RATE_LIMIT),
+        (RuntimeError("read timeout"), STREAM_ERROR_KIND_TIMEOUT),
+    ],
+)
+def test_stream_error_kind_is_stable_for_clients(error, expected_kind):
+    assert stream_error_kind(error) == expected_kind
+
+
+def test_user_stream_error_sse_payload_includes_kind_and_code():
+    payload = user_stream_error_sse_payload(ValidationError("Bad input"))
+
+    assert payload["type"] == "error"
+    assert payload["message"] == "Bad input"
+    assert payload["error_code"] == "ValidationError"
+    assert payload["error_kind"] == STREAM_ERROR_KIND_DOMAIN
 
 
 def test_stream_event_to_sse_token():
