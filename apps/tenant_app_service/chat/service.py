@@ -679,10 +679,6 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
             domain.profile,
             assignable_skills=assignable_skills,
         )
-        allowed_tool_names = catalog.allowed_runtime_tool_names(
-            domain.profile,
-            assignable_skills=assignable_skills,
-        )
         default_tools = [one_tools.get(name, {"name": name}) for name in default_tool_names]
         preloaded = {
             **yaml_one,
