@@ -169,13 +169,18 @@ export default function MultiSelectField({
       ) : (
         <Popover open={open} onOpenChange={setOpen}>
           <PopoverTrigger asChild>
-            <button type="button" role="combobox" aria-expanded={open} className={triggerClassName}>
+            <div
+              role="combobox"
+              tabIndex={0}
+              aria-expanded={open}
+              className={cn(triggerClassName, 'cursor-pointer')}
+            >
               <SelectionSurface
                 selectedOptions={selectedOptions}
                 placeholder={placeholder}
                 onRemove={removeOption}
               />
-            </button>
+            </div>
           </PopoverTrigger>
           <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-2" align="start">
             {listContent}
