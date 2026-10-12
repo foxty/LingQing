@@ -8,8 +8,6 @@ from langchain_core.messages import HumanMessage, SystemMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.artifact.repository import ArtifactRepository
-from apps.shared.context_resource.domain import ContextResourceItem, ContextResourceKey
-from apps.shared.context_resource.service import ContextResourceSearchService
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import (
     AuthorizationError,
@@ -33,7 +31,6 @@ from apps.tenant_app_service.chat.repository import ThreadRepository
 from apps.tenant_app_service.chat.schemas import (
     ChatRequest,
     ChatResponse,
-    ContextResourceRef,
     Message,
     SessionStatusResponse,
     SimpleMessage,
@@ -391,10 +388,6 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
             )
 
         agent_id = await self._resolve_agent_id(request)
-        self.logger.info(
-            f"Chat request received - tenant: {self.tenant_id}, agent: {agent_id}, "
-            f"user: {current_user.username} (id: {current_user.id})"
-        )
 
         await self._cancel_superseded_hitl_if_needed(request)
 
@@ -402,14 +395,28 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
         tenant = await self._get_tenant_domain()
 
         agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
+        attachment_scope = None
+        if capability_profile is not None:
+            attachment_scope = {
+                "collections": capability_profile.allowed_collection_ids,
+                "data_sources": capability_profile.allowed_data_source_ids,
+                "api_connectors": capability_profile.allowed_api_connector_ids,
+            }
+        self.logger.info(
+            "Chat request received tenant=%s agent=%s user_id=%s attachment_scope=%s",
+            self.tenant_id,
+            agent_id,
+            current_user.id,
+            attachment_scope,
+        )
 
         # For HITL continuation, keep user message and add continuation signal to resume workflow.
         lc_messages = self._convert_to_langchain_messages([request.message])
-        lc_messages = await self._inject_selected_context_resources(
+        lc_messages = await self._inject_message_attachments(
             lc_messages,
-            request.selected_resource_ids,
-            thread_id=request.thread_id,
+            selected_artifact_ids=request.selected_artifact_ids,
             selected_artifact_id=request.selected_artifact_id,
+            current_user=current_user,
         )
 
         self.logger.debug(f"Converted message for tenant {request.tenant_id}, agent {agent_id}")
@@ -850,113 +857,111 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
                 exc_info=True,
             )
 
-    async def _inject_selected_context_resources(
+    async def _inject_message_attachments(
         self,
         lc_messages: list,
-        resource_refs: list[ContextResourceRef] | None,
         *,
-        thread_id: str | None,
-        selected_artifact_id: int | None,
+        selected_artifact_ids: list[int] | None = None,
+        selected_artifact_id: int | None = None,
+        current_user: UserDTO | None = None,
     ) -> list:
-        """Inject @mention context for the agent and persist display metadata on the human message."""
-        if resource_refs:
-            items = await self._resolve_context_resource_items(resource_refs)
-            context_msg = self._build_context_resources_system_message(items)
-            if context_msg:
-                lc_messages.insert(0, context_msg)
-            self._stamp_human_message_context_resources(lc_messages, items)
+        """Inject @mention artifact context for the agent."""
+        ids: list[int] = []
+        if selected_artifact_ids:
+            ids.extend(selected_artifact_ids)
+        elif selected_artifact_id is not None:
+            ids.append(selected_artifact_id)
+        if not ids:
+            return lc_messages
+        return await self._inject_selected_artifacts(
+            lc_messages,
+            ids,
+            current_user=current_user,
+        )
+
+    async def _inject_selected_artifacts(
+        self,
+        lc_messages: list,
+        artifact_ids: list[int],
+        *,
+        current_user: UserDTO | None,
+    ) -> list:
+        """Inject artifact continuity context from artifact record ids (not thread-scoped)."""
+        if not artifact_ids or current_user is None:
             return lc_messages
 
-        if selected_artifact_id and thread_id:
-            context_msg = await self._prepare_artifact_context_message(thread_id, selected_artifact_id)
-            if context_msg:
-                lc_messages.insert(0, context_msg)
+        from apps.shared.artifact.access import require_artifact_record_read
 
+        context_lines = [
+            "[Context] The user attached the following artifacts to continue working on:",
+        ]
+        metadata: list[dict] = []
+
+        for artifact_id in artifact_ids:
+            try:
+                record = await require_artifact_record_read(
+                    db=self.db,
+                    tenant_id=self.tenant_id,
+                    user_id=current_user.id,
+                    user_role=current_user.role,
+                    artifact_id=artifact_id,
+                )
+                artifact = db_artifact_to_domain(record)
+                context_lines.append(
+                    f"- Type: {artifact.artifact_type}, Title: {artifact.title}, "
+                    f"Artifact id: {artifact.id}, Resource id: {artifact.resource_id}, "
+                    f"URL: {artifact.url or 'n/a'}"
+                )
+                metadata.append(
+                    {
+                        "artifact_id": artifact.id,
+                        "artifact_type": artifact.artifact_type,
+                        "title": artifact.title or "Untitled",
+                        "resource_id": artifact.resource_id,
+                    }
+                )
+            except Exception as exc:
+                self.logger.warning(
+                    "Skipping inaccessible artifact %s for user %s: %s",
+                    artifact_id,
+                    current_user.id,
+                    exc,
+                )
+                context_lines.append(f"- artifact id={artifact_id}: not accessible")
+                metadata.append(
+                    {
+                        "artifact_id": artifact_id,
+                        "artifact_type": "unknown",
+                        "title": f"Artifact #{artifact_id}",
+                        "inaccessible": True,
+                    }
+                )
+
+        context_lines.append(
+            "Use the tools appropriate to each artifact type to inspect or update the underlying resource."
+        )
+        lc_messages.insert(0, SystemMessage(content="\n".join(context_lines)))
+        self._stamp_attached_artifacts(lc_messages, metadata)
         return lc_messages
 
     @staticmethod
-    def _stamp_human_message_context_resources(
-        lc_messages: list,
-        items: list[ContextResourceItem],
-    ) -> None:
-        """Attach resolved context resources to the latest human message for history display."""
+    def _stamp_attached_artifacts(lc_messages: list, items: list[dict]) -> None:
         if not items:
             return
-
-        summaries = [item.to_metadata_dict() for item in items]
+        chip_payload = [
+            {
+                "artifact_id": item["artifact_id"],
+                "artifact_type": item.get("artifact_type", "unknown"),
+                "title": item.get("title", "Untitled"),
+                "resource_type": item.get("artifact_type", "unknown"),
+                "resource_id": item["artifact_id"],
+            }
+            for item in items
+        ]
         for msg in reversed(lc_messages):
             if isinstance(msg, HumanMessage):
                 kwargs = dict(msg.additional_kwargs or {})
-                kwargs["context_resources"] = summaries
+                kwargs["attached_artifacts"] = chip_payload
                 msg.additional_kwargs = kwargs
                 return
 
-    async def _resolve_context_resource_items(
-        self, resource_refs: list[ContextResourceRef]
-    ) -> list[ContextResourceItem]:
-        """Resolve @mention refs via shared context resource service."""
-        service = ContextResourceSearchService(self.tenant_id, self.db)
-        keys = [
-            ContextResourceKey(resource_type=ref.resource_type, resource_id=ref.resource_id)
-            for ref in resource_refs
-        ]
-        return await service.resolve_by_refs(keys)
-
-    def _build_context_resources_system_message(
-        self, items: list[ContextResourceItem]
-    ) -> SystemMessage | None:
-        """Build a SystemMessage summarising @mention-selected resources for the agent."""
-        if not items:
-            return None
-
-        context_lines = [
-            "[Context] The user has attached the following resources to this message:",
-        ]
-
-        for item in items:
-            if item.resource_type == "asset" and item.subtitle and item.subtitle != "not found":
-                context_lines.append(
-                    f"- Type: asset, Title: {item.title}, Data Source: {item.subtitle}"
-                )
-            elif item.subtitle == "not found":
-                context_lines.append(f"- {item.resource_type} (id={item.resource_id}): not found")
-            else:
-                context_lines.append(f"- Type: {item.resource_type}, Title: {item.title}")
-
-        context_lines.append(
-            "Please use these resources as context when answering the user's question."
-        )
-        return SystemMessage(content="\n".join(context_lines))
-
-    async def _prepare_context_resources_message(
-        self, resource_refs: list[ContextResourceRef]
-    ) -> SystemMessage | None:
-        """Build a SystemMessage summarising all @mention-selected resources."""
-        try:
-            items = await self._resolve_context_resource_items(resource_refs)
-            self.logger.info(f"Injecting {len(items)} context resource(s) into chat")
-            return self._build_context_resources_system_message(items)
-        except Exception as e:
-            self.logger.error(
-                f"Failed to prepare context resources message: {e}",
-                exc_info=True,
-            )
-            return None
-
-    async def _prepare_artifact_context_message(self, thread_id: str, artifact_id: int) -> SystemMessage | None:
-        try:
-            artifact_model = await self.artifact_repo.get_by_id(artifact_id)
-            if not artifact_model or artifact_model.tenant_id != self.tenant_id:
-                self.logger.warning(f"Artifact {artifact_id} not found or inaccessible for thread {thread_id}")
-                return None
-
-            artifact = db_artifact_to_domain(artifact_model)
-
-            context_text = artifact.generate_context_message()
-
-            self.logger.info(f"Injecting artifact context: {artifact_id} - {artifact.title}")
-            return SystemMessage(content=context_text)
-
-        except Exception as e:
-            self.logger.error(f"Failed to prepare artifact context message: {e}", exc_info=True)
-            return None

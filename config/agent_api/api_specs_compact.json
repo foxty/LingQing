@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-08T07:49:00.790556+00:00",
+  "generated_at": "2026-10-12T08:51:26.402708+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -138,6 +138,34 @@
         ],
         "title": "AclShareResponse",
         "description": "ACL share row serialized for UI consumption."
+      },
+      "AgentAttachmentAccessItem": {
+        "properties": {
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "type": "integer",
+            "title": "Resource Id"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "can_read": {
+            "type": "boolean",
+            "title": "Can Read"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resource_type",
+          "resource_id",
+          "name",
+          "can_read"
+        ],
+        "title": "AgentAttachmentAccessItem"
       },
       "AgentCapabilityConfigDTO": {
         "properties": {
@@ -342,6 +370,13 @@
             "type": "boolean",
             "title": "Can Manage",
             "default": false
+          },
+          "attachment_access": {
+            "items": {
+              "$ref": "#/components/schemas/AgentAttachmentAccessItem"
+            },
+            "type": "array",
+            "title": "Attachment Access"
           }
         },
         "type": "object",
@@ -1569,6 +1604,100 @@
         "title": "Artifact",
         "description": "Artifact protocol DTO for tool/UI rendering."
       },
+      "ArtifactResponse": {
+        "properties": {
+          "type": {
+            "type": "string",
+            "title": "Type",
+            "description": "Type discriminator",
+            "default": "artifact"
+          },
+          "artifact_type": {
+            "type": "string",
+            "title": "Artifact Type",
+            "description": "Artifact type (dashboard, chart, etc.)"
+          },
+          "id": {
+            "type": "integer",
+            "title": "Id",
+            "description": "Artifact record ID"
+          },
+          "resource_id": {
+            "type": "integer",
+            "title": "Resource Id",
+            "description": "Underlying resource ID for ACL and deep links"
+          },
+          "url": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Url",
+            "description": "Artifact URL"
+          },
+          "title": {
+            "type": "string",
+            "title": "Title",
+            "description": "Artifact title"
+          },
+          "artifact_metadata": {
+            "additionalProperties": true,
+            "type": "object",
+            "title": "Artifact Metadata",
+            "description": "Additional metadata"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At",
+            "description": "Creation timestamp"
+          },
+          "owner_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Owner Username",
+            "description": "Canonical owner username"
+          },
+          "is_owner": {
+            "type": "boolean",
+            "title": "Is Owner",
+            "description": "Whether current user is the creator",
+            "default": true
+          },
+          "share_permission": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Share Permission",
+            "description": "Permission level if shared (read/write), None if owner"
+          }
+        },
+        "type": "object",
+        "required": [
+          "artifact_type",
+          "id",
+          "resource_id",
+          "title",
+          "created_at"
+        ],
+        "title": "ArtifactResponse",
+        "description": "Artifact response DTO shared across artifact/thread endpoints."
+      },
       "ArtifactType": {
         "type": "string",
         "enum": [
@@ -2317,13 +2446,13 @@
               }
             ],
             "title": "Selected Artifact Id",
-            "description": "Deprecated: use selected_resource_ids instead. Single artifact ID for backward compat."
+            "description": "Deprecated: use selected_artifact_ids. Single artifact record id."
           },
-          "selected_resource_ids": {
+          "selected_artifact_ids": {
             "anyOf": [
               {
                 "items": {
-                  "$ref": "#/components/schemas/ContextResourceRef"
+                  "type": "integer"
                 },
                 "type": "array"
               },
@@ -2331,8 +2460,8 @@
                 "type": "null"
               }
             ],
-            "title": "Selected Resource Ids",
-            "description": "Context resources selected via @mention to include as context for this message"
+            "title": "Selected Artifact Ids",
+            "description": "Artifact record ids from @mention (dashboard, report, app, etc.)"
           },
           "hitl_proposal_id": {
             "anyOf": [
@@ -2391,80 +2520,6 @@
         ],
         "title": "ChatResponse",
         "description": "Chat response model."
-      },
-      "ContextResourceItemDTO": {
-        "properties": {
-          "resource_type": {
-            "type": "string",
-            "title": "Resource Type",
-            "description": "Resource type: document, dashboard, report, scheduled_task, app, asset"
-          },
-          "resource_id": {
-            "type": "integer",
-            "title": "Resource Id",
-            "description": "Primary key of the resource"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "description": "Display name"
-          },
-          "subtitle": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Subtitle",
-            "description": "Optional secondary label"
-          }
-        },
-        "type": "object",
-        "required": [
-          "resource_type",
-          "resource_id",
-          "title"
-        ],
-        "title": "ContextResourceItemDTO",
-        "description": "Single context resource search hit."
-      },
-      "ContextResourceRef": {
-        "properties": {
-          "resource_type": {
-            "type": "string",
-            "title": "Resource Type",
-            "description": "Resource type: document, dashboard, report, scheduled_task, app, asset"
-          },
-          "resource_id": {
-            "type": "integer",
-            "title": "Resource Id",
-            "description": "Primary key of the resource"
-          }
-        },
-        "type": "object",
-        "required": [
-          "resource_type",
-          "resource_id"
-        ],
-        "title": "ContextResourceRef",
-        "description": "Reference to a context resource selected via @mention."
-      },
-      "ContextResourceSearchResponse": {
-        "properties": {
-          "items": {
-            "items": {
-              "$ref": "#/components/schemas/ContextResourceItemDTO"
-            },
-            "type": "array",
-            "title": "Items"
-          }
-        },
-        "type": "object",
-        "title": "ContextResourceSearchResponse",
-        "description": "Response envelope for context resource search."
       },
       "CreateAgentSlackIntegrationRequest": {
         "properties": {
@@ -8695,7 +8750,7 @@
     "GET_/apps/{app_id}/{environment}/embed": "get_live_app_embed_apps__app_id___environment__embed_get",
     "GET_/apps/{app_id}/{environment}/entry": "get_live_app_entry_apps__app_id___environment__entry_get",
     "GET_/apps/{app_id}/{environment}/{asset_path}": "get_live_app_asset_apps__app_id___environment___asset_path__get",
-    "GET_/context-resources/search": "search_context_resources_context_resources_search_get",
+    "GET_/artifacts/context-picker": "search_artifacts_for_context_picker_artifacts_context_picker_get",
     "GET_/dashboards": "list_dashboards_dashboards_get",
     "GET_/dashboards/{dashboard_id}": "get_dashboard_dashboards__dashboard_id__get",
     "GET_/dashboards/{dashboard_id}/filters/{filter_id}/options": "get_dashboard_filter_options_dashboards__dashboard_id__filters__filter_id__options_get",
@@ -14395,12 +14450,12 @@
         "idempotent": false
       }
     },
-    "search_context_resources_context_resources_search_get": {
-      "operation_key": "GET_/context-resources/search",
+    "search_artifacts_for_context_picker_artifacts_context_picker_get": {
+      "operation_key": "GET_/artifacts/context-picker",
       "method": "GET",
-      "path": "/context-resources/search",
-      "summary": "Search context resources by keyword",
-      "description": "Return keyword-matched resources for the current tenant.\n\nSearches across documents, dashboards, reports, scheduled tasks,\nlive apps, and data source assets. Results are grouped by type.\n\nAn empty query returns recent resources (limited per type) for the\n@mention picker initial state.",
+      "path": "/artifacts/context-picker",
+      "summary": "Search artifacts attachable via @mention in chat",
+      "description": "Return artifacts the user may read (owner or ACL), across all threads.",
       "request": {
         "query_params": [
           {
@@ -14408,13 +14463,12 @@
             "required": false,
             "schema": {
               "type": "string",
-              "minLength": 0,
               "maxLength": 200,
-              "description": "Search keyword",
+              "description": "Filter by artifact title",
               "default": "",
               "title": "Query"
             },
-            "description": "Search keyword"
+            "description": "Filter by artifact title"
           },
           {
             "name": "limit",
@@ -14423,18 +14477,21 @@
               "type": "integer",
               "maximum": 50,
               "minimum": 1,
-              "description": "Max results per resource type",
-              "default": 10,
+              "default": 20,
               "title": "Limit"
             },
-            "description": "Max results per resource type"
+            "description": ""
           }
         ]
       },
       "response": {
         "success_status": "200",
         "success_schema": {
-          "$ref": "#/components/schemas/ContextResourceSearchResponse"
+          "type": "array",
+          "items": {
+            "$ref": "#/components/schemas/ArtifactResponse"
+          },
+          "title": "Response Search Artifacts For Context Picker Artifacts Context Picker Get"
         },
         "error_statuses": [
           "422"

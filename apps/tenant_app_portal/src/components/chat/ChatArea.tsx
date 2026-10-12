@@ -61,6 +61,7 @@ import {
 } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
 import { Message, ContextResource } from '@/types'
+import type { ContextResourceScopeClip } from '@/lib/contextResourcesApi'
 import { Bot, Loader2, LockKeyhole, Send, Settings } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useChatScroll } from '@/hooks/useChatScroll'
@@ -81,6 +82,7 @@ interface ChatAreaProps {
   threadLoadError?: ThreadLoadError | null
   agentAccessRevoked?: boolean
   exampleQuestions?: string[]
+  contextResourceScopeClip?: ContextResourceScopeClip
 
   // Pagination
   hasMore?: boolean
@@ -106,6 +108,7 @@ export default function ChatArea({
   threadLoadError = null,
   agentAccessRevoked = false,
   exampleQuestions = [],
+  contextResourceScopeClip,
   hasMore = false,
   isLoadingMore = false,
   onLoadMore,
@@ -320,6 +323,7 @@ export default function ChatArea({
               onOpenChange={setPickerOpen}
               onSelect={handleResourceSelect}
               selectedIds={selectedIds}
+              scopeClip={contextResourceScopeClip}
             />
           </div>
 

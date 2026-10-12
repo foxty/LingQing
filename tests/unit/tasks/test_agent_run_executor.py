@@ -11,6 +11,24 @@ from apps.tenant_app_service.chat.schemas import ChatResponse, Message
 from apps.tenant_app_service.tasks.agent_run_executor import execute_agent_run_task
 
 
+def _patch_executor_auth(monkeypatch) -> None:
+    class FakeUserRepo:
+        def __init__(self, db):
+            pass
+
+        async def get_by_id_and_tenant(self, user_id, tenant_id):
+            return SimpleNamespace(role="member")
+
+    monkeypatch.setattr(
+        "apps.tenant_app_service.tasks.agent_run_executor.UserRepository",
+        FakeUserRepo,
+    )
+    monkeypatch.setattr(
+        "apps.tenant_app_service.tasks.agent_run_executor.preflight_agent_run",
+        AsyncMock(),
+    )
+
+
 def _task(**task_config) -> ScheduledTaskDomain:
     now = datetime.now(timezone.utc)
     return ScheduledTaskDomain(
@@ -65,6 +83,7 @@ async def test_execute_agent_run_task_returns_context(monkeypatch):
             )
 
     monkeypatch.setattr("apps.tenant_app_service.tasks.agent_run_executor.app_db_session", FakeSession)
+    _patch_executor_auth(monkeypatch)
     monkeypatch.setattr(
         "apps.tenant_app_service.tasks.agent_run_executor.ChatService",
         FakeChatService,
@@ -136,6 +155,7 @@ async def test_execute_agent_run_task_persists_origin_thread_when_missing(monkey
             )
 
     monkeypatch.setattr("apps.tenant_app_service.tasks.agent_run_executor.app_db_session", FakeSession)
+    _patch_executor_auth(monkeypatch)
     monkeypatch.setattr(
         "apps.tenant_app_service.tasks.agent_run_executor.ChatService",
         FakeChatService,
@@ -207,6 +227,7 @@ async def test_execute_agent_run_task_returns_failure_result(monkeypatch):
             raise RuntimeError("chat failed")
 
     monkeypatch.setattr("apps.tenant_app_service.tasks.agent_run_executor.app_db_session", FakeSession)
+    _patch_executor_auth(monkeypatch)
     monkeypatch.setattr(
         "apps.tenant_app_service.tasks.agent_run_executor.ChatService",
         FakeChatService,
@@ -253,6 +274,7 @@ async def test_execute_agent_run_task_failure_skips_delivery_without_origin_thre
             raise RuntimeError("chat failed")
 
     monkeypatch.setattr("apps.tenant_app_service.tasks.agent_run_executor.app_db_session", FakeSession)
+    _patch_executor_auth(monkeypatch)
     monkeypatch.setattr(
         "apps.tenant_app_service.tasks.agent_run_executor.ChatService",
         FakeChatService,

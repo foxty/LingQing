@@ -289,6 +289,16 @@ Response Generation → Message Saving → Streaming Response → User Output
 - **CI/CD**: GitHub Actions
 - **Monitoring**: Structured logging
 
+## Custom agent catalog and resource access
+
+Custom agents are **presets**: system prompt, tool/skill allowlist, and attached knowledge base (collection), data source, and API connector IDs. Sharing an agent grants **invoke** access only; it does not grant data access.
+
+Effective reads in chat, Slack, scheduled runs, and @mention context use **user RBAC/ABAC/ACL ∩ attachment IDs**. Scheduled `agent_run` preflight at **create**, **update**, and **execute** only verifies **agent invoke** access; data scope matches chat (intersection at tool/search time). Use `attachment_access` in the catalog API to surface gaps before scheduling.
+
+Chat **@mention** attaches **artifacts** the user can access (dashboard, report, app, etc.) via `GET /artifacts/context-picker`. Documents and tables are discovered through agent RAG tools only.
+
+**Rollout:** After deploy, users who relied on old delegated datascope need direct ACL grants on attached KB/DS/API resources; agent share alone is insufficient.
+
 ## Security Considerations
 
 ### 1. Authentication & Authorization
@@ -308,5 +318,3 @@ Response Generation → Message Saving → Streaming Response → User Output
 - **Sandboxing**: Code execution in isolated environments
 - **Permission Checks**: Tool-level permission validation
 - **Audit Logging**: Complete action auditing
-
-_HALO_

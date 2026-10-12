@@ -349,7 +349,7 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
         patch.object(chat_service, "_get_system_agent_graph", AsyncMock(return_value=MagicMock(get_name=lambda: "A"))),
         patch.object(
             chat_service,
-            "_inject_selected_context_resources",
+            "_inject_message_attachments",
             AsyncMock(side_effect=lambda msgs, *a, **k: msgs),
         ),
         patch.object(
@@ -389,7 +389,7 @@ async def test_chat_stream_skips_persist_for_hitl_continuation(chat_service, cha
         patch.object(chat_service, "_get_system_agent_graph", AsyncMock(return_value=MagicMock(get_name=lambda: "A"))),
         patch.object(
             chat_service,
-            "_inject_selected_context_resources",
+            "_inject_message_attachments",
             AsyncMock(side_effect=lambda msgs, *a, **k: msgs),
         ),
         patch.object(
@@ -424,7 +424,7 @@ async def test_chat_stream_sse_disconnect_leaves_background_running(chat_service
         patch.object(chat_service, "_get_system_agent_graph", AsyncMock(return_value=MagicMock(get_name=lambda: "A"))),
         patch.object(
             chat_service,
-            "_inject_selected_context_resources",
+            "_inject_message_attachments",
             AsyncMock(side_effect=lambda msgs, *a, **k: msgs),
         ),
         patch.object(
@@ -471,7 +471,7 @@ async def test_chat_stream_delivers_background_events(chat_service, chat_request
         patch.object(chat_service, "_get_system_agent_graph", AsyncMock(return_value=agent_graph)),
         patch.object(
             chat_service,
-            "_inject_selected_context_resources",
+            "_inject_message_attachments",
             AsyncMock(side_effect=lambda msgs, *a, **k: msgs),
         ),
         patch.object(

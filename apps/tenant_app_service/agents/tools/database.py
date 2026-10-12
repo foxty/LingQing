@@ -16,7 +16,7 @@ from apps.shared.data_source.repository import AssetMetadataRepository, DataSour
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.agents.context import delegated_data_source_ids, extract_runtime_context
+from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 
 logger = get_logger(__name__)
@@ -82,20 +82,7 @@ async def list_data_sources(config: RunnableConfig) -> ToolResult:
             )
             data_sources = await service.list_data_sources_for_actor(actor=actor)
             profile = runtime.capability_profile
-            attached_ids = delegated_data_source_ids(profile) or []
             by_id = {ds.id: ds for ds in data_sources}
-            for ds_id in attached_ids:
-                if ds_id in by_id:
-                    continue
-                try:
-                    extra = await service.require_read_access_for_actor(
-                        data_source_id=ds_id,
-                        actor=actor,
-                        delegated_ids=attached_ids,
-                    )
-                except (AuthorizationError, ResourceNotFoundError):
-                    continue
-                by_id[ds_id] = extra
             allowed = profile.allowed_data_source_ids if profile else None
             visible = list(by_id.values())
             if allowed is not None:
@@ -170,7 +157,6 @@ async def run_sql_query_on_datasource(
                     user_role=user_role,
                 ),
                 max_rows=MAX_QUERY_RESULT_ROWS,
-                delegated_ids=delegated_data_source_ids(profile),
             )
             logger.info(f"Query returned {len(df)} rows")
 

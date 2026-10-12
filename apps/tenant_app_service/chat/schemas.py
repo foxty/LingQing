@@ -36,15 +36,6 @@ class Message(BaseModel):
     message_metadata: dict[str, Any] | None = None  # Full message metadata
 
 
-class ContextResourceRef(BaseModel):
-    """Reference to a context resource selected via @mention."""
-
-    resource_type: str = Field(
-        ..., description="Resource type: document, dashboard, report, scheduled_task, app, asset"
-    )
-    resource_id: int = Field(..., description="Primary key of the resource")
-
-
 class ChatRequest(BaseModel):
     """Chat request model."""
 
@@ -55,11 +46,11 @@ class ChatRequest(BaseModel):
     stream: bool = False
     selected_artifact_id: int | None = Field(
         None,
-        description="Deprecated: use selected_resource_ids instead. Single artifact ID for backward compat.",
+        description="Deprecated: use selected_artifact_ids. Single artifact record id.",
     )
-    selected_resource_ids: list[ContextResourceRef] | None = Field(
+    selected_artifact_ids: list[int] | None = Field(
         None,
-        description="Context resources selected via @mention to include as context for this message",
+        description="Artifact record ids from @mention (dashboard, report, app, etc.)",
     )
     hitl_proposal_id: str | None = Field(None, description="Resolved HITL proposal id for continuation")
     hitl_action: Literal["approved"] | None = Field(

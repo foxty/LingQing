@@ -98,6 +98,7 @@ interface ResourceAclShareDialogProps {
   resourceType: AclShareResourceType
   resourceId: number
   resourceTitle: string
+  hint?: string
 }
 
 export default function ResourceAclShareDialog({
@@ -106,6 +107,7 @@ export default function ResourceAclShareDialog({
   resourceType,
   resourceId,
   resourceTitle,
+  hint,
 }: ResourceAclShareDialogProps) {
   const { t } = useTranslation()
   const { showError, showSuccess } = useNotification()
@@ -233,6 +235,7 @@ export default function ResourceAclShareDialog({
         </DialogHeader>
 
         <div className="space-y-4">
+          {hint ? <p className="text-sm text-muted-foreground">{hint}</p> : null}
           {canManage && (
             <div className="rounded-md border p-4">
               <div className="text-sm font-medium">{t('components.shareDialog.newShare')}</div>

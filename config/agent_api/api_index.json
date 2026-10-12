@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-08T07:49:00.790556+00:00",
+  "generated_at": "2026-10-12T08:51:26.402708+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -243,8 +243,8 @@
       "risk_level": "read"
     },
     {
-      "operation_key": "GET_/context-resources/search",
-      "summary": "Search context resources by keyword",
+      "operation_key": "GET_/artifacts/context-picker",
+      "summary": "Search artifacts attachable via @mention in chat",
       "risk_level": "read"
     },
     {

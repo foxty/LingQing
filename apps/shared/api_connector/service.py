@@ -46,7 +46,6 @@ from apps.shared.api_connector.schemas import (
     SyncSchemaSummaryDTO,
 )
 from apps.shared.authz.authz_query_builder import build_unified_resource_filter, evaluate_resource_action
-from apps.shared.authz.delegation import allows_delegated_read
 from apps.shared.core.exceptions import (
     AuthorizationError,
     DuplicateResourceError,
@@ -757,7 +756,6 @@ class ApiConnectorService:
         *,
         operation_uid: str,
         actor: ActorContext,
-        delegated_ids: list[int] | None = None,
     ) -> ApiOperationDomain:
         operation = await self.operation_repo.get_by_uid_and_tenant(operation_uid, self.tenant_id)
         if not operation:
@@ -767,7 +765,7 @@ class ApiConnectorService:
         if not connector:
             raise ResourceNotFoundError(f"Api operation not found: {operation_uid}")
 
-        allowed = await allows_delegated_read(
+        allowed = await evaluate_resource_action(
             db_session=self.db_session,
             tenant_id=self.tenant_id,
             user_id=actor.user_id,
@@ -776,7 +774,6 @@ class ApiConnectorService:
             resource_id=connector.id,
             resource_owner_id=connector.owner_id,
             action=ABAC_ACTION_READ,
-            delegated_ids=delegated_ids,
         )
         if not allowed:
             raise AuthorizationError("Access denied to API operation")
@@ -794,7 +791,6 @@ class ApiConnectorService:
         *,
         operation_id: int,
         actor: ActorContext,
-        delegated_ids: list[int] | None = None,
     ) -> tuple[ApiOperationDomain, ApiConnectorDomain]:
         """Fetch operation by internal DB id and return it with its connector info."""
         operation = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
@@ -805,7 +801,7 @@ class ApiConnectorService:
         if not connector:
             raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
 
-        allowed = await allows_delegated_read(
+        allowed = await evaluate_resource_action(
             db_session=self.db_session,
             tenant_id=self.tenant_id,
             user_id=actor.user_id,
@@ -814,7 +810,6 @@ class ApiConnectorService:
             resource_id=connector.id,
             resource_owner_id=connector.owner_id,
             action=ABAC_ACTION_READ,
-            delegated_ids=delegated_ids,
         )
         if not allowed:
             raise AuthorizationError("Access denied to API operation")

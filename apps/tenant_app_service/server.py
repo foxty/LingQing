@@ -35,7 +35,7 @@ from apps.tenant_app_service.routers import (
     auth,
     charts,
     chat,
-    context_resources,
+    artifact_context,
     dashboard,
     data_sources,
     document_collections,
@@ -121,7 +121,7 @@ app.include_router(document_sync.router)
 app.include_router(data_sources.router)
 app.include_router(api_connectors.router)
 app.include_router(search.router)
-app.include_router(context_resources.router)
+app.include_router(artifact_context.router)
 app.include_router(dashboard.router)
 app.include_router(charts.router)
 app.include_router(tags.router)

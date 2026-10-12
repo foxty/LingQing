@@ -17,7 +17,7 @@ from apps.shared.data_source.repository import AssetMetadataRepository, DataSour
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.agents.context import delegated_data_source_ids, extract_runtime_context
+from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 
 logger = get_logger(__name__)
@@ -227,7 +227,6 @@ async def create_chart_from_sql(
                     user_id=user_id,
                     user_role=user_role,
                 ),
-                delegated_ids=delegated_data_source_ids(profile),
             )
 
             if df.empty:

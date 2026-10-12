@@ -43,7 +43,7 @@ from apps.shared.api_connector.constants import (
 from apps.shared.api_connector.domain import ApiConnectorDomain
 from apps.shared.api_connector.repository import ApiConnectorRepository, ApiOperationIndexRepository
 from apps.shared.api_connector.schemas import ApiOperationCallParameters
-from apps.shared.authz.delegation import allows_delegated_read
+from apps.shared.authz.authz_query_builder import evaluate_resource_action
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import ABAC_ACTION_READ, RESOURCE_TYPE_API_CONNECTOR
@@ -143,19 +143,17 @@ class ApiConnectorExecutionService:
         operation_id: int,
         actor: ActorContext,
         parameters: ApiOperationCallParameters | None,
-        delegated_ids: list[int] | None = None,
     ) -> ApiExecutionResult:
         operation = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
         if not operation or operation.status != OPERATION_STATUS_ACTIVE:
             raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
-        return await self._execute_operation(operation, actor, parameters, delegated_ids=delegated_ids)
+        return await self._execute_operation(operation, actor, parameters)
 
     async def _execute_operation(
         self,
         operation,
         actor: ActorContext,
         parameters: ApiOperationCallParameters | None,
-        delegated_ids: list[int] | None = None,
     ) -> ApiExecutionResult:
         operation_domain = operation_entity_to_domain(operation)
 
@@ -165,7 +163,7 @@ class ApiConnectorExecutionService:
         # Convert to domain model with auto-decryption (cipher handles encrypted → decrypted)
         connector_domain = connector_entity_to_domain(connector, cipher=self.cipher)
 
-        allowed = await allows_delegated_read(
+        allowed = await evaluate_resource_action(
             db_session=self.db_session,
             tenant_id=self.tenant_id,
             user_id=actor.user_id,
@@ -174,7 +172,6 @@ class ApiConnectorExecutionService:
             resource_id=connector.id,
             resource_owner_id=connector.owner_id,
             action=ABAC_ACTION_READ,
-            delegated_ids=delegated_ids,
         )
         if not allowed:
             raise ResourceNotFoundError(f"Access denied to API connector: {connector.id}")

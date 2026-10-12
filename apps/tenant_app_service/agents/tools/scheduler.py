@@ -7,7 +7,7 @@ from langchain_core.tools import tool
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from apps.shared.authz.ta_permissions import TenantAppPermissions
-from apps.shared.core.exceptions import ResourceNotFoundError
+from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
 from apps.shared.notification.domain import NotificationChannelType, is_valid_notification_channel
@@ -368,6 +368,24 @@ async def schedule_task(
             if denied:
                 return denied
 
+            if resolved_task_type == TASK_TYPE_AGENT_RUN:
+                from apps.tenant_app_service.agents.agent_run_preflight import preflight_agent_run_task_config
+
+                actor = ActorContext(
+                    tenant_id=runtime.user.tenant_id,
+                    user_id=runtime.user.user_id,
+                    user_role=runtime.user.role,
+                )
+                try:
+                    await preflight_agent_run_task_config(
+                        db_session,
+                        tenant_id=runtime.user.tenant_id,
+                        actor=actor,
+                        task_config=resolved_task_config,
+                    )
+                except ValidationError as exc:
+                    return ToolResult.error_result(str(exc), code="AGENT_RUN_PREFLIGHT_FAILED")
+
             service = ScheduledTaskService.create(
                 tenant_id=runtime.user.tenant_id,
                 db_session=db_session,
@@ -521,6 +539,23 @@ async def update_scheduled_task(
                     )
             else:
                 next_run_at = task.next_run_at
+
+            effective_task_type = task_type or task.task_type
+            merged_task_config = dict(task.task_config or {})
+            if task_config is not None:
+                merged_task_config.update(task_config)
+            if effective_task_type == TASK_TYPE_AGENT_RUN:
+                from apps.tenant_app_service.agents.agent_run_preflight import preflight_agent_run_task_config
+
+                try:
+                    await preflight_agent_run_task_config(
+                        db_session,
+                        tenant_id=runtime.user.tenant_id,
+                        actor=_actor_ctx(runtime),
+                        task_config=merged_task_config,
+                    )
+                except ValidationError as exc:
+                    return ToolResult.error_result(str(exc), code="AGENT_RUN_PREFLIGHT_FAILED")
 
             task = await service.update_task_for_actor(
                 task_id=task_id,

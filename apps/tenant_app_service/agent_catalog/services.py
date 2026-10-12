@@ -58,6 +58,18 @@ from apps.tenant_app_service.agents.system_agent_config import TOOL_REGISTRY, ge
 
 logger = get_logger(__name__)
 
+_ATTACHMENT_MANAGE_PERM = {
+    RESOURCE_TYPE_DOCUMENT_COLLECTION: TenantAppPermissions.DOCUMENTS_MANAGE,
+    RESOURCE_TYPE_DATA_SOURCE: TenantAppPermissions.DATA_SOURCES_MANAGE,
+    RESOURCE_TYPE_API_CONNECTOR: TenantAppPermissions.API_CONNECTORS_MANAGE,
+}
+
+
+def _iter_profile_attachments(profile: AgentCapabilityProfile):
+    yield RESOURCE_TYPE_DOCUMENT_COLLECTION, profile.knowledge_base_ids, DocumentCollection
+    yield RESOURCE_TYPE_DATA_SOURCE, profile.data_source_ids, DataSource
+    yield RESOURCE_TYPE_API_CONNECTOR, profile.api_connector_ids, ApiConnector
+
 
 class AgentCatalogService(TenantAwareService):
     def __init__(self, tenant_id: int, db_session: AsyncSession):
@@ -357,28 +369,53 @@ class AgentCatalogService(TenantAwareService):
             if skill.scope == PERSONAL_SKILL_SCOPE:
                 raise ValidationError(f"Personal skill '{skill_name}' cannot be assigned to a shareable agent")
 
-        await self._require_readable_ids(
-            actor=actor,
-            resource_type=RESOURCE_TYPE_DOCUMENT_COLLECTION,
-            resource_ids=profile.knowledge_base_ids,
-            model=DocumentCollection,
-        )
-        await self._require_readable_ids(
-            actor=actor,
-            resource_type=RESOURCE_TYPE_DATA_SOURCE,
-            resource_ids=profile.data_source_ids,
-            model=DataSource,
-        )
-        await self._require_readable_ids(
-            actor=actor,
-            resource_type=RESOURCE_TYPE_API_CONNECTOR,
-            resource_ids=profile.api_connector_ids,
-            model=ApiConnector,
-        )
+        await self._require_profile_attachments_readable(profile, actor=actor)
         if profile.model_profile_id is not None:
             await LLMProviderConfigService(self.tenant_id, self.db_session).validate_agent_model_profile(
                 profile.model_profile_id
             )
+
+    async def _role_has_manage_for_attachment_type(
+        self,
+        actor: ActorContext,
+        resource_type: str,
+    ) -> bool:
+        return await role_has_permission(
+            db=self.db_session,
+            tenant_id=actor.tenant_id,
+            role_key=actor.user_role,
+            permission=_ATTACHMENT_MANAGE_PERM[resource_type],
+        )
+
+    async def _resource_name_and_owner_id(self, model, resource_id: int) -> tuple[str | None, int | None]:
+        name = await self.db_session.scalar(
+            select(model.name).where(model.tenant_id == self.tenant_id, model.id == resource_id)
+        )
+        owner_id = await self.db_session.scalar(
+            select(model.owner_id).where(model.tenant_id == self.tenant_id, model.id == resource_id)
+        )
+        return name, owner_id
+
+    async def _actor_can_read_attachment(
+        self,
+        *,
+        actor: ActorContext,
+        resource_type: str,
+        resource_id: int,
+        owner_id: int,
+        has_manage: bool,
+    ) -> bool:
+        return await evaluate_resource_action(
+            db_session=self.db_session,
+            tenant_id=self.tenant_id,
+            user_id=actor.user_id,
+            user_role=actor.user_role,
+            resource_type=resource_type,
+            resource_id=resource_id,
+            resource_owner_id=owner_id,
+            action=ABAC_ACTION_READ,
+            has_manage_permission=has_manage,
+        )
 
     async def _require_readable_ids(
         self,
@@ -388,36 +425,66 @@ class AgentCatalogService(TenantAwareService):
         resource_ids: list[int],
         model,
     ) -> None:
-        manage_perm = {
-            RESOURCE_TYPE_DOCUMENT_COLLECTION: TenantAppPermissions.DOCUMENTS_MANAGE,
-            RESOURCE_TYPE_DATA_SOURCE: TenantAppPermissions.DATA_SOURCES_MANAGE,
-            RESOURCE_TYPE_API_CONNECTOR: TenantAppPermissions.API_CONNECTORS_MANAGE,
-        }[resource_type]
-        has_manage = await role_has_permission(
-            db=self.db_session,
-            tenant_id=actor.tenant_id,
-            role_key=actor.user_role,
-            permission=manage_perm,
-        )
+        has_manage = await self._role_has_manage_for_attachment_type(actor, resource_type)
         for resource_id in resource_ids:
-            owner_id = await self.db_session.scalar(
-                select(model.owner_id).where(model.tenant_id == self.tenant_id, model.id == resource_id)
-            )
+            _, owner_id = await self._resource_name_and_owner_id(model, resource_id)
             if owner_id is None:
                 raise ValidationError(f"{resource_type} {resource_id} not found")
-            allowed = await evaluate_resource_action(
-                db_session=self.db_session,
-                tenant_id=self.tenant_id,
-                user_id=actor.user_id,
-                user_role=actor.user_role,
+            allowed = await self._actor_can_read_attachment(
+                actor=actor,
                 resource_type=resource_type,
                 resource_id=resource_id,
-                resource_owner_id=owner_id,
-                action=ABAC_ACTION_READ,
-                has_manage_permission=has_manage,
+                owner_id=owner_id,
+                has_manage=has_manage,
             )
             if not allowed:
                 raise AuthorizationError(f"Cannot assign {resource_type} {resource_id}")
+
+    async def _require_profile_attachments_readable(
+        self,
+        profile: AgentCapabilityProfile,
+        *,
+        actor: ActorContext,
+    ) -> None:
+        for resource_type, resource_ids, model in _iter_profile_attachments(profile):
+            await self._require_readable_ids(
+                actor=actor,
+                resource_type=resource_type,
+                resource_ids=resource_ids,
+                model=model,
+            )
+
+    async def build_attachment_access(
+        self,
+        profile: AgentCapabilityProfile,
+        *,
+        actor: ActorContext,
+    ) -> list:
+        from apps.tenant_app_service.agent_catalog.dtos import AgentAttachmentAccessItem
+
+        items: list[AgentAttachmentAccessItem] = []
+        for resource_type, resource_ids, model in _iter_profile_attachments(profile):
+            has_manage = await self._role_has_manage_for_attachment_type(actor, resource_type)
+            for resource_id in resource_ids:
+                name, owner_id = await self._resource_name_and_owner_id(model, resource_id)
+                can_read = False
+                if owner_id is not None:
+                    can_read = await self._actor_can_read_attachment(
+                        actor=actor,
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        owner_id=owner_id,
+                        has_manage=has_manage,
+                    )
+                items.append(
+                    AgentAttachmentAccessItem(
+                        resource_type=resource_type,
+                        resource_id=resource_id,
+                        name=str(name or resource_id),
+                        can_read=can_read,
+                    )
+                )
+        return items
 
     async def _to_response(
         self,
@@ -438,6 +505,7 @@ class AgentCatalogService(TenantAwareService):
             action=ABAC_ACTION_WRITE,
             has_manage_permission=has_manage,
         )
+        attachment_access = await self.build_attachment_access(domain.profile, actor=actor)
         return AgentResponse(
             id=domain.id,
             name=domain.name,
@@ -460,6 +528,7 @@ class AgentCatalogService(TenantAwareService):
             updated_at=domain.updated_at,
             can_write=can_write,
             can_manage=has_manage or domain.owner_id == actor.user_id,
+            attachment_access=attachment_access,
         )
 
     def _system_agent_response(self, *, actor: ActorContext | None) -> AgentResponse:

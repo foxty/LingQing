@@ -56,7 +56,6 @@ async def fetch_upload_block_bytes(
     tenant_id: int | None = None,
     user_id: int | None = None,
     user_role: str | None = None,
-    delegated_collection_ids: list[int] | None = None,
 ) -> bytes | None:
     """Load raster bytes for one ``_image_upload`` block."""
     source = block.get("source")
@@ -75,7 +74,6 @@ async def fetch_upload_block_bytes(
                 document_id,
                 filename,
                 actor=actor,
-                delegated_ids=delegated_collection_ids,
             )
         except Exception as exc:
             logger.warning("Slack document image read failed: %s", exc)
@@ -103,7 +101,6 @@ def make_slack_image_fetcher(
     tenant_id: int,
     user_id: int,
     user_role: str,
-    delegated_collection_ids: list[int] | None = None,
 ) -> ImageFetcher:
     """Build a fetcher that honors document ACL for the linked Slack user."""
 
@@ -114,7 +111,6 @@ def make_slack_image_fetcher(
             tenant_id=tenant_id,
             user_id=user_id,
             user_role=user_role,
-            delegated_collection_ids=delegated_collection_ids,
         )
 
     return fetch

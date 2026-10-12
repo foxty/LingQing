@@ -14,7 +14,10 @@ import {
   useState,
 } from 'react'
 import { ContextResource } from '@/types'
-import { searchContextResources } from '@/lib/contextResourcesApi'
+import {
+  searchContextResources,
+  type ContextResourceScopeClip,
+} from '@/lib/contextResourcesApi'
 import {
   FileText,
   BarChart3,
@@ -36,6 +39,8 @@ interface ResourcePickerPopoverProps {
   onSelect: (resource: ContextResource) => void
   /** Already-selected resource IDs to exclude from results */
   selectedIds: Set<string>
+  /** Optional KB/DS/API ID allowlists (intersect with user ACL in search API) */
+  scopeClip?: ContextResourceScopeClip
 }
 
 export interface ResourcePickerPopoverHandle {
@@ -64,7 +69,7 @@ const ResourcePickerPopover = forwardRef<
   ResourcePickerPopoverHandle,
   ResourcePickerPopoverProps
 >(function ResourcePickerPopover(
-  { inputValue, open, onOpenChange, onSelect, selectedIds },
+  { inputValue, open, onOpenChange, onSelect, selectedIds, scopeClip },
   ref
 ) {
   const [results, setResults] = useState<ContextResource[]>([])
@@ -88,7 +93,7 @@ const ResourcePickerPopover = forwardRef<
     const fetchResults = async () => {
       setLoading(true)
       try {
-        const response = await searchContextResources(searchTerm, 8)
+        const response = await searchContextResources(searchTerm, 8, scopeClip)
         const filtered = response.items.filter(
           (item) =>
             !selectedIds.has(`${item.resource_type}-${item.resource_id}`)
@@ -103,7 +108,7 @@ const ResourcePickerPopover = forwardRef<
     }
 
     fetchResults()
-  }, [open, searchTerm, selectedIds])
+  }, [open, searchTerm, selectedIds, scopeClip])
 
   const handleSelect = useCallback(
     (resource: ContextResource) => {

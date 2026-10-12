@@ -29,7 +29,7 @@ def _document_block() -> dict:
 async def test_fetch_upload_block_bytes_reads_document_via_service(monkeypatch):
     db = AsyncMock()
 
-    async def fake_read(self, document_id, filename, *, actor, delegated_ids=None):
+    async def fake_read(self, document_id, filename, *, actor):
         assert document_id == 7
         assert filename == f"{HASH}.png"
         assert actor.user_id == 42
@@ -94,41 +94,11 @@ async def test_default_image_fetcher_skips_document_blocks():
 
 
 @pytest.mark.asyncio
-async def test_fetch_upload_block_bytes_passes_delegated_collection_ids(monkeypatch):
-    delegated: list[int] | None = None
-
-    async def fake_read(self, document_id, filename, *, actor, delegated_ids=None):
-        nonlocal delegated
-        delegated = delegated_ids
-        return DocumentImageFile(content=PNG, media_type="image/png")
-
-    monkeypatch.setattr(
-        "apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher.DocumentService.read_document_image",
-        fake_read,
-    )
-    monkeypatch.setattr(
-        "apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher.get_file_storage",
-        lambda: MagicMock(),
-    )
-
-    await fetch_upload_block_bytes(
-        _document_block(),
-        db=AsyncMock(),
-        tenant_id=1,
-        user_id=42,
-        user_role="admin",
-        delegated_collection_ids=[99],
-    )
-
-    assert delegated == [99]
-
-
-@pytest.mark.asyncio
 async def test_make_slack_image_fetcher_delegates_to_document_service(monkeypatch):
     db = AsyncMock()
     calls: list[int] = []
 
-    async def fake_read(self, document_id, filename, *, actor, delegated_ids=None):
+    async def fake_read(self, document_id, filename, *, actor):
         calls.append(document_id)
         return DocumentImageFile(content=PNG, media_type="image/png")
 

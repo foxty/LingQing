@@ -9,8 +9,8 @@ from sqlalchemy.sql.elements import ColumnElement
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
+    evaluate_resource_action,
 )
-from apps.shared.authz.delegation import allows_delegated_read
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.base_service import TenantAwareService
@@ -119,7 +119,6 @@ class DocumentCollectionService(TenantAwareService):
         document_id: int,
         actor: ActorContext,
         action: AbacAction,
-        delegated_ids: list[int] | None = None,
     ) -> int:
         """Ensure the actor can access a document via its collection."""
         stmt = select(Document.collection_id).where(
@@ -133,7 +132,6 @@ class DocumentCollectionService(TenantAwareService):
             collection_id=collection_id,
             actor=actor,
             action=action,
-            delegated_ids=delegated_ids,
         )
         return collection_id
 
@@ -143,14 +141,13 @@ class DocumentCollectionService(TenantAwareService):
         collection_id: int,
         actor: ActorContext,
         action: AbacAction,
-        delegated_ids: list[int] | None = None,
     ) -> DocumentCollectionDomain:
         collection = await self._get_domain(collection_id)
         if collection is None:
             raise ResourceNotFoundError(f"Document collection {collection_id} not found")
 
         has_manage = await self.has_collections_manage_permission(actor=actor)
-        allowed = await allows_delegated_read(
+        allowed = await evaluate_resource_action(
             db_session=self.db_session,
             tenant_id=self.tenant_id,
             user_id=actor.user_id,
@@ -160,7 +157,6 @@ class DocumentCollectionService(TenantAwareService):
             resource_owner_id=collection.owner_id,
             action=action,
             has_manage_permission=has_manage,
-            delegated_ids=delegated_ids,
         )
         if not allowed:
             raise AuthorizationError("无权访问该文档集合")
@@ -172,7 +168,7 @@ class DocumentCollectionService(TenantAwareService):
         actor: ActorContext,
     ) -> tuple[bool, bool]:
         has_manage = await self.has_collections_manage_permission(actor=actor)
-        can_write = await allows_delegated_read(
+        can_write = await evaluate_resource_action(
             db_session=self.db_session,
             tenant_id=self.tenant_id,
             user_id=actor.user_id,
@@ -183,7 +179,7 @@ class DocumentCollectionService(TenantAwareService):
             action=ABAC_ACTION_WRITE,
             has_manage_permission=has_manage,
         )
-        can_manage = await allows_delegated_read(
+        can_manage = await evaluate_resource_action(
             db_session=self.db_session,
             tenant_id=self.tenant_id,
             user_id=actor.user_id,
