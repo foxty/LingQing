@@ -66,6 +66,32 @@ async def _require_artifact_access(
     raise AuthorizationError("Access denied")
 
 
+async def require_artifact_record_read(
+    *,
+    db: AsyncSession,
+    tenant_id: int,
+    user_id: int,
+    user_role: str,
+    artifact_id: int,
+) -> Artifact:
+    """Load an artifact row by record id and enforce read access on its underlying resource."""
+    stmt = select(Artifact).where(Artifact.id == artifact_id, Artifact.tenant_id == tenant_id)
+    result = await db.execute(stmt)
+    record = result.scalar_one_or_none()
+    if record is None:
+        raise ResourceNotFoundError(f"Artifact {artifact_id} not found")
+
+    guard = ArtifactAccessGuard(
+        db=db,
+        tenant_id=tenant_id,
+        user_id=user_id,
+        user_role=user_role,
+        artifact_type=record.artifact_type,
+    )
+    await guard.require_read(resource_id=record.resource_id)
+    return record
+
+
 class ArtifactAccessGuard:
     """Reusable guard for artifact read/write/owner-manage checks."""
 

@@ -248,8 +248,10 @@ class ConversationMemoryManager:
             metadata["capability_id"] = kwargs.pop("capability_id")
         if "capability_name" in kwargs:
             metadata["capability_name"] = kwargs.pop("capability_name")
-        if "context_resources" in kwargs:
-            metadata["context_resources"] = kwargs.pop("context_resources")
+        if "attached_artifacts" in kwargs:
+            metadata["attached_artifacts"] = kwargs.pop("attached_artifacts")
+        elif "context_resources" in kwargs:
+            metadata["attached_artifacts"] = kwargs.pop("context_resources")
 
         # Merge capability context
         if cap_context:
