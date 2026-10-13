@@ -11,7 +11,7 @@ import { useDocumentParsed } from '@/hooks/useDocuments'
 import { normalizeApiErrorPayload } from '@/lib/api'
 import type { ApiParsedBlock } from '@/lib/documentsApi'
 import { formatDate } from '@/lib/dateTime'
-import { AuthDocumentImage } from '@/components/chat/AuthDocumentImage'
+import { AuthenticatedDocumentImage } from '@/components/markdown/AuthenticatedDocumentImage'
 import type { Document } from '@/types'
 import { useTranslation } from 'react-i18next'
 
@@ -133,7 +133,7 @@ function ParsedBlock({ block, documentId }: { block: ApiParsedBlock; documentId:
     const filename = block.uri.split('/').pop() ?? ''
     return (
       <figure className="space-y-1">
-        <AuthDocumentImage
+        <AuthenticatedDocumentImage
           src={`/documents/${documentId}/images/${filename}`}
           alt={block.caption ?? ''}
         />

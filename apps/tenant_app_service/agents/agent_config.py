@@ -118,6 +118,13 @@ class AgentConfig:
         """
         sections: list[str] = []
 
+        if self._should_compose_platform_baseline():
+            from apps.tenant_app_service.agents.system_agent_config import get_config_loader
+
+            baseline = get_config_loader().get_platform_baseline_prompt().strip()
+            if baseline:
+                sections.append(baseline)
+
         agent_prompt = (self.system_prompt or "").strip()
         if agent_prompt:
             sections.append(agent_prompt)
@@ -134,6 +141,9 @@ class AgentConfig:
                     sections.append(loaded_msg)
 
         return "\n\n".join(section for section in sections if section).strip()
+
+    def _should_compose_platform_baseline(self) -> bool:
+        return self.get_config().get("prompt_mode", "platform") != "standalone"
 
     def _build_available_skills_prompt(self, runtime: AgentRuntimeContext) -> str:
         """Build an explicit Available Skills section from resolved skill metadata."""
@@ -217,18 +227,27 @@ class AgentConfig:
         merged = self.get_effective_base_tool_defs()
         skills = self.get_resolved_skills(runtime)
 
+        platform_specs = self._get_platform_tool_specs()
         for skill_name in loaded_skills:
             skill = skills.get(skill_name)
             if not skill:
                 continue
+            from apps.tenant_app_service.agents.platform_tools import skill_tool_configs_to_agent_tool_yaml
+
+            skill_tool_defs = skill_tool_configs_to_agent_tool_yaml(skill.tools, platform_specs)
             merged = resolve_effective_skill_tools(
                 default_tools=merged,
-                skill_tools=skill.tools,
+                skill_tools=skill_tool_defs,
                 tool_registry=self._get_tool_registry(),
                 strict_registry=True,
             )
 
         return merged
+
+    def _get_platform_tool_specs(self) -> dict[str, dict[str, Any]]:
+        from apps.tenant_app_service.agents.system_agent_config import get_config_loader
+
+        return get_config_loader().get_platform_tool_specs()
 
     def get_tool_config(
         self, loaded_skills: list[str], tool_name: str, runtime: AgentRuntimeContext

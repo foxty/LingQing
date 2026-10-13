@@ -110,6 +110,14 @@ def manager_factory(tmp_path):
 # === Tool Resolution Tests ===
 
 
+def test_loaded_skill_tools_inherit_platform_policy(manager_factory, mock_runtime):
+    """Platform hitl_test_echo limit (3) wins over skill limit (5) when both are merged."""
+    manager = manager_factory()
+    tool_config = manager.get_tool_config(["dashboard_builder"], "hitl_test_echo", mock_runtime)
+    assert tool_config is not None
+    assert tool_config.limit == 3
+
+
 def test_get_tools_for_skill_mapping(manager_factory, mock_runtime):
     manager = manager_factory()
 
@@ -391,6 +399,40 @@ def test_system_prompt_structure_ordering(manager_factory, mock_runtime):
     assert base_pos > -1
     assert base_pos < available_pos
     assert available_pos < loaded_pos
+
+
+def test_system_prompt_includes_platform_baseline_when_configured(tmp_path, mock_runtime, monkeypatch):
+    agents_yaml = tmp_path / "agents.yaml"
+    agents_yaml.write_text(
+        yaml.safe_dump(
+            {
+                "platform": {"system_prompt_baseline": "Platform baseline section"},
+                "system_agents": {
+                    "test_agent": {
+                        "agent_id": -1,
+                        "name": "Test Agent",
+                        "system_prompt": "Role prompt",
+                        "default_tools": [],
+                    }
+                },
+                "mini_agents": {},
+            },
+            sort_keys=False,
+        ),
+        encoding="utf-8",
+    )
+    loader = AgentConfigLoader(config_path=str(agents_yaml))
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agents.system_agent_config.get_config_loader",
+        lambda: loader,
+    )
+    manager = AgentConfig(load_yaml_agent_config(-1, config_loader=loader))
+    prompt = manager.get_system_prompt([], mock_runtime)
+    baseline_pos = prompt.find("Platform baseline section")
+    role_pos = prompt.find("Role prompt")
+    assert baseline_pos > -1
+    assert role_pos > -1
+    assert baseline_pos < role_pos
 
 
 def test_manager_loads_standard_skill_directory(tmp_path, mock_runtime):

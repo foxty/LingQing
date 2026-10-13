@@ -1,6 +1,6 @@
 import DocumentProse from '@/components/DocumentProse'
 import ReportHtmlContent from '@/components/ReportHtmlContent'
-import { ReportImage } from '@/components/ReportImage'
+import { MarkdownImage } from '@/components/markdown/MarkdownImage'
 import EmptyState from '@/components/EmptyState'
 import ResourceAclShareDialog from '@/components/ResourceAclShareDialog'
 import { Button } from '@/components/ui/button'
@@ -102,7 +102,7 @@ function createMarkdownComponents(pageTitle: string) {
       }
       return <h1 {...props}>{children}</h1>
     },
-    img: ({ src, alt }: { src?: string; alt?: string }) => <ReportImage src={src} alt={alt} />,
+    img: ({ src, alt }: { src?: string; alt?: string }) => <MarkdownImage src={src} alt={alt} />,
   }
 }
 

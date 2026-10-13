@@ -66,10 +66,10 @@ import { AiTurn, TurnProcessItem } from '@/lib/chatTurns'
 import ToolCallTimeline from './ToolCallTimeline'
 import HitlApprovalCard from './HitlApprovalCard'
 import MessageFeedbackButtons from './MessageFeedbackButtons'
-import { AuthDocumentImage } from './AuthDocumentImage'
+import { MarkdownImage } from '@/components/markdown/MarkdownImage'
 import type { MessageFeedback } from '@/types'
 
-const markdownComponents = { img: AuthDocumentImage }
+const markdownComponents = { img: MarkdownImage }
 
 type ToolProcessItem = Extract<TurnProcessItem, { type: 'tool' }>
 type ApprovalProcessItem = Extract<TurnProcessItem, { type: 'approval' }>

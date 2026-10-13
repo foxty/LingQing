@@ -44,6 +44,7 @@ class ToolError:
             "hint": self.hint,
         }
 
+
 @dataclass
 class ToolResult:
     """Unified tool return structure.

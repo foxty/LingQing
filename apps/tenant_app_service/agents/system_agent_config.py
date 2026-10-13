@@ -29,6 +29,12 @@ from apps.tenant_app_service.agents.mini.domain import (
     MiniAgentConfig,
     TableMetadata,
 )
+from apps.tenant_app_service.agents.platform_tools import (
+    build_platform_tool_specs,
+    extract_default_tool_names,
+    resolve_tool_defs,
+    validate_platform_tool_specs,
+)
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 
 logger = get_logger(__name__)
@@ -154,6 +160,7 @@ class AgentConfigLoader:
         """
         self.config_path = Path(config_path)
         self._yaml_config: Dict[str, Any] | None = None
+        self._platform_tool_specs: dict[str, dict[str, Any]] | None = None
         self.logger = logger
 
     def load_yaml(self, force_reload: bool = False) -> Dict[str, Any]:
@@ -169,6 +176,7 @@ class AgentConfigLoader:
             try:
                 with open(self.config_path) as f:
                     self._yaml_config = yaml.safe_load(f)
+                self._platform_tool_specs = None
                 self._validate_config(self._yaml_config)
             except FileNotFoundError:
                 self.logger.error(f"Config file not found: {self.config_path}")
@@ -221,6 +229,67 @@ class AgentConfigLoader:
         # Check that all referenced skills have either a legacy YAML file or
         # a standard skill directory (with SKILL.md) at init time.
         self._validate_skill_references(config)
+        self._validate_platform_section(config)
+
+    def _validate_platform_section(self, config: Dict[str, Any]) -> None:
+        platform = config.get("platform")
+        if not isinstance(platform, dict):
+            return
+        raw_specs = platform.get("tool_specs")
+        if raw_specs is not None and not isinstance(raw_specs, dict):
+            raise ValueError("platform.tool_specs must be a mapping")
+        baseline = platform.get("system_prompt_baseline")
+        if baseline is not None and not isinstance(baseline, str):
+            raise ValueError("platform.system_prompt_baseline must be a string")
+        if raw_specs:
+            merged = build_platform_tool_specs(raw_specs, TOOL_REGISTRY)
+            validate_platform_tool_specs(merged, TOOL_REGISTRY, strict_full_catalog=True)
+            self._platform_tool_specs = merged
+
+    def get_platform_tool_specs(self) -> dict[str, dict[str, Any]]:
+        """Merged platform tool policy for every registered tool."""
+        if self._platform_tool_specs is not None:
+            return self._platform_tool_specs
+        yaml_config = self.load_yaml()
+        platform = yaml_config.get("platform") or {}
+        raw_specs = platform.get("tool_specs") or {}
+        merged = build_platform_tool_specs(raw_specs, TOOL_REGISTRY)
+        validate_platform_tool_specs(
+            merged,
+            TOOL_REGISTRY,
+            strict_full_catalog=bool(raw_specs),
+        )
+        self._platform_tool_specs = merged
+        return merged
+
+    def get_platform_tool_names(self) -> frozenset[str]:
+        return frozenset(self.get_platform_tool_specs().keys())
+
+    def get_platform_baseline_prompt(self) -> str:
+        yaml_config = self.load_yaml()
+        platform = yaml_config.get("platform") or {}
+        baseline = platform.get("system_prompt_baseline") or ""
+        return baseline if isinstance(baseline, str) else ""
+
+    def materialize_system_agent_document(self, agent_def: Dict[str, Any]) -> AgentLoadedConfig:
+        """Resolve ``default_tools`` from platform specs and set prompt composition mode."""
+        document = dict(agent_def)
+        raw_tools = document.get("default_tools") or []
+        tool_names = extract_default_tool_names(raw_tools)
+        overrides: dict[str, dict[str, Any]] = {}
+        for entry in raw_tools:
+            if isinstance(entry, dict):
+                name = entry.get("name")
+                if isinstance(name, str) and name.strip():
+                    overrides[name.strip()] = {key: value for key, value in entry.items() if key != "name"}
+        if tool_names:
+            document["default_tools"] = resolve_tool_defs(
+                tool_names,
+                self.get_platform_tool_specs(),
+                overrides=overrides,
+            )
+        document.setdefault("prompt_mode", "platform")
+        return document  # type: ignore[return-value]
 
     def _validate_skill_references(self, config: Dict[str, Any]) -> None:
         """Validate that referenced skills exist under the sibling ``skills`` directory."""
@@ -280,11 +349,17 @@ class AgentConfigLoader:
         """
         return self.load_yaml(force_reload=True)
 
-    def get_system_agent_config(self, agent_id: int) -> AgentLoadedConfig | None:
+    def get_system_agent_config(
+        self,
+        agent_id: int,
+        *,
+        materialize: bool = True,
+    ) -> AgentLoadedConfig | None:
         """Get system agent config by ID from YAML.
 
         Args:
             agent_id: System agent ID
+            materialize: When True, resolve ``default_tools`` from platform specs
 
         Returns:
             Agent config dict or None if not found
@@ -292,7 +367,9 @@ class AgentConfigLoader:
         yaml_config = self.load_yaml()
         for agent_key, agent_def in yaml_config.get("system_agents", {}).items():
             if agent_def.get("agent_id") == agent_id:
-                return agent_def
+                if materialize:
+                    return self.materialize_system_agent_document(agent_def)
+                return agent_def  # type: ignore[return-value]
         return None
 
     def get_system_agent_config_by_name(self, agent_name: str) -> AgentLoadedConfig | None:
@@ -413,10 +490,12 @@ def load_yaml_agent_config(
     mini_agents = yaml_config.get("mini_agents") or {}
     for agent_def in system_agents.values():
         if isinstance(agent_def, dict) and agent_def.get("agent_id") == agent_id:
-            return agent_def
+            return loader.materialize_system_agent_document(agent_def)
     for preset_def in mini_agents.values():
         if isinstance(preset_def, dict) and preset_def.get("agent_id") == agent_id:
-            return preset_def
+            preset = dict(preset_def)
+            preset.setdefault("prompt_mode", "standalone")
+            return preset  # type: ignore[return-value]
     raise ValueError(
         f"Agent ID {agent_id} not found in config. "
         f"Available system agents: {list(system_agents.keys())}, "
@@ -425,6 +504,8 @@ def load_yaml_agent_config(
 
 
 __all__ = [
+    "AgentConfigLoader",
+    "TOOL_REGISTRY",
     "get_config_loader",
     "load_yaml_agent_config",
 ]

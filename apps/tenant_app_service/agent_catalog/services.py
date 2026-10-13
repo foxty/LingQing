@@ -35,7 +35,6 @@ from apps.shared.domain.types import (
 from apps.shared.llm_providers.service import LLMProviderConfigService
 from apps.shared.observability.dtos import TenantUsageStatsDTO
 from apps.shared.observability.service import ObservabilityService
-from apps.tenant_app_service.tenant.schemas import TokenUsageDailyPoint, TokenUsageEventsResponse
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_catalog.adapters import db_agent_to_custom
 from apps.tenant_app_service.agent_catalog.domain import (
@@ -55,6 +54,7 @@ from apps.tenant_app_service.agent_catalog.dtos import (
 )
 from apps.tenant_app_service.agent_catalog.repository import AgentCatalogRepository
 from apps.tenant_app_service.agents.system_agent_config import TOOL_REGISTRY, get_config_loader
+from apps.tenant_app_service.tenant.schemas import TokenUsageDailyPoint, TokenUsageEventsResponse
 
 logger = get_logger(__name__)
 
@@ -332,7 +332,9 @@ class AgentCatalogService(TenantAwareService):
             api_connector_ids=profile.api_connector_ids,
             platform_capabilities=profile.platform_capabilities,
         )
-        return [name for name in names if name in TOOL_REGISTRY]
+        platform_names = get_config_loader().get_platform_tool_names()
+        allowed = platform_names if platform_names else frozenset(TOOL_REGISTRY.keys())
+        return [name for name in names if name in TOOL_REGISTRY and name in allowed]
 
     def allowed_runtime_tool_names(
         self,
@@ -349,7 +351,9 @@ class AgentCatalogService(TenantAwareService):
             if skill is None:
                 continue
             for tool_name in skill.tools:
-                if tool_name in TOOL_REGISTRY and tool_name not in seen:
+                platform_names = get_config_loader().get_platform_tool_names()
+                allowed = platform_names if platform_names else frozenset(TOOL_REGISTRY.keys())
+                if tool_name in TOOL_REGISTRY and tool_name in allowed and tool_name not in seen:
                     seen.add(tool_name)
                     names.append(tool_name)
         return names
@@ -533,11 +537,9 @@ class AgentCatalogService(TenantAwareService):
 
     def _system_agent_response(self, *, actor: ActorContext | None) -> AgentResponse:
         yaml_config = get_config_loader().get_system_agent_config(SYSTEM_AGENT_ONE_ID) or {}
-        tool_names = [
-            item.get("name")
-            for item in yaml_config.get("default_tools", [])
-            if isinstance(item, dict) and item.get("name")
-        ]
+        from apps.tenant_app_service.agents.platform_tools import extract_default_tool_names
+
+        tool_names = extract_default_tool_names(yaml_config.get("default_tools"))
         return AgentResponse(
             id=SYSTEM_AGENT_ONE_ID,
             name=yaml_config.get("name") or SYSTEM_AGENT_ONE_NAME,

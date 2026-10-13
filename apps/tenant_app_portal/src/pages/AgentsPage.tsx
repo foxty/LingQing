@@ -31,7 +31,7 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useAgents, useDeleteAgent } from '@/hooks/useAgents'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
-import { SYSTEM_AGENT_ONE_ID, type CatalogAgent } from '@/lib/agentsApi'
+import type { CatalogAgent } from '@/lib/agentsApi'
 import { listSlackIntegrations, type SlackIntegration } from '@/lib/slackApi'
 import { actionRules, routeRules } from '@/lib/permissionRules'
 import { useQuery } from '@tanstack/react-query'
@@ -118,7 +118,6 @@ export default function AgentsPage() {
   const [sharing, setSharing] = useState<CatalogAgent | null>(null)
   const deleteConfirm = useConfirmation<CatalogAgent>()
 
-  const systemAgent = agents.find((agent) => agent.id === SYSTEM_AGENT_ONE_ID)
   const customAgents = agents.filter((agent) => !agent.is_system)
 
   const openCreate = () => {
@@ -210,7 +209,7 @@ export default function AgentsPage() {
       <AgentCreateDrawer
         open={creating}
         onOpenChange={setCreating}
-        defaultPrompt={systemAgent?.system_prompt}
+        defaultPrompt=""
         onCreated={(agent) => navigate(`/agents/${agent.id}?tab=settings`)}
       />
 

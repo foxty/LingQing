@@ -59,6 +59,7 @@ def _naive_utc_now() -> datetime:
     """Current naive UTC datetime for DB storage."""
     return datetime.now(UTC).replace(tzinfo=None)
 
+
 # ============ Storage Access ============
 
 
