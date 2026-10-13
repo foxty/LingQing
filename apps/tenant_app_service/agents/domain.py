@@ -73,6 +73,7 @@ class AgentLoadedConfig(TypedDict, total=False):
     max_tokens: int
     frequency_penalty: float
     max_loop_iterations: int
+    prompt_mode: str
     classification: Any
     response_format: Any
 

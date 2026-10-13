@@ -1,0 +1,144 @@
+"""Integration tests for custom-agent platform capabilities vs runtime tool allowlists."""
+
+from __future__ import annotations
+
+from datetime import UTC, datetime
+from uuid import uuid4
+
+import pytest
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from apps.shared.core.policy_seed import seed_default_policies
+from apps.shared.db.models import Agent, Tenant, User
+from apps.shared.domain.actor import ActorContext
+from apps.shared.schemas.user import UserDTO
+from apps.tenant_app_service.agents.runtime_capability import build_agent_capability_profile
+from apps.tenant_app_service.chat.service import ChatService
+
+pytestmark = pytest.mark.integration
+
+
+@pytest.mark.asyncio
+async def test_scheduling_only_custom_agent_excludes_workspace_tools(async_db_session: AsyncSession):
+    suffix = uuid4().hex[:8]
+    tenant = Tenant(name=f"cap-{suffix}", slug=f"cap-{suffix}", status="active")
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+    await seed_default_policies(async_db_session, tenant.id)
+
+    user = User(
+        username=f"owner-{suffix}@example.com",
+        email=f"owner-{suffix}@example.com",
+        hashed_password="test",
+        role="admin",
+        tenant_id=tenant.id,
+        status="active",
+    )
+    async_db_session.add(user)
+    await async_db_session.flush()
+
+    agent = Agent(
+        tenant_id=tenant.id,
+        owner_id=user.id,
+        name=f"scheduler-{suffix}",
+        description="scheduling only",
+        system_prompt="Run schedules.",
+        config={
+            "platform_capabilities": ["scheduling"],
+            "default_tools": [],
+            "skills": [],
+            "knowledge_base_ids": [],
+            "data_source_ids": [],
+            "api_connector_ids": [],
+        },
+        tags=[],
+        example_questions=[],
+        status="active",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    async_db_session.add(agent)
+    await async_db_session.commit()
+
+    actor = ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role)
+    profile = await build_agent_capability_profile(
+        async_db_session,
+        tenant_id=tenant.id,
+        actor=actor,
+        agent_id=agent.id,
+        assignable_skills=[],
+    )
+    assert profile is not None
+    allowed = set(profile.allowed_tool_names or [])
+    assert "run_bash_script" not in allowed
+    assert "create_report" not in allowed
+    assert "list_scheduled_tasks" in allowed
+    assert "schedule_task" in allowed
+
+
+@pytest.mark.asyncio
+async def test_get_agent_graph_custom_agent_passes_spec_tool_limits(async_db_session: AsyncSession, monkeypatch):
+    suffix = uuid4().hex[:8]
+    tenant = Tenant(name=f"graph-{suffix}", slug=f"graph-{suffix}", status="active")
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+    await seed_default_policies(async_db_session, tenant.id)
+
+    user = User(
+        username=f"admin-{suffix}@example.com",
+        email=f"admin-{suffix}@example.com",
+        hashed_password="test",
+        role="admin",
+        tenant_id=tenant.id,
+        status="active",
+    )
+    async_db_session.add(user)
+    await async_db_session.flush()
+
+    agent = Agent(
+        tenant_id=tenant.id,
+        owner_id=user.id,
+        name=f"kb-{suffix}",
+        description="kb agent",
+        system_prompt="Search docs.",
+        config={
+            "platform_capabilities": [],
+            "skills": [],
+            "knowledge_base_ids": [999001],
+            "data_source_ids": [],
+            "api_connector_ids": [],
+        },
+        tags=[],
+        example_questions=[],
+        status="active",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    async_db_session.add(agent)
+    await async_db_session.commit()
+
+    captured: dict = {}
+
+    async def capture_get_or_create(config, *, cache_revision=None, config_overrides=None):
+        captured["config"] = config
+        return object()
+
+    service = ChatService(tenant_id=tenant.id, db=async_db_session)
+    monkeypatch.setattr(service.agent_pool, "get_or_create_agent", capture_get_or_create)
+
+    current_user = UserDTO(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        tenant_id=tenant.id,
+        tenant_name=tenant.name,
+    )
+    _graph, capability = await service._get_agent_graph(agent.id, current_user=current_user)
+
+    assert capability is not None
+    assert "search_documents" in capability.allowed_tool_names
+    preloaded = captured["config"]
+    assert preloaded["agent_id"] == agent.id
+    assert "tags" not in preloaded
+    limits = {item["name"]: item for item in preloaded["default_tools"]}
+    assert limits["search_documents"]["limit"] == 5

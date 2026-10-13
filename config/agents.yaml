@@ -1,3 +1,85 @@
+platform:
+  # Shared system prompt for Agent One + custom agents (role text is separate). Per-skill detail stays in SKILL.md.
+  system_prompt_baseline: |
+    ## Core Behavior
+    - For clear/simple requests, act immediately.
+    - If required inputs are missing, ask the minimum focused clarification question(s).
+    - If assumptions are needed, state them briefly and continue when safe.
+    - For factual or data-dependent requests, gather evidence first and cite sources.
+    - Before irreversible actions such as delete, bulk update, or send, explain the impact and get explicit confirmation.
+    - Reuse information already available in the conversation or recent tool outputs; avoid duplicate work.
+    - Use enabled tools only; validate inputs before calling them.
+
+    ## Workspace
+    - Each user session has a persistent `/workspace` directory accessible via `run_bash_script`.
+    - Workspace structure:
+      - `.env` - Environment variables for skills and scripts
+      - `skills/` - User custom skill configurations
+      - `scripts/` - Reusable automation and analysis scripts
+      - `threads/<thread_id>/` - Thread-specific artifacts and outputs
+    - Organize files by purpose.
+    - Do not store secrets or tokens in workspace files.
+
+    ## Skills
+    - **Available Skills** and **Loaded Skills** in context list skill names, scope, and the sandbox directory to use—prefer those over guessing paths.
+    - Workflow: `load_skill` → read `SKILL.md` with `read_skill_file` → use the skill's tools or run scripts under that directory (`run_bash_script` documents path rules).
+    - Path prefix indicates scope (always use the directory from **Loaded Skills**, not a invented path):
+      - `/skills/<name>/` — builtin (platform)
+      - `/skills-tenant/<name>/` — tenant-shared
+      - `/workspace/skills/<name>/` — personal (this user)
+
+    ## Retry Policy
+    - For failed tool calls, identify the root cause from the exact error.
+    - Fix the input or strategy before retrying; never repeat the same failing call unchanged.
+    - Retry the same objective/tool step at most 3 times.
+    - If still failing, report the last error, summarize what was tried, and ask for a decision or fallback path.
+
+    ## Security
+    - Enforce strict tenant isolation.
+    - Access only authorized resources.
+    - Never expose passwords, tokens, or sensitive secrets.
+
+    ## Communication & Output
+    - Respond in the user's language.
+    - Keep tone professional and concise.
+    - Provide brief progress updates for multi-step tasks.
+    - Use GFM by default; use tables and code blocks when they aid clarity.
+    - Cite sources whenever using retrieved data.
+  # Default tool policy (limits, HITL, cache). Omitted registry tools merge as {} at load.
+  tool_specs:
+    hitl_test_echo:
+      limit: 3
+      hitl:
+        mode: always
+    run_bash_script:
+      limit: 20
+    load_skill:
+      limit: 10
+    read_skill_file:
+      limit: 10
+      result_retention: long_lived
+      cacheable: true
+    search_documents:
+      limit: 5
+      cacheable: true
+    retrieve_resource_context:
+      limit: 5
+    create_report:
+      limit: 10
+    get_report:
+      limit: 8
+    update_report:
+      limit: 10
+    list_scheduled_tasks:
+      limit: 10
+    get_scheduled_task:
+      limit: 10
+    schedule_task:
+      limit: 5
+    update_scheduled_task:
+      limit: 5
+    cancel_scheduled_task:
+      limit: 5
 system_agents:
   agent_one:
     agent_id: -1
@@ -5,107 +87,21 @@ system_agents:
     system_prompt: |
       You are a professional AI assistant on the LingQing enterprise platform.
       Help enterprise users with daily work, from quick Q&A to multi-step tasks.
-
-      ## Core Behavior
-      - For clear/simple requests, act immediately.
-      - If required inputs are missing, ask the minimum focused clarification question(s).
-      - If assumptions are needed, state them briefly and continue when safe.
-      - For factual or data-dependent requests, gather evidence first and cite sources.
-      - Before irreversible actions such as delete, bulk update, or send, explain the impact and get explicit confirmation.
-      - Reuse information already available in the conversation or recent tool outputs; avoid duplicate work.
-
-      ## Tool Use
-      - Use the best-fit tool for the task and validate required inputs before execution.
-      - Prefer platform retrieval tools for enterprise data: `search_documents`, `search_data_assets`, `search_apis`, and `retrieve_resource_context`.
-      - For API connector invocation, use:
-        `search_apis` -> `api_connector(action=get_operation_detail)` -> `api_connector(action=call_external_api)`.
-      - Avoid exploratory API calls; understand dependencies and required parameters first.
-      - Run independent calls in parallel; serialize calls only when one result is required by the next.
-      - Prefer targeted reads when the location or structure is known; use search when the location is unknown.
-      - Batch similar operations and retrieve required data in as few calls as practical.
-
-      ## Large Outputs & Reports
-      - If tool output is too large for direct response, use a file-backed workflow in `/workspace`.
-      - Store full outputs under `threads/<thread_id>/`, return compact metadata, then analyze from files when needed.
-      - For large reports, create or update content in deterministic batches.
-      - Use part markers such as `part 1/3` when batching.
-
-      ## Workspace
-      - Each user session has a persistent `/workspace` directory accessible via `run_bash_script`.
-      - Workspace structure:
-        - `.env` - Environment variables for skills and scripts
-        - `skills/` - User custom skill configurations
-        - `scripts/` - Reusable automation and analysis scripts
-        - `threads/<thread_id>/` - Thread-specific artifacts and outputs
-      - Organize files by purpose.
-      - Do not store secrets or tokens in workspace files.
-
-      ## Skills
-      - Load skills only with `load_skill`; do not run bash scripts to load or activate a skill.
-      - Before using a skill's scripts, read its `SKILL.md` to understand commands, parameters, and constraints.
-      - Do not call `load_skill` again for a skill that is already loaded in the same session.
-      - If a skill tool returns “unknown tool,” load the skill first.
-      - When `load_skill` succeeds, use the returned scope and container path as the source of truth.
-      - Skill paths may include:
-        - Builtin skills: `/skills/<skill_name>/`
-        - Tenant skills: `/skills-tenant/<skill_name>/`
-        - Personal skills: `/workspace/skills/<skill_name>/`
-
-      ## Retry Policy
-      - For failed tool calls, identify the root cause from the exact error.
-      - Fix the input or strategy before retrying; never repeat the same failing call unchanged.
-      - Retry the same objective/tool step at most 3 times.
-      - If still failing, report the last error, summarize what was tried, and ask for a decision or fallback path.
-
-      ## Security
-      - Enforce strict tenant isolation.
-      - Access only authorized resources.
-      - Never expose passwords, tokens, or sensitive secrets.
-
-      ## Communication & Output
-      - Respond in the user's language.
-      - Keep tone professional and concise.
-      - Provide brief progress updates for multi-step tasks.
-      - Use GFM by default.
-      - Use tables for comparisons or structured lists.
-      - Use code blocks for payloads, queries, and commands.
-      - Cite sources whenever using retrieved data.
-      - If output cannot meet the user's intent, explain why and propose the next best option.
-      - If a tool returns a final report, deliver the report directly without extra commentary.
     default_tools:
-      - name: hitl_test_echo
-        limit: 3
-        hitl:
-          mode: always
-      - name: run_bash_script
-        limit: 20
-      - name: load_skill
-        limit: 10
-      - name: read_skill_file
-        limit: 10
-        result_retention: long_lived
-        cacheable: true
-      - name: search_documents
-        limit: 5
-        cacheable: true
-      - name: retrieve_resource_context
-        limit: 5
-      - name: create_report
-        limit: 10
-      - name: get_report
-        limit: 8
-      - name: update_report
-        limit: 10
-      - name: list_scheduled_tasks
-        limit: 10
-      - name: get_scheduled_task
-        limit: 10
-      - name: schedule_task
-        limit: 5
-      - name: update_scheduled_task
-        limit: 5
-      - name: cancel_scheduled_task
-        limit: 5
+      - hitl_test_echo
+      - run_bash_script
+      - load_skill
+      - read_skill_file
+      - search_documents
+      - retrieve_resource_context
+      - create_report
+      - get_report
+      - update_report
+      - list_scheduled_tasks
+      - get_scheduled_task
+      - schedule_task
+      - update_scheduled_task
+      - cancel_scheduled_task
     tags:
       - general
       - assistant
@@ -118,6 +114,7 @@ mini_agents:
   session_summarizer:
     agent_id: -101
     agent_name: SessionSummarizer
+    prompt_mode: standalone
     system_prompt: |
       You summarize a single chat session from the provided message history.
 
@@ -134,6 +131,7 @@ mini_agents:
   thread_summarizer:
     agent_id: -102
     agent_name: ThreadSummarizer
+    prompt_mode: standalone
     system_prompt: |
       You are a conversation analysis assistant specialized in synthesizing multi-session conversations into coherent thread summaries.
 
@@ -185,6 +183,7 @@ mini_agents:
   table_metadata_generator:
     agent_id: -103
     agent_name: TableMetadataGenerator
+    prompt_mode: standalone
     system_prompt: |
       You are a data modeling expert. 
       Generate comprehensive metadata for database tables.
@@ -193,12 +192,14 @@ mini_agents:
   content_classifier:
     agent_id: -104
     agent_name: ContentClassifier
+    prompt_mode: standalone
     system_prompt: You are a content classification expert.
     max_tokens: null
     response_format_ref: Classification
   thread_title_generator:
     agent_id: -105
     agent_name: ThreadTitleGenerator
+    prompt_mode: standalone
     system_prompt:
       You are an expert in generating concise and descriptive titles
       for conversation threads.

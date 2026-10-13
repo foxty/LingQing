@@ -10,7 +10,7 @@ import pandas as pd
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError, ValidationError
+from apps.shared.core.exceptions import AuthorizationError, ValidationError
 from apps.shared.data_source import DataSourceService
 from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
 from apps.shared.db.session import app_db_session

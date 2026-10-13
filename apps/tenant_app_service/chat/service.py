@@ -673,30 +673,27 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
         actor = ActorContext(tenant_id=current_user.tenant_id, user_id=current_user.id, user_role=current_user.role)
         domain = await catalog.require_agent_access(agent_id=agent_id, actor=actor, action=ABAC_ACTION_READ)
 
-        yaml_one = load_yaml_agent_config(SYSTEM_AGENT_ONE_ID)
-        one_tools = {
-            item.get("name"): item
-            for item in yaml_one.get("default_tools", [])
-            if isinstance(item, dict) and item.get("name")
-        }
+        from apps.tenant_app_service.agents.custom_agent_loaded_config import (
+            build_custom_agent_loaded_config,
+            runtime_defaults_from_system_agent,
+        )
+        from apps.tenant_app_service.agents.system_agent_config import get_config_loader
+
+        loader = get_config_loader()
+        yaml_one = loader.get_system_agent_config(SYSTEM_AGENT_ONE_ID, materialize=False) or {}
         assignable_skills = resolve_assignable_skills(
             tenant_id=current_user.tenant_id, user_id=current_user.id
         )
-        default_tool_names = catalog.derived_tool_names(
+        derived_tool_names = catalog.derived_tool_names(
             domain.profile,
             assignable_skills=assignable_skills,
         )
-        default_tools = [one_tools.get(name, {"name": name}) for name in default_tool_names]
-        preloaded = {
-            **yaml_one,
-            "agent_id": domain.id,
-            "name": domain.name,
-            "system_prompt": domain.system_prompt,
-            "default_tools": default_tools,
-            "example_questions": domain.example_questions,
-        }
-        if domain.profile.model_profile_id is not None:
-            preloaded["model_profile_id"] = domain.profile.model_profile_id
+        preloaded = build_custom_agent_loaded_config(
+            domain=domain,
+            derived_tool_names=derived_tool_names,
+            loader=loader,
+            runtime_defaults=runtime_defaults_from_system_agent(yaml_one),
+        )
 
         revision = domain.updated_at.isoformat() if domain.updated_at else "0"
         graph = await self.agent_pool.get_or_create_agent(

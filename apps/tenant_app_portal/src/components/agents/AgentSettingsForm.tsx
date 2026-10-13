@@ -31,8 +31,12 @@ const agentFormResources = {
   en: {
     name: 'Name',
     prompt: 'System prompt',
+    promptHelp:
+      'Role-specific instructions only. Platform rules (tools, workspace, skills, security) are applied automatically.',
+    rolePromptPlaceholder:
+      'Describe this agent\'s role, tone, and domain focus. Platform behavior is included automatically.',
     sectionGeneral: 'General',
-    sectionGeneralDesc: 'Name, model, and instructions for this agent.',
+    sectionGeneralDesc: 'Name, model, and role instructions for this agent.',
     sectionAccess: 'Access',
     sectionAccessDesc: 'Skills, platform features, and tenant resources.',
     platformFeatures: 'Platform features',
@@ -63,8 +67,10 @@ const agentFormResources = {
   zh: {
     name: '名称',
     prompt: '系统提示词',
+    promptHelp: '仅填写角色与领域指令。平台通用规则（工具、工作区、技能、安全等）会自动附加。',
+    rolePromptPlaceholder: '描述该智能体的角色、语气与领域。平台通用行为会自动包含。',
     sectionGeneral: '常规',
-    sectionGeneralDesc: '名称、模型与系统指令。',
+    sectionGeneralDesc: '名称、模型与角色指令。',
     sectionAccess: '访问权限',
     sectionAccessDesc: '技能、平台功能与租户资源。',
     platformFeatures: '平台功能',
@@ -252,6 +258,7 @@ export default function AgentSettingsForm({
           </div>
           <div className="space-y-2">
             <Label htmlFor="agent-prompt">{t('agents.prompt')}</Label>
+            <p className="text-sm text-muted-foreground">{t('agents.promptHelp')}</p>
             <Textarea
               id="agent-prompt"
               value={formPrompt}
@@ -259,6 +266,7 @@ export default function AgentSettingsForm({
               rows={10}
               disabled={readOnly}
               className="font-mono text-sm"
+              placeholder={t('agents.rolePromptPlaceholder')}
             />
           </div>
         </div>

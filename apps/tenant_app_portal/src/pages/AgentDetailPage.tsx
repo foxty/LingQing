@@ -380,6 +380,7 @@ function OverviewTab({
             <Bot className="h-4 w-4" />
             {t('agents.prompt')}
           </div>
+          <p className="text-sm text-muted-foreground">{t('agents.promptHelp')}</p>
           <p className="text-sm text-muted-foreground whitespace-pre-wrap">{description}</p>
         </CardContent>
       </Card>

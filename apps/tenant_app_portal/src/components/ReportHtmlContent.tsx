@@ -1,5 +1,5 @@
 import DocumentProse from '@/components/DocumentProse'
-import { ReportImage } from '@/components/ReportImage'
+import { MarkdownImage } from '@/components/markdown/MarkdownImage'
 import { createElement, type ReactNode } from 'react'
 
 const ALLOWED_ATTRS: Record<string, string> = {
@@ -34,7 +34,7 @@ function nodeToReact(node: Node, key: string | number): ReactNode {
   const tag = element.tagName.toLowerCase()
   if (tag === 'img') {
     return (
-      <ReportImage
+      <MarkdownImage
         key={key}
         src={element.getAttribute('src') ?? undefined}
         alt={element.getAttribute('alt') ?? undefined}
