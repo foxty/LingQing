@@ -14,6 +14,7 @@ from apps.shared.db.models import AclGrant as AclGrantModel
 from apps.shared.db.models import Agent, Artifact, ArtifactLink, ChatThread, Dashboard, Tenant, User
 from apps.tenant_app_service.agents.tools import dashboard_base, dashboard_filter, dashboard_widget
 from apps.tenant_app_service.agents.tools.tool_result import ToolResultStatus
+from tests.integration.helpers.runtime_seed import ensure_runtime_base_records
 from tests.integration.tool_integration_helpers import build_runnable_config_for_actor
 
 
@@ -31,39 +32,11 @@ class _SessionContext:
 
 
 async def _seed_base_records(async_db_session, runtime_context) -> None:
-    tenant = Tenant(id=runtime_context.tenant.tenant_id, name=runtime_context.tenant.tenant_name)
-    user = User(
-        id=runtime_context.user.user_id,
-        username=runtime_context.user.username,
-        email=f"{runtime_context.user.username}@example.com",
-        hashed_password="test_password_hash",
-        role=runtime_context.user.role,
-        tenant_id=runtime_context.user.tenant_id,
+    await ensure_runtime_base_records(
+        async_db_session,
+        runtime_context,
+        agent_system_prompt="You are a test agent.",
     )
-    agent = Agent(
-        id=runtime_context.agent_id,
-        tenant_id=runtime_context.tenant.tenant_id,
-        owner_id=runtime_context.user.user_id,
-        name=runtime_context.agent_name,
-        description="test agent",
-        system_prompt="You are a test agent.",
-        config={},
-        tags=None,
-        example_questions=None,
-    )
-    thread = ChatThread(
-        id=runtime_context.thread_id,
-        tenant_id=runtime_context.tenant.tenant_id,
-        user_id=runtime_context.user.user_id,
-        agent_id=runtime_context.agent_id,
-        title="test thread",
-    )
-    async_db_session.add_all([tenant, user])
-    await async_db_session.flush()
-    async_db_session.add(agent)
-    await async_db_session.flush()
-    async_db_session.add(thread)
-    await async_db_session.commit()
 
 
 async def _create_dashboard(async_db_session, runnable_config) -> dict:

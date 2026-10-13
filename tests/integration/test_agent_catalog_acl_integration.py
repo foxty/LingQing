@@ -228,9 +228,15 @@ async def agent_acl_env(async_db_session: AsyncSession):
         data_source = DataSource(
             tenant_id=tenant.id,
             name=f"owner-ds-{suffix}",
-            type="sqlite",
+            type="postgres",
             managed=True,
-            config={},
+            config={
+                "host": "localhost",
+                "port": 5432,
+                "database": "analytics",
+                "username": "user",
+                "password": "password",
+            },
             owner_id=owner.id,
         )
         seed.add_all([collection, data_source])

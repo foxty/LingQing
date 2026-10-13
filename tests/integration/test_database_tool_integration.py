@@ -8,10 +8,12 @@ import json
 
 import pandas as pd
 import pytest
+from sqlalchemy import delete
 
 from apps.shared.data_source.service import DataSourceService
 from apps.shared.db.models import AssetMetadata, DataSource, Tenant
 from apps.tenant_app_service.agents.tools import database as database_tool
+from tests.integration.helpers.runtime_seed import ensure_runtime_tenant_user
 
 
 class _SessionContext:
@@ -48,22 +50,7 @@ class _FakeDBManager:
 
 
 async def _seed_tenant(async_db_session, runtime_context) -> Tenant:
-    from apps.shared.db.models import User
-
-    tenant = Tenant(id=runtime_context.tenant.tenant_id, name=runtime_context.tenant.tenant_name)
-    async_db_session.add(tenant)
-    await async_db_session.flush()
-    user = User(
-        id=runtime_context.user.user_id,
-        username=runtime_context.user.username,
-        email=f"{runtime_context.user.username}@example.com",
-        hashed_password="hashed",
-        role=runtime_context.user.role,
-        tenant_id=runtime_context.user.tenant_id,
-    )
-    async_db_session.add(user)
-    await async_db_session.commit()
-    return tenant
+    return await ensure_runtime_tenant_user(async_db_session, runtime_context)
 
 
 async def _seed_data_source(async_db_session, runtime_context) -> DataSource:
@@ -118,11 +105,18 @@ async def test_list_data_sources_tool_returns_dialect_hints(
     )
 
     await _seed_tenant(async_db_session, runtime_context)
+    # Full-suite runs may leave other tenant-1 rows from committing HTTP fixtures.
+    await async_db_session.execute(
+        delete(DataSource).where(DataSource.tenant_id == runtime_context.tenant.tenant_id)
+    )
+    await async_db_session.flush()
     data_source = await _seed_data_source(async_db_session, runtime_context)
 
     result = await database_tool.list_data_sources.ainvoke({}, config=runnable_config)
     payload = json.loads(result.content)
 
+    assert len(payload) >= 1
+    payload = [row for row in payload if row["data_source_id"] == data_source.id]
     assert len(payload) == 1
     assert payload[0]["data_source_id"] == data_source.id
     assert payload[0]["name"] == data_source.name

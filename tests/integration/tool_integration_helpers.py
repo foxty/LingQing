@@ -2,7 +2,8 @@
 
 from langchain_core.runnables import RunnableConfig
 
-from apps.shared.db.models import Agent, ChatThread, DataSource, Tenant, User
+from apps.shared.db.models import Agent, ChatThread, DataSource, User
+from tests.integration.helpers.runtime_seed import ensure_runtime_base_records, ensure_runtime_tenant
 
 
 class SessionContext:
@@ -28,57 +29,7 @@ def patch_agent_tool_db_session(monkeypatch, tool_module, session) -> None:
 
 
 async def seed_base_records(async_db_session, runtime_context) -> None:
-    tenant_id = runtime_context.tenant.tenant_id
-    user_id = runtime_context.user.user_id
-    agent_id = runtime_context.agent_id
-
-    tenant = await async_db_session.get(Tenant, tenant_id)
-    if tenant is None:
-        tenant = Tenant(id=tenant_id, name=runtime_context.tenant.tenant_name)
-        async_db_session.add(tenant)
-        await async_db_session.flush()
-
-    user = await async_db_session.get(User, user_id)
-    if user is None:
-        user = User(
-            id=user_id,
-            username=runtime_context.user.username,
-            email=f"{runtime_context.user.username}@example.com",
-            hashed_password="test_password_hash",
-            role=runtime_context.user.role,
-            tenant_id=runtime_context.user.tenant_id,
-        )
-        async_db_session.add(user)
-        await async_db_session.flush()
-
-    agent = await async_db_session.get(Agent, agent_id)
-    if agent is None:
-        agent = Agent(
-            id=agent_id,
-            tenant_id=tenant_id,
-            owner_id=user_id,
-            name=runtime_context.agent_name,
-            description="test agent",
-            system_prompt="test",
-            config={},
-            tags=None,
-            example_questions=None,
-        )
-        async_db_session.add(agent)
-        await async_db_session.flush()
-
-    thread = await async_db_session.get(ChatThread, runtime_context.thread_id)
-    if thread is None:
-        thread = ChatThread(
-            id=runtime_context.thread_id,
-            tenant_id=tenant_id,
-            user_id=user_id,
-            agent_id=agent_id,
-            title="test thread",
-        )
-        async_db_session.add(thread)
-
-    await async_db_session.commit()
+    await ensure_runtime_base_records(async_db_session, runtime_context)
 
 
 def postgres_config(async_db_session) -> dict:
@@ -142,6 +93,7 @@ async def seed_actor_records(
     role: str,
     thread_id: str,
 ) -> None:
+    await ensure_runtime_tenant(async_db_session, runtime_context)
     user = await async_db_session.get(User, user_id)
     if user is None:
         user = User(
