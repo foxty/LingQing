@@ -33,6 +33,13 @@ class AgentCapabilityConfigDTO(BaseModel):
         return normalized
 
 
+class AgentAttachmentAccessItem(BaseModel):
+    resource_type: str
+    resource_id: int
+    name: str
+    can_read: bool
+
+
 class AgentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -50,6 +57,7 @@ class AgentResponse(BaseModel):
     updated_at: datetime | None = None
     can_write: bool = False
     can_manage: bool = False
+    attachment_access: list[AgentAttachmentAccessItem] = Field(default_factory=list)
 
 
 class AgentCreateRequest(BaseModel):

@@ -221,7 +221,7 @@ export function useWorkbenchChat({
               content: userInput,
               timestamp: new Date().toISOString(),
               message_metadata: {
-                context_resources: selectedResources,
+                attached_artifacts: selectedResources,
               },
             },
         activeThreadId
@@ -243,10 +243,7 @@ export function useWorkbenchChat({
                 content: userInput,
               },
               thread_id: activeThreadId,
-              selected_resource_ids: selectedResources.map((r) => ({
-                resource_type: r.resource_type,
-                resource_id: r.resource_id,
-              })),
+              selected_artifact_ids: selectedResources.map((r) => r.artifact_id),
               hitl_proposal_id: options?.hitlProposalId || null,
               hitl_action: options?.hitlAction || null,
             },

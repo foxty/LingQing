@@ -207,13 +207,6 @@ class AgentCapabilityProfile(BaseDomainModel):
     allowed_collection_ids: list[int] | None = None
     allowed_data_source_ids: list[int] | None = None
     allowed_api_connector_ids: list[int] | None = None
-    delegate: bool = False
-
-    def delegated(self, attached_ids: list[int] | None) -> list[int] | None:
-        """Attached resource IDs when this invoker may use the agent's datascope."""
-        if not self.delegate:
-            return None
-        return list(attached_ids) if attached_ids else None
 
     @classmethod
     def model_validate(cls, obj: dict[str, Any] | None) -> "AgentCapabilityProfile | None":

@@ -23,11 +23,15 @@ interface ContextChipProps {
 }
 
 const RESOURCE_TYPE_CONFIG: Record<string, { icon: React.ReactNode }> = {
-  document: { icon: <FileText className="w-3 h-3" /> },
   dashboard: { icon: <BarChart3 className="w-3 h-3" /> },
+  chart: { icon: <BarChart3 className="w-3 h-3" /> },
   report: { icon: <FileSpreadsheet className="w-3 h-3" /> },
   scheduled_task: { icon: <Clock className="w-3 h-3" /> },
   app: { icon: <AppWindow className="w-3 h-3" /> },
+  code: { icon: <FileText className="w-3 h-3" /> },
+  iframe: { icon: <AppWindow className="w-3 h-3" /> },
+  data_preview: { icon: <Database className="w-3 h-3" /> },
+  document: { icon: <FileText className="w-3 h-3" /> },
   asset: { icon: <Database className="w-3 h-3" /> },
 }
 
@@ -37,7 +41,8 @@ export default function ContextChip({
   readOnly = false,
   variant = 'input',
 }: ContextChipProps) {
-  const config = RESOURCE_TYPE_CONFIG[resource.resource_type] ?? {
+  const typeKey = resource.artifact_type ?? resource.resource_type ?? 'unknown'
+  const config = RESOURCE_TYPE_CONFIG[typeKey] ?? {
     icon: <FileText className="w-3 h-3" />,
   }
 

@@ -16,7 +16,7 @@ from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
 )
-from apps.shared.authz.delegation import allows_delegated_read
+from apps.shared.authz.authz_query_builder import evaluate_resource_action
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.base_service import TenantAwareService
@@ -155,7 +155,6 @@ class DataSourceService(TenantAwareService):
         asset_id: int,
         actor: ActorContext,
         action: AbacAction,
-        delegated_ids: list[int] | None = None,
     ) -> int:
         """Ensure the actor can access an asset via its data source."""
         stmt = (
@@ -173,7 +172,6 @@ class DataSourceService(TenantAwareService):
             data_source_id=data_source_id,
             actor=actor,
             action=action,
-            delegated_ids=delegated_ids,
         )
         return data_source_id
 
@@ -183,14 +181,13 @@ class DataSourceService(TenantAwareService):
         data_source_id: int,
         actor: ActorContext,
         action: AbacAction,
-        delegated_ids: list[int] | None = None,
     ) -> tuple[DataSourceDomain, bool]:
         data_source = await self._get_data_source_domain(data_source_id)
         if not data_source:
             raise ResourceNotFoundError(f"Data source {data_source_id} not found")
 
         has_manage_permission = await self.has_data_source_manage_permission_for_actor(actor=actor)
-        allowed = await allows_delegated_read(
+        allowed = await evaluate_resource_action(
             db_session=self.data_source_repo.db,
             tenant_id=actor.tenant_id,
             user_id=actor.user_id,
@@ -200,7 +197,6 @@ class DataSourceService(TenantAwareService):
             resource_owner_id=data_source.owner_id,
             action=action,
             has_manage_permission=has_manage_permission,
-            delegated_ids=delegated_ids,
         )
         if not allowed:
             raise AuthorizationError("无权访问该数据源")
@@ -212,13 +208,11 @@ class DataSourceService(TenantAwareService):
         *,
         data_source_id: int,
         actor: ActorContext,
-        delegated_ids: list[int] | None = None,
     ) -> DataSourceDomain:
         data_source, _ = await self.require_data_source_access_for_actor(
             data_source_id=data_source_id,
             actor=actor,
             action=ABAC_ACTION_READ,
-            delegated_ids=delegated_ids,
         )
         return data_source
 
@@ -303,12 +297,10 @@ class DataSourceService(TenantAwareService):
         *,
         data_source_id: int,
         actor: ActorContext,
-        delegated_ids: list[int] | None = None,
     ) -> DataSourceResponse:
         data_source = await self.require_read_access_for_actor(
             data_source_id=data_source_id,
             actor=actor,
-            delegated_ids=delegated_ids,
         )
         return domain_data_source_to_api(data_source)
 
@@ -463,20 +455,12 @@ class DataSourceService(TenantAwareService):
         actor: ActorContext,
         params: dict | None = None,
         max_rows: int | None = None,
-        delegated_ids: list[int] | None = None,
     ) -> pd.DataFrame:
-        """Execute read-only query with data-source-level authorization.
-
-        Authorization behavior:
-        - When `actor` is provided, the caller must have read access to the data source.
-        - Individual table references are not checked separately; assets inherit data source access.
-        - ``delegated_ids`` optionally expands read for one agent turn; omit on HTTP callers.
-        """
+        """Execute read-only query with data-source-level authorization."""
         validate_read_only_sql(sql_query)
         await self.require_read_access_for_actor(
             data_source_id=data_source_id,
             actor=actor,
-            delegated_ids=delegated_ids,
         )
 
         db_manager = await self.get_db_manager(data_source_id)

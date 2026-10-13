@@ -19,7 +19,7 @@ from apps.shared.data_source.repository import AssetMetadataRepository, DataSour
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.agents.context import delegated_data_source_ids, extract_runtime_context
+from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 from apps.tenant_app_service.agents.workspace_utils import (
     cleanup_temp_tables_for_thread,
@@ -120,7 +120,6 @@ async def create_materialized_view(
                 data_source_id=data_source_id,
                 sql_query=sql_query,
                 actor=actor,
-                delegated_ids=delegated_data_source_ids(runtime.capability_profile),
             )
 
             # Get DB manager through service for write operation
@@ -245,11 +244,9 @@ async def join_cross_datasource(
             )
 
             # Extract left table
-            attached_ids = delegated_data_source_ids(runtime.capability_profile)
             left_ds = await service.get_data_source_for_actor(
                 data_source_id=left_data_source_id,
                 actor=actor,
-                delegated_ids=attached_ids,
             )
 
             if not left_ds:
@@ -262,7 +259,6 @@ async def join_cross_datasource(
                 data_source_id=left_data_source_id,
                 sql_query=left_query,
                 actor=actor,
-                delegated_ids=attached_ids,
             )
 
             logger.info(f"Extracted {len(left_df)} rows from left source '{left_ds.name}'")
@@ -271,7 +267,6 @@ async def join_cross_datasource(
             right_ds = await service.get_data_source_for_actor(
                 data_source_id=right_data_source_id,
                 actor=actor,
-                delegated_ids=attached_ids,
             )
 
             if not right_ds:
@@ -284,7 +279,6 @@ async def join_cross_datasource(
                 data_source_id=right_data_source_id,
                 sql_query=right_query,
                 actor=actor,
-                delegated_ids=attached_ids,
             )
 
             logger.info(f"Extracted {len(right_df)} rows from right source '{right_ds.name}'")

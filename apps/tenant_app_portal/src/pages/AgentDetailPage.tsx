@@ -46,6 +46,9 @@ i18n.addResourceBundle(
       totalFeedback: 'Total feedback',
       positiveRate: 'Positive rate',
       viewAllFeedback: 'View all feedback',
+      attachmentAccessTitle: 'Resource access for you',
+      attachmentAccessHint:
+        'You can run this agent, but some attached resources are not readable with your current permissions.',
     },
     agents: {
       system: 'Built-in',
@@ -74,6 +77,8 @@ i18n.addResourceBundle(
       totalFeedback: '反馈总数',
       positiveRate: '好评率',
       viewAllFeedback: '查看全部反馈',
+      attachmentAccessTitle: '你的资源访问情况',
+      attachmentAccessHint: '你可以运行该智能体，但部分已挂载资源在当前权限下不可读。',
     },
     agents: {
       system: '内置',
@@ -223,6 +228,7 @@ export default function AgentDetailPage() {
     [TAB_FEEDBACK]: t('agentDetail.tabFeedback'),
   }
   const tabs = visibleTabIds.map((id) => ({ id, label: tabLabels[id] ?? id }))
+  const attachmentGaps = (agent.attachment_access ?? []).filter((item) => !item.can_read)
 
   const setTab = (tab: string) => {
     const next = new URLSearchParams(searchParams)
@@ -269,6 +275,21 @@ export default function AgentDetailPage() {
           ) : null
         }
       />
+
+      {attachmentGaps.length > 0 ? (
+        <Alert>
+          <AlertDescription>
+            <p className="font-medium">{t('agentDetail.attachmentAccessHint')}</p>
+            <ul className="mt-2 list-disc pl-5 text-sm">
+              {attachmentGaps.map((item) => (
+                <li key={`${item.resource_type}-${item.resource_id}`}>
+                  {item.name} ({item.resource_type} #{item.resource_id})
+                </li>
+              ))}
+            </ul>
+          </AlertDescription>
+        </Alert>
+      ) : null}
 
       <Tabs value={resolvedTab} onValueChange={setTab}>
         <TabsList>

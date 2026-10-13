@@ -4,11 +4,15 @@ from datetime import UTC, datetime
 
 from sqlalchemy import update
 
+from apps.shared.core.exceptions import ValidationError
 from apps.shared.db.models import ScheduledTask
 from apps.shared.db.session import app_db_session
+from apps.shared.domain.actor import ActorContext
 from apps.shared.tasks.domain import ScheduledTaskDomain, normalize_agent_run_task_config, parse_agent_run_task_config
 from apps.shared.tasks.execution_service import TaskExecutionResult
 from apps.shared.utils.logger import get_logger
+from apps.tenant_app_service.agents.agent_run_preflight import preflight_agent_run
+from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.agent_ingress.slack.scheduled_delivery import (
     SLACK_SCHEDULED_FAILURE_MESSAGE,
     deliver_scheduled_agent_run_to_slack,
@@ -62,6 +66,18 @@ async def execute_agent_run_task(task: ScheduledTaskDomain) -> TaskExecutionResu
     try:
         slack_thread_delivered = False
         async with app_db_session() as db_session:
+            user_repo = UserRepository(db_session)
+            db_user = await user_repo.get_by_id_and_tenant(task.user_id, task.tenant_id)
+            if db_user is None:
+                raise ValidationError(f"User {task.user_id} not found for scheduled agent run")
+            actor = ActorContext(tenant_id=task.tenant_id, user_id=task.user_id, user_role=db_user.role)
+            await preflight_agent_run(
+                db_session,
+                tenant_id=task.tenant_id,
+                actor=actor,
+                agent_id=agent_id,
+            )
+
             chat_service = ChatService(task.tenant_id, db_session)
             response = await chat_service.run_headless(
                 user_id=task.user_id,

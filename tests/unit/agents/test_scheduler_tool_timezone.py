@@ -1,5 +1,6 @@
 import json
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pytest
 
@@ -41,6 +42,10 @@ async def test_schedule_task_uses_runtime_timezone_fallback(monkeypatch, runnabl
     monkeypatch.setattr(
         "apps.tenant_app_service.agents.tools.scheduler.ScheduledTaskService.create_task_with_artifact",
         _fake_create_task_with_artifact,
+    )
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agents.agent_run_preflight.preflight_agent_run_task_config",
+        AsyncMock(),
     )
 
     runtime = runnable_config["configurable"]["runtime"]
@@ -87,6 +92,10 @@ async def test_schedule_task_prefers_explicit_schedule_timezone(monkeypatch, run
     monkeypatch.setattr(
         "apps.tenant_app_service.agents.tools.scheduler.ScheduledTaskService.create_task_with_artifact",
         _fake_create_task_with_artifact,
+    )
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agents.agent_run_preflight.preflight_agent_run_task_config",
+        AsyncMock(),
     )
 
     runtime = runnable_config["configurable"]["runtime"]

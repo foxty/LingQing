@@ -12,7 +12,7 @@ from apps.shared.api_connector.execution import ApiConnectorExecutionService
 from apps.shared.api_connector.schemas import ApiOperationCallParameters
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
-from apps.tenant_app_service.agents.context import delegated_api_connector_ids, extract_runtime_context
+from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 
 # Final payload chunking guardrail: split oversized response text into fixed-size chunks.
@@ -217,14 +217,12 @@ async def api_connector(
 
         service = ApiConnectorService(tenant_id=runtime.user.tenant_id, db_session=session)
 
-        attached_ids = delegated_api_connector_ids(runtime.capability_profile)
         allowed_ids = runtime.capability_profile.allowed_api_connector_ids if runtime.capability_profile else None
 
         if action == "get_operation_detail":
             row, connector = await service.get_operation_by_id_for_actor(
                 operation_id=operation_id,
                 actor=actor,
-                delegated_ids=attached_ids,
             )
             if allowed_ids is not None and connector.id not in allowed_ids:
                 return ToolResult.error_result("Access denied to API operation", code="API_CONNECTOR_FORBIDDEN")
@@ -248,7 +246,6 @@ async def api_connector(
                 _row, connector = await service.get_operation_by_id_for_actor(
                     operation_id=operation_id,
                     actor=actor,
-                    delegated_ids=attached_ids,
                 )
                 if connector.id not in allowed_ids:
                     return ToolResult.error_result("Access denied to API operation", code="API_CONNECTOR_FORBIDDEN")
@@ -257,7 +254,6 @@ async def api_connector(
                 operation_id=operation_id,
                 actor=actor,
                 parameters=parameters or ApiOperationCallParameters(),
-                delegated_ids=attached_ids,
             )
             if result.error:
                 return ToolResult.error_result(

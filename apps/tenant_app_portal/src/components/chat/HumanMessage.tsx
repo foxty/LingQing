@@ -7,9 +7,8 @@ interface HumanMessageProps {
 }
 
 export default function HumanMessage({ message }: HumanMessageProps) {
-  const contextResources = message.message_metadata?.context_resources as
-    | ContextResource[]
-    | undefined
+  const contextResources = (message.message_metadata?.attached_artifacts ??
+    message.message_metadata?.context_resources) as ContextResource[] | undefined
 
   return (
     <div className="flex items-start space-x-3 flex-row-reverse space-x-reverse">
@@ -22,7 +21,7 @@ export default function HumanMessage({ message }: HumanMessageProps) {
             <div className="flex flex-wrap gap-1.5 mb-2">
               {contextResources.map((resource) => (
                 <ContextChip
-                  key={`${resource.resource_type}-${resource.resource_id}`}
+                  key={`artifact-${resource.artifact_id ?? resource.resource_id}`}
                   resource={resource}
                   readOnly
                   variant="message"

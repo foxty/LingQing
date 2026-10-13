@@ -320,11 +320,11 @@ class ChatStreamingMixin:
         session_id = str(uuid4())
         agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
         lc_messages = self._convert_to_langchain_messages([request.message])
-        lc_messages = await self._inject_selected_context_resources(
+        lc_messages = await self._inject_message_attachments(
             lc_messages,
-            request.selected_resource_ids,
-            thread_id=request.thread_id,
+            selected_artifact_ids=request.selected_artifact_ids,
             selected_artifact_id=request.selected_artifact_id,
+            current_user=current_user,
         )
 
         tenant = await self._get_tenant_domain()

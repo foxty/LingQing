@@ -18,7 +18,7 @@ export default function ContextChipsBar({ resources, onRemove }: ContextChipsBar
     <div className="flex flex-wrap gap-1.5 px-3 pt-2 pb-1 border-b">
       {resources.map((resource) => (
         <ContextChip
-          key={`${resource.resource_type}-${resource.resource_id}`}
+          key={`artifact-${resource.artifact_id}`}
           resource={resource}
           onRemove={() => onRemove(resource)}
         />

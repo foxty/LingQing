@@ -491,7 +491,7 @@ async def test_create_rejects_personal_skill(async_db_session, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_agent_share_does_not_copy_collection_acl(async_db_session, monkeypatch):
-    from apps.shared.authz.delegation import allows_delegated_read, has_agent_delegation
+    from apps.shared.domain.actor import ActorContext
 
     tenant = Tenant(name="agent_acl", slug="agent_acl", config=None)
     async_db_session.add(tenant)
@@ -568,61 +568,25 @@ async def test_agent_share_does_not_copy_collection_acl(async_db_session, monkey
     )
     assert peer_can_read is False
 
-    assert await has_agent_delegation(
-        async_db_session,
-        tenant_id=tenant.id,
-        agent_id=created.id,
-        user_id=peer.id,
-        owner_id=owner.id,
-    )
-    attached_ids = [collection.id]
-    assert await allows_delegated_read(
-        db_session=async_db_session,
-        tenant_id=tenant.id,
-        user_id=peer.id,
-        user_role="member",
-        resource_type=RESOURCE_TYPE_DOCUMENT_COLLECTION,
-        resource_id=collection.id,
-        resource_owner_id=owner.id,
-        action=ABAC_ACTION_READ,
-        delegated_ids=attached_ids,
-    )
-    assert not await allows_delegated_read(
-        db_session=async_db_session,
-        tenant_id=tenant.id,
-        user_id=peer.id,
-        user_role="member",
-        resource_type=RESOURCE_TYPE_DOCUMENT_COLLECTION,
-        resource_id=collection.id,
-        resource_owner_id=owner.id,
-        action=ABAC_ACTION_READ,
-        delegated_ids=None,
-    )
+    from apps.shared.document.collection_service import DocumentCollectionService
 
-    async_db_session.add(
-        AclGrant(
-            tenant_id=tenant.id,
-            resource_type=RESOURCE_TYPE_DOCUMENT_COLLECTION,
-            resource_id=collection.id,
-            principal_type="user",
-            principal_id=str(peer.id),
-            permission="read",
-            effect="deny",
-            created_by=owner.id,
+    peer_actor = ActorContext(tenant_id=tenant.id, user_id=peer.id, user_role="member")
+    collection_service = DocumentCollectionService(tenant.id, async_db_session)
+    with pytest.raises(Exception):
+        await collection_service.require_collection_access(
+            collection_id=collection.id,
+            actor=peer_actor,
+            action=ABAC_ACTION_READ,
         )
-    )
-    await async_db_session.flush()
-    assert not await allows_delegated_read(
-        db_session=async_db_session,
-        tenant_id=tenant.id,
-        user_id=peer.id,
-        user_role="member",
-        resource_type=RESOURCE_TYPE_DOCUMENT_COLLECTION,
-        resource_id=collection.id,
-        resource_owner_id=owner.id,
-        action=ABAC_ACTION_READ,
-        delegated_ids=attached_ids,
-    )
+
+    from apps.tenant_app_service.agent_catalog.adapters import db_agent_to_custom
+
+    record = await service._repo.get_by_id_and_tenant(created.id, tenant.id)
+    custom = db_agent_to_custom(record)
+    access = await service.build_attachment_access(custom.profile, actor=peer_actor)
+    kb_items = [a for a in access if a.resource_type == RESOURCE_TYPE_DOCUMENT_COLLECTION]
+    assert len(kb_items) == 1
+    assert kb_items[0].can_read is False
 
 
 def test_viewer_cannot_invoke_chat_without_chat_access():

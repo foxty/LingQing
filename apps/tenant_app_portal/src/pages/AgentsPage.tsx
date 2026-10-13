@@ -58,6 +58,8 @@ i18n.addResourceBundle(
       slackStatusConnected: 'Slack connected',
       slackStatusDisabled: 'Slack disabled',
       rowActions: 'Agent actions',
+      shareHint:
+        'Sharing lets others run this agent. They still need their own access to attached knowledge bases, data sources, and APIs.',
     },
   },
   true,
@@ -86,6 +88,8 @@ i18n.addResourceBundle(
       slackStatusConnected: 'Slack 已连接',
       slackStatusDisabled: 'Slack 已禁用',
       rowActions: '智能体操作',
+      shareHint:
+        '共享仅允许他人运行该智能体。对方仍需单独拥有已挂载的知识库、数据源与 API 的访问权限。',
     },
   },
   true,
@@ -217,6 +221,7 @@ export default function AgentsPage() {
           resourceType={ACL_SHARE_RESOURCE_TYPES.AGENT}
           resourceId={sharing.id}
           resourceTitle={sharing.name}
+          hint={t('agents.shareHint')}
         />
       ) : null}
 

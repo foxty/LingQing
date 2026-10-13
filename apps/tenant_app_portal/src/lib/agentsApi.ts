@@ -18,6 +18,13 @@ export interface AgentCapabilityConfig {
   model_profile_id?: number | null
 }
 
+export interface AgentAttachmentAccessItem {
+  resource_type: string
+  resource_id: number
+  name: string
+  can_read: boolean
+}
+
 export interface CatalogAgent {
   id: number
   name: string
@@ -33,6 +40,7 @@ export interface CatalogAgent {
   updated_at: string | null
   can_write: boolean
   can_manage: boolean
+  attachment_access: AgentAttachmentAccessItem[]
 }
 
 export interface AgentWritePayload {

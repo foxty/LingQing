@@ -1,9 +1,7 @@
 /**
- * Resource Picker Popover Component
+ * Artifact Picker Popover (@mention)
  *
- * Triggers when the user types @ in the textarea.
- * Shows a searchable list of context resources grouped by type.
- * Supports keyboard navigation (↑↓ Enter) and click selection.
+ * Artifact @mention picker — user-accessible artifacts (any thread), filterable by title.
  */
 
 import {
@@ -14,27 +12,24 @@ import {
   useState,
 } from 'react'
 import { ContextResource } from '@/types'
-import { searchContextResources } from '@/lib/contextResourcesApi'
+import { searchArtifactsForMention } from '@/lib/artifactContextApi'
 import {
-  FileText,
   BarChart3,
   FileSpreadsheet,
   Clock,
   AppWindow,
-  Database,
   Loader2,
+  LineChart,
+  Code2,
+  Globe,
+  Table2,
 } from 'lucide-react'
 
 interface ResourcePickerPopoverProps {
-  /** Current textarea value */
   inputValue: string
-  /** Whether the picker should be open */
   open: boolean
-  /** Called when the picker should close */
   onOpenChange: (open: boolean) => void
-  /** Called when a resource is selected */
   onSelect: (resource: ContextResource) => void
-  /** Already-selected resource IDs to exclude from results */
   selectedIds: Set<string>
 }
 
@@ -42,22 +37,42 @@ export interface ResourcePickerPopoverHandle {
   handleKeyDown: (e: React.KeyboardEvent) => boolean
 }
 
-const RESOURCE_TYPE_ICONS: Record<string, React.ReactNode> = {
-  document: <FileText className="w-3.5 h-3.5" />,
+const ARTIFACT_TYPE_ICONS: Record<string, React.ReactNode> = {
   dashboard: <BarChart3 className="w-3.5 h-3.5" />,
+  chart: <LineChart className="w-3.5 h-3.5" />,
   report: <FileSpreadsheet className="w-3.5 h-3.5" />,
   scheduled_task: <Clock className="w-3.5 h-3.5" />,
   app: <AppWindow className="w-3.5 h-3.5" />,
-  asset: <Database className="w-3.5 h-3.5" />,
+  code: <Code2 className="w-3.5 h-3.5" />,
+  iframe: <Globe className="w-3.5 h-3.5" />,
+  data_preview: <Table2 className="w-3.5 h-3.5" />,
 }
 
-const RESOURCE_TYPE_LABELS: Record<string, string> = {
-  document: '文档',
+const ARTIFACT_TYPE_LABELS: Record<string, string> = {
   dashboard: '看板',
+  chart: '图表',
   report: '报告',
   scheduled_task: '定时任务',
   app: '应用',
-  asset: '数据资产',
+  code: '代码',
+  iframe: '嵌入页',
+  data_preview: '数据预览',
+}
+
+function artifactToContextResource(artifact: {
+  id: number
+  artifact_type: string
+  title: string
+  owner_username?: string | null
+}): ContextResource {
+  return {
+    artifact_id: artifact.id,
+    artifact_type: artifact.artifact_type,
+    title: artifact.title,
+    resource_type: artifact.artifact_type,
+    resource_id: artifact.id,
+    subtitle: artifact.owner_username ?? null,
+  }
 }
 
 const ResourcePickerPopover = forwardRef<
@@ -88,12 +103,11 @@ const ResourcePickerPopover = forwardRef<
     const fetchResults = async () => {
       setLoading(true)
       try {
-        const response = await searchContextResources(searchTerm, 8)
-        const filtered = response.items.filter(
-          (item) =>
-            !selectedIds.has(`${item.resource_type}-${item.resource_id}`)
-        )
-        setResults(filtered)
+        const artifacts = await searchArtifactsForMention(searchTerm, 20)
+        const mapped = artifacts
+          .map(artifactToContextResource)
+          .filter((item) => !selectedIds.has(`artifact-${item.artifact_id}`))
+        setResults(mapped)
         setActiveIndex(0)
       } catch {
         setResults([])
@@ -156,10 +170,11 @@ const ResourcePickerPopover = forwardRef<
 
   const groupedResults = results.reduce<Record<string, ContextResource[]>>(
     (acc, item) => {
-      if (!acc[item.resource_type]) {
-        acc[item.resource_type] = []
+      const type = item.artifact_type
+      if (!acc[type]) {
+        acc[type] = []
       }
-      acc[item.resource_type].push(item)
+      acc[type].push(item)
       return acc
     },
     {}
@@ -174,46 +189,35 @@ const ResourcePickerPopover = forwardRef<
   })
 
   return (
-    <div
-      className="absolute bottom-full left-0 z-50 mb-2 w-full max-w-sm overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"
-      role="listbox"
-      aria-label="选择引用资源"
-    >
-      <div className="border-b bg-muted/30 px-3 py-2 text-xs text-muted-foreground">
-        <span className="font-mono text-foreground">@{searchTerm || '…'}</span>
-        <span className="ml-1.5">
-          {searchTerm ? '搜索匹配资源' : '输入关键词筛选，或从列表选择'}
-        </span>
+    <div className="absolute bottom-full left-0 right-0 mb-1 z-50 rounded-md border bg-popover text-popover-foreground shadow-md max-h-72 overflow-y-auto">
+      <div className="px-3 py-2 text-xs text-muted-foreground border-b">
+        输入关键词筛选产物，或从列表选择
       </div>
-
-      <div className="max-h-64 overflow-y-auto">
+      <div className="max-h-60 overflow-y-auto">
         {loading ? (
-          <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-            <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            搜索中...
+          <div className="flex items-center justify-center py-8 text-muted-foreground">
+            <Loader2 className="w-5 h-5 animate-spin" />
           </div>
         ) : results.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            未找到匹配的资源
+            暂无可附加的产物
           </div>
         ) : (
           <div className="py-1">
             {typeOrder.map((type) => (
               <div key={type}>
                 <div className="flex items-center gap-1.5 bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                  {RESOURCE_TYPE_ICONS[type]}
-                  {RESOURCE_TYPE_LABELS[type] || type}
+                  {ARTIFACT_TYPE_ICONS[type] ?? <AppWindow className="w-3.5 h-3.5" />}
+                  {ARTIFACT_TYPE_LABELS[type] || type}
                 </div>
                 {groupedResults[type].map((resource) => {
                   const item = flatItems.find(
-                    (i) =>
-                      i.resource.resource_type === resource.resource_type &&
-                      i.resource.resource_id === resource.resource_id
+                    (i) => i.resource.artifact_id === resource.artifact_id
                   )
                   const isActive = item?.globalIndex === activeIndex
                   return (
                     <button
-                      key={`${resource.resource_type}-${resource.resource_id}`}
+                      key={`artifact-${resource.artifact_id}`}
                       type="button"
                       role="option"
                       aria-selected={isActive}
@@ -225,11 +229,11 @@ const ResourcePickerPopover = forwardRef<
                         if (item) setActiveIndex(item.globalIndex)
                       }}
                     >
-                      {RESOURCE_TYPE_ICONS[resource.resource_type]}
+                      {ARTIFACT_TYPE_ICONS[resource.artifact_type] ?? (
+                        <AppWindow className="w-3.5 h-3.5" />
+                      )}
                       <div className="min-w-0 flex-1">
-                        <div className="truncate font-medium">
-                          {resource.title}
-                        </div>
+                        <div className="truncate font-medium">{resource.title}</div>
                         {resource.subtitle && (
                           <div className="truncate text-xs text-muted-foreground">
                             {resource.subtitle}

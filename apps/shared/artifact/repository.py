@@ -111,11 +111,15 @@ class ArtifactRepository:
         user_id: int,
         *,
         artifact_type: str | None = None,
+        query: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Artifact]:
         """Artifacts the user owns or can access via ACL grants."""
         filters = self._tenant_type_filters(tenant_id, artifact_type)
+        if query:
+            escaped = query.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+            filters.append(Artifact.title.ilike(f"%{escaped}%", escape="\\"))
         allowed_permissions = required_acl_permissions("read")
         acl_allow_exists = exists(
             select(AclGrant.id)

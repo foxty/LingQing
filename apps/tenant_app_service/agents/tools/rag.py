@@ -45,7 +45,6 @@ class _SearchRuntime(NamedTuple):
     collection_ids: list[int] | None
     data_source_ids: list[int] | None
     api_ids: list[int] | None
-    delegate: bool
 
 
 class SearchQueryInput(BaseModel):
@@ -86,7 +85,6 @@ def _get_runtime(config: RunnableConfig) -> _SearchRuntime:
         collection_ids=profile.allowed_collection_ids if profile else None,
         data_source_ids=profile.allowed_data_source_ids if profile else None,
         api_ids=profile.allowed_api_connector_ids if profile else None,
-        delegate=bool(profile.delegate) if profile else False,
     )
 
 
@@ -103,7 +101,6 @@ async def _search_service(session, runtime: _SearchRuntime) -> SearchService:
         allowed_collection_ids=runtime.collection_ids,
         allowed_data_source_ids=runtime.data_source_ids,
         allowed_api_connector_ids=runtime.api_ids,
-        delegate=runtime.delegate,
     )
 
 
@@ -293,7 +290,6 @@ async def _retrieve_api_operation(service: SearchService, resource_id: int) -> T
         op, connector = await connector_service.get_operation_by_id_for_actor(
             operation_id=resource_id,
             actor=_service_actor(service),
-            delegated_ids=(service.allowed_api_connector_ids if getattr(service, "delegate", False) else None),
         )
         if service.allowed_api_connector_ids is not None and connector.id not in service.allowed_api_connector_ids:
             return ToolResult.error_result("API operation not found", code="API_OPERATION_NOT_FOUND")

@@ -39,55 +39,18 @@ async def test_thread_with_history(async_db_session, runtime_context):
     test_tenant_id = runtime_context.tenant.tenant_id
     test_agent_id = runtime_context.agent_id
 
-    tenant = await async_db_session.get(Tenant, test_tenant_id)
-    if tenant is None:
-        tenant = Tenant(
-            id=test_tenant_id,
-            name=runtime_context.tenant.tenant_name,
-            slug=f"tenant-{test_tenant_id}",
-            status="active",
-        )
-        async_db_session.add(tenant)
-        await async_db_session.flush()
+    from tests.integration.helpers.runtime_seed import ensure_runtime_base_records
 
-    user = await async_db_session.get(User, runtime_context.user.user_id)
-    if user is None:
-        user = User(
-            id=runtime_context.user.user_id,
-            username=runtime_context.user.username,
-            email=f"{runtime_context.user.username}@example.com",
-            hashed_password="hashed",
-            role=runtime_context.user.role,
-            tenant_id=test_tenant_id,
-            status="active",
-        )
-        async_db_session.add(user)
-        await async_db_session.flush()
-
-    agent = await async_db_session.get(Agent, test_agent_id)
-    if agent is None:
-        agent = Agent(
-            id=test_agent_id,
-            tenant_id=test_tenant_id,
-            owner_id=runtime_context.user.user_id,
-            name=runtime_context.agent_name,
-            description="test agent",
-            system_prompt="test prompt",
-            config={},
-        )
-        async_db_session.add(agent)
-        await async_db_session.flush()
-
-    thread = ChatThread(
-        id=test_thread_id,
-        tenant_id=test_tenant_id,
-        user_id=runtime_context.user.user_id,
-        agent_id=test_agent_id,
-        title="Test Conversation",
-        message_count=0,
+    await ensure_runtime_base_records(
+        async_db_session,
+        runtime_context,
+        agent_system_prompt="test prompt",
+        thread_id=test_thread_id,
+        thread_title="Test Conversation",
     )
-    async_db_session.add(thread)
-    await async_db_session.commit()
+
+    thread = await async_db_session.get(ChatThread, test_thread_id)
+    assert thread is not None
 
     manager = ConversationMemoryManager(async_db_session, thread.id, tenant_id=test_tenant_id, agent_id=test_agent_id)
 

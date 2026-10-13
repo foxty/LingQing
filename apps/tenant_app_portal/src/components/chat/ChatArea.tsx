@@ -24,8 +24,8 @@ i18n.addResourceBundle('en', 'translation', {
     threadLoadFailedDesc: 'Something went wrong while loading this conversation. Try again or start a new one.',
     agentAccessRevoked: 'You no longer have access to this agent',
     agentAccessRevokedDesc: 'This conversation is no longer listed. Start a new one with an agent you can use.',
-    messagePlaceholderEnter: 'Type a message... (Enter to send, @ to select resources)',
-    messagePlaceholderCtrlEnter: 'Type a message... (Ctrl+Enter to send, @ to select resources)',
+    messagePlaceholderEnter: 'Type a message... (Enter to send, @ to attach artifacts)',
+    messagePlaceholderCtrlEnter: 'Type a message... (Ctrl+Enter to send, @ to attach artifacts)',
     enterToSend: 'Enter to send',
     ctrlEnterToSend: 'Ctrl+Enter to send',
     send: 'Send',
@@ -44,8 +44,8 @@ i18n.addResourceBundle('zh', 'translation', {
     threadLoadFailedDesc: '加载此对话时出错。请重试或开始新对话。',
     agentAccessRevoked: '你已没有此智能体的访问权限',
     agentAccessRevokedDesc: '此对话已不再列出。请改用你仍可访问的智能体开始新对话。',
-    messagePlaceholderEnter: '输入消息...（Enter 发送，@选择资源）',
-    messagePlaceholderCtrlEnter: '输入消息...（Ctrl+Enter 发送，@选择资源）',
+    messagePlaceholderEnter: '输入消息...（Enter 发送，@附加产物）',
+    messagePlaceholderCtrlEnter: '输入消息...（Ctrl+Enter 发送，@附加产物）',
     enterToSend: 'Enter 发送',
     ctrlEnterToSend: 'Ctrl+Enter 发送',
     send: '发送',
@@ -141,16 +141,12 @@ export default function ChatArea({
 
   const handleRemoveResource = useCallback((resource: ContextResource) => {
     setSelectedResources((prev) =>
-      prev.filter(
-        (r) =>
-          r.resource_type !== resource.resource_type ||
-          r.resource_id !== resource.resource_id
-      )
+      prev.filter((r) => r.artifact_id !== resource.artifact_id)
     )
   }, [])
 
   const selectedIds = new Set(
-    selectedResources.map((r) => `${r.resource_type}-${r.resource_id}`)
+    selectedResources.map((r) => `artifact-${r.artifact_id}`)
   )
 
   const handleSend = useCallback(() => {

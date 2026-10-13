@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.api_connector.repository import ApiConnectorRepository, ApiOperationIndexRepository
 from apps.shared.authz.authz_query_builder import AuthzSqlFilter, build_unified_resource_filter
-from apps.shared.authz.delegation import combine_agent_scope, filter_explicit_deny_ids
+from apps.shared.authz.agent_scope import combine_agent_scope
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.data_source.adapters import db_asset_metadata_to_domain
@@ -137,7 +137,6 @@ class SearchService(TenantAwareService):
         allowed_collection_ids: list[int] | None = None,
         allowed_data_source_ids: list[int] | None = None,
         allowed_api_connector_ids: list[int] | None = None,
-        delegate: bool = False,
     ):
         super().__init__(tenant_id=tenant_id, db_session=session)
         self.session = session
@@ -146,7 +145,6 @@ class SearchService(TenantAwareService):
         self.allowed_collection_ids = allowed_collection_ids
         self.allowed_data_source_ids = allowed_data_source_ids
         self.allowed_api_connector_ids = allowed_api_connector_ids
-        self.delegate = delegate
         self.rag_manager = RAGManager(tenant_id=tenant_id, embeddings=embeddings)
         self.asset_repo = AssetMetadataRepository(session)
         self.data_source_repo = DataSourceRepository(session)
@@ -448,7 +446,6 @@ class SearchService(TenantAwareService):
                 document_id=resource_id,
                 actor=actor,
                 action=ABAC_ACTION_READ,
-                delegated_ids=self._delegated_ids(getattr(self, "allowed_collection_ids", None)),
             )
             if self.allowed_collection_ids is not None and collection_id not in self.allowed_collection_ids:
                 raise ResourceNotFoundError(f"Document {resource_id} not found")
@@ -463,7 +460,6 @@ class SearchService(TenantAwareService):
                 asset_id=resource_id,
                 actor=actor,
                 action=ABAC_ACTION_READ,
-                delegated_ids=self._delegated_ids(getattr(self, "allowed_data_source_ids", None)),
             )
             if (
                 getattr(self, "allowed_data_source_ids", None) is not None
@@ -945,14 +941,9 @@ class SearchService(TenantAwareService):
     def _clip_collection_scope(
         self, scope: DocumentAccessScope, allowed_ids: list[int] | None = None
     ) -> DocumentAccessScope:
-        """Restrict document search to the agent's attached collections.
-
-        With ``delegate``, attached collections are readable in this chat even
-        if the user has no collection ACL. Without it, user ACL ∩ agent set.
-        """
+        """Restrict document search to user ACL ∩ agent attachment collections."""
         if allowed_ids is None and self.allowed_collection_ids is None:
             return scope
-        delegate = getattr(self, "delegate", False)
         user_filter = AuthzSqlFilter(
             allow_all=scope.allow_all,
             deny_all=scope.deny_all,
@@ -962,7 +953,6 @@ class SearchService(TenantAwareService):
             user_scope=user_filter,
             id_column=DocumentModel.collection_id,
             allowed_ids=allowed_ids,
-            delegate=delegate,
         )
         index_combined = combine_agent_scope(
             user_scope=AuthzSqlFilter(
@@ -972,7 +962,6 @@ class SearchService(TenantAwareService):
             ),
             id_column=ResourceIndex.parent_id,
             allowed_ids=allowed_ids,
-            delegate=delegate,
         )
         return DocumentAccessScope(
             deny_all=combined.deny_all,
@@ -1006,7 +995,6 @@ class SearchService(TenantAwareService):
             user_scope=user_filter,
             id_column=AssetMetadata.data_source_id,
             allowed_ids=allowed_ids,
-            delegate=getattr(self, "delegate", False),
         )
         index_combined = combine_agent_scope(
             user_scope=AuthzSqlFilter(
@@ -1016,7 +1004,6 @@ class SearchService(TenantAwareService):
             ),
             id_column=ResourceIndex.parent_id,
             allowed_ids=allowed_ids,
-            delegate=getattr(self, "delegate", False),
         )
         return AssetAccessScope(
             deny_all=combined.deny_all,
@@ -1041,27 +1028,10 @@ class SearchService(TenantAwareService):
             user_scope=user_scope,
             id_column=ApiConnector.id,
             allowed_ids=allowed_ids,
-            delegate=getattr(self, "delegate", False),
         )
-
-    def _delegated_ids(self, allowed_ids: list[int] | None) -> list[int] | None:
-        if not getattr(self, "delegate", False) or not allowed_ids:
-            return None
-        return list(allowed_ids)
 
     async def _scoped_allowed_ids(self, resource_type, allowed_ids: list[int] | None) -> list[int] | None:
-        if allowed_ids is None:
-            return None
-        if not getattr(self, "delegate", False) or self.user_id is None:
-            return allowed_ids
-        return await filter_explicit_deny_ids(
-            self.session,
-            tenant_id=self.tenant_id,
-            user_id=self.user_id,
-            user_role=self.user_role,
-            resource_type=resource_type,
-            resource_ids=allowed_ids,
-        )
+        return allowed_ids
 
     async def _filter_connector_ids(self, authz_filter_clause) -> list[int]:
         stmt = select(ApiConnector.id).where(ApiConnector.tenant_id == self.tenant_id, authz_filter_clause)

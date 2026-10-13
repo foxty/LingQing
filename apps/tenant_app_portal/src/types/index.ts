@@ -45,7 +45,9 @@ export interface Message {
     capability_id?: string
     capability_name?: string
     sub_agent_id?: string // ID of the sub-agent that generated this message
-    context_resources?: ContextResource[]
+    attached_artifacts?: AttachedArtifact[]
+    /** @deprecated Legacy key; use attached_artifacts */
+    context_resources?: AttachedArtifact[]
     [key: string]: any
   }
   artifact_id?: number // Optional artifact ID (ThreadArtifact.id) for context
@@ -349,12 +351,17 @@ export function convertApiSkillToSkill(api: ApiSkill): Skill {
 }
 
 /**
- * Unified context resource type for @mention picker.
- * Represents any resource that can be attached to a chat message as context.
+ * Artifact attached via @mention in chat (artifact record id, not underlying resource id).
  */
-export interface ContextResource {
-  resource_type: 'document' | 'dashboard' | 'report' | 'scheduled_task' | 'app' | 'asset'
-  resource_id: number
+export interface AttachedArtifact {
+  artifact_id: number
+  artifact_type: string
   title: string
+  /** Chip compatibility / legacy persisted metadata */
+  resource_type?: string
+  resource_id?: number
   subtitle?: string | null
 }
+
+/** @deprecated Use AttachedArtifact */
+export type ContextResource = AttachedArtifact

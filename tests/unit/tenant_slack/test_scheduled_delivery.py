@@ -109,11 +109,6 @@ async def test_deliver_scheduled_agent_run_posts_to_thread(monkeypatch):
         "apps.tenant_app_service.agent_ingress.slack.scheduled_delivery.get_settings",
         lambda: SimpleNamespace(PORTAL_ORIGIN="https://portal.test", TENANT_APP_API_ORIGIN="https://api.test"),
     )
-    monkeypatch.setattr(
-        "apps.tenant_app_service.agent_ingress.slack.markdown_delivery.resolve_delegated_collection_ids",
-        AsyncMock(return_value=None),
-    )
-
     client = SimpleNamespace(chat_post_message=AsyncMock(return_value={"ok": True, "ts": "1.0"}))
 
     result = await deliver_scheduled_agent_run_to_slack(

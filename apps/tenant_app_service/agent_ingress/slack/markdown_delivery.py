@@ -13,7 +13,6 @@ from typing import Any
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.domain.actor import ActorContext
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort
 from apps.tenant_app_service.agent_ingress.slack.domain import (
@@ -38,8 +37,6 @@ from apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher import (
     default_image_fetcher,
     make_slack_image_fetcher,
 )
-from apps.tenant_app_service.agents.runtime_capability import resolve_delegated_collection_ids
-
 logger = get_logger(__name__)
 
 CANVAS_MARKDOWN_MAX_CHARS = 1_048_576
@@ -65,7 +62,6 @@ def _select_image_fetcher(
     requester_user_id: int | None,
     requester_role: str | None,
     image_fetcher: ImageFetcher | None,
-    delegated_collection_ids: list[int] | None = None,
 ) -> ImageFetcher:
     if image_fetcher is not None:
         return image_fetcher
@@ -75,7 +71,6 @@ def _select_image_fetcher(
             tenant_id=tenant_id,
             user_id=requester_user_id,
             user_role=requester_role,
-            delegated_collection_ids=delegated_collection_ids,
         )
     return default_image_fetcher
 
@@ -104,26 +99,13 @@ async def deliver_markdown_to_slack(
     """Render Markdown and post it. A block rejection retries once as mrkdwn."""
     active = policy or SlackMarkdownPolicy()
     source = ensure_slack_reply_text(markdown)
-    delegated_collection_ids: list[int] | None = None
-    if db_session is not None and tenant_id is not None and requester_user_id is not None and requester_role:
-        actor = ActorContext(
-            tenant_id=tenant_id,
-            user_id=requester_user_id,
-            user_role=requester_role,
-        )
-        delegated_collection_ids = await resolve_delegated_collection_ids(
-            db_session,
-            tenant_id=tenant_id,
-            actor=actor,
-            agent_id=agent_id,
-        )
+    _ = agent_id  # reserved for delivery metadata; authz uses requester ACL only
     fetcher = _select_image_fetcher(
         db_session=db_session,
         tenant_id=tenant_id,
         requester_user_id=requester_user_id,
         requester_role=requester_role,
         image_fetcher=image_fetcher,
-        delegated_collection_ids=delegated_collection_ids,
     )
     messages = await build_outbound_messages(
         client=client,
