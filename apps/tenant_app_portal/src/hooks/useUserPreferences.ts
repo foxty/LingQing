@@ -1,15 +1,19 @@
 import { useState, useEffect } from 'react'
+import type { ArtifactsAutoOpenPreference } from '@/lib/userPreferencesTypes'
 
 export type SendKeyPreference = 'enter' | 'ctrl-enter'
+export type { ArtifactsAutoOpenPreference } from '@/lib/userPreferencesTypes'
 
 interface UserPreferences {
   sendKey: SendKeyPreference
   lastAgentId: number
+  artifactsAutoOpen: ArtifactsAutoOpenPreference
 }
 
 const DEFAULT_PREFERENCES: UserPreferences = {
   sendKey: 'enter',
   lastAgentId: -1,
+  artifactsAutoOpen: 'never',
 }
 
 const STORAGE_KEY = 'user_preferences'

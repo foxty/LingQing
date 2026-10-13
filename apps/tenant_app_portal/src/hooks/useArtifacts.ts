@@ -19,6 +19,7 @@ interface UseArtifactsReturn {
   selectArtifact: (artifact: Artifact) => void
   clearSelection: () => void
   updatePanelWidth: (width: number) => void
+  restoreSelectionFromStorage: () => void
 }
 
 const STORAGE_KEY_PREFIX = 'selectedArtifact_'
@@ -32,7 +33,7 @@ const STORAGE_KEY_PREFIX = 'selectedArtifact_'
  * - Manages panel width for resizing
  * - Prevents duplicate artifacts
  * - Unified selectedArtifact controls both Artifacts Panel and Context Banner
- * - Persists selection in localStorage per thread
+ * - Persists selection in localStorage per thread (restored when the panel is opened)
  */
 export function useArtifacts(threadId: string | null): UseArtifactsReturn {
   const [artifacts, setArtifacts] = useState<Artifact[]>([])
@@ -44,13 +45,14 @@ export function useArtifacts(threadId: string | null): UseArtifactsReturn {
     return 400;
   })
   const [loading, setLoading] = useState(false)
-  const hasLoadedRef = useRef(false)
+  const artifactsRef = useRef<Artifact[]>([])
 
   const getStorageKey = useCallback(() => {
     return threadId ? `${STORAGE_KEY_PREFIX}${threadId}` : null
   }, [threadId])
 
-  const loadSelectedArtifactFromStorage = useCallback((artifactsList: Artifact[]) => {
+  const restoreSelectionFromStorage = useCallback(() => {
+    const artifactsList = artifactsRef.current
     if (!threadId) {
       setSelectedArtifact(null)
       return
@@ -58,7 +60,6 @@ export function useArtifacts(threadId: string | null): UseArtifactsReturn {
 
     const storageKey = getStorageKey()
     if (!storageKey) {
-      setSelectedArtifact(null)
       return
     }
 
@@ -66,19 +67,16 @@ export function useArtifacts(threadId: string | null): UseArtifactsReturn {
       const storedArtifactId = localStorage.getItem(storageKey)
       if (storedArtifactId) {
         const artifactId = parseInt(storedArtifactId, 10)
-        const foundArtifact = artifactsList.find(art => art.id === artifactId)
+        const foundArtifact = artifactsList.find((art) => art.id === artifactId)
         if (foundArtifact) {
           setSelectedArtifact(foundArtifact)
           return
         }
-        // If artifact not found, clear the storage
         localStorage.removeItem(storageKey)
       }
     } catch (error) {
       console.warn('Failed to load selected artifact from localStorage:', error)
     }
-    
-    setSelectedArtifact(null)
   }, [threadId, getStorageKey])
 
   const saveSelectedArtifactToStorage = useCallback((artifact: Artifact | null) => {
@@ -108,18 +106,10 @@ export function useArtifacts(threadId: string | null): UseArtifactsReturn {
     setLoading(true)
     try {
       const data = await listThreadArtifacts(threadId)
+      artifactsRef.current = data
       setArtifacts(data)
-      
-      // Only load from storage after initial load or when explicitly reloading
-      // This prevents auto-selection during normal thread switching
-      if (hasLoadedRef.current) {
-        loadSelectedArtifactFromStorage(data)
-      } else {
-        // On first load, don't auto-select anything unless restored from storage
-        loadSelectedArtifactFromStorage(data)
-        hasLoadedRef.current = true
-      }
-      
+      setSelectedArtifact(null)
+
       return data
     } catch (err) {
       console.error('Failed to load artifacts:', err)
@@ -129,11 +119,10 @@ export function useArtifacts(threadId: string | null): UseArtifactsReturn {
     } finally {
       setLoading(false)
     }
-  }, [threadId, loadSelectedArtifactFromStorage])
+  }, [threadId])
 
   // Load historical artifacts from API when thread changes
   useEffect(() => {
-    hasLoadedRef.current = false
     void reloadArtifacts()
   }, [reloadArtifacts])
 
@@ -160,5 +149,6 @@ export function useArtifacts(threadId: string | null): UseArtifactsReturn {
     selectArtifact,
     clearSelection,
     updatePanelWidth,
+    restoreSelectionFromStorage,
   }
 }

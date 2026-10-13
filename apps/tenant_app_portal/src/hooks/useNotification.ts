@@ -53,6 +53,19 @@ export function useNotification() {
     return toast.info(message, { duration: duration ?? DEFAULT_DURATIONS.info })
   }, [])
 
+  const showInfoWithAction = useCallback(
+    (message: string, actionLabel: string, onAction: () => void, duration?: number) => {
+      return toast.info(message, {
+        duration: duration ?? DEFAULT_DURATIONS.info,
+        action: {
+          label: actionLabel,
+          onClick: onAction,
+        },
+      })
+    },
+    []
+  )
+
   const showWarning = useCallback((message: string, duration?: number) => {
     return toast.warning(message, { duration: duration ?? DEFAULT_DURATIONS.warning })
   }, [])
@@ -66,6 +79,7 @@ export function useNotification() {
     showSuccess,
     showError,
     showInfo,
+    showInfoWithAction,
     showWarning,
     dismissNotification,
   }

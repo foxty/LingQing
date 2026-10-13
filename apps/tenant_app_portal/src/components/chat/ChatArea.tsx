@@ -28,6 +28,10 @@ i18n.addResourceBundle('en', 'translation', {
     messagePlaceholderCtrlEnter: 'Type a message... (Ctrl+Enter to send, @ to attach artifacts)',
     enterToSend: 'Enter to send',
     ctrlEnterToSend: 'Ctrl+Enter to send',
+    artifactsAutoOpen: 'Artifacts panel',
+    artifactsAutoOpenNever: 'Stay closed (badge + toast)',
+    artifactsAutoOpenOnNew: 'Open for new artifacts',
+    artifactsAutoOpenAlways: 'Always open for new artifacts',
     send: 'Send',
   },
 }, true, true)
@@ -48,6 +52,10 @@ i18n.addResourceBundle('zh', 'translation', {
     messagePlaceholderCtrlEnter: '输入消息...（Ctrl+Enter 发送，@附加产物）',
     enterToSend: 'Enter 发送',
     ctrlEnterToSend: 'Ctrl+Enter 发送',
+    artifactsAutoOpen: '产物面板',
+    artifactsAutoOpenNever: '保持关闭（角标与提示）',
+    artifactsAutoOpenOnNew: '有新产物时打开',
+    artifactsAutoOpenAlways: '有新产物时始终打开',
     send: '发送',
   },
 }, true, true)
@@ -55,10 +63,13 @@ import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuLabel,
   DropdownMenuRadioGroup,
   DropdownMenuRadioItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import type { ArtifactsAutoOpenPreference } from '@/lib/userPreferencesTypes'
 import { Textarea } from '@/components/ui/textarea'
 import { Message, ContextResource } from '@/types'
 import { Bot, Loader2, LockKeyhole, Send, Settings } from 'lucide-react'
@@ -76,6 +87,7 @@ interface ChatAreaProps {
   streamingContent: string
   streamingToolCalls?: StreamingToolCallState[]
   sendKeyPreference: 'enter' | 'ctrl-enter'
+  artifactsAutoOpen: ArtifactsAutoOpenPreference
   threadId?: string
   isLoadingHistory?: boolean
   threadLoadError?: ThreadLoadError | null
@@ -90,6 +102,7 @@ interface ChatAreaProps {
   // Callbacks
   onSendMessage: (message: string, resources: ContextResource[]) => void
   onSendKeyPreferenceChange: (value: 'enter' | 'ctrl-enter') => void
+  onArtifactsAutoOpenChange: (value: ArtifactsAutoOpenPreference) => void
   onHitlApprovedContinue?: (proposalId: string) => void | Promise<void>
   onHitlRejected?: (proposalId: string) => void | Promise<void>
 }
@@ -101,6 +114,7 @@ export default function ChatArea({
   streamingContent,
   streamingToolCalls = [],
   sendKeyPreference,
+  artifactsAutoOpen,
   threadId,
   isLoadingHistory = false,
   threadLoadError = null,
@@ -111,6 +125,7 @@ export default function ChatArea({
   onLoadMore,
   onSendMessage,
   onSendKeyPreferenceChange,
+  onArtifactsAutoOpenChange,
   onHitlApprovedContinue,
   onHitlRejected,
 }: ChatAreaProps) {
@@ -334,6 +349,24 @@ export default function ChatArea({
               >
                 <DropdownMenuRadioItem value="enter">{t('workbench.enterToSend')}</DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="ctrl-enter">{t('workbench.ctrlEnterToSend')}</DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel>{t('workbench.artifactsAutoOpen')}</DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={artifactsAutoOpen}
+                onValueChange={(value) =>
+                  onArtifactsAutoOpenChange(value as ArtifactsAutoOpenPreference)
+                }
+              >
+                <DropdownMenuRadioItem value="never">
+                  {t('workbench.artifactsAutoOpenNever')}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="on-new">
+                  {t('workbench.artifactsAutoOpenOnNew')}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="always">
+                  {t('workbench.artifactsAutoOpenAlways')}
+                </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
