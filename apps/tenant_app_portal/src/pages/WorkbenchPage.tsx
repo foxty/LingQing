@@ -9,6 +9,7 @@ import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { useWorkbenchChat } from '@/hooks/useWorkbenchChat'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
+import { useNotification } from '@/hooks/useNotification'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import {
@@ -30,6 +31,8 @@ i18n.addResourceBundle('en', 'translation', {
     streamFailed: 'The agent could not finish this turn. Please try again.',
     authRequired: 'Your session expired. Sign in again and retry.',
     openArtifacts: 'Open artifacts',
+    artifactReady: 'New artifact ready',
+    viewArtifact: 'View',
     untitledThread: 'Conversation',
     selectAgent: 'Agent',
     agentAccessRevoked: 'You no longer have access to this agent',
@@ -44,6 +47,8 @@ i18n.addResourceBundle('zh', 'translation', {
     streamFailed: '智能体未能完成本轮对话，请重试。',
     authRequired: '登录已过期，请重新登录后再试。',
     openArtifacts: '打开产物',
+    artifactReady: '新产物已就绪',
+    viewArtifact: '查看',
     untitledThread: '对话',
     selectAgent: '智能体',
     agentAccessRevoked: '你已没有此智能体的访问权限',
@@ -64,9 +69,12 @@ export default function WorkbenchPage() {
   const [selectedAgentId, setSelectedAgentId] = useState<number>(
     Number(searchParams.get('agent')) || preferences.lastAgentId || SYSTEM_AGENT_ONE_ID
   )
-  const [artifactsPanelVisible, setArtifactsPanelVisible] = useState(true)
+  const [artifactsPanelVisible, setArtifactsPanelVisible] = useState(false)
   const [departedThreadId, setDepartedThreadId] = useState<string | null>(null)
   const initialMessageSentRef = useRef(false)
+  const artifactsPanelVisibleRef = useRef(false)
+  const artifactsPanelDismissedForThreadRef = useRef(false)
+  const { showInfoWithAction } = useNotification()
   const { data: routeThread, isFetched: routeThreadFetched } = useThread(
     threadIdParam,
     threadIdParam !== departedThreadId
@@ -105,7 +113,35 @@ export default function WorkbenchPage() {
     selectArtifact,
     clearSelection,
     updatePanelWidth,
+    restoreSelectionFromStorage,
   } = useArtifacts(currentThreadId)
+
+  useEffect(() => {
+    artifactsPanelVisibleRef.current = artifactsPanelVisible
+  }, [artifactsPanelVisible])
+
+  useEffect(() => {
+    artifactsPanelDismissedForThreadRef.current = false
+    setArtifactsPanelVisible(false)
+  }, [currentThreadId])
+
+  const setArtifactsPanelVisibleFromChat = useCallback((visible: boolean) => {
+    if (visible) {
+      artifactsPanelDismissedForThreadRef.current = false
+    }
+    setArtifactsPanelVisible(visible)
+  }, [])
+
+  const handleOpenArtifactsPanel = useCallback(() => {
+    artifactsPanelDismissedForThreadRef.current = false
+    setArtifactsPanelVisible(true)
+    restoreSelectionFromStorage()
+  }, [restoreSelectionFromStorage])
+
+  const handleCollapseArtifactsPanel = useCallback(() => {
+    artifactsPanelDismissedForThreadRef.current = true
+    setArtifactsPanelVisible(false)
+  }, [])
 
   const {
     displayMessages,
@@ -129,7 +165,19 @@ export default function WorkbenchPage() {
     updateThreadTitle,
     reloadArtifacts,
     selectArtifact,
-    setArtifactsPanelVisible,
+    setArtifactsPanelVisible: setArtifactsPanelVisibleFromChat,
+    artifactsAutoOpen: preferences.artifactsAutoOpen,
+    isArtifactsPanelDismissedForThread: () => artifactsPanelDismissedForThreadRef.current,
+    isArtifactsPanelVisible: () => artifactsPanelVisibleRef.current,
+    onNewArtifactsWhilePanelClosed: (newArtifacts) => {
+      const primary = newArtifacts[0]
+      if (!primary) return
+      showInfoWithAction(t('workbench.artifactReady'), t('workbench.viewArtifact'), () => {
+        artifactsPanelDismissedForThreadRef.current = false
+        setArtifactsPanelVisible(true)
+        selectArtifact(primary)
+      })
+    },
   })
 
   const queryAgentId = Number(searchParams.get('agent'))
@@ -336,7 +384,7 @@ export default function WorkbenchPage() {
                 variant="ghost"
                 size="sm"
                 className="ml-auto h-9 shrink-0 px-2"
-                onClick={() => setArtifactsPanelVisible(true)}
+                onClick={handleOpenArtifactsPanel}
                 title={t('workbench.openArtifacts')}
                 aria-label={t('workbench.openArtifacts')}
               >
@@ -353,6 +401,7 @@ export default function WorkbenchPage() {
             streamingContent={isStreaming ? streamingContent : ''}
             streamingToolCalls={isStreaming ? streamingToolCalls : []}
             sendKeyPreference={preferences.sendKey}
+            artifactsAutoOpen={preferences.artifactsAutoOpen}
             threadId={currentThreadId || undefined}
             isLoadingHistory={historyLoading}
             threadLoadError={threadLoadError}
@@ -364,6 +413,9 @@ export default function WorkbenchPage() {
             onSendMessage={handleSendMessage}
             onSendKeyPreferenceChange={(value) => {
               updatePreferences({ sendKey: value })
+            }}
+            onArtifactsAutoOpenChange={(value) => {
+              updatePreferences({ artifactsAutoOpen: value })
             }}
             onHitlApprovedContinue={handleHitlApprovedContinue}
             onHitlRejected={handleHitlRejected}
@@ -381,7 +433,7 @@ export default function WorkbenchPage() {
           onWidthChange={updatePanelWidth}
           onArtifactSelect={selectArtifact}
           onClearSelection={clearSelection}
-          onCollapse={() => setArtifactsPanelVisible(false)}
+          onCollapse={handleCollapseArtifactsPanel}
         />
       ) : null}
     </div>

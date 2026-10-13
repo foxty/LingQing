@@ -7,9 +7,11 @@ import { useChatStream } from '@/hooks/useChatStream'
 import { shouldNavigateAfterStreamStart } from '@/lib/chatStream'
 import { SESSION_STATUS } from '@/lib/chatApi'
 import { isStreamTransportError } from '@/lib/streamErrors'
+import type { ArtifactsAutoOpenPreference } from '@/lib/userPreferencesTypes'
 import {
   getLatestMessageTimestamp,
   getLatestSessionWindow,
+  shouldAutoOpenArtifactsPanel,
   toTimestampMs,
 } from '@/lib/workbenchChatUtils'
 import type { SSEMessage } from '@/lib/sse'
@@ -24,6 +26,10 @@ interface UseWorkbenchChatOptions {
   reloadArtifacts: () => Promise<Artifact[]>
   selectArtifact: (artifact: Artifact) => void
   setArtifactsPanelVisible: (visible: boolean) => void
+  artifactsAutoOpen: ArtifactsAutoOpenPreference
+  isArtifactsPanelDismissedForThread: () => boolean
+  isArtifactsPanelVisible: () => boolean
+  onNewArtifactsWhilePanelClosed: (artifacts: Artifact[]) => void
 }
 
 function withOptimisticMessage(history: Message[], optimistic: Message | null): Message[] {
@@ -46,6 +52,10 @@ export function useWorkbenchChat({
   reloadArtifacts,
   selectArtifact,
   setArtifactsPanelVisible,
+  artifactsAutoOpen,
+  isArtifactsPanelDismissedForThread,
+  isArtifactsPanelVisible,
+  onNewArtifactsWhilePanelClosed,
 }: UseWorkbenchChatOptions) {
   const { t } = useTranslation()
   const { user } = useAuth()
@@ -146,8 +156,19 @@ export function useWorkbenchChat({
               )
             })
             if (artifactsInLatestSession.length > 0) {
-              setArtifactsPanelVisible(true)
-              selectArtifact(artifactsInLatestSession[0])
+              const primary = artifactsInLatestSession[0]
+              const shouldOpen = shouldAutoOpenArtifactsPanel(
+                artifactsAutoOpen,
+                isArtifactsPanelDismissedForThread()
+              )
+              if (shouldOpen) {
+                setArtifactsPanelVisible(true)
+                selectArtifact(primary)
+              } else if (isArtifactsPanelVisible()) {
+                selectArtifact(primary)
+              } else {
+                onNewArtifactsWhilePanelClosed(artifactsInLatestSession)
+              }
             }
           }
         } finally {

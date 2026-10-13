@@ -1,4 +1,14 @@
+import type { ArtifactsAutoOpenPreference } from '@/lib/userPreferencesTypes'
 import type { Message } from '@/types'
+
+export function shouldAutoOpenArtifactsPanel(
+  preference: ArtifactsAutoOpenPreference,
+  panelDismissedForThread: boolean
+): boolean {
+  if (preference === 'always') return true
+  if (preference === 'never') return false
+  return !panelDismissedForThread
+}
 
 export function toTimestampMs(value?: string): number | null {
   if (!value) return null
