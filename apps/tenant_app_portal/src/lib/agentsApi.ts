@@ -8,6 +8,23 @@ import type {
 
 export const SYSTEM_AGENT_ONE_ID = -1
 
+/** Keep only catalog skill ids (drops stale entries hidden from the multi-select UI). */
+export function filterAgentSkillIds(
+  skills: string[],
+  available: ReadonlySet<string>
+): string[] {
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const name of skills) {
+    if (!available.has(name) || seen.has(name)) {
+      continue
+    }
+    seen.add(name)
+    out.push(name)
+  }
+  return out
+}
+
 export interface AgentCapabilityConfig {
   default_tools: string[]
   skills: string[]

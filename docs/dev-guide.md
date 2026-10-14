@@ -90,7 +90,7 @@ Local dev skips `entrypoint.sh`, so link repo skills into storage (`DATA_ROOT_PA
 ln -sfn "$(pwd)/config/skills" "$DATA_ROOT_PATH/skills"
 ```
 
-`npm run dev:ta` runs the same via `npm run link-dev-skills`. Full Docker (`stack-up`) copies skills at startup instead.
+`npm run dev:ta` runs the same via `npm run link-dev-skills`. Full Docker (`stack-up`) mirrors `config/skills` into `DATA_ROOT/skills` on each tenant-app container start (see `deploy/docker/entrypoint.sh`).
 
 **Benefits:**
 

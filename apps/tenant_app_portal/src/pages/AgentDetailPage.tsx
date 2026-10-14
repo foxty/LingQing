@@ -16,7 +16,11 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/hooks/useAuth'
 import { useAgent, useUpdateAgent } from '@/hooks/useAgents'
 import { useAgentFormOptions } from '@/hooks/useAgentFormOptions'
-import { agentApiErrorMessage, type AgentCapabilityConfig } from '@/lib/agentsApi'
+import {
+  agentApiErrorMessage,
+  filterAgentSkillIds,
+  type AgentCapabilityConfig,
+} from '@/lib/agentsApi'
 import { PERMISSIONS, routeRules } from '@/lib/permissionRules'
 import { useQueryClient } from '@tanstack/react-query'
 import { useFeedbackStats } from '@/hooks/useMessageFeedbackAnalysis'
@@ -153,9 +157,9 @@ export default function AgentDetailPage() {
     formHydratedAt.current = hydrationKey
     setFormName(agent.name)
     setFormPrompt(agent.system_prompt)
-    setFormConfig(agentConfigFromAgent(agent.config))
+    setFormConfig(agentConfigFromAgent(agent.config, skills.map((s) => s.name)))
     setFormError(null)
-  }, [agent, agentId])
+  }, [agent, agentId, skills])
 
   const resetSettingsForm = () => {
     if (!agent) {
@@ -164,7 +168,7 @@ export default function AgentDetailPage() {
     formHydratedAt.current = `${agent.id}:${agent.updated_at ?? ''}`
     setFormName(agent.name)
     setFormPrompt(agent.system_prompt)
-    setFormConfig(agentConfigFromAgent(agent.config))
+    setFormConfig(agentConfigFromAgent(agent.config, skills.map((s) => s.name)))
     setFormError(null)
   }
 
@@ -246,18 +250,22 @@ export default function AgentDetailPage() {
     }
     try {
       setFormError(null)
+      const availableSkillNames = new Set(skills.map((s) => s.name))
       const updated = await updateMutation.mutateAsync({
         agentId: agent.id,
         payload: {
           name: formName.trim(),
           system_prompt: formPrompt,
-          config: formConfig,
+          config: {
+            ...formConfig,
+            skills: filterAgentSkillIds(formConfig.skills, availableSkillNames),
+          },
         },
       })
       formHydratedAt.current = `${updated.id}:${updated.updated_at ?? ''}`
       setFormName(updated.name)
       setFormPrompt(updated.system_prompt)
-      setFormConfig(agentConfigFromAgent(updated.config))
+      setFormConfig(agentConfigFromAgent(updated.config, skills.map((s) => s.name)))
     } catch (error) {
       setFormError(agentApiErrorMessage(error, t('agents.saveFailed')))
     }

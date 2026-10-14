@@ -123,8 +123,8 @@ def test_project_skill_files_load_with_tool_registry():
     loader = SkillConfigLoader(skills_dir="config/skills", tool_registry=TOOL_REGISTRY)
     skills = loader.load_all(force_reload=True)
 
-    assert "data_analyst" in skills
-    assert "dashboard_builder" in skills
+    assert "data-analyst" in skills
+    assert "dashboard-builder" in skills
     assert "app-builder" in skills
     assert "weather-ip-helper" in skills
     assert "default" not in skills

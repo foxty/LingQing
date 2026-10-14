@@ -55,18 +55,18 @@ class TestSkillTemplateResolution:
     def test_skills_are_loaded_from_resolution(self, manager_with_skills, mock_runtime):
         skills = manager_with_skills.get_resolved_skills(mock_runtime)
 
-        assert "data_analyst" in skills
-        assert "dashboard_builder" in skills
+        assert "data-analyst" in skills
+        assert "dashboard-builder" in skills
 
     def test_skill_meta_comes_from_skill_descriptions(self, manager_with_skills, mock_runtime):
         skills_meta = manager_with_skills.get_resolved_skills_meta(mock_runtime)
         names = {entry["name"] for entry in skills_meta}
 
-        assert "data_analyst" in names
-        assert "dashboard_builder" in names
+        assert "data-analyst" in names
+        assert "dashboard-builder" in names
 
     def test_system_prompt_for_skill_comes_from_skill_file(self, manager_with_skills, mock_runtime):
-        prompt = manager_with_skills.get_system_prompt(["data_analyst"], mock_runtime)
+        prompt = manager_with_skills.get_system_prompt(["data-analyst"], mock_runtime)
 
         assert "You are a Data Analyst Agent." in prompt
 
