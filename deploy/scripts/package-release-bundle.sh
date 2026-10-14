@@ -97,7 +97,7 @@ Edit the **FILL BEFORE DEPLOY** section of \`.env.template\`:
 ./bootstrap.sh --version ${VERSION} --registry ${REGISTRY_URL}
 \`\`\`
 
-\`bootstrap.sh\` derives \`CORS_ORIGINS\`, \`PORTAL_ORIGIN\`, and \`TENANT_APP_API_ORIGIN\` from the public URLs.
+\`bootstrap.sh\` derives \`CORS_ORIGINS\`, \`PORTAL_ORIGIN\`, and \`TENANT_APP_API_ORIGIN\` (\`{APP_PUBLIC_URL}/api\`) from the public URLs.
 
 Full reference: https://github.com/${GITHUB_REPO}/blob/main/docs/deploy/reference.md
 

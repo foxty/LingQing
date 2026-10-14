@@ -111,7 +111,7 @@ cp deploy/env/.env.production.template .env.prod
 
 Or use `.env.template` from the release bundle. Fill secrets, PostgreSQL (`TENANT_APP_DB_*`, `TENANT_MANAGER_DB_*`), `DATA_ROOT_HOST_PATH`, and public URLs.
 
-`bootstrap.sh` derives `CORS_ORIGINS`, `PORTAL_ORIGIN`, and `TENANT_APP_API_ORIGIN` from `APP_PUBLIC_URL` and `MANAGER_PUBLIC_URL`.
+`bootstrap.sh` fills `CORS_ORIGINS`, `PORTAL_ORIGIN`, and `TENANT_APP_API_ORIGIN` from `APP_PUBLIC_URL` and `MANAGER_PUBLIC_URL` **only when those keys are unset** (explicit values in `.env` are kept). Defaults: portal origin = `APP_PUBLIC_URL`; API origin = `{APP_PUBLIC_URL}/api` (gateway `/api` proxy — required for SSO/webhooks). Register `{TENANT_APP_API_ORIGIN}/auth/sso/callback` at the IdP (Settings → Identity).
 
 Full variable reference: [reference.md](reference.md).
 
