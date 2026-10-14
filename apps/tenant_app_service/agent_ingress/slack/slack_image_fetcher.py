@@ -1,4 +1,4 @@
-"""Fetch image bytes for Slack upload (document ACL + owned URLs)."""
+"""Fetch image bytes for Slack upload (document ACL + chart static files + owned URLs)."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_file_storage
+from apps.shared.chart.paths import read_chart_static_png_file
 from apps.shared.document.service import DocumentService
 from apps.shared.domain.actor import ActorContext
 from apps.shared.utils.logger import get_logger
@@ -27,7 +28,7 @@ def is_raster_image(data: bytes) -> bool:
 
 
 async def fetch_owned_url_bytes(url: str) -> bytes | None:
-    """Download an image from an owned origin. Redirects are not followed."""
+    """Download raster bytes from an owned origin. Redirects are not followed."""
     try:
         import aiohttp
     except ImportError:
@@ -44,7 +45,23 @@ async def fetch_owned_url_bytes(url: str) -> bytes | None:
     except Exception as exc:
         logger.warning("Slack image fetch failed: %s", exc)
         return None
-    if len(data) > IMAGE_FETCH_MAX_BYTES or not is_raster_image(data):
+    if len(data) > IMAGE_FETCH_MAX_BYTES:
+        return None
+    if is_raster_image(data):
+        return data
+    logger.warning("Slack image fetch returned non-raster bytes from %s", url)
+    return None
+
+
+def _chart_png_bytes(filename: str) -> bytes | None:
+    data = read_chart_static_png_file(filename)
+    if data is None:
+        logger.warning("Slack chart PNG not found on disk: %s", filename)
+        return None
+    if len(data) > IMAGE_FETCH_MAX_BYTES:
+        return None
+    if not is_raster_image(data):
+        logger.warning("Slack chart file is not raster PNG: %s", filename)
         return None
     return data
 
@@ -59,6 +76,12 @@ async def fetch_upload_block_bytes(
 ) -> bytes | None:
     """Load raster bytes for one ``_image_upload`` block."""
     source = block.get("source")
+    if source == "chart":
+        filename = block.get("filename")
+        if not isinstance(filename, str):
+            return None
+        return _chart_png_bytes(filename)
+
     if source == "document":
         if db is None or tenant_id is None or user_id is None or not user_role:
             logger.warning("Slack document image fetch missing tenant/user context")
@@ -90,7 +113,7 @@ async def fetch_upload_block_bytes(
 
 async def default_image_fetcher(block: dict[str, Any]) -> bytes | None:
     """URL-only fetcher when no document requester context is available."""
-    if block.get("source") == "document":
+    if block.get("source") in {"document", "chart"}:
         return None
     return await fetch_upload_block_bytes(block)
 

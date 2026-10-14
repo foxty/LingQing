@@ -37,14 +37,16 @@ class TestRenderChartSVGGeneration:
         assert "![Monthly Sales]" in result
         assert result.endswith("\n\n")
 
-        # Verify SVG file was created
+        # Verify SVG + companion PNG were created
         svg_files = list(charts_tmp_path.glob("chart_*.svg"))
         assert len(svg_files) == 1
+        png_files = list(charts_tmp_path.glob("chart_*.png"))
+        assert len(png_files) == 1
 
-        # Verify SVG content
         svg_content = svg_files[0].read_text(encoding="utf-8")
         assert svg_content.startswith("<?xml") or svg_content.startswith("<svg")
         assert "Monthly Sales" in svg_content
+        assert png_files[0].read_bytes().startswith(b"\x89PNG\r\n\x1a\n")
 
     def test_render_line_chart_creates_svg(self, charts_tmp_path):
         """Line chart should produce a valid SVG file."""

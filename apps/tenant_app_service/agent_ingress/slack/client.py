@@ -16,6 +16,16 @@ from apps.shared.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _slack_response_dict(exc: SlackApiError) -> dict[str, Any]:
+    response = exc.response
+    if isinstance(response, dict):
+        return response
+    if isinstance(response, str):
+        return {"error": response}
+    getter = getattr(response, "get", None)
+    return dict(response) if callable(getter) else {}
+
+
 class SlackClientPort(Protocol):
     """Port for Slack Web API calls. Implementations must be async."""
 
@@ -60,11 +70,10 @@ class SlackClientPort(Protocol):
         ...
 
     async def upload_file(self, *, bot_token: str, filename: str, content: bytes) -> str:
-        """Upload image bytes and return the Slack file id.
+        """Upload image bytes and return the Slack file id for Block Kit ``slack_file`` blocks.
 
-        The file is not shared into a channel here. Sharing via
-        files.completeUploadExternal would also post a file message. The image
-        block references the file id instead.
+        Do not pass ``channel`` here — sharing the file into the channel creates a second
+        message; the image block on ``chat.postMessage`` / ``chat.update`` references the id.
         """
         ...
 
@@ -205,7 +214,15 @@ class SlackWebClient:
         try:
             resp = await client.files_info(file=file_id)
         except SlackApiError as exc:
-            logger.warning("Slack files.info failed for %s: %s", file_id, exc)
+            payload = _slack_response_dict(exc)
+            if payload.get("error") == "missing_scope" and payload.get("needed") == "files:read":
+                logger.warning(
+                    "Slack bot token is missing files:read (file=%s). "
+                    "Add files:read under OAuth scopes and reinstall the app to the workspace.",
+                    file_id,
+                )
+            else:
+                logger.warning("Slack files.info failed for %s: %s", file_id, exc)
             return None
         file_obj = dict(resp.data or {}).get("file") or {}
         return file_obj.get("permalink") or file_obj.get("url_private")

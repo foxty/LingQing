@@ -36,6 +36,8 @@ def parse_document_image_location(url_or_path: str) -> DocumentImageRef | None:
 def upload_block_cache_key(block: dict[str, Any]) -> str:
     if block.get("source") == "document":
         return f"document:{block.get('document_id')}:{block.get('filename')}"
+    if block.get("source") == "chart":
+        return f"chart:{block.get('filename')}"
     return f"url:{block.get('url')}"
 
 

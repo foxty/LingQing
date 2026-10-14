@@ -94,6 +94,26 @@ async def test_default_image_fetcher_skips_document_blocks():
 
 
 @pytest.mark.asyncio
+async def test_fetch_upload_block_bytes_reads_chart_png_from_disk(monkeypatch, tmp_path):
+    name = "chart_9_slack_ab12cd34.png"
+    (tmp_path / name).write_bytes(PNG)
+    monkeypatch.setattr(
+        "apps.shared.chart.paths.get_charts_path",
+        lambda: str(tmp_path),
+    )
+    block = {"source": "chart", "filename": name}
+    result = await fetch_upload_block_bytes(block)
+    assert result == PNG
+
+
+@pytest.mark.asyncio
+async def test_default_image_fetcher_skips_chart_blocks():
+    block = {"source": "chart", "filename": "chart_1_x_ab12cd34.png"}
+    result = await default_image_fetcher(block)
+    assert result is None
+
+
+@pytest.mark.asyncio
 async def test_make_slack_image_fetcher_delegates_to_document_service(monkeypatch):
     db = AsyncMock()
     calls: list[int] = []
