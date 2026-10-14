@@ -14,7 +14,7 @@ from slack_sdk.errors import SlackApiError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort
+from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, _slack_response_dict
 from apps.tenant_app_service.agent_ingress.slack.domain import (
     ensure_slack_reply_text,
     format_reply_for_slack,
@@ -133,7 +133,12 @@ async def deliver_markdown_to_slack(
     except SlackApiError as exc:
         if not _is_invalid_blocks(exc):
             raise
-        logger.warning("Slack rejected blocks; falling back to mrkdwn")
+        detail = _slack_response_dict(exc)
+        logger.warning(
+            "Slack rejected blocks (%s); falling back to mrkdwn. "
+            "Inline chart images need files:read + files:write on the bot token.",
+            detail.get("error") or detail,
+        )
         fallback = degraded_outbound_messages(
             source,
             portal_origin=portal_origin,

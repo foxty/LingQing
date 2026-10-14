@@ -4,8 +4,17 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass
+from enum import StrEnum
 from typing import Any
 from urllib.parse import urlparse
+
+
+class SlackImageUploadSource(StrEnum):
+    """``source`` field on ``_image_upload`` blocks passed to the image fetcher."""
+
+    CHART = "chart"
+    DOCUMENT = "document"
+    URL = "url"
 
 DOCUMENT_IMAGE_PATH = re.compile(
     r"^(?:/api)?/documents/(?P<document_id>\d+)/images/(?P<filename>[a-f0-9]{64}\.(?:png|jpe?g|gif))$",
@@ -34,8 +43,11 @@ def parse_document_image_location(url_or_path: str) -> DocumentImageRef | None:
 
 
 def upload_block_cache_key(block: dict[str, Any]) -> str:
-    if block.get("source") == "document":
+    source = block.get("source")
+    if source == SlackImageUploadSource.DOCUMENT:
         return f"document:{block.get('document_id')}:{block.get('filename')}"
+    if source == SlackImageUploadSource.CHART:
+        return f"chart:{block.get('filename')}"
     return f"url:{block.get('url')}"
 
 

@@ -5,6 +5,8 @@ structured data into a persisted SVG file and returns a markdown image string.
 
 Output format:  "\n\n![title](https://.../static/charts/chart_*.svg)\n\n"
 
+Each chart is saved as SVG (markdown URL) and PNG (Slack / raster consumers).
+
 SVG is used because:
 - Vector quality at any resolution
 - Smaller files than raster formats
@@ -31,6 +33,9 @@ from apps.shared.chart.data_processor import (
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+# Kaleido PNG scale for the companion raster written beside each SVG.
+_CHART_PNG_EXPORT_SCALE = 2
 
 
 def render_chart(
@@ -279,21 +284,28 @@ def _generate_colors(n: int, palette: str = "gradient") -> List[str]:
 
 
 def _save_plotly_chart(fig: go.Figure, title: str) -> str:
-    """Save Plotly figure as SVG and return its public URL."""
+    """Save Plotly figure as SVG + PNG; return the SVG public URL for markdown."""
     chart_id = str(uuid.uuid4())[:8]
     timestamp = int(time.time())
     safe_title = "".join(c if c.isalnum() else "_" for c in title)[:30]
     static_dir = Path(get_charts_path())
     filename = f"chart_{timestamp}_{safe_title}_{chart_id}.svg"
     file_path = static_dir / filename
-
-    # Use fig.to_image() which works with kaleido for SVG export
+    png_path = file_path.with_suffix(".png")
 
     svg_bytes = fig.to_image(format="svg", scale=1)
     file_path.write_bytes(svg_bytes)
+    png_bytes = fig.to_image(format="png", scale=_CHART_PNG_EXPORT_SCALE, height=600)
+    png_path.write_bytes(png_bytes)
 
-    file_size = file_path.stat().st_size
-    logger.info(f"Plotly chart saved: {file_path} (size: {file_size / 1024:.1f} KB)")
+    svg_kb = file_path.stat().st_size / 1024
+    png_kb = png_path.stat().st_size / 1024
+    logger.info(
+        "Plotly chart saved: %s (svg %.1f KB, png %.1f KB)",
+        file_path.name,
+        svg_kb,
+        png_kb,
+    )
 
     api_base = EnvConfig.CHART_SERVICE_URL.rstrip("/")
     return f"{api_base}/static/charts/{filename}"

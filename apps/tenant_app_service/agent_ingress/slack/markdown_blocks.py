@@ -21,10 +21,15 @@ from apps.tenant_app_service.agent_ingress.slack.domain import (
     _replace_emoji_shortcodes,
     _resolve_url,
 )
-from apps.tenant_app_service.agent_ingress.slack.slack_image_refs import parse_document_image_location
+from apps.shared.chart.paths import chart_png_url_for_svg_url, chart_static_png_filename
+from apps.tenant_app_service.agent_ingress.slack.slack_image_refs import (
+    SlackImageUploadSource,
+    parse_document_image_location,
+)
 
 SLACK_TABLE_MAX_COLUMNS = 20
 _IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif")
+_SVG_EXTENSION = ".svg"
 _PARSER = MarkdownIt("commonmark").enable(["table", "strikethrough"])
 _OPEN_MARKERS = {"strong_open": "*", "em_open": "_", "s_open": "~"}
 _CLOSE_FOR_OPEN = {"strong_open": "strong_close", "em_open": "em_close", "s_open": "s_close"}
@@ -652,13 +657,14 @@ def _image_block(
 ) -> dict[str, Any]:
     alt = piece.alt.replace("\n", " ")[:2000] or "image"
     fallback = _chart_slack_link(piece.raw_url, alt, portal_origin, api_origin)
-    if _image_extension(piece.resolved_url) == "":
+    extension = _image_extension(piece.resolved_url)
+    if extension == "" and not _is_svg_url(piece.resolved_url):
         return _section(fallback)
     document = parse_document_image_location(piece.raw_url) or parse_document_image_location(piece.resolved_url)
     if document is not None:
         return {
             "type": "_image_upload",
-            "source": "document",
+            "source": SlackImageUploadSource.DOCUMENT,
             "document_id": document.document_id,
             "filename": document.filename,
             "alt_text": alt,
@@ -666,12 +672,19 @@ def _image_block(
             "upload_filename": document.filename,
             "fallback_mrkdwn": fallback,
         }
+    chart_png = chart_static_png_filename(piece.resolved_url) or chart_static_png_filename(
+        chart_png_url_for_svg_url(piece.resolved_url)
+    )
+    if chart_png and _is_owned_origin(piece.resolved_url, portal_origin, api_origin):
+        return _chart_upload_block(alt, chart_png, piece.resolved_url, fallback)
+    if extension == _SVG_EXTENSION or _is_svg_url(piece.resolved_url):
+        return _section(fallback)
     if _is_public_https(piece.resolved_url):
         return {"type": "image", "image_url": piece.resolved_url, "alt_text": alt}
     if _is_owned_origin(piece.resolved_url, portal_origin, api_origin):
         return {
             "type": "_image_upload",
-            "source": "url",
+            "source": SlackImageUploadSource.URL,
             "alt_text": alt,
             "url": piece.resolved_url,
             "upload_filename": _upload_filename(piece.resolved_url),
@@ -688,9 +701,31 @@ def _image_extension(url: str) -> str:
     return ""
 
 
-def _upload_filename(url: str) -> str:
-    extension = _image_extension(url) or ".png"
-    name = Path(urlparse(url).path).name
+def _is_svg_url(url: str) -> bool:
+    return urlparse(url).path.lower().endswith(_SVG_EXTENSION)
+
+
+def _chart_upload_block(
+    alt: str,
+    png_filename: str,
+    resolved_url: str,
+    fallback: str,
+) -> dict[str, Any]:
+    return {
+        "type": "_image_upload",
+        "source": SlackImageUploadSource.CHART,
+        "filename": png_filename,
+        "alt_text": alt,
+        "url": resolved_url,
+        "upload_filename": png_filename,
+        "fallback_mrkdwn": fallback,
+    }
+
+
+def _upload_filename(url: str, *, force_png: bool = False) -> str:
+    extension = ".png" if force_png else (_image_extension(url) or ".png")
+    stem = Path(urlparse(url).path).stem or "image"
+    name = f"{stem}.png" if force_png else Path(urlparse(url).path).name
     cleaned = _FILENAME_CLEAN.sub("_", name).strip("._")[:80]
     if not cleaned.lower().endswith(_IMAGE_EXTENSIONS):
         cleaned = f"{cleaned or 'image'}{extension}"
