@@ -25,7 +25,7 @@ from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
 MAX_SKILL_SIZE_BYTES = 10 * 1024 * 1024
 
 
@@ -126,7 +126,9 @@ class SkillZipValidator:
             raise ValidationError("Frontmatter must define non-empty 'name'")
         name = name.strip()
         if not SKILL_NAME_RE.match(name) or "--" in name:
-            raise ValidationError("Skill name must contain only lowercase letters, digits, and single hyphens")
+            raise ValidationError(
+                "Skill name must contain only lowercase letters, digits, hyphens, and underscores"
+            )
 
         description = frontmatter.get("description", "")
         if not isinstance(description, str) or not description.strip():
@@ -141,5 +143,7 @@ class SkillZipValidator:
         if len(name) > 64:
             raise ValidationError("Skill name must be <= 64 characters")
         if "--" in name or not SKILL_NAME_RE.match(name):
-            raise ValidationError("Skill name must contain only lowercase letters, digits, and single hyphens")
+            raise ValidationError(
+                "Skill name must contain only lowercase letters, digits, hyphens, and underscores"
+            )
         return name

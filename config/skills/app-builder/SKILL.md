@@ -7,9 +7,7 @@ description: |
 
   CAPABILITIES: Write HTML/CSS/JS frontend code, create PostgreSQL migrations, build Python scheduled jobs (ETL/data sync), implement custom business logic, integrate APIs, automate workflows.
 
-  DO NOT USE for: Simple dashboards with pre-built widgets (use dashboard_builder instead).
-
-  Load `app-builder` first.
+  DO NOT USE for: Simple dashboards with pre-built widgets (use dashboard-builder instead).
 metadata:
   owner: platform
 tools:

@@ -16,7 +16,11 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import type { AgentCapabilityConfig, AgentSkillCatalogItem } from '@/lib/agentsApi'
+import {
+  filterAgentSkillIds,
+  type AgentCapabilityConfig,
+  type AgentSkillCatalogItem,
+} from '@/lib/agentsApi'
 import { usePlatformCapabilities } from '@/hooks/useAgents'
 import type { LLMModelProfile } from '@/lib/llmConfigApi'
 
@@ -135,13 +139,18 @@ type AgentSettingsFormProps = {
 }
 
 export function agentConfigFromAgent(
-  config: AgentCapabilityConfig | undefined
+  config: AgentCapabilityConfig | undefined,
+  availableSkillNames?: Iterable<string>
 ): AgentCapabilityConfig {
-  return {
+  const merged = {
     ...emptyAgentConfig(),
     ...config,
     platform_capabilities: config?.platform_capabilities ?? [],
   }
+  if (availableSkillNames) {
+    merged.skills = filterAgentSkillIds(merged.skills, new Set(availableSkillNames))
+  }
+  return merged
 }
 
 export default function AgentSettingsForm({

@@ -26,7 +26,7 @@ from apps.tenant_app_service.skills.domain import SkillType
 
 logger = get_logger(__name__)
 STANDARD_SKILL_FILE = "SKILL.md"
-STANDARD_SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?$")
+STANDARD_SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
 STANDARD_SKILL_KNOWN_FIELDS = {
     "name",
     "description",
@@ -344,7 +344,7 @@ class SkillConfigLoader:
         if "--" in name or not STANDARD_SKILL_NAME_RE.match(name):
             raise ValueError(
                 f"Skill '{name}' in '{skill_file}' field 'name' must contain only lowercase letters, "
-                "digits, and single hyphens"
+                "digits, hyphens, and underscores"
             )
         if skill_dir.name != name:
             raise ValueError(

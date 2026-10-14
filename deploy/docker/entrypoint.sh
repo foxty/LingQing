@@ -76,8 +76,10 @@ sync_skills() {
         if [ -d "$src" ]; then
             mkdir -p "$dst"
             mkdir -p "$pkg_dst"
+            # Mirror builtins from the image: drop stale dirs (e.g. renamed skills) on the volume.
+            find "$dst" -mindepth 1 -maxdepth 1 -exec rm -rf {} +
             cp -r "$src/." "$dst/"
-            echo "✓ Skills synced to $dst"
+            echo "✓ Builtin skills mirrored from image to $dst"
             echo "✓ Skill package cache initialized at $pkg_dst"
         else
             echo "Warning: Skills source not found at $src, skipping sync"
