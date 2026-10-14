@@ -7,10 +7,12 @@ import pytest
 from apps.shared.core.exceptions import ResourceNotFoundError
 from apps.shared.document.types import DocumentImageFile
 from apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher import (
+    IMAGE_FETCH_MAX_BYTES,
     default_image_fetcher,
     fetch_upload_block_bytes,
     make_slack_image_fetcher,
 )
+from apps.tenant_app_service.agent_ingress.slack.slack_image_refs import SlackImageUploadSource
 
 PNG = b"\x89PNG\r\n\x1a\nslack-test"
 HASH = "f" * 64
@@ -136,3 +138,47 @@ async def test_make_slack_image_fetcher_delegates_to_document_service(monkeypatc
 
     assert result == PNG
     assert calls == [7]
+
+
+@pytest.mark.asyncio
+async def test_make_slack_image_fetcher_reads_chart_png_from_disk(monkeypatch, tmp_path):
+    name = "chart_2_slack_ab12cd34.png"
+    (tmp_path / name).write_bytes(PNG)
+    monkeypatch.setattr(
+        "apps.shared.chart.paths.get_charts_path",
+        lambda: str(tmp_path),
+    )
+    fetch = make_slack_image_fetcher(db=AsyncMock(), tenant_id=1, user_id=1, user_role="member")
+    block = {"source": SlackImageUploadSource.CHART, "filename": name}
+    assert await fetch(block) == PNG
+
+
+@pytest.mark.asyncio
+async def test_fetch_upload_block_bytes_rejects_oversized_chart(monkeypatch, tmp_path):
+    name = "chart_3_big_ab12cd34.png"
+    oversized = b"\x89PNG\r\n\x1a\n" + (b"x" * (IMAGE_FETCH_MAX_BYTES + 1))
+    (tmp_path / name).write_bytes(oversized)
+    monkeypatch.setattr(
+        "apps.shared.chart.paths.get_charts_path",
+        lambda: str(tmp_path),
+    )
+    block = {"source": SlackImageUploadSource.CHART, "filename": name}
+    assert await fetch_upload_block_bytes(block) is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_upload_block_bytes_chart_missing_filename():
+    assert await fetch_upload_block_bytes({"source": SlackImageUploadSource.CHART}) is None
+
+
+@pytest.mark.asyncio
+async def test_fetch_upload_block_bytes_url_missing_url():
+    assert await fetch_upload_block_bytes({"source": SlackImageUploadSource.URL}) is None
+
+
+@pytest.mark.asyncio
+async def test_default_image_fetcher_warns_for_chart(caplog):
+    block = {"source": SlackImageUploadSource.CHART, "filename": "chart_1_x_ab12cd34.png"}
+    with caplog.at_level("WARNING"):
+        assert await default_image_fetcher(block) is None
+    assert "default image fetcher cannot load chart blocks" in caplog.text.lower()

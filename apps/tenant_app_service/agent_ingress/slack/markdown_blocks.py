@@ -22,7 +22,10 @@ from apps.tenant_app_service.agent_ingress.slack.domain import (
     _resolve_url,
 )
 from apps.shared.chart.paths import chart_png_url_for_svg_url, chart_static_png_filename
-from apps.tenant_app_service.agent_ingress.slack.slack_image_refs import parse_document_image_location
+from apps.tenant_app_service.agent_ingress.slack.slack_image_refs import (
+    SlackImageUploadSource,
+    parse_document_image_location,
+)
 
 SLACK_TABLE_MAX_COLUMNS = 20
 _IMAGE_EXTENSIONS = (".png", ".jpg", ".jpeg", ".gif")
@@ -661,7 +664,7 @@ def _image_block(
     if document is not None:
         return {
             "type": "_image_upload",
-            "source": "document",
+            "source": SlackImageUploadSource.DOCUMENT,
             "document_id": document.document_id,
             "filename": document.filename,
             "alt_text": alt,
@@ -681,7 +684,7 @@ def _image_block(
     if _is_owned_origin(piece.resolved_url, portal_origin, api_origin):
         return {
             "type": "_image_upload",
-            "source": "url",
+            "source": SlackImageUploadSource.URL,
             "alt_text": alt,
             "url": piece.resolved_url,
             "upload_filename": _upload_filename(piece.resolved_url),
@@ -710,7 +713,7 @@ def _chart_upload_block(
 ) -> dict[str, Any]:
     return {
         "type": "_image_upload",
-        "source": "chart",
+        "source": SlackImageUploadSource.CHART,
         "filename": png_filename,
         "alt_text": alt,
         "url": resolved_url,

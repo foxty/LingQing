@@ -1,12 +1,14 @@
 """Unit tests for Slack Markdown delivery side effects."""
 
 from typing import Any
+from unittest.mock import AsyncMock
 
 import pytest
 from slack_sdk.errors import SlackApiError
 
 from apps.tenant_app_service.agent_ingress.slack.markdown_blocks import MarkdownRenderError, SlackMarkdownPolicy
 from apps.tenant_app_service.agent_ingress.slack.markdown_delivery import deliver_markdown_to_slack
+from apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher import make_slack_image_fetcher
 
 PNG = b"\x89PNG\r\n\x1a\nfake"
 
@@ -93,6 +95,69 @@ async def test_inline_table_and_public_image_append_actions():
     assert slack.canvases == []
     assert _types(slack.posts) == ["section", "table", "image", "actions"]
     assert slack.posts[0]["blocks"][-1]["block_id"] == "feedback_msg_1"
+
+
+@pytest.mark.asyncio
+async def test_owned_chart_svg_uploads_png_from_disk(monkeypatch, tmp_path):
+    slack = _SlackStub()
+    png_name = "chart_1_daily_ab12cd34.png"
+    (tmp_path / png_name).write_bytes(PNG)
+    monkeypatch.setattr(
+        "apps.shared.chart.paths.get_charts_path",
+        lambda: str(tmp_path),
+    )
+    fetch = make_slack_image_fetcher(db=AsyncMock(), tenant_id=1, user_id=1, user_role="member")
+    chart_svg = f"http://127.0.0.1:8000/static/charts/{png_name.replace('.png', '.svg')}"
+
+    await deliver_markdown_to_slack(
+        client=slack,
+        bot_token="xoxb-test",
+        channel_id="C1",
+        markdown=f"![Daily]({chart_svg})",
+        message_id=None,
+        thread_ts=None,
+        api_origin="http://127.0.0.1:8000",
+        image_fetcher=fetch,
+    )
+
+    assert slack.uploads == [png_name]
+    assert len(slack.posts) == 1
+    assert slack.posts[0]["blocks"][0]["type"] == "image"
+    assert slack.posts[0]["blocks"][0]["slack_file"] == {"id": "F_UPLOAD"}
+
+
+@pytest.mark.asyncio
+async def test_chart_image_delivery_skips_http_fetch(monkeypatch, tmp_path):
+    slack = _SlackStub()
+    png_name = "chart_9_slack_ab12cd34.png"
+    (tmp_path / png_name).write_bytes(PNG)
+    monkeypatch.setattr(
+        "apps.shared.chart.paths.get_charts_path",
+        lambda: str(tmp_path),
+    )
+
+    async def _must_not_fetch_url(_url: str) -> bytes | None:
+        raise AssertionError("owned URL fetch must not run for chart upload blocks")
+
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher.fetch_owned_url_bytes",
+        _must_not_fetch_url,
+    )
+    fetch = make_slack_image_fetcher(db=AsyncMock(), tenant_id=1, user_id=1, user_role="member")
+    chart_svg = f"http://127.0.0.1:8000/static/charts/{png_name.replace('.png', '.svg')}"
+
+    await deliver_markdown_to_slack(
+        client=slack,
+        bot_token="xoxb-test",
+        channel_id="C1",
+        markdown=f"![Daily]({chart_svg})",
+        message_id=None,
+        thread_ts=None,
+        api_origin="http://127.0.0.1:8000",
+        image_fetcher=fetch,
+    )
+
+    assert slack.uploads == [png_name]
 
 
 @pytest.mark.asyncio
