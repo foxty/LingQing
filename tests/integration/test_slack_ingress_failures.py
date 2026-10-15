@@ -22,12 +22,13 @@ class TestSlackIngressFailures:
         fake = slack_test_setup["fake_slack"]
         slack_user = f"U_noprofile_{uuid4().hex[:8]}"
         fake.posted_messages.clear()
+        fake.ephemeral_messages.clear()
 
         await post_slack_dm(slack_test_setup, slack_user=slack_user)
 
         assert any(
             "Could not reach Slack to verify your account" in m["text"]
-            for m in fake.posted_messages
+            for m in fake.ephemeral_messages
         )
 
     @pytest.mark.asyncio

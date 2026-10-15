@@ -49,6 +49,18 @@ class SlackClientPort(Protocol):
         """Post a message to a channel, optionally threaded."""
         ...
 
+    async def chat_post_ephemeral(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        user: str,
+        text: str,
+        thread_ts: str | None = None,
+    ) -> dict[str, Any]:
+        """Post a message visible only to one user in a channel or thread."""
+        ...
+
     async def chat_update(
         self,
         *,
@@ -139,6 +151,22 @@ class SlackWebClient:
         if blocks:
             kwargs["blocks"] = blocks
         resp = await client.chat_postMessage(**kwargs)
+        return dict(resp.data or {})
+
+    async def chat_post_ephemeral(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        user: str,
+        text: str,
+        thread_ts: str | None = None,
+    ) -> dict[str, Any]:
+        client = AsyncWebClient(token=bot_token)
+        kwargs: dict[str, Any] = {"channel": channel, "user": user, "text": text}
+        if thread_ts:
+            kwargs["thread_ts"] = thread_ts
+        resp = await client.chat_postEphemeral(**kwargs)
         return dict(resp.data or {})
 
     async def chat_update(

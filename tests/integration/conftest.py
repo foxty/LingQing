@@ -379,6 +379,11 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
             bot_token=bot_token, channel=channel, text=text, thread_ts=thread_ts, blocks=blocks
         )
 
+    async def _fake_chat_post_ephemeral(self, *, bot_token, channel, user, text, thread_ts=None):
+        return await fake_slack.chat_post_ephemeral(
+            bot_token=bot_token, channel=channel, user=user, text=text, thread_ts=thread_ts
+        )
+
     async def _fake_chat_update(self, *, bot_token, channel, ts, text, blocks=None):
         return await fake_slack.chat_update(
             bot_token=bot_token, channel=channel, ts=ts, text=text, blocks=blocks
@@ -390,6 +395,7 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
     SlackWebClient.auth_test = _fake_auth_test  # type: ignore
     SlackWebClient.users_info = _fake_users_info  # type: ignore
     SlackWebClient.chat_post_message = _fake_chat_post_message  # type: ignore
+    SlackWebClient.chat_post_ephemeral = _fake_chat_post_ephemeral  # type: ignore
     SlackWebClient.chat_update = _fake_chat_update  # type: ignore
     SlackWebClient.conversations_open = _fake_conversations_open  # type: ignore
 

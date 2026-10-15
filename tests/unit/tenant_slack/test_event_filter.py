@@ -166,6 +166,14 @@ def test_parse_thread_reply_event_rejects_dm_thread():
     assert parsed is None
 
 
+def test_parse_thread_reply_event_rejects_leading_mention_duplicate_of_app_mention():
+    parsed = parse_thread_reply_event(
+        _channel_event(text="<@UBOT> show me one more time"),
+        event_id="EvT4",
+    )
+    assert parsed is None
+
+
 def test_strip_bot_mention_removes_leading_markup():
     assert strip_bot_mention("<@UBOT> hello") == "hello"
     assert strip_bot_mention("<@UBOT>hello") == "hello"
