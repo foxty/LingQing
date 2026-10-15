@@ -68,6 +68,16 @@ host_from_url() {
     echo "$1" | sed -E 's#^https?://##' | cut -d/ -f1
 }
 
+set_env_value_if_empty() {
+    local env_file="$1"
+    local key="$2"
+    local value="$3"
+    if [[ -n "$(read_env_value "$env_file" "$key")" ]]; then
+        return 0
+    fi
+    set_env_value "$env_file" "$key" "$value"
+}
+
 expand_public_urls() {
     local env_file="$1"
     local app_url manager_url
@@ -78,9 +88,13 @@ expand_public_urls() {
         return 0
     fi
 
-    set_env_value "$env_file" CORS_ORIGINS "${app_url},${manager_url}"
-    set_env_value "$env_file" PORTAL_ORIGIN "$app_url"
-    set_env_value "$env_file" TENANT_APP_API_ORIGIN "$app_url"
+    app_url="${app_url%/}"
+    manager_url="${manager_url%/}"
+
+    set_env_value_if_empty "$env_file" CORS_ORIGINS "${app_url},${manager_url}"
+    set_env_value_if_empty "$env_file" PORTAL_ORIGIN "$app_url"
+    # Gateway serves the tenant app API under /api; OIDC redirect must hit the backend proxy.
+    set_env_value_if_empty "$env_file" TENANT_APP_API_ORIGIN "${app_url}/api"
 }
 
 normalize_env_file() {
