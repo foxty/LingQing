@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 import { useAuth } from '@/hooks/useAuth'
+import { messageForSsoDeniedReason, messageForSsoExchangeError } from '@/lib/ssoLoginMessages'
 import { ssoExchange } from '@/lib/ssoApi'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Button } from '@/components/ui/button'
 import { AlertCircle, Loader2 } from 'lucide-react'
 import { convertApiUserToUser } from '@/types'
 
@@ -15,6 +17,7 @@ i18n.addResourceBundle('en', 'translation', {
     ssoPending: 'Your login is pending admin approval.',
     ssoDenied: 'Sign-in was denied. Please contact your administrator.',
     ssoInvalidTicket: 'Invalid or expired sign-in ticket. Please try again.',
+    backToSignIn: 'Back to sign in',
     ssoReasons: {
       invalid_or_expired_state: 'Sign-in session expired. Please try again.',
       provider_mismatch: 'Sign-in provider mismatch. Please try again.',
@@ -44,6 +47,7 @@ i18n.addResourceBundle('zh', 'translation', {
     ssoPending: '您的登录正在等待管理员审批。',
     ssoDenied: '登录被拒绝，请联系管理员。',
     ssoInvalidTicket: '登录票据无效或已过期，请重试。',
+    backToSignIn: '返回登录',
     ssoReasons: {
       invalid_or_expired_state: '登录会话已过期，请重试。',
       provider_mismatch: '登录提供商不匹配，请重试。',
@@ -86,9 +90,7 @@ export default function SsoCallbackPage() {
     }
     if (statusParam === 'denied') {
       setStatus('denied')
-      const reason = params.get('reason') || ''
-      const mapped = reason ? t(`login.ssoReasons.${reason}`, { defaultValue: '' }) : ''
-      setMessage(mapped || t('login.ssoDenied'))
+      setMessage(messageForSsoDeniedReason(params.get('reason') || '', t))
       return
     }
     if (!ticket) {
@@ -110,9 +112,9 @@ export default function SsoCallbackPage() {
         login(user, res.access_token, [])
         await refreshPermissions()
         navigate('/', { replace: true })
-      } catch (e: any) {
+      } catch (e: unknown) {
         setStatus('error')
-        setMessage(e?.response?.data?.detail || t('login.ssoInvalidTicket'))
+        setMessage(messageForSsoExchangeError(e, t))
       }
     }
     void exchange()
@@ -124,18 +126,25 @@ export default function SsoCallbackPage() {
         <CardHeader>
           <CardTitle className="text-center">{t('login.title')}</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col items-center gap-4 py-8">
+        <CardContent className="flex flex-col gap-4 py-8">
           {status === 'loading' && (
-            <>
+            <div className="flex flex-col items-center gap-4 py-4">
               <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
               <p className="text-sm text-muted-foreground">{t('login.ssoExchanging')}</p>
-            </>
+            </div>
           )}
           {(status === 'pending' || status === 'denied' || status === 'error') && (
-            <Alert variant={status === 'pending' ? 'default' : 'destructive'}>
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{message}</AlertDescription>
-            </Alert>
+            <>
+              <Alert variant={status === 'pending' ? 'default' : 'destructive'} className="w-full">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>{message}</AlertDescription>
+              </Alert>
+              <Button variant="outline" className="w-full" asChild>
+                <Link to="/login" replace>
+                  {t('login.backToSignIn')}
+                </Link>
+              </Button>
+            </>
           )}
         </CardContent>
       </Card>
