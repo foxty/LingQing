@@ -248,6 +248,22 @@ class TestSkillRepository:
         assert "ops-comma" in loaded
         assert [t.name for t in loaded["ops-comma"].tools] == ["search_data_assets", "search_documents"]
 
+    def test_load_skill_skips_unknown_allowed_tools(self, tmp_path, caplog):
+        skills_dir = tmp_path / "skills"
+        skill_dir = skills_dir / "ops-partial"
+        skill_dir.mkdir(parents=True)
+        (skill_dir / "SKILL.md").write_text(
+            "---\nname: ops-partial\ndescription: Mix of valid and invalid tools.\n"
+            "allowed-tools: search_data_assets, not_a_real_tool\n---\n\nBody\n",
+            encoding="utf-8",
+        )
+        repo = SkillRepository(str(tmp_path))
+        with caplog.at_level("WARNING"):
+            loaded = repo.load_skill_configs(str(skills_dir), SkillType.TENANT)
+        assert "ops-partial" in loaded
+        assert [t.name for t in loaded["ops-partial"].tools] == ["search_data_assets"]
+        assert "references unknown tool 'not_a_real_tool'; skipping" in caplog.text
+
     def test_load_skill_with_colons_in_tool_names(self, tmp_path):
         skills_dir = tmp_path / "skills"
         skill_dir = skills_dir / "agent-browser"
@@ -260,10 +276,7 @@ class TestSkillRepository:
         repo = SkillRepository(str(tmp_path))
         loaded = repo.load_skill_configs(str(skills_dir), SkillType.TENANT)
         assert "agent-browser" in loaded
-        assert [t.name for t in loaded["agent-browser"].tools] == [
-            "Bash(agent-browser:*)",
-            "Bash(npx agent-browser:*)",
-        ]
+        assert loaded["agent-browser"].tools == []
 
 
 # ==============================================================================

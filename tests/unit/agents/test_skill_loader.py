@@ -78,7 +78,7 @@ tools: []
         loader.load_all()
 
 
-def test_unknown_tool_rejected_with_registry(tmp_path):
+def test_unknown_tool_skipped_with_registry(tmp_path, caplog):
     skills_dir = tmp_path / "skills"
     skills_dir.mkdir()
     (skills_dir / "bad_tool.yaml").write_text(
@@ -96,8 +96,10 @@ tools:
         skills_dir=str(skills_dir),
         tool_registry={"search_documents": object()},
     )
-    with pytest.raises(ValueError, match="unknown tool"):
-        loader.load_all()
+    skills = loader.load_all()
+    assert "test" in skills
+    assert skills["test"].tools == []
+    assert "references unknown tool 'unknown_tool'; skipping" in caplog.text
 
 
 def test_invalid_tool_limit_raises_error(tmp_path):
@@ -215,7 +217,7 @@ Use tools as needed.
 
     skill = skills["ops-helper"]
     assert [tool.name for tool in skill.tools] == ["list_data_sources", "run_sql_query_on_datasource"]
-    assert "references unmapped allowed-tool 'unknown_tool'; skipping" in caplog.text
+    assert "references unknown tool 'unknown_tool'; skipping" in caplog.text
 
 
 def test_standard_skill_name_must_match_directory(tmp_path):

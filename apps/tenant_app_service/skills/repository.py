@@ -32,7 +32,6 @@ from apps.tenant_app_service.agents.domain import (
 )
 from apps.tenant_app_service.skills.domain import SkillConfigData, SkillType
 from apps.tenant_app_service.skills.paths import SkillPaths
-
 logger = get_logger(__name__)
 
 # Skill file format constants
@@ -532,14 +531,24 @@ class SkillRepository:
             return match.group(1).strip(), int(match.group(2)) or TOOL_LIMIT_UNLIMITED
         return stripped, TOOL_LIMIT_UNLIMITED
 
+    @staticmethod
+    def _skip_unregistered_tool(name: str, skill_file: Path, tool_name: str) -> bool:
+        from apps.tenant_app_service.agents.system_agent_config import TOOL_REGISTRY
+
+        if tool_name in TOOL_REGISTRY:
+            return False
+        logger.warning(
+            "Skill '%s' in '%s' references unknown tool '%s'; skipping",
+            name,
+            skill_file,
+            tool_name,
+        )
+        return True
+
     def _parse_standard_allowed_tools(
         self, frontmatter: dict[str, Any], name: str, skill_file: Path
     ) -> list[ToolConfig]:
-        """Parse allowed-tools from standard skill frontmatter.
-
-        Note: Tool registry validation is NOT performed here. It's a
-        service-layer concern that happens after loading.
-        """
+        """Parse allowed-tools from standard skill frontmatter."""
         tools_config = frontmatter.get("tools")
         if tools_config is not None:
             if not isinstance(tools_config, list):
@@ -562,16 +571,33 @@ class SkillRepository:
                 )
 
         tools: list[ToolConfig] = []
+        seen: set[str] = set()
         for idx, tool_entry in enumerate(tools_raw):
             if isinstance(tool_entry, str):
                 tool_name, limit = self._parse_tool_name_and_limit(tool_entry)
+                if tool_name in seen:
+                    continue
+                if self._skip_unregistered_tool(name, skill_file, tool_name):
+                    continue
+                seen.add(tool_name)
                 tools.append(ToolConfig(name=tool_name, limit=limit))
             elif isinstance(tool_entry, dict):
                 # Object format: {name: "tool", limit: 5, ...}
-                tool_name = tool_entry.get("name")
-                if not isinstance(tool_name, str) or not tool_name.strip():
+                declared_name = tool_entry.get("name")
+                if not isinstance(declared_name, str) or not declared_name.strip():
                     raise ValueError(f"Skill '{name}' in '{skill_file}' tool entry #{idx} must define non-empty 'name'")
-                tool_name = tool_name.strip()
+                tool_name = declared_name.strip()
+                if tool_name in seen:
+                    logger.warning(
+                        "Skill '%s' in '%s' has duplicate tool '%s'; using first occurrence",
+                        name,
+                        skill_file,
+                        tool_name,
+                    )
+                    continue
+                if self._skip_unregistered_tool(name, skill_file, tool_name):
+                    continue
+                seen.add(tool_name)
 
                 raw_limit = tool_entry.get("limit", 0)
                 if not isinstance(raw_limit, int) or raw_limit < 0:

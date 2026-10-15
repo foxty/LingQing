@@ -463,8 +463,8 @@ Body.
     assert "search_data_assets" in skill.tools[0].cache_invalidates
 
 
-def test_standard_skill_structured_tools_unmapped_tool_skipped(tmp_path, caplog):
-    """Test that unmapped tools are skipped with warning."""
+def test_standard_skill_structured_tools_unknown_tool_skipped(tmp_path, caplog):
+    """Test that unknown registry tools are skipped with warning."""
     skills_dir = tmp_path / "skills"
     skills_dir.mkdir()
 
@@ -493,7 +493,7 @@ Body.
     skill = skills["unmapped-tool"]
     assert len(skill.tools) == 1  # Only valid tool
     assert skill.tools[0].name == "search_data_assets"
-    assert "references unmapped tool 'nonexistent_tool'; skipping" in caplog.text
+    assert "references unknown tool 'nonexistent_tool'; skipping" in caplog.text
 
 
 def test_standard_skill_structured_tools_complex_hitl_config(tmp_path):
