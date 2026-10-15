@@ -111,6 +111,7 @@ class TestSlackWebhook:
         assert disable_resp.json()["enabled"] is False
 
         fake.posted_messages.clear()
+        fake.ephemeral_messages.clear()
         event = make_message_event(
             user_id="U_disabled",
             channel_id="D_disabled",
@@ -129,8 +130,8 @@ class TestSlackWebhook:
         assert resp.json()["status"] == "disabled"
 
         async def _assert_disabled_notification() -> None:
-            assert fake.posted_messages
-            assert "disabled" in fake.posted_messages[0]["text"].lower()
+            assert fake.ephemeral_messages
+            assert "disabled" in fake.ephemeral_messages[0]["text"].lower()
 
         await _wait_until(_assert_disabled_notification)
 

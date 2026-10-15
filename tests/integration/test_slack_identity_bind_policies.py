@@ -44,6 +44,7 @@ class TestSlackBindPolicies:
         email = f"policy_{uuid4().hex[:8]}@{tenant['external_domain']}"
         fake.register_user(slack_user, email=email)
         fake.posted_messages.clear()
+        fake.ephemeral_messages.clear()
 
         await set_workspace_bind_policy(
             slack_test_setup["session_factory"],
@@ -75,10 +76,10 @@ class TestSlackBindPolicies:
             assert not fake.posted_messages
         elif bind_policy == "pending_approval":
             assert len(pending) == 1
-            assert any("pending admin approval" in m["text"] for m in fake.posted_messages)
+            assert any("pending admin approval" in m["text"] for m in fake.ephemeral_messages)
         else:
             assert not pending
-            assert any("No LingQing account" in m["text"] for m in fake.posted_messages)
+            assert any("No LingQing account" in m["text"] for m in fake.ephemeral_messages)
 
     @pytest.mark.asyncio
     async def test_domain_not_allowed_rejects_user(self, slack_test_setup):
@@ -86,12 +87,13 @@ class TestSlackBindPolicies:
         slack_user = f"U_domain_{uuid4().hex[:8]}"
         fake.register_user(slack_user, email=f"blocked_{uuid4().hex[:8]}@not-allowed.example")
         fake.posted_messages.clear()
+        fake.ephemeral_messages.clear()
 
         await post_slack_dm(slack_test_setup, slack_user=slack_user, wait_seconds=0)
 
         async def _assert_domain_rejection() -> None:
             assert any(
-                "email domain is not allowed" in m["text"] for m in fake.posted_messages
+                "email domain is not allowed" in m["text"] for m in fake.ephemeral_messages
             )
 
         await wait_until_background(_assert_domain_rejection)
@@ -102,6 +104,7 @@ class TestSlackBindPolicies:
         slack_user = f"U_noemail_{uuid4().hex[:8]}"
         fake.register_user(slack_user, email=None)
         fake.posted_messages.clear()
+        fake.ephemeral_messages.clear()
 
         await post_slack_dm(slack_test_setup, slack_user=slack_user, wait_seconds=0)
 
@@ -109,7 +112,7 @@ class TestSlackBindPolicies:
             assert any(
                 "email domain is not allowed" in m["text"]
                 or "could not read an email" in m["text"].lower()
-                for m in fake.posted_messages
+                for m in fake.ephemeral_messages
             )
 
         await wait_until_background(_assert_missing_email_rejection)

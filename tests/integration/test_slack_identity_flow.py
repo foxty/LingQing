@@ -110,7 +110,7 @@ class TestSlackIdentityFlow:
         )
         assert pending_resp.status_code == 200
         assert not any(p["external_subject"] == slack_user for p in pending_resp.json())
-        assert any("No LingQing account" in m["text"] for m in fake.posted_messages)
+        assert any("No LingQing account" in m["text"] for m in fake.ephemeral_messages)
 
     @pytest.mark.asyncio
     async def test_admin_bind_pending_identity_succeeds(self, slack_test_setup):

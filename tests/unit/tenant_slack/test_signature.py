@@ -131,3 +131,18 @@ def test_describe_ignored_event_for_non_dm():
         }
     )
     assert reason == "non_dm_channel_type=channel"
+
+
+def test_describe_ignored_event_for_channel_thread_message():
+    reason = describe_ignored_event(
+        {
+            "type": "message",
+            "user": "U1",
+            "channel": "C1",
+            "text": "plain follow-up in thread",
+            "ts": "2.0",
+            "thread_ts": "1.0",
+            "channel_type": "channel",
+        }
+    )
+    assert reason == "channel_thread_requires_bot_mention"

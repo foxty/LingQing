@@ -22,6 +22,7 @@ class FakeSlackClient:
 
     def __init__(self):
         self.posted_messages: list[dict[str, Any]] = []
+        self.ephemeral_messages: list[dict[str, Any]] = []
         self.updated_messages: list[dict[str, Any]] = []
         self.opened_conversations: list[dict[str, Any]] = []
         self.uploaded_files: list[dict[str, Any]] = []
@@ -69,6 +70,19 @@ class FakeSlackClient:
         record = {"channel": channel, "text": text, "thread_ts": thread_ts, "blocks": blocks, "ts": ts}
         self.posted_messages.append(record)
         return {"ok": True, "ts": ts, "channel": channel}
+
+    async def chat_post_ephemeral(
+        self,
+        *,
+        bot_token: str,
+        channel: str,
+        user: str,
+        text: str,
+        thread_ts: str | None = None,
+    ) -> dict[str, Any]:
+        record = {"channel": channel, "user": user, "text": text, "thread_ts": thread_ts}
+        self.ephemeral_messages.append(record)
+        return {"ok": True, "message_ts": f"ephemeral.{len(self.ephemeral_messages)}"}
 
     async def chat_update(
         self,

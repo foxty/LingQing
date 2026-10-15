@@ -210,9 +210,10 @@ class SlackIngressService:
 
     async def _post_ephemeral(self, bot_token: str, event: SlackMessageEvent, text: str) -> None:
         try:
-            await self.client.chat_post_message(
+            await self.client.chat_post_ephemeral(
                 bot_token=bot_token,
                 channel=event.channel_id,
+                user=event.user_id,
                 text=text,
                 thread_ts=slack_reply_thread_ts(
                     channel_type=event.channel_type,
@@ -221,7 +222,7 @@ class SlackIngressService:
                 ),
             )
         except Exception:
-            logger.exception("Failed to post Slack reply to channel %s", event.channel_id)
+            logger.exception("Failed to post Slack ephemeral to channel %s user %s", event.channel_id, event.user_id)
 
     async def _resolve_thread_id(
         self,

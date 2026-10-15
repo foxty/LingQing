@@ -28,7 +28,6 @@ from apps.tenant_app_service.agent_ingress.slack.domain import (
     describe_ignored_event,
     parse_app_mention_event,
     parse_message_event,
-    parse_thread_reply_event,
     slack_signature_failure_reason,
 )
 from apps.tenant_app_service.agent_ingress.slack.ingress_service import SlackIngressService
@@ -173,12 +172,14 @@ async def _handle_slack_events(
 
 
 def _parse_slack_event(event: dict, *, event_id: str | None) -> SlackMessageEvent | None:
+    """Accept DMs (message.im) and channel @mentions (app_mention) only.
+
+    Shared-channel thread follow-ups without @bot are ignored so human side
+    conversation in a bot thread does not invoke the agent.
+    """
     event_type = event.get("type")
     if event_type == "message":
-        parsed = parse_message_event(event, event_id=event_id)
-        if parsed is None and event.get("thread_ts"):
-            parsed = parse_thread_reply_event(event, event_id=event_id)
-        return parsed
+        return parse_message_event(event, event_id=event_id)
     if event_type == "app_mention":
         return parse_app_mention_event(event, event_id=event_id)
     return None

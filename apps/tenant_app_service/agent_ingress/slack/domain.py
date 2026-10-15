@@ -142,8 +142,9 @@ def describe_ignored_event(event: dict) -> str:
     if event_type == "message":
         if parse_message_event(event) is not None:
             return "unexpected_accepted_dm"
-        if event.get("thread_ts") and parse_thread_reply_event(event) is not None:
-            return "unexpected_accepted_thread_reply"
+        channel_type = event.get("channel_type")
+        if event.get("thread_ts") and channel_type in SHARED_CHANNEL_TYPES:
+            return "channel_thread_requires_bot_mention"
         return _describe_unprocessable_message(event, event_type)
     return f"unhandled type={event_type}"
 
@@ -244,8 +245,17 @@ def parse_app_mention_event(event: dict, event_id: str | None = None) -> SlackMe
     )
 
 
+def message_has_leading_user_mention(text: str) -> bool:
+    """True when Slack message text starts with a user mention (``<@U…>``)."""
+    return bool(_BOT_MENTION_PATTERN.match(text or ""))
+
+
 def parse_thread_reply_event(event: dict, event_id: str | None = None) -> SlackMessageEvent | None:
-    """Extract a SlackMessageEvent from a channel/group/mpim thread follow-up."""
+    """Extract a SlackMessageEvent from a channel/group/mpim thread follow-up.
+
+    Not used by the ingress router (channels require ``app_mention``). Kept for
+    unit tests and potential service-layer reuse.
+    """
     if event.get("type") != SlackEventType.MESSAGE:
         return None
     if not is_processable_message_event(event):
@@ -257,6 +267,9 @@ def parse_thread_reply_event(event: dict, event_id: str | None = None) -> SlackM
     user_id = event.get("user") or ""
     channel_id = event.get("channel") or ""
     text = event.get("text") or ""
+    # @bot in a thread is delivered as both app_mention and message; handle via app_mention only.
+    if message_has_leading_user_mention(text):
+        return None
     ts = event.get("ts") or ""
     if not (user_id and channel_id and ts):
         return None
