@@ -56,10 +56,6 @@ class SkillService:
         self._repo = SkillRepository(self._data_root)
         self._config_store = SkillConfigStore(self._data_root)
         self._zip_validator = SkillZipValidator()
-        # Tool registry for validation (injected from agent runtime)
-        from apps.tenant_app_service.agents.system_agent_config import TOOL_REGISTRY
-
-        self._tool_registry = TOOL_REGISTRY
         self._package_fetcher = package_fetcher
 
     def list_skills(self, tenant_id: int, user_id: int, type_filter: SkillType | None = None) -> list[SkillInfo]:
@@ -111,6 +107,10 @@ class SkillService:
         self._extract_skill_zip(zip_file, target_dir)
         # Invalidate the resolver cache so the new skill shows up.
         self._resolver.clear_cache()
+
+        loaded = self._resolver.resolve(tenant_id=tenant_id, user_id=user_id, force_reload=True).get(name)
+        if loaded is not None:
+            return self._to_info(loaded)
 
         return SkillInfo(
             name=name,
@@ -210,23 +210,6 @@ class SkillService:
         from apps.tenant_app_service.skills.domain import find_skill_md_base
 
         return find_skill_md_base(members)
-
-    def _validate_skill_tools(self, skill: SkillConfig, tool_registry: dict[str, Any] | None = None) -> None:
-        """Validate skill's tool references against registry (business rule).
-
-        This is called after loading skills to ensure all referenced tools
-        exist in the agent runtime. Tool validation is a service-layer
-        concern, not a repository concern.
-        """
-        registry = tool_registry or self._tool_registry
-        if not registry:
-            return  # No registry available, skip validation
-
-        for tool in skill.tools:
-            if tool.name not in registry:
-                from apps.shared.core.exceptions import ValidationError
-
-                raise ValidationError(f"Skill '{skill.name}' references unknown tool '{tool.name}'")
 
     def delete_skill(self, tenant_id: int, user_id: int, skill_type: SkillType, name: str) -> None:
         from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError

@@ -500,8 +500,8 @@ You are a Standard Data Analysis skill.
     assert "unload_skill" in tool_names
 
 
-def test_manager_standard_skill_unmapped_allowed_tools_raises(tmp_path, mock_runtime):
-    """AgentConfig uses strict_registry=True, so unknown tools raise ValueError."""
+def test_manager_standard_skill_unknown_allowed_tools_skipped_at_load(tmp_path, mock_runtime):
+    """Unknown tools in SKILL.md are dropped at parse time; load_skill merge stays valid."""
     agents_yaml = tmp_path / "agents.yaml"
     agents_yaml.write_text(
         yaml.safe_dump(
@@ -553,9 +553,10 @@ Use tools as needed.
         data_root=str(tmp_path),
         tool_registry=TOOL_REGISTRY,
     )
-    # strict_registry=True causes unknown tools to raise ValueError
-    with pytest.raises(ValueError, match="(?i)unknown tool"):
-        manager.get_tools(["ops-helper"], mock_runtime)
+    tool_names = {tool.name for tool in manager.get_tools(["ops-helper"], mock_runtime)}
+    assert "load_skill" in tool_names
+    assert "search_data_assets" in tool_names
+    assert "unknown_tool" not in tool_names
 
 
 def test_manager_prompt_uses_skill_name_only(tmp_path, mock_runtime):

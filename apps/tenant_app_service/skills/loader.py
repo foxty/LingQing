@@ -23,7 +23,6 @@ from apps.tenant_app_service.agents.domain import (
     ToolConfig,
 )
 from apps.tenant_app_service.skills.domain import SkillType
-
 logger = get_logger(__name__)
 STANDARD_SKILL_FILE = "SKILL.md"
 STANDARD_SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")
@@ -205,7 +204,13 @@ class SkillConfigLoader:
                 )
 
             if self.tool_registry is not None and tool_name not in self.tool_registry:
-                raise ValueError(f"Skill '{name}' in '{file_path}' references unknown tool '{tool_name}'")
+                logger.warning(
+                    "Skill '%s' in '%s' references unknown tool '%s'; skipping",
+                    name,
+                    file_path,
+                    tool_name,
+                )
+                continue
 
             raw_limit = tool_def.get("limit", 0)
             if not isinstance(raw_limit, int) or raw_limit < 0:
@@ -424,22 +429,24 @@ class SkillConfigLoader:
         for tool_name in allowed_names:
             if tool_name in seen:
                 continue
-            seen.add(tool_name)
 
             if self.tool_registry is not None and tool_name not in self.tool_registry:
                 logger.warning(
-                    "Skill '%s' in '%s' references unmapped allowed-tool '%s'; skipping",
+                    "Skill '%s' in '%s' references unknown tool '%s'; skipping",
                     name,
                     skill_file,
                     tool_name,
                 )
                 continue
 
+            seen.add(tool_name)
             tools.append(ToolConfig(name=tool_name, limit=TOOL_LIMIT_UNLIMITED))
 
         return tools
 
-    def _parse_structured_tools(self, tools_config: Any, name: str, skill_file: Path) -> list[ToolConfig]:
+    def _parse_structured_tools(
+        self, tools_config: Any, name: str, skill_file: Path
+    ) -> list[ToolConfig]:
         """Parse structured tools configuration with full metadata support."""
         if not isinstance(tools_config, list):
             raise ValueError(f"Skill '{name}' in '{skill_file}' field 'tools' must be a list of tool configurations")
@@ -451,12 +458,12 @@ class SkillConfigLoader:
             if not isinstance(tool_def, dict):
                 raise ValueError(f"Skill '{name}' in '{skill_file}' tools entry #{idx} must be an object")
 
-            tool_name = tool_def.get("name")
-            if not isinstance(tool_name, str) or not tool_name.strip():
+            declared_name = tool_def.get("name")
+            if not isinstance(declared_name, str) or not declared_name.strip():
                 raise ValueError(
                     f"Skill '{name}' in '{skill_file}' tools entry #{idx} must define non-empty string field 'name'"
                 )
-            tool_name = tool_name.strip()
+            tool_name = declared_name.strip()
 
             if tool_name in seen:
                 logger.warning(
@@ -470,10 +477,10 @@ class SkillConfigLoader:
 
             if self.tool_registry is not None and tool_name not in self.tool_registry:
                 logger.warning(
-                    "Skill '%s' in '%s' references unmapped tool '%s'; skipping",
+                    "Skill '%s' in '%s' references unknown tool '%s'; skipping",
                     name,
                     skill_file,
-                    tool_name,
+                    declared_name,
                 )
                 continue
 
