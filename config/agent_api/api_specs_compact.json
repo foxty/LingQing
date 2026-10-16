@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-12T08:51:26.402708+00:00",
+  "generated_at": "2026-10-16T14:06:33.291575+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -2487,6 +2487,18 @@
             ],
             "title": "Hitl Action",
             "description": "HITL approve continuation only; reject is handled via HITL API"
+          },
+          "thinking_effort": {
+            "type": "string",
+            "enum": [
+              "none",
+              "low",
+              "medium",
+              "high"
+            ],
+            "title": "Thinking Effort",
+            "description": "Extended reasoning level when the agent model supports it (default none)",
+            "default": "none"
           }
         },
         "type": "object",
@@ -6427,6 +6439,19 @@
             "title": "Embedding Api Base",
             "description": "Default Embedding API base URL"
           },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Provider preset metadata from catalog"
+          },
           "models": {
             "items": {
               "$ref": "#/components/schemas/ModelDTO"
@@ -6497,6 +6522,19 @@
             ],
             "title": "Api Base Env",
             "description": "Environment variable for API base"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata",
+            "description": "Provider preset metadata from catalog"
           },
           "models": {
             "items": {

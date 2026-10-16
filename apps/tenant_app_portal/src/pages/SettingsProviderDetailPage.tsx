@@ -5,8 +5,10 @@ import { modelsRegistryKey, registerModelsRegistryI18n } from '@/components/mode
 import ProfileFormDialog from '@/components/models-registry/ProfileFormDialog'
 import ProviderFormDialog from '@/components/models-registry/ProviderFormDialog'
 import {
+  catalogModelHasReasoningControl,
   defaultBadgesForProfile,
   presetDisplayName,
+  profileReasoningControlBadge,
   unregisteredCatalogModels,
 } from '@/components/models-registry/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -32,6 +34,7 @@ import {
   createRegistryProfile,
   deleteRegistryProfile,
   getRegistryDefaults,
+  inferCatalogPresetKey,
   listCatalogProviders,
   listRegistryProfiles,
   listRegistryProviders,
@@ -192,6 +195,15 @@ export default function SettingsProviderDetailPage() {
   }
 
   const presetName = presetDisplayName(provider, catalog)
+  const catalogPresetKey = inferCatalogPresetKey(provider, catalog)
+  const catalogPreset = catalogPresetKey
+    ? catalog.find((item) => item.key === catalogPresetKey || item.provider === catalogPresetKey)
+    : undefined
+  const thinkingWireMode =
+    catalogPreset?.metadata && typeof catalogPreset.metadata.thinking_request_mode === 'string'
+      ? catalogPreset.metadata.thinking_request_mode
+      : null
+  const presetKeyStored = Boolean(provider.preset_key?.trim())
 
   return (
     <div className="space-y-6">
@@ -202,6 +214,20 @@ export default function SettingsProviderDetailPage() {
         meta={
           <div className="space-y-1">
             <p>{presetName !== '—' ? presetName : t(modelsRegistryKey('customPreset'))}</p>
+            {catalogPresetKey ? (
+              <p className="text-xs text-muted-foreground">
+                {t(modelsRegistryKey('catalogPresetKey'))}:{' '}
+                <span className="font-mono">{catalogPresetKey}</span>
+                {!presetKeyStored ? ` (${t(modelsRegistryKey('catalogPresetInferred'))})` : null}
+                {thinkingWireMode ? (
+                  <>
+                    {' · '}
+                    {t(modelsRegistryKey('catalogThinkingWire'))}:{' '}
+                    <span className="font-mono">{thinkingWireMode}</span>
+                  </>
+                ) : null}
+              </p>
+            ) : null}
             <p className="font-mono text-xs truncate">{provider.api_base}</p>
             <p>
               {t(modelsRegistryKey('apiKey'))}: {provider.api_key_masked}
@@ -258,6 +284,7 @@ export default function SettingsProviderDetailPage() {
                 size="sm"
                 variant="secondary"
                 disabled={busy}
+                className="inline-flex items-center gap-2"
                 onClick={() =>
                   void quickAddCatalogModel(
                     model.key,
@@ -267,7 +294,12 @@ export default function SettingsProviderDetailPage() {
                   )
                 }
               >
-                + {model.name}
+                <span>+ {model.name}</span>
+                {catalogModelHasReasoningControl(model) ? (
+                  <Badge variant="outline" className="font-normal">
+                    {t(modelsRegistryKey('badgeReasoningControl'))}
+                  </Badge>
+                ) : null}
               </Button>
             ))}
           </div>
@@ -317,6 +349,10 @@ export default function SettingsProviderDetailPage() {
                     <TableCell className="py-2.5 text-muted-foreground">
                       {(() => {
                         const badges = defaultBadgesForProfile(profile.id, defaults, t)
+                        const reasoningBadge = profileReasoningControlBadge(profile, catalog, t)
+                        if (reasoningBadge) {
+                          badges.push(reasoningBadge)
+                        }
                         if (badges.length === 0) {
                           return <span className="text-xs">—</span>
                         }

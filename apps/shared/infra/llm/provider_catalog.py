@@ -33,6 +33,7 @@ class ProviderPreset:
     embedding_api_base: str | None = None
     api_base_env: str | None = None
     default_params: dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 def _slugify(value: str) -> str:
@@ -95,6 +96,7 @@ class ProviderCatalog:
                 embedding_api_base=provider_embedding_api_base,
                 api_base_env=provider_api_base_env,
                 default_params=inherited_defaults,
+                metadata=provider_data.get("metadata") or {},
             )
 
             self._load_models_for_provider(
@@ -157,6 +159,8 @@ class ProviderCatalog:
                 model_key = model_data.get("key") or model_data.get("model_id")
                 if not model_key:
                     raise ValueError(f"Invalid model config under {preset_key}: 'key' or 'model_id' is required")
+                if not model_data.get("name"):
+                    model_data["name"] = model_data.get("model_id") or model_key
 
             catalog_model_key = f"{preset_key}/{model_key}"
             embedding_api_base = provider_embedding_api_base if category == "embedding" else None
@@ -174,6 +178,7 @@ class ProviderCatalog:
                     **inherited_defaults,
                     **(model_data.get("default_params", {}) or {}),
                 },
+                "metadata": model_data.get("metadata") or {},
             }
 
             profile = ModelProfile(**merged_model_data)
@@ -215,6 +220,7 @@ class ProviderCatalog:
             "api_base": preset.api_base or (first_profile.api_base if first_profile else None),
             "embedding_api_base": preset.embedding_api_base
             or (getattr(first_profile, "embedding_api_base", None) if first_profile else None),
+            "metadata": preset.metadata,
             "models": [self._profile_summary(profile) for profile in profiles],
         }
 
@@ -261,6 +267,15 @@ class ProviderCatalog:
 
     def get_profile(self, catalog_model_key: str) -> ModelProfile | None:
         return self._profiles.get(catalog_model_key) or self._embedding_profiles.get(catalog_model_key)
+
+    def find_llm_profile(self, preset_key: str | None, model_id: str) -> ModelProfile | None:
+        """Match tenant profile to catalog by provider preset and API model id."""
+        if not preset_key or not model_id:
+            return None
+        for profile in self._profiles.values():
+            if profile.provider_key == preset_key and profile.model_id == model_id:
+                return profile
+        return None
 
 
 _catalog: ProviderCatalog | None = None

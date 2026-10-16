@@ -29,9 +29,11 @@ def has_legacy_llm_config(tenant_config: dict[str, Any] | None) -> bool:
 
 
 def _infer_preset_key(api_base: str) -> str | None:
-    catalog = get_provider_catalog()
-    for preset in catalog.list_presets():
-        if preset.api_base and preset.api_base == api_base:
+    normalized = (api_base or "").strip()
+    if not normalized:
+        return None
+    for preset in get_provider_catalog().list_presets():
+        if preset.api_base and preset.api_base == normalized:
             return preset.key
     return None
 

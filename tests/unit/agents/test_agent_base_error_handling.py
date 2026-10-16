@@ -121,10 +121,12 @@ class TestLlmCallErrorHandling:
             prompt_context_stats=None,
             configured_model_id=None,
             max_output_tokens=None,
+            thinking_context=None,
         ):
             captured["model_key"] = model_key
             captured["stats"] = prompt_context_stats
             captured["max_output_tokens"] = max_output_tokens
+            captured["thinking_context"] = thinking_context
 
             class _Tracker:
                 def record_response(self, response):

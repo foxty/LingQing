@@ -28,6 +28,7 @@ import {
 import { AlertCircle } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { catalogModelHasReasoningControl } from '@/components/models-registry/utils'
 import { modelsRegistryKey, registerModelsRegistryI18n } from './i18n'
 
 const emptyForm = (category: ModelProfileCategory, providerId: string) => ({
@@ -204,6 +205,9 @@ export default function ProfileFormDialog({
                   {catalogModels.map((model) => (
                     <SelectItem key={model.key} value={model.key}>
                       {model.name} ({model.model_id})
+                      {catalogModelHasReasoningControl(model)
+                        ? ` · ${t(modelsRegistryKey('badgeReasoningControl'))}`
+                        : ''}
                     </SelectItem>
                   ))}
                   <SelectItem value={CUSTOM_CATALOG_MODEL_KEY}>{t(modelsRegistryKey('customModel'))}</SelectItem>

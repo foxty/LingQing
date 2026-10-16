@@ -66,7 +66,7 @@ async def test_get_or_create_resolves_profile_override():
         )
 
     service_cls.return_value.resolve_for_agent.assert_awaited_once_with(7, mini=False)
-    create_chat_model.assert_called_once_with(resolved)
+    create_chat_model.assert_called_once_with(resolved, thinking_effort="none")
     chat_model.bind_tools.assert_called_once_with([])
     assert result is bound_model
     assert manager.get_configured_model_id() == "gpt-test"
@@ -252,3 +252,12 @@ async def test_get_or_create_scoped_by_tenant_id():
 
     assert first is not second
     assert service_cls.return_value.resolve_for_agent.await_count == 2
+
+
+def test_workbench_off_attempts_disable_from_payload():
+    assert ModelBindingManager._workbench_off_attempts_disable({"reasoning_effort": "none"}) is True
+    assert ModelBindingManager._workbench_off_attempts_disable({"reasoning_effort": "low"}) is False
+    assert (
+        ModelBindingManager._workbench_off_attempts_disable({"thinking": {"type": "disabled"}}) is True
+    )
+    assert ModelBindingManager._workbench_off_attempts_disable(None) is False

@@ -33,6 +33,13 @@ i18n.addResourceBundle('en', 'translation', {
     artifactsAutoOpenOnNew: 'Open for new artifacts',
     artifactsAutoOpenAlways: 'Always open for new artifacts',
     send: 'Send',
+    thinkingEffort: 'Reasoning effort',
+    thinkingNone: 'Off (default)',
+    thinkingLow: 'Low',
+    thinkingMedium: 'Medium',
+    thinkingHigh: 'High',
+    thinkingEffortUnavailable:
+      'Not available for this agent’s model (catalog has no reasoning control for the resolved profile).',
   },
 }, true, true)
 
@@ -57,6 +64,12 @@ i18n.addResourceBundle('zh', 'translation', {
     artifactsAutoOpenOnNew: '有新产物时打开',
     artifactsAutoOpenAlways: '有新产物时始终打开',
     send: '发送',
+    thinkingEffort: '推理深度',
+    thinkingNone: '关闭（默认）',
+    thinkingLow: '低',
+    thinkingMedium: '中',
+    thinkingHigh: '高',
+    thinkingEffortUnavailable: '当前智能体绑定的模型不支持工作台推理深度控制。',
   },
 }, true, true)
 import { Button } from '@/components/ui/button'
@@ -69,7 +82,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
-import type { ArtifactsAutoOpenPreference } from '@/lib/userPreferencesTypes'
+import type { ArtifactsAutoOpenPreference, ThinkingEffort } from '@/lib/userPreferencesTypes'
 import { Textarea } from '@/components/ui/textarea'
 import { Message, ContextResource } from '@/types'
 import { Bot, Loader2, LockKeyhole, Send, Settings } from 'lucide-react'
@@ -88,6 +101,8 @@ interface ChatAreaProps {
   streamingToolCalls?: StreamingToolCallState[]
   sendKeyPreference: 'enter' | 'ctrl-enter'
   artifactsAutoOpen: ArtifactsAutoOpenPreference
+  thinkingEffort: ThinkingEffort
+  thinkingEffortControlEnabled?: boolean
   threadId?: string
   isLoadingHistory?: boolean
   threadLoadError?: ThreadLoadError | null
@@ -103,6 +118,7 @@ interface ChatAreaProps {
   onSendMessage: (message: string, resources: ContextResource[]) => void
   onSendKeyPreferenceChange: (value: 'enter' | 'ctrl-enter') => void
   onArtifactsAutoOpenChange: (value: ArtifactsAutoOpenPreference) => void
+  onThinkingEffortChange: (value: ThinkingEffort) => void
   onHitlApprovedContinue?: (proposalId: string) => void | Promise<void>
   onHitlRejected?: (proposalId: string) => void | Promise<void>
 }
@@ -115,6 +131,8 @@ export default function ChatArea({
   streamingToolCalls = [],
   sendKeyPreference,
   artifactsAutoOpen,
+  thinkingEffort,
+  thinkingEffortControlEnabled = true,
   threadId,
   isLoadingHistory = false,
   threadLoadError = null,
@@ -126,6 +144,7 @@ export default function ChatArea({
   onSendMessage,
   onSendKeyPreferenceChange,
   onArtifactsAutoOpenChange,
+  onThinkingEffortChange,
   onHitlApprovedContinue,
   onHitlRejected,
 }: ChatAreaProps) {
@@ -366,6 +385,30 @@ export default function ChatArea({
                 </DropdownMenuRadioItem>
                 <DropdownMenuRadioItem value="always">
                   {t('workbench.artifactsAutoOpenAlways')}
+                </DropdownMenuRadioItem>
+              </DropdownMenuRadioGroup>
+              <DropdownMenuSeparator />
+              <DropdownMenuLabel
+                className={!thinkingEffortControlEnabled ? 'text-muted-foreground' : undefined}
+                title={
+                  !thinkingEffortControlEnabled ? t('workbench.thinkingEffortUnavailable') : undefined
+                }
+              >
+                {t('workbench.thinkingEffort')}
+              </DropdownMenuLabel>
+              <DropdownMenuRadioGroup
+                value={thinkingEffort}
+                onValueChange={(value) => onThinkingEffortChange(value as ThinkingEffort)}
+              >
+                <DropdownMenuRadioItem value="none">{t('workbench.thinkingNone')}</DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="low" disabled={!thinkingEffortControlEnabled}>
+                  {t('workbench.thinkingLow')}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="medium" disabled={!thinkingEffortControlEnabled}>
+                  {t('workbench.thinkingMedium')}
+                </DropdownMenuRadioItem>
+                <DropdownMenuRadioItem value="high" disabled={!thinkingEffortControlEnabled}>
+                  {t('workbench.thinkingHigh')}
                 </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
             </DropdownMenuContent>

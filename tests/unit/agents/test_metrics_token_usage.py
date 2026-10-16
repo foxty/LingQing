@@ -171,6 +171,32 @@ def test_session_metrics_aggregate_by_model_label():
     assert "system.ai.deepseek-v4-flash-0731 → /mosaicml/local_model" in metrics.model_usage
 
 
+def test_session_metrics_aggregate_thinking_from_llm_events():
+    now = datetime.now(UTC)
+    events = [
+        MetricsEvent(
+            event_type=EventType.LLM_CALL,
+            context=MetricsContext(session_id="s-thinking", model_key="qwen3.5-plus"),
+            start_time=now,
+            end_time=now,
+            extra_context={
+                "thinking": {
+                    "thinking_effort": "medium",
+                    "supports_thinking": True,
+                    "thinking_evidence": "usage",
+                    "reasoning_tokens": 512,
+                }
+            },
+        )
+    ]
+
+    metrics = AgentSessionMetrics.from_events(events)
+
+    assert metrics.thinking is not None
+    assert metrics.thinking["thinking_effort"] == "medium"
+    assert metrics.thinking["reasoning_tokens"] == 512
+
+
 def test_db_adapter_preserves_extra_context():
     now = datetime.now(UTC)
     event = MetricsEvent(

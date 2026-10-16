@@ -43,6 +43,7 @@ class ProviderWithModelsDTO(BaseModel):
     type: str = Field(..., description="Provider type")
     api_base: str | None = Field(default=None, description="Default API base URL")
     api_base_env: str | None = Field(default=None, description="Environment variable for API base")
+    metadata: dict | None = Field(default=None, description="Provider preset metadata from catalog")
     models: list[ModelDTO] = Field(default_factory=list, description="Available models for this provider")
 
 
@@ -56,6 +57,7 @@ class ProviderWithModelsByCategoryDTO(BaseModel):
     api_base: str | None = Field(default=None, description="Default API base URL")
     api_base_env: str | None = Field(default=None, description="Environment variable for API base")
     embedding_api_base: str | None = Field(default=None, description="Default Embedding API base URL")
+    metadata: dict | None = Field(default=None, description="Provider preset metadata from catalog")
     models: list[ModelDTO] = Field(
         default_factory=list, description="Available models for this provider (filtered by category)"
     )

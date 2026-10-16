@@ -117,6 +117,7 @@ class ResolvedModelConfig:
     provider_preset_key: str | None
     api_base: str
     api_key: str
+    catalog_model_key: str | None = None
 
 
 class LLMProviderRepositoryPort(Protocol):

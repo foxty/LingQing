@@ -782,6 +782,7 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
                 "thread_id": thread_id,
                 "db_session": db_session or self.db,
                 "runtime": runtime_ctx.model_dump(),
+                "thinking_effort": request.thinking_effort,
                 "history_message_limit": history_message_limit,
                 # On HITL resume: signals agent_base._load_history to rewrite the stale
                 # PENDING ToolMessage, and tool_executor._handle_hitl_gate to use the
@@ -961,4 +962,23 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
                 kwargs["attached_artifacts"] = chip_payload
                 msg.additional_kwargs = kwargs
                 return
+
+    async def agent_thinking_effort_control_enabled(self, agent_id: int, actor: ActorContext) -> bool:
+        """Whether workbench reasoning effort applies to this agent's resolved LLM profile."""
+        from apps.shared.infra.llm.thinking import model_supports_thinking
+        from apps.shared.llm_providers.service import LLMProviderConfigService
+        from apps.tenant_app_service.agent_catalog.adapters import resolve_assignable_skills
+        from apps.tenant_app_service.agent_catalog.services import AgentCatalogService
+
+        catalog = AgentCatalogService(tenant_id=self.tenant_id, db_session=self.db)
+        assignable_skills = resolve_assignable_skills(tenant_id=self.tenant_id, user_id=actor.user_id)
+        agent = await catalog.get_agent_for_actor(
+            agent_id=agent_id,
+            actor=actor,
+            assignable_skills=assignable_skills,
+        )
+        llm = LLMProviderConfigService(self.tenant_id, self.db)
+        await llm.ensure_migrated()
+        resolved = await llm.resolve_for_agent(agent.config.model_profile_id, mini=False)
+        return model_supports_thinking(resolved)
 

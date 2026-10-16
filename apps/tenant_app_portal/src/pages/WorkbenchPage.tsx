@@ -6,6 +6,7 @@ import { useArtifacts } from '@/hooks/useArtifacts'
 import { useAuth } from '@/hooks/useAuth'
 import { useThread, useThreads } from '@/hooks/useThreads'
 import { useUserPreferences } from '@/hooks/useUserPreferences'
+import { useAgentThinkingEffortControl } from '@/hooks/useAgentThinkingEffortControl'
 import { useWorkbenchChat } from '@/hooks/useWorkbenchChat'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -167,6 +168,7 @@ export default function WorkbenchPage() {
     selectArtifact,
     setArtifactsPanelVisible: setArtifactsPanelVisibleFromChat,
     artifactsAutoOpen: preferences.artifactsAutoOpen,
+    thinkingEffort: preferences.thinkingEffort,
     isArtifactsPanelDismissedForThread: () => artifactsPanelDismissedForThreadRef.current,
     isArtifactsPanelVisible: () => artifactsPanelVisibleRef.current,
     onNewArtifactsWhilePanelClosed: (newArtifacts) => {
@@ -194,7 +196,11 @@ export default function WorkbenchPage() {
   )
   const latestThread = accessibleThreads[0] || null
   const currentThread = sortedThreads.find((thread) => thread.id === currentThreadId) || null
-  const selectedAgent = agentOptions.find((agent) => agent.id === selectedAgentId)
+  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId)
+  const { thinkingEffortControlEnabled } = useAgentThinkingEffortControl(
+    selectedAgentId,
+    selectedAgent?.config
+  )
   const agentAccessRevoked =
     agentsLoaded && !agentsFailed && selectedAgentId > 0 && !agents.some((agent) => agent.id === selectedAgentId)
   const sessionTitle = currentThread?.title || t('workbench.untitledThread')
@@ -402,6 +408,8 @@ export default function WorkbenchPage() {
             streamingToolCalls={isStreaming ? streamingToolCalls : []}
             sendKeyPreference={preferences.sendKey}
             artifactsAutoOpen={preferences.artifactsAutoOpen}
+            thinkingEffort={preferences.thinkingEffort}
+            thinkingEffortControlEnabled={thinkingEffortControlEnabled}
             threadId={currentThreadId || undefined}
             isLoadingHistory={historyLoading}
             threadLoadError={threadLoadError}
@@ -416,6 +424,9 @@ export default function WorkbenchPage() {
             }}
             onArtifactsAutoOpenChange={(value) => {
               updatePreferences({ artifactsAutoOpen: value })
+            }}
+            onThinkingEffortChange={(value) => {
+              updatePreferences({ thinkingEffort: value })
             }}
             onHitlApprovedContinue={handleHitlApprovedContinue}
             onHitlRejected={handleHitlRejected}

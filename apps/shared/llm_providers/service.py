@@ -43,6 +43,28 @@ from apps.shared.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
+def _effective_profile_params(
+    profile: LLMModelProfileDomain,
+    *,
+    provider_preset_key: str | None = None,
+) -> dict[str, Any] | None:
+    """Catalog default_params with tenant profile.params overrides (tenant wins per key)."""
+    catalog = get_provider_catalog()
+    catalog_profile = None
+    if profile.catalog_model_key:
+        catalog_profile = catalog.get_profile(profile.catalog_model_key)
+    elif profile.is_llm() and provider_preset_key:
+        catalog_profile = catalog.find_llm_profile(provider_preset_key, profile.model_id)
+
+    base: dict[str, Any] = {}
+    if catalog_profile and catalog_profile.default_params:
+        base = dict(catalog_profile.default_params)
+    tenant = dict(profile.params or {})
+    if not base and not tenant:
+        return profile.params
+    return {**base, **tenant}
+
+
 class LLMProviderConfigService:
     """Tenant-scoped LLM provider and model profile management."""
 
@@ -270,18 +292,22 @@ class LLMProviderConfigService:
         if profile.is_llm():
             api_base = provider.api_base
 
+        preset_key = provider.preset_key.strip() if provider.preset_key and provider.preset_key.strip() else None
+        params = _effective_profile_params(profile, provider_preset_key=preset_key)
+
         return ResolvedModelConfig(
             profile_id=profile.id,
             profile_name=profile.name,
             category=profile.category,
             model_id=profile.model_id,
-            params=profile.params,
+            params=params,
             provider_id=provider.id,
             provider_display_name=provider.display_name,
             provider_type=provider.type,
-            provider_preset_key=provider.preset_key,
+            provider_preset_key=preset_key,
             api_base=api_base,
             api_key=self._cipher.decrypt(provider.api_key_encrypted),
+            catalog_model_key=profile.catalog_model_key,
         )
 
     async def get_profile_binding_timestamps(self, profile_id: int) -> tuple[datetime, datetime]:

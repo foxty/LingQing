@@ -68,6 +68,17 @@ export interface HitlPayload {
   expires_at?: string
 }
 
+export interface SessionThinkingMetrics {
+  thinking_effort_requested?: string
+  thinking_effort?: string
+  supports_thinking?: boolean
+  thinking_request?: Record<string, unknown> | null
+  thinking_evidence?: 'usage' | 'content_blocks' | 'none' | string
+  reasoning_tokens?: number
+  thinking_content_blocks?: number
+  thinking_effort_none_disables?: boolean
+}
+
 export interface SessionMetrics {
   session_id: string
   total_tokens: {
@@ -81,6 +92,7 @@ export interface SessionMetrics {
   start_time: string
   end_time: string
   model_usage?: Record<string, { calls: number; tokens: number }>
+  thinking?: SessionThinkingMetrics | null
 }
 
 export interface ToolCallMetrics {

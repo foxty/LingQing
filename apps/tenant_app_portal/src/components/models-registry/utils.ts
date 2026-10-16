@@ -1,11 +1,32 @@
 import {
   catalogModelsForProvider,
   inferCatalogPresetKey,
+  type CatalogModel,
   type CatalogProvider,
   type LLMModelProfile,
   type LLMProvider,
   type ModelProfileCategory,
 } from '@/lib/llmConfigApi'
+import { catalogEntryForModelKey } from '@/lib/thinkingCatalog'
+
+export function catalogModelHasReasoningControl(model: CatalogModel): boolean {
+  return model.metadata?.supports_thinking === true
+}
+
+export function profileReasoningControlBadge(
+  profile: LLMModelProfile,
+  catalog: CatalogProvider[],
+  t: (key: string) => string
+): string | null {
+  if (profile.category !== 'llm') {
+    return null
+  }
+  const entry = catalogEntryForModelKey(catalog, profile.catalog_model_key)
+  if (entry && catalogModelHasReasoningControl(entry.model)) {
+    return t('settings.modelsRegistry.badgeReasoningControl')
+  }
+  return null
+}
 
 export function modelCountLabel(profiles: LLMModelProfile[], providerId: number): string {
   const linked = profiles.filter((profile) => profile.provider_id === providerId)

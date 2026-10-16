@@ -27,6 +27,25 @@ i18n.addResourceBundle('en', 'translation', {
     generatingResponse: 'Generating response',
     thinking: 'Thinking...',
     noResponseGenerated: 'No response was generated.',
+    reasoningTitle: 'Model reasoning',
+    reasoningStatus: 'Reasoning',
+    reasoningEffortRequested: 'Workbench effort requested',
+    reasoningEffort: 'Workbench effort sent',
+    reasoningSupported: 'Catalog allows effort control',
+    reasoningEvidence: 'Provider signal',
+    reasoningTokens: 'Provider reasoning tokens',
+    reasoningTokensHint:
+      'Reported by the provider. Models may reason by default even when workbench effort is none.',
+    reasoningApiRequest: 'API reasoning payload',
+    reasoningGatewayMismatch:
+      'Gateway reported reasoning tokens while API had reasoning_effort "none". The route may ignore disable or label output tokens as reasoning.',
+    reasoningNoneDoesNotDisable:
+      'Workbench "Off" sends minimum reasoning effort (low) for this model; it does not disable thinking.',
+    reasoningEvidenceUsage: 'usage metadata',
+    reasoningEvidenceBlocks: 'thinking content blocks',
+    reasoningEvidenceNone: 'none detected',
+    showReasoning: 'Show reasoning',
+    hideReasoning: 'Hide reasoning',
   },
 }, true, true)
 
@@ -55,6 +74,24 @@ i18n.addResourceBundle('zh', 'translation', {
     generatingResponse: '正在生成回复',
     thinking: '思考中...',
     noResponseGenerated: '未生成回复内容。',
+    reasoningTitle: '模型推理',
+    reasoningStatus: '推理',
+    reasoningEffortRequested: '工作台选择的深度',
+    reasoningEffort: '工作台发送的深度',
+    reasoningSupported: '目录允许深度控制',
+    reasoningTokensHint: '由提供商上报；即使工作台为 none，模型仍可能默认推理。',
+    reasoningApiRequest: 'API 推理参数',
+    reasoningGatewayMismatch:
+      'API 已发送 reasoning_effort "none"，但网关仍上报推理 Token。可能是路由未禁用推理或用量分类方式不同。',
+    reasoningNoneDoesNotDisable:
+      '工作台「关闭」对此模型会发送最低推理深度（low），不会关闭思考能力。',
+    reasoningEvidence: '提供商信号',
+    reasoningTokens: '推理 Token',
+    reasoningEvidenceUsage: '用量元数据',
+    reasoningEvidenceBlocks: 'thinking 内容块',
+    reasoningEvidenceNone: '未检测到',
+    showReasoning: '展开推理',
+    hideReasoning: '收起推理',
   },
 }, true, true)
 import { AlertCircle, Bot, Check, ChevronDown, ChevronUp, Copy, Loader2 } from 'lucide-react'
@@ -210,6 +247,16 @@ export default function AiTurnMessage({
     : isSessionMetrics(turn.finalMessage.metrics)
       ? turn.finalMessage.metrics
       : null
+  const thinkingContent =
+    typeof turn.finalMessage.message_metadata?.thinking_content === 'string'
+      ? turn.finalMessage.message_metadata.thinking_content.trim()
+      : ''
+  const reasoningEvidenceLabel = (evidence?: string) => {
+    if (evidence === 'usage') return t('workbench.reasoningEvidenceUsage')
+    if (evidence === 'content_blocks') return t('workbench.reasoningEvidenceBlocks')
+    return t('workbench.reasoningEvidenceNone')
+  }
+
   const usedModels = useMemo(() => {
     if (!sessionMetrics?.model_usage) {
       return []
@@ -469,6 +516,73 @@ export default function AiTurnMessage({
                 <span className="text-muted-foreground">{t('workbench.duration')}</span>
                 <span className="font-medium">{(sessionMetrics.duration_ms ?? 0).toFixed(2)}ms</span>
               </div>
+              {sessionMetrics.thinking ? (
+                <>
+                  <div className="mt-2 border-t border-border pt-2 font-medium text-foreground">
+                    {t('workbench.reasoningTitle')}
+                  </div>
+                  {'thinking_effort_requested' in sessionMetrics.thinking ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">{t('workbench.reasoningEffortRequested')}</span>
+                      <span className="font-medium">
+                        {sessionMetrics.thinking.thinking_effort_requested ?? 'none'}
+                      </span>
+                    </div>
+                  ) : null}
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{t('workbench.reasoningEffort')}</span>
+                    <span className="font-medium">{sessionMetrics.thinking.thinking_effort ?? 'none'}</span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{t('workbench.reasoningApiRequest')}</span>
+                    <span className="font-medium text-right break-all">
+                      {sessionMetrics.thinking.thinking_request
+                        ? JSON.stringify(sessionMetrics.thinking.thinking_request)
+                        : t('workbench.reasoningEvidenceNone')}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{t('workbench.reasoningSupported')}</span>
+                    <span className="font-medium">
+                      {sessionMetrics.thinking.supports_thinking ? 'yes' : 'no'}
+                    </span>
+                  </div>
+                  <div className="flex justify-between gap-2">
+                    <span className="text-muted-foreground">{t('workbench.reasoningEvidence')}</span>
+                    <span className="font-medium text-right">
+                      {reasoningEvidenceLabel(sessionMetrics.thinking.thinking_evidence)}
+                    </span>
+                  </div>
+                  {typeof sessionMetrics.thinking.reasoning_tokens === 'number' ? (
+                    <div className="flex justify-between gap-2">
+                      <span className="text-muted-foreground">{t('workbench.reasoningTokens')}</span>
+                      <span className="font-medium">{sessionMetrics.thinking.reasoning_tokens}</span>
+                    </div>
+                  ) : null}
+                  {(sessionMetrics.thinking.reasoning_tokens ?? 0) > 0 &&
+                  (sessionMetrics.thinking.thinking_effort ?? 'none') === 'none' ? (
+                    <p className="mt-1 text-[11px] leading-snug text-muted-foreground">
+                      {sessionMetrics.thinking.thinking_effort_none_disables === false
+                        ? t('workbench.reasoningNoneDoesNotDisable')
+                        : sessionMetrics.thinking.thinking_request &&
+                            typeof sessionMetrics.thinking.thinking_request === 'object' &&
+                            sessionMetrics.thinking.thinking_request.reasoning_effort === 'none'
+                          ? t('workbench.reasoningGatewayMismatch')
+                          : t('workbench.reasoningTokensHint')}
+                    </p>
+                  ) : null}
+                  {thinkingContent ? (
+                    <details className="mt-2">
+                      <summary className="cursor-pointer text-muted-foreground hover:text-foreground">
+                        {t('workbench.showReasoning')}
+                      </summary>
+                      <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded-md border border-border bg-background/80 p-2 text-[11px] text-muted-foreground">
+                        {thinkingContent}
+                      </pre>
+                    </details>
+                  ) : null}
+                </>
+              ) : null}
             </div>
           )}
         </div>
