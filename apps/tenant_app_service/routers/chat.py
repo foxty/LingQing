@@ -16,8 +16,8 @@ from apps.shared.core.exceptions import (
     ValidationError,
 )
 from apps.shared.db.session import app_db_session, get_db
-from apps.shared.observability.service import ObservabilityService
 from apps.shared.domain.actor import ActorContext
+from apps.shared.observability.service import ObservabilityService
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.chat import ChatService
 from apps.tenant_app_service.chat.adapters import chat_thread_to_domain

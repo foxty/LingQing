@@ -5,8 +5,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.auth import get_current_user
 from apps.shared.db.session import get_db
-from apps.shared.schemas.user import UserDTO
 from apps.shared.llm_providers.embedding_resolver import resolve_tenant_embeddings
+from apps.shared.schemas.user import UserDTO
 from apps.shared.search import SearchService
 from apps.shared.search.schemas import (
     SearchResponse,

@@ -5,6 +5,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
+
 class SimpleMessage(BaseModel):
     """Simple message model for chat requests (aligned with frontend).
 

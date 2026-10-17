@@ -7,6 +7,12 @@ from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
 from apps.shared.db.session import get_db
 from apps.shared.infra.llm.provider_catalog import get_provider_catalog
+from apps.shared.llm_providers.catalog_dtos import (
+    ModelCategory,
+    ModelDTO,
+    ProviderWithModelsByCategoryDTO,
+    ProviderWithModelsDTO,
+)
 from apps.shared.llm_providers.domain import ModelProfileCategory
 from apps.shared.llm_providers.dtos import (
     CreateLLMModelProfileRequest,
@@ -19,12 +25,6 @@ from apps.shared.llm_providers.dtos import (
     UpdateLLMDefaultsRequest,
     UpdateLLMModelProfileRequest,
     UpdateLLMProviderRequest,
-)
-from apps.shared.llm_providers.catalog_dtos import (
-    ModelCategory,
-    ModelDTO,
-    ProviderWithModelsByCategoryDTO,
-    ProviderWithModelsDTO,
 )
 from apps.shared.llm_providers.service import LLMProviderConfigService
 from apps.shared.schemas.user import UserDTO

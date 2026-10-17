@@ -11,12 +11,12 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.tasks.domain import ScheduledTaskDomain, normalize_agent_run_task_config, parse_agent_run_task_config
 from apps.shared.tasks.execution_service import TaskExecutionResult
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.agents.agent_run_preflight import preflight_agent_run
-from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.agent_ingress.slack.scheduled_delivery import (
     SLACK_SCHEDULED_FAILURE_MESSAGE,
     deliver_scheduled_agent_run_to_slack,
 )
+from apps.tenant_app_service.agents.agent_run_preflight import preflight_agent_run
+from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.chat.service import ChatService
 
 logger = get_logger(__name__)

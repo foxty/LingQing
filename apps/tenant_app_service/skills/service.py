@@ -14,7 +14,6 @@ from typing import TYPE_CHECKING, Any, BinaryIO
 
 from apps.config import EnvConfig
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.agents.domain import SkillConfig
 from apps.tenant_app_service.skills.domain import (
     SkillPackageFetcherPort,
     SkillSourceRef,

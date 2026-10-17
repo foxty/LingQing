@@ -8,8 +8,8 @@ from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
-from apps.tenant_manager_service.db.models import Base
 from apps.shared.db.url import sqlalchemy_url_for_alembic_ini
+from apps.tenant_manager_service.db.models import Base
 from apps.tenant_manager_service.db.session import build_tenant_manager_db_url
 
 config = context.config

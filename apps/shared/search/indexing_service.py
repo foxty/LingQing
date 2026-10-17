@@ -23,7 +23,6 @@ from apps.shared.document.manifest import get_storage_uri, is_manifest_pointer, 
 from apps.shared.domain.types import (
     SearchableResourceType,
 )
-from apps.shared.llm_providers.embedding_resolver import resolve_tenant_embeddings
 from apps.shared.infra.rag.index_payload import IndexRecordPayload, IndexUpsertPayload
 from apps.shared.infra.rag.metadata_keys import (
     META_CHUNK_INDEX,
@@ -36,6 +35,7 @@ from apps.shared.infra.rag.metadata_keys import (
 )
 from apps.shared.infra.rag.rag_manager import RAGManager
 from apps.shared.infra.storage import FileStorage
+from apps.shared.llm_providers.embedding_resolver import resolve_tenant_embeddings
 from apps.shared.search.adapters import db_to_domain, domain_to_response
 from apps.shared.search.parser import ResourceParser
 from apps.shared.search.repository import ResourceIndexRepository

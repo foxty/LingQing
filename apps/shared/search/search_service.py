@@ -8,12 +8,13 @@ Provides hybrid search combining:
 from typing import Any
 
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.api_connector.repository import ApiConnectorRepository, ApiOperationIndexRepository
-from apps.shared.authz.authz_query_builder import AuthzSqlFilter, build_unified_resource_filter
 from apps.shared.authz.agent_scope import combine_agent_scope
+from apps.shared.authz.authz_query_builder import AuthzSqlFilter, build_unified_resource_filter
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.data_source.adapters import db_asset_metadata_to_domain
@@ -35,7 +36,6 @@ from apps.shared.domain.types import (
     SearchableResourceType,
 )
 from apps.shared.infra.rag import RAGManager
-from langchain_core.embeddings import Embeddings
 from apps.shared.infra.rag.metadata_keys import META_RESOURCE_ID
 from apps.shared.search.parser import prepare_search_queries
 from apps.shared.search.repository import ResourceIndexRepository

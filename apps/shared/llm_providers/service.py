@@ -17,6 +17,7 @@ from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.db.models import Tenant
 from apps.shared.infra.llm.llm_model_resolver import create_chat_model, create_embeddings
 from apps.shared.infra.llm.provider_catalog import get_provider_catalog
+from apps.shared.llm_providers.catalog_dtos import ModelCategory
 from apps.shared.llm_providers.domain import (
     LLMDefaults,
     LLMModelProfileDomain,
@@ -35,13 +36,12 @@ from apps.shared.llm_providers.dtos import (
     UpdateLLMModelProfileRequest,
     UpdateLLMProviderRequest,
 )
-from apps.shared.llm_providers.repository import LLMModelProfileRepository, LLMProviderRepository, _UNSET
+from apps.shared.llm_providers.repository import _UNSET, LLMModelProfileRepository, LLMProviderRepository
 from apps.shared.llm_providers.runtime_config import (
     seed_params_from_catalog,
     seed_provider_config_from_catalog,
     seed_reasoning_config_from_catalog,
 )
-from apps.shared.llm_providers.catalog_dtos import ModelCategory
 from apps.shared.utils.field_cipher import FieldCipher
 from apps.shared.utils.logger import get_logger
 
