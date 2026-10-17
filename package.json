@@ -16,6 +16,7 @@
     "test:unit": "nx run root:test:unit",
     "ci": "nx run root:ci",
     "lint": "nx lint",
+    "lint:all": "nx run-many -t lint --all",
     "tenant-cli": "nx run tenant-cli",
     "gen-api-spec": "nx run root:agent-api-spec:generate",
     "check-api-spec": "nx run root:agent-api-spec:check",

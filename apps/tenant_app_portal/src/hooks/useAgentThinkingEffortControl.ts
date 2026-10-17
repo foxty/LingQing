@@ -1,11 +1,7 @@
 import { fetchThinkingEffortControl, type ThinkingEffortOption } from '@/lib/chatApi'
-import type { AgentCapabilityConfig } from '@/lib/agentsApi'
 import { useQuery } from '@tanstack/react-query'
 
-export function useAgentThinkingEffortControl(
-  agentId: number,
-  _agentConfig?: AgentCapabilityConfig
-) {
+export function useAgentThinkingEffortControl(agentId: number) {
   const query = useQuery({
     queryKey: ['thinking-effort-control', agentId],
     queryFn: () => fetchThinkingEffortControl(agentId),

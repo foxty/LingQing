@@ -203,7 +203,7 @@ export default function WorkbenchPage() {
     defaultThinkingEffortValue,
     agentModelId,
     agentProfileName,
-  } = useAgentThinkingEffortControl(selectedAgentId, selectedAgent?.config)
+  } = useAgentThinkingEffortControl(selectedAgentId)
 
   useEffect(() => {
     if (!defaultThinkingEffortValue) {
