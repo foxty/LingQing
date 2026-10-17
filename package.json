@@ -17,6 +17,7 @@
     "ci": "nx run root:ci",
     "lint": "nx lint",
     "lint:all": "nx run-many -t lint --all",
+    "build:portals": "nx run-many -t build --projects=tenant_app_portal,tenant_manager_portal",
     "tenant-cli": "nx run tenant-cli",
     "gen-api-spec": "nx run root:agent-api-spec:generate",
     "check-api-spec": "nx run root:agent-api-spec:check",

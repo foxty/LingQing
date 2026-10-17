@@ -142,7 +142,7 @@ export interface ThinkingEffortControl {
 }
 
 export async function fetchThinkingEffortControl(agentId: number): Promise<ThinkingEffortControl> {
-  const response = await api.get<{ enabled: boolean }>('/chat/thinking-effort-control', {
+  const response = await api.get<ThinkingEffortControl>('/chat/thinking-effort-control', {
     params: { agent_id: agentId },
   })
   return response.data
