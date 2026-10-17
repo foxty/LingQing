@@ -1,8 +1,7 @@
 """Chart tool wrappers for agents.
 
-Rendering logic lives in apps.shared.chart.renderer.  These tools are thin
-adapters that wire LangGraph tool inputs to render_chart() and manage the
-DB session for data-source queries.
+Rendering logic lives in apps.shared.chart.renderer.  These tools wire LangGraph
+inputs to render_chart() and ChartService artifact registration.
 """
 
 import json
@@ -12,19 +11,34 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from apps.shared.chart.renderer import render_chart
+from apps.shared.chart.service import ChartService
+from apps.shared.chart.types import ChartRenderResult
 from apps.shared.data_source import DataSourceService
 from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.context import extract_runtime_context
+from apps.tenant_app_service.agents.domain import AgentRuntimeContext
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 
 logger = get_logger(__name__)
 
 
+async def _register_agent_chart(*, rendered: ChartRenderResult, runtime: AgentRuntimeContext) -> str:
+    async with app_db_session() as session:
+        service = ChartService.create(tenant_id=runtime.user.tenant_id, db=session)
+        return await service.register_chart(
+            svg_bytes=rendered.svg_bytes,
+            png_bytes=rendered.png_bytes,
+            owner_id=runtime.user.user_id,
+            thread_id=runtime.thread_id,
+            title=rendered.title,
+        )
+
+
 @tool
-def create_chart_from_structured_data(
+async def create_chart_from_structured_data(
     chart_type: str,
     data: str,
     title: str,
@@ -58,7 +72,7 @@ def create_chart_from_structured_data(
         config: Runtime configuration (auto-injected by LangGraph)
 
     Returns:
-        Markdown string with chart image
+        ToolResult with ``markdown`` containing a persisted chart image URL (``/charts/{id}/image.svg``).
 
     Examples:
         # Single-series bar
@@ -98,7 +112,8 @@ def create_chart_from_structured_data(
     """
     logger.info(f"Creating static Plotly chart: type={chart_type}, title={title}")
     try:
-        result = render_chart(
+        runtime = extract_runtime_context(config)
+        rendered = render_chart(
             chart_type=chart_type,
             data=data,
             title=title,
@@ -111,9 +126,15 @@ def create_chart_from_structured_data(
             z_key=z_key,
             stacked=stacked,
         )
+        markdown = await _register_agent_chart(rendered=rendered, runtime=runtime)
         logger.info(f"Static chart created: {title}")
-        return ToolResult.success({"markdown": result})
+        return ToolResult.success({"markdown": markdown})
 
+    except ValueError as e:
+        return ToolResult.error_result(
+            code="CHART_RUNTIME_CONTEXT_REQUIRED",
+            message=str(e),
+        )
     except Exception as e:
         logger.error(f"Error creating static Plotly chart: {str(e)}", exc_info=True)
         return ToolResult.error_result(
@@ -160,6 +181,9 @@ async def create_chart_from_sql(
             long-format data (values in a category column) — auto-pivoted when needed.
         z_key: Column for numeric Z values (heatmap only)
         stacked: When True and chart_type='bar', renders as stacked bar instead of grouped
+
+    Returns:
+        ToolResult with ``markdown`` containing a persisted chart image URL (``/charts/{id}/image.svg``).
 
     Examples:
         # Single-series line
@@ -242,7 +266,7 @@ async def create_chart_from_sql(
             data_list = df.to_dict(orient="records")
             data_json = json.dumps(data_list, ensure_ascii=False, default=str)
 
-            result = render_chart(
+            rendered = render_chart(
                 chart_type=chart_type,
                 data=data_json,
                 title=title,
@@ -256,8 +280,10 @@ async def create_chart_from_sql(
                 stacked=stacked,
             )
 
+            markdown = await _register_agent_chart(rendered=rendered, runtime=runtime)
+
             logger.info(f"Chart created from SQL: {title} ({len(df)} data points)")
-            return ToolResult.success({"markdown": result})
+            return ToolResult.success({"markdown": markdown})
 
     except Exception as e:
         error_msg = f"Error creating chart from SQL: {str(e)}"

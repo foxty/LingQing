@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-12T08:51:26.402708+00:00",
+  "generated_at": "2026-10-16T02:15:56.152157+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -245,6 +245,11 @@
     {
       "operation_key": "GET_/artifacts/context-picker",
       "summary": "Search artifacts attachable via @mention in chat",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/charts/{chart_id}/image.{extension}",
+      "summary": "Get Chart Image",
       "risk_level": "read"
     },
     {
@@ -625,11 +630,6 @@
     {
       "operation_key": "POST_/apps/v1/{app_id}/{environment}/data/query",
       "summary": "Query Live App Data V1",
-      "risk_level": "write"
-    },
-    {
-      "operation_key": "POST_/charts/from-sql",
-      "summary": "Create Chart From Sql Api",
       "risk_level": "write"
     },
     {

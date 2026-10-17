@@ -5,9 +5,12 @@ import json
 import pandas as pd
 import pytest
 
+from apps.shared.chart.types import ChartRenderResult
 from apps.tenant_app_service.agents.tools.chart import create_chart_from_sql
 from apps.tenant_app_service.agents.tools.tool_result import ToolResultStatus
 from apps.tenant_app_service.agents.tools.workspace import create_materialized_view, join_cross_datasource
+
+PNG = b"\x89PNG\r\n\x1a\n"
 
 
 @pytest.mark.asyncio
@@ -32,11 +35,18 @@ async def test_create_chart_from_sql_uses_query_data(monkeypatch, runnable_confi
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.app_db_session", lambda: _FakeSessionContext())
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.DataSourceService", _FakeService)
 
-    def _fake_render_chart(**kwargs):
-        return "chart-ok"
+    render_kwargs: dict = {}
 
-    # Patch where the symbol is used (imported into the tool module), not where it is defined.
+    def _fake_render_chart(**kwargs):
+        render_kwargs.update(kwargs)
+        return ChartRenderResult(svg_bytes=b"<svg/>", png_bytes=PNG, title=kwargs.get("title", "Chart"))
+
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.render_chart", _fake_render_chart)
+
+    async def _fake_register(**kwargs):
+        return "\n\n![Monthly](http://127.0.0.1:8000/charts/1/image.svg)\n\n"
+
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart._register_agent_chart", _fake_register)
 
     result = await create_chart_from_sql.ainvoke(
         {
@@ -53,11 +63,12 @@ async def test_create_chart_from_sql_uses_query_data(monkeypatch, runnable_confi
     payload = json.loads(result.content)
 
     assert result.status == ToolResultStatus.SUCCESS
-    assert payload["markdown"] == "chart-ok"
+    assert "/charts/1/image.svg" in payload["markdown"]
     assert captured["tenant_id"] == 1
     assert captured["query_kwargs"]["data_source_id"] == 3
     assert captured["query_kwargs"]["actor"].user_id == 123
     assert captured["query_kwargs"]["actor"].user_role == "admin"
+    assert render_kwargs["title"] == "Monthly"
 
 
 @pytest.mark.asyncio
@@ -113,6 +124,7 @@ async def test_create_materialized_view_uses_query_data_and_writes(monkeypatch, 
         },
         config=runnable_config,
     )
+
     payload = json.loads(result.content)
 
     assert result.status == ToolResultStatus.SUCCESS

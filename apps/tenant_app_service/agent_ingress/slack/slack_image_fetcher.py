@@ -1,4 +1,4 @@
-"""Fetch image bytes for Slack upload (document ACL + chart static files + owned URLs)."""
+"""Fetch image bytes for Slack upload (document ACL + chart artifacts + owned URLs)."""
 
 from __future__ import annotations
 
@@ -8,7 +8,9 @@ from typing import Any
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_file_storage
-from apps.shared.chart.paths import read_chart_static_png_file
+from apps.shared.chart.embed import chart_id_from_image_url
+from apps.shared.chart.service import ChartService
+from apps.shared.chart.storage import CHART_IMAGE_FORMAT_PNG
 from apps.shared.document.service import DocumentService
 from apps.shared.domain.actor import ActorContext
 from apps.shared.utils.logger import get_logger
@@ -19,7 +21,12 @@ logger = get_logger(__name__)
 IMAGE_FETCH_MAX_BYTES = 8 * 1024 * 1024
 ImageFetcher = Callable[[dict[str, Any]], Awaitable[bytes | None]]
 
-_CONTEXT_ONLY_SOURCES = frozenset({SlackImageUploadSource.DOCUMENT, SlackImageUploadSource.CHART})
+_CONTEXT_ONLY_SOURCES = frozenset(
+    {
+        SlackImageUploadSource.DOCUMENT,
+        SlackImageUploadSource.CHART_RESOURCE,
+    }
+)
 
 
 def is_raster_image(data: bytes) -> bool:
@@ -68,15 +75,24 @@ async def fetch_owned_url_bytes(url: str) -> bytes | None:
     return None
 
 
-def _chart_png_bytes(filename: str) -> bytes | None:
-    data = read_chart_static_png_file(filename)
-    if data is None:
-        logger.warning("Slack chart PNG not found on disk: %s", filename)
+async def _chart_resource_png_bytes(
+    chart_id: int,
+    *,
+    db: AsyncSession,
+    tenant_id: int,
+    user_id: int,
+    user_role: str,
+) -> bytes | None:
+    actor = ActorContext(tenant_id=tenant_id, user_id=user_id, user_role=user_role)
+    service = ChartService.create(tenant_id=tenant_id, db=db)
+    try:
+        data, _ = await service.read_image(chart_id, fmt=CHART_IMAGE_FORMAT_PNG, actor=actor)
+    except Exception as exc:
+        logger.warning("Slack chart resource read failed: %s", exc)
         return None
-    if _reject_oversized(data, context=f"chart:{filename}"):
+    if _reject_oversized(data, context=f"chart_resource:{chart_id}"):
         return None
     if not is_raster_image(data):
-        logger.warning("Slack chart file is not raster PNG: %s", filename)
         return None
     return data
 
@@ -91,12 +107,21 @@ async def fetch_upload_block_bytes(
 ) -> bytes | None:
     """Load raster bytes for one ``_image_upload`` block."""
     source = block.get("source")
-    if source == SlackImageUploadSource.CHART:
-        filename = block.get("filename")
-        if not isinstance(filename, str):
-            logger.warning("Slack chart upload block missing filename")
+
+    if source == SlackImageUploadSource.CHART_RESOURCE:
+        if db is None or tenant_id is None or user_id is None or not user_role:
+            logger.warning("Slack chart resource fetch missing tenant/user context")
             return None
-        return _chart_png_bytes(filename)
+        chart_id = block.get("chart_id")
+        if not isinstance(chart_id, int):
+            return None
+        return await _chart_resource_png_bytes(
+            chart_id,
+            db=db,
+            tenant_id=tenant_id,
+            user_id=user_id,
+            user_role=user_role,
+        )
 
     if source == SlackImageUploadSource.DOCUMENT:
         if db is None or tenant_id is None or user_id is None or not user_role:
@@ -129,6 +154,12 @@ async def fetch_upload_block_bytes(
     if not url:
         logger.warning("Slack image upload block missing url (source=%s)", source)
         return None
+    if chart_id_from_image_url(url) is not None:
+        logger.warning(
+            "Slack url fetch blocked for chart artifact path (use chart_resource block): %s",
+            url,
+        )
+        return None
     return await fetch_owned_url_bytes(url)
 
 
@@ -151,7 +182,7 @@ def make_slack_image_fetcher(
     user_id: int,
     user_role: str,
 ) -> ImageFetcher:
-    """Build a fetcher that honors document ACL for the linked Slack user."""
+    """Build a fetcher that enforces chart artifact + document collection read for the Slack user."""
 
     async def fetch(block: dict[str, Any]) -> bytes | None:
         return await fetch_upload_block_bytes(

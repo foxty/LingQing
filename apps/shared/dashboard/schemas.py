@@ -629,33 +629,3 @@ class DashboardFilterOptionsResponse(BaseModel):
     has_error: bool = Field(default=False, description="Whether option query failed")
     error_message: str | None = Field(default=None, description="Option query error message")
 
-
-class ChartFromSQLRequest(BaseModel):
-    """Request payload for creating a chart from SQL query results."""
-
-    data_source_id: int = Field(..., alias="dataSourceId", description="Data source ID")
-    sql_query: str = Field(..., alias="sqlQuery", min_length=1, description="SQL SELECT query")
-    chart_type: str = Field(..., alias="chartType", description="Chart type")
-    x_key: str = Field(..., alias="xKey", description="X-axis key")
-    y_key: str | None = Field(
-        default=None, alias="yKey", description="Y-axis key (not required for multi-series charts)"
-    )
-    title: str = Field(..., description="Chart title")
-    x_label: str | None = Field(default=None, alias="xLabel", description="X-axis label")
-    y_label: str | None = Field(default=None, alias="yLabel", description="Y-axis label")
-    series_keys: list[str] | None = Field(default=None, alias="seriesKeys", description="Multi-series value keys")
-    z_key: str | None = Field(default=None, alias="zKey", description="Heatmap value key")
-    theme: str = Field(default="plotly_white", description="Plotly theme")
-
-    model_config = ConfigDict(populate_by_name=True)
-
-
-class ChartFromSQLResponse(BaseModel):
-    """Response payload for chart generation from SQL."""
-
-    data_source_id: int = Field(..., alias="dataSourceId")
-    row_count: int = Field(..., alias="rowCount")
-    chart_markdown: str = Field(..., alias="chartMarkdown")
-    chart_url: str | None = Field(default=None, alias="chartUrl")
-
-    model_config = ConfigDict(populate_by_name=True)

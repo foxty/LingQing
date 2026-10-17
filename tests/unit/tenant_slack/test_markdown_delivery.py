@@ -98,16 +98,14 @@ async def test_inline_table_and_public_image_append_actions():
 
 
 @pytest.mark.asyncio
-async def test_owned_chart_svg_uploads_png_from_disk(monkeypatch, tmp_path):
+async def test_owned_chart_svg_uploads_png_from_service(monkeypatch):
     slack = _SlackStub()
-    png_name = "chart_1_daily_ab12cd34.png"
-    (tmp_path / png_name).write_bytes(PNG)
     monkeypatch.setattr(
-        "apps.shared.chart.paths.get_charts_path",
-        lambda: str(tmp_path),
+        "apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher.ChartService.read_image",
+        AsyncMock(return_value=(PNG, "image/png")),
     )
     fetch = make_slack_image_fetcher(db=AsyncMock(), tenant_id=1, user_id=1, user_role="member")
-    chart_svg = f"http://127.0.0.1:8000/static/charts/{png_name.replace('.png', '.svg')}"
+    chart_svg = "http://127.0.0.1:8000/charts/5/image.svg"
 
     await deliver_markdown_to_slack(
         client=slack,
@@ -120,20 +118,18 @@ async def test_owned_chart_svg_uploads_png_from_disk(monkeypatch, tmp_path):
         image_fetcher=fetch,
     )
 
-    assert slack.uploads == [png_name]
+    assert slack.uploads[0].startswith("chart_")
     assert len(slack.posts) == 1
     assert slack.posts[0]["blocks"][0]["type"] == "image"
     assert slack.posts[0]["blocks"][0]["slack_file"] == {"id": "F_UPLOAD"}
 
 
 @pytest.mark.asyncio
-async def test_chart_image_delivery_skips_http_fetch(monkeypatch, tmp_path):
+async def test_chart_image_delivery_skips_http_fetch(monkeypatch):
     slack = _SlackStub()
-    png_name = "chart_9_slack_ab12cd34.png"
-    (tmp_path / png_name).write_bytes(PNG)
     monkeypatch.setattr(
-        "apps.shared.chart.paths.get_charts_path",
-        lambda: str(tmp_path),
+        "apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher.ChartService.read_image",
+        AsyncMock(return_value=(PNG, "image/png")),
     )
 
     async def _must_not_fetch_url(_url: str) -> bytes | None:
@@ -144,7 +140,7 @@ async def test_chart_image_delivery_skips_http_fetch(monkeypatch, tmp_path):
         _must_not_fetch_url,
     )
     fetch = make_slack_image_fetcher(db=AsyncMock(), tenant_id=1, user_id=1, user_role="member")
-    chart_svg = f"http://127.0.0.1:8000/static/charts/{png_name.replace('.png', '.svg')}"
+    chart_svg = "http://127.0.0.1:8000/charts/8/image.svg"
 
     await deliver_markdown_to_slack(
         client=slack,
@@ -157,7 +153,7 @@ async def test_chart_image_delivery_skips_http_fetch(monkeypatch, tmp_path):
         image_fetcher=fetch,
     )
 
-    assert slack.uploads == [png_name]
+    assert len(slack.uploads) == 1
 
 
 @pytest.mark.asyncio

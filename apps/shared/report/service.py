@@ -9,6 +9,8 @@ from apps.shared.artifact.lifecycle import ArtifactLifecycle
 from apps.shared.artifact.schemas import Artifact
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
+from apps.shared.chart.access import validate_embedded_chart_ids
+from apps.shared.chart.embed import embedded_chart_ids_from_markdown, merge_embedded_chart_ids_metadata
 from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError
 from apps.shared.core.transaction import transaction
 from apps.shared.db.models import ChatThread
@@ -115,12 +117,24 @@ class ReportService:
         if not has_manage and report.owner_id != actor.user_id:
             raise AuthorizationError("You do not have permission to update this report")
 
+        merged_metadata = report_metadata
+        if content is not None:
+            chart_ids = embedded_chart_ids_from_markdown(content)
+            await validate_embedded_chart_ids(
+                db=self.db,
+                tenant_id=self.tenant_id,
+                actor=actor,
+                chart_ids=chart_ids,
+            )
+            base_meta = report_metadata if report_metadata is not None else report.report_metadata
+            merged_metadata = merge_embedded_chart_ids_metadata(content, base_meta)
+
         updated = await self.report_repo.update_report(
             report_id,
             title=title,
             content=content,
             format=format,
-            report_metadata=report_metadata,
+            report_metadata=merged_metadata,
         )
         return domain_report_to_dto(updated)
 
@@ -134,6 +148,7 @@ class ReportService:
         thread_id: str | None = None,
         report_metadata: dict | None = None,
     ) -> ReportCreateWithArtifactResult:
+        meta = merge_embedded_chart_ids_metadata(content, report_metadata)
         report = await self.report_repo.create_report(
             tenant_id=self.tenant_id,
             owner_id=owner_id,
@@ -141,7 +156,7 @@ class ReportService:
             content=content,
             format=format,
             source_thread_id=thread_id,
-            report_metadata=report_metadata,
+            report_metadata=meta,
         )
 
         report_dto = domain_report_to_dto(report)

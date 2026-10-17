@@ -2049,6 +2049,32 @@ class Report(Base):
     owner_user: Mapped["User | None"] = relationship("User", foreign_keys=[owner_id], lazy="noload")
 
 
+class Chart(Base):
+    """Persisted chart resource (artifact-backed, thread-scoped creation)."""
+
+    __tablename__ = "charts"
+    __table_args__ = (
+        Index("idx_charts_tenant_thread", "tenant_id", "thread_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("tenants.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    owner_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    title: Mapped[str] = mapped_column(String(500), nullable=False, default="", server_default="")
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
 class AclPrincipal(Base):
     """Principal registry for unified ACL (user/role)."""
 

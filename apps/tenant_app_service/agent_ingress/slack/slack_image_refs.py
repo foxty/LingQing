@@ -8,20 +8,21 @@ from enum import StrEnum
 from typing import Any
 from urllib.parse import urlparse
 
-
-class SlackImageUploadSource(StrEnum):
-    """``source`` field on ``_image_upload`` blocks passed to the image fetcher."""
-
-    CHART = "chart"
-    DOCUMENT = "document"
-    URL = "url"
+from apps.shared.utils.markdown_images import MARKDOWN_IMAGE_RE
 
 DOCUMENT_IMAGE_PATH = re.compile(
     r"^(?:/api)?/documents/(?P<document_id>\d+)/images/(?P<filename>[a-f0-9]{64}\.(?:png|jpe?g|gif))$",
     re.IGNORECASE,
 )
-MARKDOWN_IMAGE_RE = re.compile(r"!\[([^\]]*)\]\(([^)]+)\)")
 HTML_IMG_SRC_RE = re.compile(r"""<img\b[^>]*\bsrc=["']([^"']+)["']""", re.IGNORECASE)
+
+
+class SlackImageUploadSource(StrEnum):
+    """``source`` field on ``_image_upload`` blocks passed to the image fetcher."""
+
+    CHART_RESOURCE = "chart_resource"
+    DOCUMENT = "document"
+    URL = "url"
 
 
 @dataclass(frozen=True)
@@ -46,8 +47,8 @@ def upload_block_cache_key(block: dict[str, Any]) -> str:
     source = block.get("source")
     if source == SlackImageUploadSource.DOCUMENT:
         return f"document:{block.get('document_id')}:{block.get('filename')}"
-    if source == SlackImageUploadSource.CHART:
-        return f"chart:{block.get('filename')}"
+    if source == SlackImageUploadSource.CHART_RESOURCE:
+        return f"chart_resource:{block.get('chart_id')}"
     return f"url:{block.get('url')}"
 
 
