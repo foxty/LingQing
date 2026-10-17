@@ -28,7 +28,7 @@ jobs:
       should_build: ${{ steps.decide.outputs.should_build }}
       date_tag: ${{ steps.decide.outputs.date_tag }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           ref: main
           fetch-depth: 0
