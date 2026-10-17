@@ -1,11 +1,7 @@
 r"""Server-side Plotly SVG chart renderer.
 
-Provides render_chart() — the single public entry point that converts
-structured data into a persisted SVG file and returns a markdown image string.
-
-Output format:  "\n\n![title](https://.../static/charts/chart_*.svg)\n\n"
-
-Each chart is saved as SVG (markdown URL) and PNG (Slack / raster consumers).
+Provides render_chart() — converts structured data into SVG + PNG bytes via Plotly/Kaleido.
+Persistence and URLs are handled by ChartService in the application layer.
 
 SVG is used because:
 - Vector quality at any resolution
@@ -15,14 +11,10 @@ SVG is used because:
 """
 
 import json
-import time
-import uuid
-from pathlib import Path
 from typing import Any, Dict, List
 
 import plotly.graph_objects as go
 
-from apps.config import EnvConfig, get_charts_path
 from apps.shared.chart.data_processor import (
     coerce_numeric_value,
     ensure_numeric_series,
@@ -30,6 +22,7 @@ from apps.shared.chart.data_processor import (
     handle_duplicate_x_values,
     pivot_long_to_wide,
 )
+from apps.shared.chart.types import ChartRenderResult
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -50,8 +43,8 @@ def render_chart(
     series_keys: List[str] | None = None,
     z_key: str | None = None,
     stacked: bool = False,
-) -> str:
-    r"""Render chart from JSON data and return a markdown image string.
+) -> ChartRenderResult:
+    r"""Render chart from JSON data and return SVG + PNG bytes.
 
     Args:
         chart_type: Public chart type. One of: 'bar', 'line', 'pie', 'scatter',
@@ -70,11 +63,11 @@ def render_chart(
         stacked: When True with chart_type='bar', renders stacked instead of grouped.
 
     Returns:
-        Markdown image string: "\\n\\n![title](url)\\n\\n"
+        ChartRenderResult with SVG and PNG bytes.
     """
     data_list: List[Dict[str, Any]] = json.loads(data)
     if not data_list:
-        return "Error: No data provided for visualization"
+        raise ValueError("No data provided for visualization")
 
     # Resolve series_key (single column name) into series_keys (list of distinct values).
     # series_key is the preferred API for long-format data; series_keys is the advanced form.
@@ -87,7 +80,14 @@ def render_chart(
         # Scatter with series_key uses categorical coloring, not a pivot.
         if chart_type == "scatter":
             return _render_scatter_categorical(
-                data_list, x_key, y_key, series_key, x_label, y_label, title, "plotly_white"
+                data_list,
+                x_key,
+                y_key,
+                series_key,
+                x_label,
+                y_label,
+                title,
+                "plotly_white",
             )
         # All other types: extract distinct values in order of first appearance.
         seen: dict = {}
@@ -148,8 +148,7 @@ def render_chart(
         "plotly_white",
         series_data,
     )
-    chart_url = _save_plotly_chart(fig, title)
-    return f"\n\n![{title}]({chart_url})\n\n"
+    return _plotly_figure_to_result(fig, title)
 
 
 # ---------------------------------------------------------------------------
@@ -283,32 +282,16 @@ def _generate_colors(n: int, palette: str = "gradient") -> List[str]:
     return [base_colors[i % len(base_colors)] for i in range(n)]
 
 
-def _save_plotly_chart(fig: go.Figure, title: str) -> str:
-    """Save Plotly figure as SVG + PNG; return the SVG public URL for markdown."""
-    chart_id = str(uuid.uuid4())[:8]
-    timestamp = int(time.time())
-    safe_title = "".join(c if c.isalnum() else "_" for c in title)[:30]
-    static_dir = Path(get_charts_path())
-    filename = f"chart_{timestamp}_{safe_title}_{chart_id}.svg"
-    file_path = static_dir / filename
-    png_path = file_path.with_suffix(".png")
-
+def _plotly_figure_to_result(fig: go.Figure, title: str) -> ChartRenderResult:
     svg_bytes = fig.to_image(format="svg", scale=1)
-    file_path.write_bytes(svg_bytes)
     png_bytes = fig.to_image(format="png", scale=_CHART_PNG_EXPORT_SCALE, height=600)
-    png_path.write_bytes(png_bytes)
-
-    svg_kb = file_path.stat().st_size / 1024
-    png_kb = png_path.stat().st_size / 1024
     logger.info(
-        "Plotly chart saved: %s (svg %.1f KB, png %.1f KB)",
-        file_path.name,
-        svg_kb,
-        png_kb,
+        "Plotly chart rendered: %s (svg %.1f KB, png %.1f KB)",
+        title,
+        len(svg_bytes) / 1024,
+        len(png_bytes) / 1024,
     )
-
-    api_base = EnvConfig.CHART_SERVICE_URL.rstrip("/")
-    return f"{api_base}/static/charts/{filename}"
+    return ChartRenderResult(svg_bytes=svg_bytes, png_bytes=png_bytes, title=title)
 
 
 def _create_plotly_figure(
@@ -703,7 +686,7 @@ def _render_scatter_categorical(
     y_label: str | None,
     title: str,
     theme: str,
-) -> str:
+) -> ChartRenderResult:
     """Render scatter chart with marker color per category (series_key column)."""
     if not x_key or not y_key:
         keys = list(data_list[0].keys())
@@ -767,5 +750,4 @@ def _render_scatter_categorical(
         hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif"),
     )
 
-    chart_url = _save_plotly_chart(fig, title)
-    return f"\n\n![{title}]({chart_url})\n\n"
+    return _plotly_figure_to_result(fig, title)

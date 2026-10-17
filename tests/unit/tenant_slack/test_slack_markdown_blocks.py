@@ -78,17 +78,16 @@ def test_two_images_stay_inline():
     assert [block["type"] for block in plan.blocks] == ["image", "image"]
 
 
-def test_svg_image_on_owned_origin_is_marked_for_upload():
-    chart_svg = "http://127.0.0.1:8000/static/charts/chart_1_daily_ab12cd34.svg"
+def test_chart_resource_svg_is_marked_for_upload():
+    chart_svg = "http://127.0.0.1:8000/charts/42/image.svg"
     text = f"![Daily]({chart_svg})"
     plan = plan_slack_markdown(text, api_origin="http://127.0.0.1:8000")
     assert plan.image_count == 1
     block = plan.blocks[0]
     assert block["type"] == "_image_upload"
-    assert block["source"] == "chart"
-    assert block["filename"] == "chart_1_daily_ab12cd34.png"
+    assert block["source"] == "chart_resource"
+    assert block["chart_id"] == 42
     assert block["url"] == chart_svg
-    assert block["upload_filename"] == "chart_1_daily_ab12cd34.png"
 
 
 def test_svg_image_on_unowned_host_becomes_chart_link():

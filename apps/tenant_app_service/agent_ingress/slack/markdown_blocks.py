@@ -16,7 +16,7 @@ from urllib.parse import urlparse
 
 from markdown_it import MarkdownIt
 
-from apps.shared.chart.paths import chart_png_url_for_svg_url, chart_static_png_filename
+from apps.shared.chart.embed import chart_id_from_image_url
 from apps.tenant_app_service.agent_ingress.slack.domain import (
     _chart_slack_link,
     _replace_emoji_shortcodes,
@@ -672,11 +672,19 @@ def _image_block(
             "upload_filename": document.filename,
             "fallback_mrkdwn": fallback,
         }
-    chart_png = chart_static_png_filename(piece.resolved_url) or chart_static_png_filename(
-        chart_png_url_for_svg_url(piece.resolved_url)
-    )
-    if chart_png and _is_owned_origin(piece.resolved_url, portal_origin, api_origin):
-        return _chart_upload_block(alt, chart_png, piece.resolved_url, fallback)
+    for candidate in (piece.resolved_url, piece.raw_url):
+        resource_id = chart_id_from_image_url(candidate)
+        if resource_id is not None:
+            upload_name = f"chart_{resource_id}.png"
+            return {
+                "type": "_image_upload",
+                "source": SlackImageUploadSource.CHART_RESOURCE,
+                "chart_id": resource_id,
+                "alt_text": alt,
+                "url": piece.resolved_url,
+                "upload_filename": upload_name,
+                "fallback_mrkdwn": fallback,
+            }
     if extension == _SVG_EXTENSION or _is_svg_url(piece.resolved_url):
         return _section(fallback)
     if _is_public_https(piece.resolved_url):
@@ -703,23 +711,6 @@ def _image_extension(url: str) -> str:
 
 def _is_svg_url(url: str) -> bool:
     return urlparse(url).path.lower().endswith(_SVG_EXTENSION)
-
-
-def _chart_upload_block(
-    alt: str,
-    png_filename: str,
-    resolved_url: str,
-    fallback: str,
-) -> dict[str, Any]:
-    return {
-        "type": "_image_upload",
-        "source": SlackImageUploadSource.CHART,
-        "filename": png_filename,
-        "alt_text": alt,
-        "url": resolved_url,
-        "upload_filename": png_filename,
-        "fallback_mrkdwn": fallback,
-    }
 
 
 def _upload_filename(url: str, *, force_png: bool = False) -> str:

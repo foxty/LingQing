@@ -1,13 +1,12 @@
-"""Tests for Slack document image path parsing."""
+"""Tests for Slack image reference helpers."""
 
 from apps.tenant_app_service.agent_ingress.slack.slack_image_refs import (
     SlackImageUploadSource,
-    iter_markdown_image_refs,
     parse_document_image_location,
     upload_block_cache_key,
 )
 
-HASH = "d" * 64
+HASH = "a" * 64
 
 
 def test_parse_document_image_location():
@@ -17,12 +16,24 @@ def test_parse_document_image_location():
     assert ref.filename == f"{HASH}.png"
 
 
-def test_upload_block_cache_key_chart():
-    name = "chart_1_daily_ab12cd34.png"
-    assert upload_block_cache_key({"source": SlackImageUploadSource.CHART, "filename": name}) == f"chart:{name}"
-
-
-def test_iter_markdown_image_refs_includes_html_img():
-    markdown = f'<p>See <img src="/documents/3/images/{HASH}.png" alt="Deck"></p>'
-    refs = iter_markdown_image_refs(markdown)
-    assert refs == [("", f"/documents/3/images/{HASH}.png")]
+def test_upload_block_cache_key():
+    assert (
+        upload_block_cache_key(
+            {
+                "source": SlackImageUploadSource.CHART_RESOURCE,
+                "chart_id": 7,
+            }
+        )
+        == "chart_resource:7"
+    )
+    name = f"{HASH}.png"
+    assert (
+        upload_block_cache_key(
+            {
+                "source": SlackImageUploadSource.DOCUMENT,
+                "document_id": 2,
+                "filename": name,
+            }
+        )
+        == f"document:2:{name}"
+    )

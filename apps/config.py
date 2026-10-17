@@ -451,6 +451,19 @@ def get_charts_path() -> str:
     return str(charts_path)
 
 
+def get_tenant_media_path(tenant_id: int | str) -> str:
+    """Private tenant media (thread charts, report assets, user charts).
+
+    Returns:
+        {DATA_ROOT_PATH}/tenants/tenant_{tenant_id}/media/
+    """
+    from pathlib import Path
+
+    media_path = Path(get_tenant_data_root(tenant_id)) / "media"
+    media_path.mkdir(parents=True, exist_ok=True)
+    return str(media_path)
+
+
 def get_tenant_documents_path(tenant_id: int | str) -> str:
     """Get the documents storage path for a tenant.
 

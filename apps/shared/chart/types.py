@@ -4,6 +4,7 @@ These chart types are used by both the server-side renderer and dashboard
 widgets. Keep frontend ECharts builders in sync with this literal.
 """
 
+from dataclasses import dataclass
 from typing import Literal
 
 # All chart types supported by the platform.
@@ -22,3 +23,12 @@ ChartType = Literal[
     "multi_area",
     "gauge",
 ]
+
+
+@dataclass(frozen=True)
+class ChartRenderResult:
+    """Raster + vector output from Plotly (no persistence or URLs)."""
+
+    svg_bytes: bytes
+    png_bytes: bytes
+    title: str

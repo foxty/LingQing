@@ -64,7 +64,6 @@ PROTECTED_ENDPOINTS = [
     ("POST", "/dashboards/{dashboard_id}/widgets/{widget_id}/query-data", Permissions.DASHBOARDS_SQL_EXECUTE),
     ("POST", "/dashboards/{dashboard_id}/widgets/query-preview", Permissions.DASHBOARDS_SQL_EXECUTE),
     ("POST", "/dashboards/{dashboard_id}/widgets/{widget_id}/query-preview", Permissions.DASHBOARDS_SQL_EXECUTE),
-    ("POST", "/charts/from-sql", Permissions.DASHBOARDS_SQL_EXECUTE),
     ("POST", "/dashboards/{dashboard_id}/widgets", Permissions.DASHBOARDS_WRITE),
     ("PATCH", "/dashboards/{dashboard_id}/widgets/{widget_id}", Permissions.DASHBOARDS_WRITE),
     ("DELETE", "/dashboards/{dashboard_id}/widgets/{widget_id}", Permissions.DASHBOARDS_WRITE),

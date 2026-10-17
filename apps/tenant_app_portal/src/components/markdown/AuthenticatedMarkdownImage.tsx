@@ -1,19 +1,20 @@
 import { ExpandableMarkdownImage } from '@/components/markdown/ExpandableMarkdownImage'
 import { useEffect, useState } from 'react'
 import api from '@/lib/api'
+import { chartImageApiPath } from '@/lib/chartImagePath'
 import { documentImageApiPath } from '@/lib/documentImagePath'
 import { markdownImagePlaceholderClassName } from '@/lib/markdownImagePresentation'
 import { cn } from '@/lib/utils'
 
-type AuthenticatedDocumentImageProps = {
+type AuthenticatedMarkdownImageProps = {
   src?: string
   alt?: string
   className?: string
 }
 
-/** Fetches tenant document parse images (auth required). */
-export function AuthenticatedDocumentImage({ src, alt, className }: AuthenticatedDocumentImageProps) {
-  const apiPath = src ? documentImageApiPath(src) : null
+/** Fetches auth-backed markdown images (document parse + chart artifacts). */
+export function AuthenticatedMarkdownImage({ src, alt, className }: AuthenticatedMarkdownImageProps) {
+  const apiPath = src ? documentImageApiPath(src) ?? chartImageApiPath(src) : null
   const [objectUrl, setObjectUrl] = useState<string | null>(null)
   const [loadState, setLoadState] = useState<'loading' | 'ready' | 'error'>('loading')
 
@@ -64,7 +65,7 @@ export function AuthenticatedDocumentImage({ src, alt, className }: Authenticate
   if (loadState === 'loading') {
     return (
       <div
-        className={cn(markdownImagePlaceholderClassName('document'), className)}
+        className={cn(markdownImagePlaceholderClassName(), className)}
         role="status"
         aria-label={alt ?? 'Loading image'}
       />
@@ -76,11 +77,6 @@ export function AuthenticatedDocumentImage({ src, alt, className }: Authenticate
   }
 
   return (
-    <ExpandableMarkdownImage
-      displaySrc={objectUrl}
-      alt={alt}
-      kind="document"
-      className={className}
-    />
+    <ExpandableMarkdownImage displaySrc={objectUrl} alt={alt} className={className} />
   )
 }

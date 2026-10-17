@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-17T04:02:02.769176+00:00",
+  "generated_at": "2026-10-17T12:12:53.309130+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -2259,150 +2259,6 @@
         "type": "object",
         "title": "ChartDisplayConfigDTO",
         "description": "Chart widget display configuration with titles, labels, and formatting."
-      },
-      "ChartFromSQLRequest": {
-        "properties": {
-          "dataSourceId": {
-            "type": "integer",
-            "title": "Datasourceid",
-            "description": "Data source ID"
-          },
-          "sqlQuery": {
-            "type": "string",
-            "minLength": 1,
-            "title": "Sqlquery",
-            "description": "SQL SELECT query"
-          },
-          "chartType": {
-            "type": "string",
-            "title": "Charttype",
-            "description": "Chart type"
-          },
-          "xKey": {
-            "type": "string",
-            "title": "Xkey",
-            "description": "X-axis key"
-          },
-          "yKey": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ykey",
-            "description": "Y-axis key (not required for multi-series charts)"
-          },
-          "title": {
-            "type": "string",
-            "title": "Title",
-            "description": "Chart title"
-          },
-          "xLabel": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Xlabel",
-            "description": "X-axis label"
-          },
-          "yLabel": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Ylabel",
-            "description": "Y-axis label"
-          },
-          "seriesKeys": {
-            "anyOf": [
-              {
-                "items": {
-                  "type": "string"
-                },
-                "type": "array"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Serieskeys",
-            "description": "Multi-series value keys"
-          },
-          "zKey": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Zkey",
-            "description": "Heatmap value key"
-          },
-          "theme": {
-            "type": "string",
-            "title": "Theme",
-            "description": "Plotly theme",
-            "default": "plotly_white"
-          }
-        },
-        "type": "object",
-        "required": [
-          "dataSourceId",
-          "sqlQuery",
-          "chartType",
-          "xKey",
-          "title"
-        ],
-        "title": "ChartFromSQLRequest",
-        "description": "Request payload for creating a chart from SQL query results."
-      },
-      "ChartFromSQLResponse": {
-        "properties": {
-          "dataSourceId": {
-            "type": "integer",
-            "title": "Datasourceid"
-          },
-          "rowCount": {
-            "type": "integer",
-            "title": "Rowcount"
-          },
-          "chartMarkdown": {
-            "type": "string",
-            "title": "Chartmarkdown"
-          },
-          "chartUrl": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Charturl"
-          }
-        },
-        "type": "object",
-        "required": [
-          "dataSourceId",
-          "rowCount",
-          "chartMarkdown"
-        ],
-        "title": "ChartFromSQLResponse",
-        "description": "Response payload for chart generation from SQL."
       },
       "ChatRequest": {
         "properties": {
@@ -8866,6 +8722,7 @@
     "GET_/apps/{app_id}/{environment}/entry": "get_live_app_entry_apps__app_id___environment__entry_get",
     "GET_/apps/{app_id}/{environment}/{asset_path}": "get_live_app_asset_apps__app_id___environment___asset_path__get",
     "GET_/artifacts/context-picker": "search_artifacts_for_context_picker_artifacts_context_picker_get",
+    "GET_/charts/{chart_id}/image.{extension}": "get_chart_image_charts__chart_id__image__extension__get",
     "GET_/dashboards": "list_dashboards_dashboards_get",
     "GET_/dashboards/{dashboard_id}": "get_dashboard_dashboards__dashboard_id__get",
     "GET_/dashboards/{dashboard_id}/filters/{filter_id}/options": "get_dashboard_filter_options_dashboards__dashboard_id__filters__filter_id__options_get",
@@ -8942,7 +8799,6 @@
     "POST_/apps/v1/{app_id}/{environment}/data/import": "import_live_app_data_v1_apps_v1__app_id___environment__data_import_post",
     "POST_/apps/v1/{app_id}/{environment}/data/mutate": "mutate_live_app_data_v1_apps_v1__app_id___environment__data_mutate_post",
     "POST_/apps/v1/{app_id}/{environment}/data/query": "query_live_app_data_v1_apps_v1__app_id___environment__data_query_post",
-    "POST_/charts/from-sql": "create_chart_from_sql_api_charts_from_sql_post",
     "POST_/chat": "chat_chat_post",
     "POST_/dashboards": "create_dashboard_dashboards_post",
     "POST_/dashboards/{dashboard_id}/filters": "add_dashboard_filter_dashboards__dashboard_id__filters_post",
@@ -9432,38 +9288,6 @@
         "success_status": "201",
         "success_schema": {
           "$ref": "#/components/schemas/SlackIntegrationResponse"
-        },
-        "error_statuses": [
-          "422"
-        ]
-      },
-      "constraints": {
-        "side_effect": true,
-        "idempotent": false
-      }
-    },
-    "create_chart_from_sql_api_charts_from_sql_post": {
-      "operation_key": "POST_/charts/from-sql",
-      "method": "POST",
-      "path": "/charts/from-sql",
-      "summary": "Create Chart From Sql Api",
-      "description": "Create a chart from SQL query results and return markdown/url for rendering.",
-      "request": {
-        "body_schema": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "$ref": "#/components/schemas/ChartFromSQLRequest"
-              }
-            }
-          },
-          "required": true
-        }
-      },
-      "response": {
-        "success_status": "201",
-        "success_schema": {
-          "$ref": "#/components/schemas/ChartFromSQLResponse"
         },
         "error_statuses": [
           "422"
@@ -10783,6 +10607,45 @@
         "success_schema": {
           "$ref": "#/components/schemas/AssetSchemaResponse"
         },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_chart_image_charts__chart_id__image__extension__get": {
+      "operation_key": "GET_/charts/{chart_id}/image.{extension}",
+      "method": "GET",
+      "path": "/charts/{chart_id}/image.{extension}",
+      "summary": "Get Chart Image",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "chart_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Chart Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "extension",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Extension"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
         "error_statuses": [
           "422"
         ]

@@ -1,23 +1,24 @@
 import { describe, expect, it } from 'vitest'
 import {
+  markdownImageExpandedClassName,
   markdownImageInlineClassName,
-  markdownImageKind,
+  markdownImagePlaceholderClassName,
 } from '@/lib/markdownImagePresentation'
 
-const DOC_IMAGE = `/api/documents/42/images/${'a'.repeat(64)}.png`
-const CHART_SVG = '/api/static/charts/chart_1_TEST.svg'
-
 describe('markdownImagePresentation', () => {
-  it('maps src to chart vs document kind', () => {
-    expect(markdownImageKind(DOC_IMAGE)).toBe('document')
-    expect(markdownImageKind(CHART_SVG)).toBe('chart')
-    expect(markdownImageKind('/unknown.png')).toBeNull()
+  it('applies unified inline classes for auth-backed markdown images', () => {
+    const inline = markdownImageInlineClassName()
+    expect(inline).toContain('65vh')
+    expect(inline).toContain('w-full')
+    expect(inline).toContain('cursor-zoom-in')
   })
 
-  it('applies viewport-aware classes by kind', () => {
-    expect(markdownImageInlineClassName('chart')).toContain('70vh')
-    expect(markdownImageInlineClassName('chart')).toContain('w-full')
-    expect(markdownImageInlineClassName('document')).toContain('55vh')
-    expect(markdownImageInlineClassName('document').split(/\s+/)).not.toContain('w-full')
+  it('merges optional className', () => {
+    expect(markdownImageInlineClassName('extra-class')).toContain('extra-class')
+  })
+
+  it('placeholder and expanded classes are stable', () => {
+    expect(markdownImagePlaceholderClassName()).toContain('animate-pulse')
+    expect(markdownImageExpandedClassName()).toContain('88vh')
   })
 })

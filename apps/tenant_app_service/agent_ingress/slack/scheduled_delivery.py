@@ -80,6 +80,13 @@ async def deliver_scheduled_agent_run_to_slack(
     membership = await UserRepository(db_session).get_user_membership(tenant_id, user_id)
     if membership is not None:
         requester_role = membership[0].role
+    elif response_text and ("](/charts/" in response_text or "](/documents/" in response_text):
+        logger.warning(
+            "Slack scheduled delivery: no tenant role for user=%s tenant=%s; "
+            "secured chart/document images will not upload",
+            user_id,
+            tenant_id,
+        )
 
     try:
         await post_slack_reply_with_feedback(

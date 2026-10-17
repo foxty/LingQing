@@ -34,7 +34,7 @@ from apps.tenant_app_service.routers import (
     api_connectors,
     artifact_context,
     auth,
-    charts,
+    chart_media,
     chat,
     dashboard,
     data_sources,
@@ -123,7 +123,7 @@ app.include_router(api_connectors.router)
 app.include_router(search.router)
 app.include_router(artifact_context.router)
 app.include_router(dashboard.router)
-app.include_router(charts.router)
+app.include_router(chart_media.router)
 app.include_router(tags.router)
 app.include_router(abac.router)
 app.include_router(observability.router)

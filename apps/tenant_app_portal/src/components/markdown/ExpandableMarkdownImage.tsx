@@ -7,14 +7,12 @@ import {
 import {
   markdownImageExpandedClassName,
   markdownImageInlineClassName,
-  type MarkdownImageKind,
 } from '@/lib/markdownImagePresentation'
 import { cn } from '@/lib/utils'
 
 type ExpandableMarkdownImageProps = {
   displaySrc: string
   alt?: string
-  kind: MarkdownImageKind
   className?: string
 }
 
@@ -22,7 +20,6 @@ type ExpandableMarkdownImageProps = {
 export function ExpandableMarkdownImage({
   displaySrc,
   alt,
-  kind,
   className,
 }: ExpandableMarkdownImageProps) {
   const label = alt?.trim() || 'Image'
@@ -41,7 +38,7 @@ export function ExpandableMarkdownImage({
           <img
             src={displaySrc}
             alt={alt ?? ''}
-            className={markdownImageInlineClassName(kind)}
+            className={markdownImageInlineClassName()}
             loading="lazy"
             decoding="async"
           />
@@ -55,7 +52,7 @@ export function ExpandableMarkdownImage({
           <img
             src={displaySrc}
             alt={alt ?? ''}
-            className={markdownImageExpandedClassName(kind)}
+            className={markdownImageExpandedClassName()}
           />
         </div>
       </DialogContent>

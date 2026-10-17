@@ -6,6 +6,6 @@ Dashboard widget rendering stays frontend-only (ECharts via buildChartOptions())
 """
 
 from apps.shared.chart.renderer import render_chart
-from apps.shared.chart.types import ChartType
+from apps.shared.chart.types import ChartRenderResult, ChartType
 
-__all__ = ["ChartType", "render_chart"]
+__all__ = ["ChartRenderResult", "ChartType", "render_chart"]

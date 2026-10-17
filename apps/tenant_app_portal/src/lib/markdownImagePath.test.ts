@@ -1,48 +1,51 @@
 import { describe, expect, it } from 'vitest'
+import { isSecureChartImageSrc } from '@/lib/chartImagePath'
 import { documentImageApiPath } from '@/lib/documentImagePath'
 import {
-  directMarkdownImageSrc,
-  isStaticChartSvgSrc,
   markdownImageMode,
+  resolveMarkdownImageFetchPath,
 } from '@/lib/markdownImagePath'
 
 const DOC_IMAGE = `/api/documents/42/images/${'a'.repeat(64)}.png`
-
-/** Production-shaped chart URL from agent markdown (regression: was ignored by document-only img). */
-const CHAT_CHART_SVG =
-  '/api/static/charts/chart_1791888562_TEST_1__Bar__single_series__f7e1aac7.svg'
+const CHART_SVG = '/api/charts/42/image.svg'
 
 describe('markdownImagePath', () => {
-  it('detects static chart svg paths', () => {
-    expect(isStaticChartSvgSrc('/api/static/charts/chart_1_TEST.svg')).toBe(true)
-    expect(isStaticChartSvgSrc('/static/charts/chart_1.svg')).toBe(true)
-    expect(isStaticChartSvgSrc('http://localhost:8000/static/charts/chart_1.svg')).toBe(true)
-    expect(isStaticChartSvgSrc('/documents/1/images/abc.png')).toBe(false)
-  })
-
-  it('classifies document vs chart images', () => {
+  it('classifies document and chart images as authenticated', () => {
     expect(markdownImageMode(DOC_IMAGE)).toBe('authenticated-document')
-    expect(markdownImageMode('/api/static/charts/chart_1791888562_TEST.svg')).toBe('direct')
+    expect(markdownImageMode(CHART_SVG)).toBe('authenticated-document')
+    expect(markdownImageMode('/charts/99/image.png')).toBe('authenticated-document')
   })
 
-  it('rewrites chart urls for vite proxy', () => {
-    expect(directMarkdownImageSrc('/api/static/charts/chart_1.svg')).toBe('/api/static/charts/chart_1.svg')
-    expect(directMarkdownImageSrc('/static/charts/chart_1.svg')).toBe('/api/static/charts/chart_1.svg')
-    expect(directMarkdownImageSrc('http://localhost:8000/static/charts/chart_1.svg')).toBe(
-      '/api/static/charts/chart_1.svg',
-    )
+  it('returns null for unsupported src', () => {
+    expect(markdownImageMode('/unknown.png')).toBeNull()
+    expect(markdownImageMode('')).toBeNull()
   })
 
-  describe('regression: chat chart markdown images', () => {
-    it('treats agent chart svg as direct, not authenticated document', () => {
-      expect(documentImageApiPath(CHAT_CHART_SVG)).toBeNull()
-      expect(markdownImageMode(CHAT_CHART_SVG)).toBe('direct')
-      expect(directMarkdownImageSrc(CHAT_CHART_SVG)).toBe(CHAT_CHART_SVG)
+  it('resolves fetch path for document and chart', () => {
+    expect(resolveMarkdownImageFetchPath(DOC_IMAGE)).toBe(documentImageApiPath(DOC_IMAGE))
+    expect(resolveMarkdownImageFetchPath(CHART_SVG)).toBe('/charts/42/image.svg')
+  })
+
+  it('detects secure chart resource paths', () => {
+    expect(isSecureChartImageSrc('/api/charts/1/image.svg')).toBe(true)
+    expect(isSecureChartImageSrc('/charts/1/image.png')).toBe(true)
+    expect(isSecureChartImageSrc('/api/static/charts/chart_1.svg')).toBe(false)
+    expect(isSecureChartImageSrc(DOC_IMAGE)).toBe(false)
+  })
+
+  describe('regression: artifact chart markdown images', () => {
+    const LEGACY_STATIC = '/api/static/charts/chart_1791888562_TEST.svg'
+
+    it('does not treat legacy static chart urls as supported', () => {
+      expect(documentImageApiPath(LEGACY_STATIC)).toBeNull()
+      expect(markdownImageMode(LEGACY_STATIC)).toBeNull()
+      expect(resolveMarkdownImageFetchPath(LEGACY_STATIC)).toBeNull()
     })
 
-    it('does not classify chart svg as unsupported (old AuthDocumentImage returned null)', () => {
-      expect(markdownImageMode(CHAT_CHART_SVG)).not.toBeNull()
-      expect(markdownImageMode(CHAT_CHART_SVG)).not.toBe('authenticated-document')
+    it('treats /charts/{id}/image.* as authenticated fetch', () => {
+      expect(documentImageApiPath(CHART_SVG)).toBeNull()
+      expect(markdownImageMode(CHART_SVG)).toBe('authenticated-document')
+      expect(resolveMarkdownImageFetchPath(CHART_SVG)).toBe('/charts/42/image.svg')
     })
   })
 })
