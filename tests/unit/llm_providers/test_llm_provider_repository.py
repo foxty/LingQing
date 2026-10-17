@@ -64,6 +64,7 @@ async def test_create_and_list_model_profile(async_db_session):
         category=ModelProfileCategory.LLM,
         model_id="qwen3.5-plus",
         params={"temperature": 0.1},
+        reasoning_config=None,
         catalog_model_key="bailian/qwen3.5-plus",
         source=ModelProfileSource.PRESET,
     )
@@ -123,6 +124,7 @@ async def test_count_profiles_for_provider(async_db_session):
         category=ModelProfileCategory.LLM,
         model_id="qwen3.5-plus",
         params=None,
+        reasoning_config=None,
         catalog_model_key="bailian/qwen3.5-plus",
         source=ModelProfileSource.PRESET,
     )
@@ -133,6 +135,7 @@ async def test_count_profiles_for_provider(async_db_session):
         category=ModelProfileCategory.EMBEDDING,
         model_id="text-embedding-v4",
         params=None,
+        reasoning_config=None,
         catalog_model_key="bailian/text-embedding-v4",
         source=ModelProfileSource.PRESET,
     )

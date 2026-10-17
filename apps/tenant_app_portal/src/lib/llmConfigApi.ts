@@ -18,6 +18,7 @@ export interface CatalogProvider {
   type: string
   api_base?: string | null
   api_base_env?: string | null
+  metadata?: Record<string, unknown> | null
   models: CatalogModel[]
 }
 
@@ -32,6 +33,17 @@ export interface LLMProvider {
   status: string
 }
 
+export interface ModelReasoningOption {
+  name: string
+  value: string
+}
+
+export interface ModelReasoningConfig {
+  supports_thinking?: boolean
+  thinking_effort_options?: ModelReasoningOption[]
+  exposes_thinking_content?: boolean
+}
+
 export interface LLMModelProfile {
   id: number
   provider_id: number
@@ -39,6 +51,7 @@ export interface LLMModelProfile {
   category: ModelProfileCategory
   model_id: string
   params: Record<string, unknown> | null
+  reasoning_config: ModelReasoningConfig | null
   catalog_model_key: string | null
   source: string
 }
@@ -82,8 +95,10 @@ export interface UpdateLLMModelProfileRequest {
   name?: string
   model_id?: string
   params?: Record<string, unknown> | null
+  reasoning_config?: ModelReasoningConfig | null
   catalog_model_key?: string | null
   source?: string
+  reset_runtime_from_catalog?: boolean
 }
 
 export interface UpdateLLMDefaultsRequest {
@@ -94,47 +109,17 @@ export interface UpdateLLMDefaultsRequest {
 
 export const CUSTOM_CATALOG_MODEL_KEY = '__custom__'
 
-/** Map tenant provider credentials to a platform catalog preset key. */
+/** Resolve catalog preset key from tenant provider (stored preset_key or exact api_base match). */
 export function inferCatalogPresetKey(
   provider: Pick<LLMProvider, 'preset_key' | 'api_base'>,
   catalog: CatalogProvider[]
 ): string | null {
-  if (provider.preset_key) {
-    return provider.preset_key
+  const stored = provider.preset_key?.trim()
+  if (stored) {
+    return stored
   }
-
-  const apiBase = provider.api_base.toLowerCase()
-
-  if (apiBase.includes('databricks.com') && apiBase.includes('/ai-gateway/')) {
-    return 'databricks-ai-gateway'
-  }
-  if (apiBase.includes('coding.dashscope.aliyuncs.com')) {
-    return 'bailian-coding-plan'
-  }
-  if (apiBase.includes('dashscope.aliyuncs.com')) {
-    return 'bailian'
-  }
-  if (apiBase.includes('api.deepseek.com')) {
-    return 'deepseek'
-  }
-  if (apiBase.includes('api.lkeap.cloud.tencent.com')) {
-    return 'tencent-cloud'
-  }
-  if (apiBase.includes('qianfan.baidubce.com')) {
-    return apiBase.includes('/coding') ? 'baidu-qianfan-coding-plan' : 'baidu-qianfan'
-  }
-  if (apiBase.includes('api.opencode.go')) {
-    return 'opencode-go'
-  }
-  if (apiBase.includes('api.mimo.xiaomi.com')) {
-    return 'xiaomi-mimo'
-  }
-  if (apiBase.includes('token-plan-cn.xiaomimimo.com')) {
-    return 'xiaomi-mimo-coding-plan'
-  }
-
   const exact = catalog.find((item) => item.api_base && item.api_base === provider.api_base)
-  return exact?.key || exact?.provider || null
+  return exact?.key ?? exact?.provider ?? null
 }
 
 export function catalogModelsForProvider(

@@ -32,6 +32,7 @@ from apps.tenant_app_service.agents.domain import (
 )
 from apps.tenant_app_service.skills.domain import SkillConfigData, SkillType
 from apps.tenant_app_service.skills.paths import SkillPaths
+
 logger = get_logger(__name__)
 
 # Skill file format constants

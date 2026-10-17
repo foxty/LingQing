@@ -21,6 +21,16 @@ export interface ChatHistoryResponse {
   has_more?: boolean
 }
 
+export interface SessionThinkingMetrics {
+  thinking_effort_requested?: string
+  thinking_effort?: string
+  supports_thinking?: boolean
+  thinking_request?: Record<string, unknown> | null
+  thinking_evidence?: string
+  reasoning_tokens?: number
+  thinking_content_blocks?: number
+}
+
 export interface SessionMetrics {
   session_id: string
   total_tokens: {
@@ -33,6 +43,7 @@ export interface SessionMetrics {
   tool_call_count: number
   start_time: string
   end_time: string
+  thinking?: SessionThinkingMetrics | null
 }
 
 export interface ToolCallMetrics {
@@ -114,6 +125,26 @@ export async function getThreadHistory(
  */
 export async function getSessionMetrics(sessionId: string): Promise<SessionMetrics> {
   const response = await api.get<SessionMetrics>(`/chat/metrics/session/${sessionId}`)
+  return response.data
+}
+
+export interface ThinkingEffortOption {
+  name: string
+  value: string
+}
+
+export interface ThinkingEffortControl {
+  enabled: boolean
+  options: ThinkingEffortOption[]
+  default_value: string
+  model_id: string
+  profile_name: string
+}
+
+export async function fetchThinkingEffortControl(agentId: number): Promise<ThinkingEffortControl> {
+  const response = await api.get<ThinkingEffortControl>('/chat/thinking-effort-control', {
+    params: { agent_id: agentId },
+  })
   return response.data
 }
 

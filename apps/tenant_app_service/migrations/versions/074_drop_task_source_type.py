@@ -5,8 +5,8 @@ Revises: 073_document_source_sync
 Create Date: 2026-10-01
 """
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision = "074_drop_task_source_type"
 down_revision = "073_document_source_sync"

@@ -21,10 +21,7 @@ Design Principles:
 from time import perf_counter
 from typing import Any, Literal
 
-from sqlalchemy import select
-
 from apps.config import get_file_storage
-from apps.shared.db.models import Tenant
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.types import (
     RESOURCE_TYPE_API_CONNECTOR,

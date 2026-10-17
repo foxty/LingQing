@@ -2,11 +2,14 @@ import ContainerDetailHeader from '@/components/ContainerDetailHeader'
 import ListDetailToolbar from '@/components/ListDetailToolbar'
 import ConnectionTestFeedback, { type ConnectionTestResult } from '@/components/ConnectionTestFeedback'
 import { modelsRegistryKey, registerModelsRegistryI18n } from '@/components/models-registry/i18n'
+import ProfileEditDialog from '@/components/models-registry/ProfileEditDialog'
 import ProfileFormDialog from '@/components/models-registry/ProfileFormDialog'
 import ProviderFormDialog from '@/components/models-registry/ProviderFormDialog'
 import {
+  catalogModelHasReasoningControl,
   defaultBadgesForProfile,
   presetDisplayName,
+  profileReasoningControlBadge,
   unregisteredCatalogModels,
 } from '@/components/models-registry/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -32,6 +35,7 @@ import {
   createRegistryProfile,
   deleteRegistryProfile,
   getRegistryDefaults,
+  inferCatalogPresetKey,
   listCatalogProviders,
   listRegistryProfiles,
   listRegistryProviders,
@@ -66,6 +70,7 @@ export default function SettingsProviderDetailPage() {
   })
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
+  const [editingProfile, setEditingProfile] = useState<LLMModelProfile | null>(null)
   const [busy, setBusy] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionTestResult, setConnectionTestResult] = useState<ConnectionTestResult | null>(null)
@@ -192,6 +197,8 @@ export default function SettingsProviderDetailPage() {
   }
 
   const presetName = presetDisplayName(provider, catalog)
+  const catalogPresetKey = inferCatalogPresetKey(provider, catalog)
+  const presetKeyStored = Boolean(provider.preset_key?.trim())
 
   return (
     <div className="space-y-6">
@@ -202,6 +209,13 @@ export default function SettingsProviderDetailPage() {
         meta={
           <div className="space-y-1">
             <p>{presetName !== '—' ? presetName : t(modelsRegistryKey('customPreset'))}</p>
+            {catalogPresetKey ? (
+              <p className="text-xs text-muted-foreground">
+                {t(modelsRegistryKey('catalogPresetKey'))}:{' '}
+                <span className="font-mono">{catalogPresetKey}</span>
+                {!presetKeyStored ? ` (${t(modelsRegistryKey('catalogPresetInferred'))})` : null}
+              </p>
+            ) : null}
             <p className="font-mono text-xs truncate">{provider.api_base}</p>
             <p>
               {t(modelsRegistryKey('apiKey'))}: {provider.api_key_masked}
@@ -258,6 +272,7 @@ export default function SettingsProviderDetailPage() {
                 size="sm"
                 variant="secondary"
                 disabled={busy}
+                className="inline-flex items-center gap-2"
                 onClick={() =>
                   void quickAddCatalogModel(
                     model.key,
@@ -267,7 +282,12 @@ export default function SettingsProviderDetailPage() {
                   )
                 }
               >
-                + {model.name}
+                <span>+ {model.name}</span>
+                {catalogModelHasReasoningControl(model) ? (
+                  <Badge variant="outline" className="font-normal">
+                    {t(modelsRegistryKey('badgeReasoningControl'))}
+                  </Badge>
+                ) : null}
               </Button>
             ))}
           </div>
@@ -317,6 +337,10 @@ export default function SettingsProviderDetailPage() {
                     <TableCell className="py-2.5 text-muted-foreground">
                       {(() => {
                         const badges = defaultBadgesForProfile(profile.id, defaults, t)
+                        const reasoningBadge = profileReasoningControlBadge(profile, t)
+                        if (reasoningBadge) {
+                          badges.push(reasoningBadge)
+                        }
                         if (badges.length === 0) {
                           return <span className="text-xs">—</span>
                         }
@@ -340,6 +364,13 @@ export default function SettingsProviderDetailPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditingProfile(profile)
+                            }}
+                          >
+                            {t(modelsRegistryKey('editModel'))}
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onClick={() => void removeProfile(profile.id)}
@@ -374,6 +405,20 @@ export default function SettingsProviderDetailPage() {
         providers={providers}
         catalog={catalog}
         fixedProviderId={provider.id}
+        onSaved={async () => {
+          showSuccess(t(modelsRegistryKey('profileSaved')))
+          await loadAll()
+        }}
+      />
+
+      <ProfileEditDialog
+        open={editingProfile !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingProfile(null)
+          }
+        }}
+        profile={editingProfile}
         onSaved={async () => {
           showSuccess(t(modelsRegistryKey('profileSaved')))
           await loadAll()

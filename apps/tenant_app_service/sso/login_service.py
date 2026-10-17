@@ -13,6 +13,7 @@ from apps.shared.auth.membership_access import (
     LOGIN_BLOCKED_MEMBERSHIP_INACTIVE,
     login_blocked_reason,
 )
+from apps.shared.auth.oauth_pkce import generate_nonce, generate_pkce
 from apps.shared.core.exceptions import (
     AuthenticationError,
     ResourceNotFoundError,
@@ -24,7 +25,6 @@ from apps.shared.external_identity import (
     IdentityBindingService,
 )
 from apps.shared.external_identity.identity_source_repository import IdentitySourceRepository
-from apps.shared.auth.oauth_pkce import generate_nonce, generate_pkce
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.token import JwtTokenIssuer

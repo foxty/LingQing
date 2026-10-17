@@ -16,12 +16,12 @@ from urllib.parse import urlparse
 
 from markdown_it import MarkdownIt
 
+from apps.shared.chart.paths import chart_png_url_for_svg_url, chart_static_png_filename
 from apps.tenant_app_service.agent_ingress.slack.domain import (
     _chart_slack_link,
     _replace_emoji_shortcodes,
     _resolve_url,
 )
-from apps.shared.chart.paths import chart_png_url_for_svg_url, chart_static_png_filename
 from apps.tenant_app_service.agent_ingress.slack.slack_image_refs import (
     SlackImageUploadSource,
     parse_document_image_location,

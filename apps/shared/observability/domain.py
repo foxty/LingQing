@@ -248,6 +248,20 @@ class AgentSessionMetrics(BaseDomainModel):
     # Status
     status: str = "active"
 
+    # Last-known extended reasoning signals from LLM call events (request + provider evidence)
+    thinking: dict[str, Any] | None = None
+
+    @staticmethod
+    def _aggregate_thinking_from_events(events: list[MetricsEvent]) -> dict[str, Any] | None:
+        merged: dict[str, Any] = {}
+        for event in events:
+            if event.event_type != EventType.LLM_CALL:
+                continue
+            raw = (event.extra_context or {}).get("thinking")
+            if isinstance(raw, dict):
+                merged.update(raw)
+        return merged or None
+
     @classmethod
     def from_events(cls, events: list[MetricsEvent]) -> "AgentSessionMetrics":
         """Calculate session metrics from a list of raw events.
@@ -369,6 +383,7 @@ class AgentSessionMetrics(BaseDomainModel):
             model_usage=model_usage,
             tool_usage=tool_usage,
             status=status,
+            thinking=cls._aggregate_thinking_from_events(events),
         )
 
 

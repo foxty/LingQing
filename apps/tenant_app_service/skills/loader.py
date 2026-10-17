@@ -23,6 +23,7 @@ from apps.tenant_app_service.agents.domain import (
     ToolConfig,
 )
 from apps.tenant_app_service.skills.domain import SkillType
+
 logger = get_logger(__name__)
 STANDARD_SKILL_FILE = "SKILL.md"
 STANDARD_SKILL_NAME_RE = re.compile(r"^[a-z0-9](?:[a-z0-9_-]{0,62}[a-z0-9])?$")

@@ -7,7 +7,7 @@ import { useChatStream } from '@/hooks/useChatStream'
 import { shouldNavigateAfterStreamStart } from '@/lib/chatStream'
 import { SESSION_STATUS } from '@/lib/chatApi'
 import { isStreamTransportError } from '@/lib/streamErrors'
-import type { ArtifactsAutoOpenPreference } from '@/lib/userPreferencesTypes'
+import type { ArtifactsAutoOpenPreference, ThinkingEffort } from '@/lib/userPreferencesTypes'
 import {
   getLatestMessageTimestamp,
   getLatestSessionWindow,
@@ -27,6 +27,7 @@ interface UseWorkbenchChatOptions {
   selectArtifact: (artifact: Artifact) => void
   setArtifactsPanelVisible: (visible: boolean) => void
   artifactsAutoOpen: ArtifactsAutoOpenPreference
+  thinkingEffort: ThinkingEffort
   isArtifactsPanelDismissedForThread: () => boolean
   isArtifactsPanelVisible: () => boolean
   onNewArtifactsWhilePanelClosed: (artifacts: Artifact[]) => void
@@ -53,6 +54,7 @@ export function useWorkbenchChat({
   selectArtifact,
   setArtifactsPanelVisible,
   artifactsAutoOpen,
+  thinkingEffort,
   isArtifactsPanelDismissedForThread,
   isArtifactsPanelVisible,
   onNewArtifactsWhilePanelClosed,
@@ -267,6 +269,7 @@ export function useWorkbenchChat({
               selected_artifact_ids: selectedResources.map((r) => r.artifact_id),
               hitl_proposal_id: options?.hitlProposalId || null,
               hitl_action: options?.hitlAction || null,
+              thinking_effort: thinkingEffort || null,
             },
           },
           activeThreadId,
@@ -296,6 +299,7 @@ export function useWorkbenchChat({
       resetStreamState,
       runStream,
       showWorkingIndicator,
+      thinkingEffort,
       t,
       threadId,
       user,

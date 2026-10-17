@@ -150,6 +150,7 @@ async def llm_call_tracker(
     prompt_context_stats: PromptContextStats | None = None,
     configured_model_id: str | None = None,
     max_output_tokens: int | None = None,
+    thinking_context: dict[str, Any] | None = None,
 ):
     """Context manager for tracking LLM calls.
 
@@ -178,6 +179,8 @@ async def llm_call_tracker(
     if prompt_context_stats is not None:
         metrics_context.message_count = prompt_context_stats.final_count
         extra_context["message_prep"] = asdict(prompt_context_stats)
+    if thinking_context:
+        extra_context["thinking"] = thinking_context
     start_timestamp = time.time()
     start_dt = _naive_utc_from_ts(start_timestamp)
 
@@ -207,6 +210,9 @@ async def llm_call_tracker(
                 model_key=metrics_context.model_key,
             )
             extra_context.update(usage_extra)
+            thinking_evidence = _extract_thinking_evidence(tracker.response)
+            if thinking_evidence:
+                extra_context.setdefault("thinking", {}).update(thinking_evidence)
             tool_calls = _extract_tool_calls(tracker.response)
             response_model_name = _extract_model_name(tracker.response, model_key)
             metrics_context.model_name = response_model_name
@@ -376,6 +382,17 @@ async def tool_call_tracker(
 
 
 # ============ Helper Functions ============
+
+
+def _extract_thinking_evidence(response: AIMessage) -> dict[str, Any]:
+    """Best-effort signals that extended reasoning ran on the provider response."""
+    from apps.tenant_app_service.agents.message_content import extract_thinking_persistence_metadata
+
+    evidence = extract_thinking_persistence_metadata(response)
+    evidence.pop("thinking_content", None)
+    if not evidence:
+        evidence["thinking_evidence"] = "none"
+    return evidence
 
 
 def _extract_tool_calls(response: AIMessage) -> list[dict[str, Any]]:

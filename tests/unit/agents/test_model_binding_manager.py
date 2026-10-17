@@ -10,7 +10,12 @@ from apps.shared.llm_providers.dtos import LLMDefaultsResponseDTO
 from apps.tenant_app_service.agents.model_binding_manager import ModelBindingManager
 
 
-def _resolved_config(*, profile_id: int = 7, model_id: str = "gpt-test") -> ResolvedModelConfig:
+def _resolved_config(
+    *,
+    profile_id: int = 7,
+    model_id: str = "gpt-test",
+    reasoning_config: dict | None = None,
+) -> ResolvedModelConfig:
     return ResolvedModelConfig(
         profile_id=profile_id,
         profile_name="Test Profile",
@@ -23,6 +28,11 @@ def _resolved_config(*, profile_id: int = 7, model_id: str = "gpt-test") -> Reso
         provider_preset_key=None,
         api_base="https://api.example.com/v1",
         api_key="secret",
+        reasoning_config=reasoning_config
+        or {
+            "supports_thinking": True,
+            "thinking_effort_options": [{"name": "low", "value": "low"}],
+        },
     )
 
 
@@ -66,7 +76,7 @@ async def test_get_or_create_resolves_profile_override():
         )
 
     service_cls.return_value.resolve_for_agent.assert_awaited_once_with(7, mini=False)
-    create_chat_model.assert_called_once_with(resolved)
+    create_chat_model.assert_called_once_with(resolved, thinking_effort="low")
     chat_model.bind_tools.assert_called_once_with([])
     assert result is bound_model
     assert manager.get_configured_model_id() == "gpt-test"
@@ -252,3 +262,32 @@ async def test_get_or_create_scoped_by_tenant_id():
 
     assert first is not second
     assert service_cls.return_value.resolve_for_agent.await_count == 2
+
+
+def test_selection_disables_reasoning_on_wire():
+    from dataclasses import replace
+
+    from apps.shared.infra.llm.thinking import selection_disables_reasoning_on_wire
+
+    reasoning = replace(
+        _resolved_config(
+            reasoning_config={
+                "supports_thinking": True,
+                "thinking_effort_options": ["none", "low", "max"],
+            }
+        ),
+        provider_config={"thinking_request_mode": "reasoning_effort"},
+    )
+    assert selection_disables_reasoning_on_wire("none", reasoning) is True
+    assert selection_disables_reasoning_on_wire("max", reasoning) is False
+
+    extra_body = replace(
+        _resolved_config(
+            reasoning_config={
+                "supports_thinking": True,
+                "thinking_effort_options": [{"name": "Off", "value": "none"}, "low"],
+            }
+        ),
+        provider_config={"thinking_request_mode": "extra_body_thinking"},
+    )
+    assert selection_disables_reasoning_on_wire("none", extra_body) is True

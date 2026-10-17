@@ -15,8 +15,8 @@ from sqlalchemy.sql.elements import ColumnElement
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
+    evaluate_resource_action,
 )
-from apps.shared.authz.authz_query_builder import evaluate_resource_action
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.base_service import TenantAwareService

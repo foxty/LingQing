@@ -1,7 +1,8 @@
-
-export PATH="$HOME/.nvm/versions/node/v20.17.0/bin:$PATH"
+#!/usr/bin/env sh
 
 npm run gen-live-app-sdk || exit 1
 npm run gen-api-spec || exit 1
 
 git add "apps/tenant_app_service/routers/sdk/lq-sdk.v1.0.js" "apps/tenant_app_service/routers/sdk/lq-sdk.v1.0.d.ts" "config/agent_api"
+
+npm run lint:all || exit 1

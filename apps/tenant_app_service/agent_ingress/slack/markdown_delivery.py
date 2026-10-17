@@ -37,6 +37,7 @@ from apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher import (
     default_image_fetcher,
     make_slack_image_fetcher,
 )
+
 logger = get_logger(__name__)
 
 CANVAS_MARKDOWN_MAX_CHARS = 1_048_576

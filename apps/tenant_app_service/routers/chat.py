@@ -3,7 +3,7 @@
 from dataclasses import asdict
 from typing import Any, AsyncIterator
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Query
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -16,6 +16,7 @@ from apps.shared.core.exceptions import (
     ValidationError,
 )
 from apps.shared.db.session import app_db_session, get_db
+from apps.shared.domain.actor import ActorContext
 from apps.shared.observability.service import ObservabilityService
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.chat import ChatService
@@ -125,6 +126,18 @@ async def chat_stream(
             "X-Accel-Buffering": "no",  # Disable nginx buffering
         },
     )
+
+
+@router.get("/thinking-effort-control", response_model=dict[str, Any], include_in_schema=False)
+async def get_thinking_effort_control(
+    agent_id: int = Query(..., description="Agent id for the workbench selection"),
+    current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Thinking effort options from the agent model profile (DB snapshot)."""
+    actor = ActorContext(tenant_id=current_user.tenant_id, user_id=current_user.id, user_role=current_user.role)
+    chat_service = ChatService(current_user.tenant_id, db)
+    return await chat_service.agent_thinking_effort_control(agent_id, actor)
 
 
 @router.get("/metrics/session/{session_id}", response_model=dict[str, Any], include_in_schema=False)

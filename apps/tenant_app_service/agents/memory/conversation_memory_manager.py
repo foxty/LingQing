@@ -237,21 +237,9 @@ class ConversationMemoryManager:
         Returns:
             Extracted metadata dictionary
         """
-        metadata = {}
+        from apps.tenant_app_service.agents.message_metadata import pop_message_metadata_from_kwargs
 
-        # Move metadata from additional_kwargs to metadata dict
-        if "timestamp" in kwargs:
-            metadata["timestamp"] = kwargs.pop("timestamp")
-        if "sub_agent_id" in kwargs:
-            metadata["sub_agent_id"] = kwargs.pop("sub_agent_id")
-        if "capability_id" in kwargs:
-            metadata["capability_id"] = kwargs.pop("capability_id")
-        if "capability_name" in kwargs:
-            metadata["capability_name"] = kwargs.pop("capability_name")
-        if "attached_artifacts" in kwargs:
-            metadata["attached_artifacts"] = kwargs.pop("attached_artifacts")
-        elif "context_resources" in kwargs:
-            metadata["attached_artifacts"] = kwargs.pop("context_resources")
+        metadata = pop_message_metadata_from_kwargs(kwargs)
 
         # Merge capability context
         if cap_context:

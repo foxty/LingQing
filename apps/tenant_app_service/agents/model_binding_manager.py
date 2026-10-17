@@ -9,6 +9,12 @@ from typing import Iterable
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.infra.llm.llm_model_resolver import create_chat_model
+from apps.shared.infra.llm.thinking import (
+    build_thinking_request_payload,
+    coerce_thinking_effort_value,
+    selection_disables_reasoning_on_wire,
+)
+from apps.shared.llm_providers.domain import ResolvedModelConfig
 from apps.shared.llm_providers.service import LLMProviderConfigService
 from apps.tenant_app_service.agents.agent_config import AgentConfig
 
@@ -25,6 +31,7 @@ class _ModelBindingSignature:
     frequency_penalty: float | None
     loaded_skills: tuple[str, ...]
     tools: tuple[str, ...]
+    thinking_effort: str
 
 
 class ModelBindingManager:
@@ -36,6 +43,11 @@ class ModelBindingManager:
         self._resolved_model_id: str | None = None
         self._resolved_profile_label: str | None = None
         self._resolved_max_tokens: int | None = None
+        self._thinking_effort: str = ""
+        self._thinking_requested_effort: str = ""
+        self._thinking_supports = False
+        self._thinking_request_payload: dict | None = None
+        self._resolved: ResolvedModelConfig | None = None
 
     def invalidate(self) -> None:
         self._cached_model = None
@@ -43,6 +55,11 @@ class ModelBindingManager:
         self._resolved_model_id = None
         self._resolved_profile_label = None
         self._resolved_max_tokens = None
+        self._thinking_effort = ""
+        self._thinking_requested_effort = ""
+        self._thinking_supports = False
+        self._thinking_request_payload = None
+        self._resolved = None
 
     async def get_or_create(
         self,
@@ -52,6 +69,7 @@ class ModelBindingManager:
         tools: list,
         tenant_id: int,
         db: AsyncSession,
+        thinking_effort: str | None = None,
     ):
         """Get or create model with tools binding using the tenant model registry."""
         skills = loaded_skills or []
@@ -67,6 +85,7 @@ class ModelBindingManager:
             profile_updated_at, provider_updated_at = await binding_service.get_profile_binding_timestamps(
                 cache_profile_id
             )
+
         signature = self._build_signature(
             tenant_id=tenant_id,
             cache_profile_id=cache_profile_id,
@@ -74,6 +93,7 @@ class ModelBindingManager:
             provider_updated_at=provider_updated_at,
             loaded_skills=skills,
             tools=tools,
+            thinking_effort=thinking_effort or "",
         )
 
         if self._cached_model is not None and signature == self._cached_signature:
@@ -83,6 +103,7 @@ class ModelBindingManager:
             model_profile_id=model_profile_id,
             tenant_id=tenant_id,
             db=db,
+            thinking_effort=thinking_effort,
         )
         self._logger.info(
             "Tenant model created for agent %s profile=%s model_id=%s tools=%s",
@@ -101,14 +122,34 @@ class ModelBindingManager:
         model_profile_id: int | None,
         tenant_id: int,
         db: AsyncSession,
+        thinking_effort: str | None,
     ):
         service = LLMProviderConfigService(tenant_id, db)
         resolved = await service.resolve_for_agent(model_profile_id, mini=False)
+        self._resolved = resolved
+        self._thinking_requested_effort = (thinking_effort or "").strip()
+        effective_effort, supports = coerce_thinking_effort_value(thinking_effort, resolved)
         self._resolved_model_id = resolved.model_id
         self._resolved_profile_label = resolved.profile_name
         params = resolved.params or {}
         self._resolved_max_tokens = params.get("max_tokens")
-        return create_chat_model(resolved)
+        self._thinking_effort = effective_effort
+        self._thinking_supports = supports
+        self._thinking_request_payload = build_thinking_request_payload(effective_effort, resolved)
+        return create_chat_model(resolved, thinking_effort=effective_effort)
+
+    def get_thinking_metrics_context(self) -> dict:
+        return {
+            "thinking_effort_requested": self._thinking_requested_effort,
+            "thinking_effort": self._thinking_effort,
+            "thinking_request": self._thinking_request_payload,
+            "supports_thinking": self._thinking_supports,
+            "thinking_effort_none_disables": (
+                selection_disables_reasoning_on_wire(self._thinking_effort, self._resolved)
+                if self._thinking_effort and self._resolved is not None
+                else False
+            ),
+        }
 
     def get_configured_model_id(self) -> str | None:
         return self._resolved_model_id
@@ -145,6 +186,7 @@ class ModelBindingManager:
         provider_updated_at: datetime | None,
         loaded_skills: list[str],
         tools: Iterable,
+        thinking_effort: str,
     ) -> _ModelBindingSignature:
         tool_names = tuple(sorted(getattr(tool, "name", "") for tool in tools))
         return _ModelBindingSignature(
@@ -158,4 +200,5 @@ class ModelBindingManager:
             frequency_penalty=self._agent_config.frequency_penalty,
             loaded_skills=tuple(loaded_skills),
             tools=tool_names,
+            thinking_effort=thinking_effort,
         )

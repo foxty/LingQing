@@ -349,6 +349,7 @@ class AgentBase(ABC):
             )
             self.logger.info("Prompt context stats: %s", asdict(prompt_context_stats))
             model_profile_id = self.agent_config.model_profile_id()
+            thinking_effort = config.get("configurable", {}).get("thinking_effort", "none")
 
             # Resolve tools at runtime for tenant-scoped skills
             tools = self.agent_config.get_tools(loaded_skills, runtime)
@@ -360,6 +361,7 @@ class AgentBase(ABC):
                 tools=tools,
                 tenant_id=runtime.tenant.tenant_id,
                 db=db_session,
+                thinking_effort=thinking_effort,
             )
 
             response = None
@@ -373,6 +375,7 @@ class AgentBase(ABC):
                 prompt_context_stats=prompt_context_stats,
                 configured_model_id=configured_model_id,
                 max_output_tokens=max_output_tokens,
+                thinking_context=self._model_binding_manager.get_thinking_metrics_context(),
             ) as tracker:
                 # Force non-streaming so usage reflects one API response (not summed stream chunks).
                 response = await model_with_tools.ainvoke(messages, config=config, stream=False)

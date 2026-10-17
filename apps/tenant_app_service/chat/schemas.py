@@ -57,6 +57,10 @@ class ChatRequest(BaseModel):
         None,
         description="HITL approve continuation only; reject is handled via HITL API",
     )
+    thinking_effort: str | None = Field(
+        default=None,
+        description="Selected thinking_effort_options value from the agent model profile snapshot",
+    )
 
 
 class ChatResponse(BaseModel):

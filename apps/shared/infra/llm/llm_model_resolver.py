@@ -7,26 +7,35 @@ from typing import Any
 from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 
+from apps.shared.infra.llm.thinking import (
+    apply_thinking_to_chat_kwargs,
+    build_thinking_request_payload,
+    coerce_thinking_effort_value,
+)
 from apps.shared.llm_providers.domain import ResolvedModelConfig
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
-_DATABRICKS_AI_GATEWAY_PRESET = "databricks-ai-gateway"
 
-
-def create_chat_model(resolved: ResolvedModelConfig) -> BaseChatModel:
+def create_chat_model(
+    resolved: ResolvedModelConfig,
+    *,
+    thinking_effort: str | None = None,
+) -> BaseChatModel:
     """Create a ChatOpenAI instance from a resolved registry profile."""
     params = resolved.params or {}
     temperature = params.get("temperature", 0.1)
     max_tokens = params.get("max_tokens")
     top_p = params.get("top_p")
+    effort, _supports = coerce_thinking_effort_value(thinking_effort, resolved)
 
     logger.info(
-        "Creating chat model profile=%s model_id=%s provider=%s",
+        "Creating chat model profile=%s model_id=%s provider=%s thinking_effort=%s",
         resolved.profile_name,
         resolved.model_id,
         resolved.provider_display_name,
+        effort,
     )
     return _create_openai_compatible_chat_model(
         resolved=resolved,
@@ -36,6 +45,7 @@ def create_chat_model(resolved: ResolvedModelConfig) -> BaseChatModel:
         temperature=temperature,
         top_p=top_p,
         max_tokens=max_tokens,
+        thinking_effort=effort,
     )
 
 
@@ -66,6 +76,7 @@ def _create_openai_compatible_chat_model(
     temperature: float,
     top_p: float | None,
     max_tokens: int | None,
+    thinking_effort: str,
 ) -> BaseChatModel:
     from langchain_openai import ChatOpenAI
 
@@ -76,8 +87,15 @@ def _create_openai_compatible_chat_model(
         "base_url": api_base,
         "stream_usage": False,
     }
-    if resolved.provider_preset_key != _DATABRICKS_AI_GATEWAY_PRESET:
-        kwargs["extra_body"] = {"thinking": {"type": "disabled"}}
+    apply_thinking_to_chat_kwargs(kwargs, resolved=resolved, thinking_effort=thinking_effort)
+    wire = build_thinking_request_payload(thinking_effort, resolved)
+    logger.info(
+        "Thinking wire format model_id=%s effort=%s chat_reasoning_effort=%s observability=%s",
+        resolved.model_id,
+        thinking_effort,
+        kwargs.get("reasoning_effort", "(field omitted)"),
+        wire,
+    )
     if top_p is not None:
         kwargs["top_p"] = top_p
     if max_tokens is not None:

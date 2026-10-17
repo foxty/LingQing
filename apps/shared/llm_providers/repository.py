@@ -28,6 +28,7 @@ def to_provider_domain(row: LLMProvider) -> LLMProviderDomain:
         api_base=row.api_base,
         embedding_api_base=row.embedding_api_base,
         api_key_encrypted=row.api_key_encrypted,
+        config=row.config,
         status=row.status,
         created_at=row.created_at,
         updated_at=row.updated_at,
@@ -43,6 +44,7 @@ def to_profile_domain(row: LLMModelProfile) -> LLMModelProfileDomain:
         category=ModelProfileCategory(row.category),
         model_id=row.model_id,
         params=row.params,
+        reasoning_config=row.reasoning_config,
         catalog_model_key=row.catalog_model_key,
         source=ModelProfileSource(row.source),
         created_at=row.created_at,
@@ -105,6 +107,7 @@ class LLMProviderRepository:
         api_base: str,
         embedding_api_base: str | None,
         api_key_encrypted: str,
+        config: dict | None = None,
         status: str = "active",
     ) -> LLMProviderDomain:
         row = LLMProvider(
@@ -115,6 +118,7 @@ class LLMProviderRepository:
             api_base=api_base,
             embedding_api_base=embedding_api_base,
             api_key_encrypted=api_key_encrypted,
+            config=config,
             status=status,
         )
         self.db.add(row)
@@ -132,6 +136,7 @@ class LLMProviderRepository:
         api_base: str | None = None,
         embedding_api_base: str | None | object = _UNSET,
         api_key_encrypted: str | None = None,
+        config: dict | None | object = _UNSET,
         status: str | None = None,
     ) -> LLMProviderDomain:
         result = await self.db.execute(
@@ -156,6 +161,8 @@ class LLMProviderRepository:
             row.embedding_api_base = embedding_api_base  # type: ignore[assignment]
         if api_key_encrypted is not None:
             row.api_key_encrypted = api_key_encrypted
+        if config is not _UNSET:
+            row.config = config  # type: ignore[assignment]
         if status is not None:
             row.status = status
         row.updated_at = datetime.now(UTC)
@@ -225,6 +232,7 @@ class LLMModelProfileRepository:
         category: ModelProfileCategory,
         model_id: str,
         params: dict | None,
+        reasoning_config: dict | None,
         catalog_model_key: str | None,
         source: ModelProfileSource,
     ) -> LLMModelProfileDomain:
@@ -235,6 +243,7 @@ class LLMModelProfileRepository:
             category=category.value,
             model_id=model_id,
             params=params,
+            reasoning_config=reasoning_config,
             catalog_model_key=catalog_model_key,
             source=source.value,
         )
@@ -249,7 +258,8 @@ class LLMModelProfileRepository:
         *,
         name: str | None = None,
         model_id: str | None = None,
-        params: dict | None = None,
+        params: dict | None | object = _UNSET,
+        reasoning_config: dict | None | object = _UNSET,
         catalog_model_key: str | None = None,
         source: ModelProfileSource | None = None,
     ) -> LLMModelProfileDomain:
@@ -267,8 +277,10 @@ class LLMModelProfileRepository:
             row.name = name
         if model_id is not None:
             row.model_id = model_id
-        if params is not None:
-            row.params = params
+        if params is not _UNSET:
+            row.params = params  # type: ignore[assignment]
+        if reasoning_config is not _UNSET:
+            row.reasoning_config = reasoning_config  # type: ignore[assignment]
         if catalog_model_key is not None:
             row.catalog_model_key = catalog_model_key
         if source is not None:

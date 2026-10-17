@@ -9,6 +9,11 @@ from typing import Any, Protocol
 
 from apps.shared.core.exceptions import ValidationError
 from apps.shared.domain.base_domain_model import BaseDomainModel
+from apps.shared.llm_providers.runtime_types import (
+    ModelParams,
+    ModelReasoningConfig,
+    ProviderRuntimeConfig,
+)
 
 
 class ModelProfileCategory(enum.StrEnum):
@@ -38,6 +43,7 @@ class LLMProviderDomain(BaseDomainModel):
     api_base: str
     embedding_api_base: str | None
     api_key_encrypted: str
+    config: ProviderRuntimeConfig | None
     status: str
     created_at: datetime
     updated_at: datetime
@@ -56,7 +62,8 @@ class LLMModelProfileDomain(BaseDomainModel):
     name: str
     category: ModelProfileCategory
     model_id: str
-    params: dict[str, Any] | None
+    params: ModelParams | None
+    reasoning_config: ModelReasoningConfig | None
     catalog_model_key: str | None
     source: ModelProfileSource
     created_at: datetime
@@ -110,13 +117,16 @@ class ResolvedModelConfig:
     profile_name: str
     category: ModelProfileCategory
     model_id: str
-    params: dict[str, Any] | None
+    params: ModelParams | None
     provider_id: int
     provider_display_name: str
     provider_type: str
     provider_preset_key: str | None
     api_base: str
     api_key: str
+    catalog_model_key: str | None = None
+    reasoning_config: ModelReasoningConfig | None = None
+    provider_config: ProviderRuntimeConfig | None = None
 
 
 class LLMProviderRepositoryPort(Protocol):

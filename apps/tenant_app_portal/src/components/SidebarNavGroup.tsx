@@ -135,11 +135,6 @@ export function getSettingsNavItems(
 ): SidebarNavItem[] {
   const items: SidebarNavItem[] = [
     { to: '/settings/models', label: t('settings.models'), matchPrefixes: ['/settings/models'] },
-    {
-      to: '/settings/embedding',
-      label: t('settings.embedding'),
-      matchPrefixes: ['/settings/embedding'],
-    },
     { to: '/settings/tags', label: t('settings.tags'), matchPrefixes: ['/settings/tags'] },
     { to: '/settings/abac', label: t('settings.abac'), matchPrefixes: ['/settings/abac'] },
     {

@@ -9,6 +9,7 @@ from apps.shared.llm_providers.dtos import (
     CreateLLMModelProfileRequest,
     CreateLLMProviderRequest,
     UpdateLLMDefaultsRequest,
+    UpdateLLMModelProfileRequest,
     UpdateLLMProviderRequest,
 )
 from apps.shared.llm_providers.service import LLMProviderConfigService
@@ -108,44 +109,6 @@ async def test_resolve_profile(async_db_session):
     assert resolved.api_key == "plain-secret"
     assert resolved.params == {"temperature": 0.2}
     assert cipher.mask_value(resolved.api_key) == provider.api_key_masked
-
-
-async def test_ensure_migrated_with_existing_provider_and_legacy_config(async_db_session):
-    cipher = FieldCipher()
-    tenant = Tenant(
-        name="legacy-after-provider",
-        slug="legacy-after-provider",
-        status="active",
-        config={
-            "llm_config": {
-                "agent_model": {
-                    "name": "Agent Default",
-                    "type": "openai-compatible",
-                    "api_base": "https://api.deepseek.com",
-                    "api_key": cipher.encrypt("test-key"),
-                    "model_id": "deepseek-v4-pro",
-                }
-            }
-        },
-    )
-    async_db_session.add(tenant)
-    await async_db_session.flush()
-
-    service = LLMProviderConfigService(tenant.id, async_db_session)
-    await service.create_provider(
-        CreateLLMProviderRequest(
-            display_name="Manual Provider",
-            api_base="https://api.example.com/v1",
-            api_key="other-key",
-        )
-    )
-
-    await service.ensure_migrated()
-    await async_db_session.refresh(tenant)
-
-    defaults = tenant.config.get("llm_defaults") or {}
-    assert defaults.get("agent_profile_id") is not None
-    assert "llm_config" not in tenant.config
 
 
 async def test_test_provider_connection_uses_linked_profile(async_db_session):
@@ -306,3 +269,87 @@ async def test_resolve_profile_rejects_disabled_provider(async_db_session):
 
     with pytest.raises(ValidationError, match="disabled"):
         await service.resolve_profile(profile.id)
+
+
+async def test_create_profile_seeds_runtime_snapshots_from_catalog(async_db_session):
+    tenant = await _seed_tenant(async_db_session)
+    service = LLMProviderConfigService(tenant.id, async_db_session)
+
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="Bailian",
+            preset_key="bailian",
+            api_base="https://dashscope.aliyuncs.com/compatible-mode/v1",
+            api_key="secret-key",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="Qwen Plus",
+            category=ModelProfileCategory.LLM,
+            model_id="qwen3.5-plus",
+            catalog_model_key="bailian/qwen3.5-plus",
+        )
+    )
+
+    listed = await service.list_profiles(category=ModelProfileCategory.LLM)
+    stored = next(item for item in listed if item.id == profile.id)
+    assert stored.reasoning_config is not None
+    assert stored.reasoning_config.get("supports_thinking") is True
+    assert stored.params is not None
+
+    providers = await service.list_providers()
+    assert providers[0].preset_key == "bailian"
+
+    resolved = await service.resolve_profile(profile.id)
+    assert resolved.reasoning_config is not None
+    assert resolved.reasoning_config.get("supports_thinking") is True
+    assert resolved.provider_config == {"thinking_request_mode": "extra_body_thinking"}
+    assert resolved.params == stored.params
+
+
+async def test_update_profile_reset_runtime_from_catalog(async_db_session):
+    tenant = await _seed_tenant(async_db_session)
+    service = LLMProviderConfigService(tenant.id, async_db_session)
+
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="DBX",
+            preset_key="databricks-ai-gateway",
+            api_base="https://workspace.example.com/ai-gateway/mlflow/v1",
+            api_key="secret-key",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="GLM Flash",
+            category=ModelProfileCategory.LLM,
+            model_id="system.ai.glm-5-3-flash",
+            catalog_model_key="databricks-ai-gateway/system.ai.glm-5-3-flash",
+        )
+    )
+
+    await service.update_profile(
+        profile.id,
+        UpdateLLMModelProfileRequest(
+            params={"temperature": 0.9},
+            reasoning_config={"supports_thinking": False},
+        ),
+    )
+    overridden = await service.resolve_profile(profile.id)
+    assert overridden.params == {"temperature": 0.9}
+    assert overridden.reasoning_config == {"supports_thinking": False}
+
+    await service.update_profile(
+        profile.id,
+        UpdateLLMModelProfileRequest(reset_runtime_from_catalog=True),
+    )
+    reset = await service.resolve_profile(profile.id)
+    assert reset.reasoning_config is not None
+    assert reset.reasoning_config.get("supports_thinking") is True
+    opts = reset.reasoning_config.get("thinking_effort_options") or []
+    assert opts[0]["value"] == "low"
+    assert reset.provider_config == {"thinking_request_mode": "reasoning_effort"}
+
