@@ -269,7 +269,7 @@ export function useWorkbenchChat({
               selected_artifact_ids: selectedResources.map((r) => r.artifact_id),
               hitl_proposal_id: options?.hitlProposalId || null,
               hitl_action: options?.hitlAction || null,
-              thinking_effort: thinkingEffort,
+              thinking_effort: thinkingEffort || null,
             },
           },
           activeThreadId,

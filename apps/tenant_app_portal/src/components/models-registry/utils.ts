@@ -7,7 +7,6 @@ import {
   type LLMProvider,
   type ModelProfileCategory,
 } from '@/lib/llmConfigApi'
-import { catalogEntryForModelKey } from '@/lib/thinkingCatalog'
 
 export function catalogModelHasReasoningControl(model: CatalogModel): boolean {
   return model.metadata?.supports_thinking === true
@@ -15,14 +14,12 @@ export function catalogModelHasReasoningControl(model: CatalogModel): boolean {
 
 export function profileReasoningControlBadge(
   profile: LLMModelProfile,
-  catalog: CatalogProvider[],
   t: (key: string) => string
 ): string | null {
   if (profile.category !== 'llm') {
     return null
   }
-  const entry = catalogEntryForModelKey(catalog, profile.catalog_model_key)
-  if (entry && catalogModelHasReasoningControl(entry.model)) {
+  if (profile.reasoning_config?.supports_thinking === true) {
     return t('settings.modelsRegistry.badgeReasoningControl')
   }
   return null

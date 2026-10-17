@@ -2,6 +2,7 @@ import ContainerDetailHeader from '@/components/ContainerDetailHeader'
 import ListDetailToolbar from '@/components/ListDetailToolbar'
 import ConnectionTestFeedback, { type ConnectionTestResult } from '@/components/ConnectionTestFeedback'
 import { modelsRegistryKey, registerModelsRegistryI18n } from '@/components/models-registry/i18n'
+import ProfileEditDialog from '@/components/models-registry/ProfileEditDialog'
 import ProfileFormDialog from '@/components/models-registry/ProfileFormDialog'
 import ProviderFormDialog from '@/components/models-registry/ProviderFormDialog'
 import {
@@ -69,6 +70,7 @@ export default function SettingsProviderDetailPage() {
   })
   const [providerDialogOpen, setProviderDialogOpen] = useState(false)
   const [profileDialogOpen, setProfileDialogOpen] = useState(false)
+  const [editingProfile, setEditingProfile] = useState<LLMModelProfile | null>(null)
   const [busy, setBusy] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionTestResult, setConnectionTestResult] = useState<ConnectionTestResult | null>(null)
@@ -196,13 +198,6 @@ export default function SettingsProviderDetailPage() {
 
   const presetName = presetDisplayName(provider, catalog)
   const catalogPresetKey = inferCatalogPresetKey(provider, catalog)
-  const catalogPreset = catalogPresetKey
-    ? catalog.find((item) => item.key === catalogPresetKey || item.provider === catalogPresetKey)
-    : undefined
-  const thinkingWireMode =
-    catalogPreset?.metadata && typeof catalogPreset.metadata.thinking_request_mode === 'string'
-      ? catalogPreset.metadata.thinking_request_mode
-      : null
   const presetKeyStored = Boolean(provider.preset_key?.trim())
 
   return (
@@ -219,13 +214,6 @@ export default function SettingsProviderDetailPage() {
                 {t(modelsRegistryKey('catalogPresetKey'))}:{' '}
                 <span className="font-mono">{catalogPresetKey}</span>
                 {!presetKeyStored ? ` (${t(modelsRegistryKey('catalogPresetInferred'))})` : null}
-                {thinkingWireMode ? (
-                  <>
-                    {' · '}
-                    {t(modelsRegistryKey('catalogThinkingWire'))}:{' '}
-                    <span className="font-mono">{thinkingWireMode}</span>
-                  </>
-                ) : null}
               </p>
             ) : null}
             <p className="font-mono text-xs truncate">{provider.api_base}</p>
@@ -349,7 +337,7 @@ export default function SettingsProviderDetailPage() {
                     <TableCell className="py-2.5 text-muted-foreground">
                       {(() => {
                         const badges = defaultBadgesForProfile(profile.id, defaults, t)
-                        const reasoningBadge = profileReasoningControlBadge(profile, catalog, t)
+                        const reasoningBadge = profileReasoningControlBadge(profile, t)
                         if (reasoningBadge) {
                           badges.push(reasoningBadge)
                         }
@@ -376,6 +364,13 @@ export default function SettingsProviderDetailPage() {
                           </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
+                          <DropdownMenuItem
+                            onClick={() => {
+                              setEditingProfile(profile)
+                            }}
+                          >
+                            {t(modelsRegistryKey('editModel'))}
+                          </DropdownMenuItem>
                           <DropdownMenuItem
                             className="text-destructive focus:text-destructive"
                             onClick={() => void removeProfile(profile.id)}
@@ -410,6 +405,20 @@ export default function SettingsProviderDetailPage() {
         providers={providers}
         catalog={catalog}
         fixedProviderId={provider.id}
+        onSaved={async () => {
+          showSuccess(t(modelsRegistryKey('profileSaved')))
+          await loadAll()
+        }}
+      />
+
+      <ProfileEditDialog
+        open={editingProfile !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingProfile(null)
+          }
+        }}
+        profile={editingProfile}
         onSaved={async () => {
           showSuccess(t(modelsRegistryKey('profileSaved')))
           await loadAll()

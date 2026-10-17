@@ -963,9 +963,10 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
                 msg.additional_kwargs = kwargs
                 return
 
-    async def agent_thinking_effort_control_enabled(self, agent_id: int, actor: ActorContext) -> bool:
-        """Whether workbench reasoning effort applies to this agent's resolved LLM profile."""
-        from apps.shared.infra.llm.thinking import model_supports_thinking
+    async def agent_thinking_effort_control(self, agent_id: int, actor: ActorContext) -> dict[str, object]:
+        """Workbench thinking control from the agent model profile DB snapshot."""
+        from apps.shared.infra.llm.thinking import list_thinking_effort_options, model_supports_thinking
+        from apps.shared.llm_providers.reasoning_options import default_thinking_effort_value
         from apps.shared.llm_providers.service import LLMProviderConfigService
         from apps.tenant_app_service.agent_catalog.adapters import resolve_assignable_skills
         from apps.tenant_app_service.agent_catalog.services import AgentCatalogService
@@ -978,7 +979,14 @@ class ChatService(TenantAwareService, ChatStreamingMixin):
             assignable_skills=assignable_skills,
         )
         llm = LLMProviderConfigService(self.tenant_id, self.db)
-        await llm.ensure_migrated()
         resolved = await llm.resolve_for_agent(agent.config.model_profile_id, mini=False)
-        return model_supports_thinking(resolved)
+        options = list_thinking_effort_options(resolved)
+        enabled = model_supports_thinking(resolved)
+        return {
+            "enabled": enabled,
+            "options": options,
+            "default_value": default_thinking_effort_value(options) if options else "",
+            "model_id": resolved.model_id,
+            "profile_name": resolved.profile_name,
+        }
 

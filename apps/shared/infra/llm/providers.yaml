@@ -10,8 +10,7 @@
 # - providers[].embedding_models[]: embedding model entries
 # - providers[].metadata.thinking_request_mode: omit | extra_body_thinking | reasoning_effort
 # - llm_models[].metadata.supports_thinking: true when extended reasoning is available
-# - llm_models[].metadata.thinking_effort_map: none|low|medium|high -> API value or omit
-#   Policy: none -> "none" when gateway supports disable; none -> low when thinking cannot be disabled
+# - llm_models[].metadata.thinking_effort_options: wire values (strings) or {name, value}; first = default
 # - llm_models[].metadata.exposes_thinking_content: true when gateway returns reasoning/thinking blocks (see DBX reason-model docs)
 # - llm_models[].default_params: per-model overrides (e.g. temperature: 1 for GPT-5.x); merged at profile create and resolve
 #
@@ -34,30 +33,65 @@ providers:
         model_id: qwen3.6-plus
         metadata:
           supports_thinking: true
+          thinking_effort_options:
+            - { name: Off, value: none }
+            - low
+            - medium
+            - high
       - key: qwen3.6-flash
         model_id: qwen3.6-flash
         metadata:
           supports_thinking: true
+          thinking_effort_options:
+            - { name: Off, value: none }
+            - low
+            - medium
+            - high
       - key: qwen3.5-plus
         model_id: qwen3.5-plus
         metadata:
           supports_thinking: true
+          thinking_effort_options:
+            - { name: Off, value: none }
+            - low
+            - medium
+            - high
       - key: qwen3.5-flash
         model_id: qwen3.5-flash
         metadata:
           supports_thinking: true
+          thinking_effort_options:
+            - { name: Off, value: none }
+            - low
+            - medium
+            - high
       - key: qwen3.6-27b
         model_id: qwen3.6-27b
         metadata:
           supports_thinking: true
+          thinking_effort_options:
+            - { name: Off, value: none }
+            - low
+            - medium
+            - high
       - key: deepseek-v4-pro
         model_id: deepseek-v4-pro
         metadata:
           supports_thinking: true
+          thinking_effort_options:
+            - { name: Off, value: none }
+            - low
+            - medium
+            - high
       - key: deepseek-v4-flash
         model_id: deepseek-v4-flash
         metadata:
           supports_thinking: true
+          thinking_effort_options:
+            - { name: Off, value: none }
+            - low
+            - medium
+            - high
     embedding_models:
       - text-embedding-v4
       - text-embedding-v3
@@ -110,38 +144,22 @@ providers:
         model_id: system.ai.deepseek-v4-flash-0731
         metadata:
           supports_thinking: true
-          thinking_effort_map:
-            "none": low
-            low: low
-            medium: high
-            high: max
+          thinking_effort_options: [low, high, max]
       - key: system.ai.deepseek-v4-1-flash
         model_id: system.ai.deepseek-v4-1-flash
         metadata:
           supports_thinking: true
-          thinking_effort_map:
-            "none": "none"
-            low: low
-            medium: high
-            high: max
+          thinking_effort_options: [none, low, high, max]
       - key: system.ai.glm-5-3
         model_id: system.ai.glm-5-3
         metadata:
           supports_thinking: true
-          thinking_effort_map:
-            "none": low
-            low: low
-            medium: high
-            high: max
+          thinking_effort_options: [low, high, max]
       - key: system.ai.glm-5-3-flash
         model_id: system.ai.glm-5-3-flash
         metadata:
           supports_thinking: true
-          thinking_effort_map:
-            "none": low
-            low: low
-            medium: high
-            high: max
+          thinking_effort_options: [low, high, max]
       - key: system.ai.gpt-5-5
         name: GPT 5.5
         model_id: system.ai.gpt-5-5

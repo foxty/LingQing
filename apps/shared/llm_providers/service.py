@@ -5,7 +5,8 @@ Used by tenant settings APIs and agent runtime resolution (Phase 2).
 
 from __future__ import annotations
 
-from datetime import datetime
+from copy import deepcopy
+from datetime import UTC, datetime
 from typing import Any
 
 from sqlalchemy import select
@@ -34,35 +35,17 @@ from apps.shared.llm_providers.dtos import (
     UpdateLLMModelProfileRequest,
     UpdateLLMProviderRequest,
 )
-from apps.shared.llm_providers.migration import has_legacy_llm_config, migrate_legacy_tenant_config
-from apps.shared.llm_providers.repository import LLMModelProfileRepository, LLMProviderRepository
+from apps.shared.llm_providers.repository import LLMModelProfileRepository, LLMProviderRepository, _UNSET
+from apps.shared.llm_providers.runtime_config import (
+    seed_params_from_catalog,
+    seed_provider_config_from_catalog,
+    seed_reasoning_config_from_catalog,
+)
 from apps.shared.llm_providers.catalog_dtos import ModelCategory
 from apps.shared.utils.field_cipher import FieldCipher
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-def _effective_profile_params(
-    profile: LLMModelProfileDomain,
-    *,
-    provider_preset_key: str | None = None,
-) -> dict[str, Any] | None:
-    """Catalog default_params with tenant profile.params overrides (tenant wins per key)."""
-    catalog = get_provider_catalog()
-    catalog_profile = None
-    if profile.catalog_model_key:
-        catalog_profile = catalog.get_profile(profile.catalog_model_key)
-    elif profile.is_llm() and provider_preset_key:
-        catalog_profile = catalog.find_llm_profile(provider_preset_key, profile.model_id)
-
-    base: dict[str, Any] = {}
-    if catalog_profile and catalog_profile.default_params:
-        base = dict(catalog_profile.default_params)
-    tenant = dict(profile.params or {})
-    if not base and not tenant:
-        return profile.params
-    return {**base, **tenant}
 
 
 class LLMProviderConfigService:
@@ -75,28 +58,6 @@ class LLMProviderConfigService:
         self._provider_repo = LLMProviderRepository(db)
         self._profile_repo = LLMModelProfileRepository(db)
 
-    async def ensure_migrated(self) -> None:
-        defaults = await self._load_defaults()
-        if defaults.to_dict():
-            return
-
-        tenant_config = await self._get_tenant_config()
-        if not has_legacy_llm_config(tenant_config):
-            return
-
-        migrated = await migrate_legacy_tenant_config(
-            tenant_id=self.tenant_id,
-            tenant_config=tenant_config,
-            db=self.db,
-        )
-        if migrated is None:
-            return
-
-        if migrated.to_dict():
-            await self._save_defaults(migrated)
-        await self._clean_legacy_config()
-        await self.db.commit()
-
     async def resolve_for_agent(self, model_profile_id: int | None, *, mini: bool = False) -> ResolvedModelConfig:
         if model_profile_id is not None:
             profile = await self._require_profile(model_profile_id)
@@ -108,7 +69,6 @@ class LLMProviderConfigService:
     # ---------- Providers ----------
 
     async def list_providers(self) -> list[LLMProviderResponseDTO]:
-        await self.ensure_migrated()
         providers = await self._provider_repo.list_providers(self.tenant_id)
         return [self._provider_to_dto(provider) for provider in providers]
 
@@ -123,6 +83,8 @@ class LLMProviderConfigService:
         preset = get_provider_catalog().get_preset(request.preset_key) if request.preset_key else None
         embedding_api_base = request.embedding_api_base or (preset.embedding_api_base if preset else None)
 
+        provider_config = seed_provider_config_from_catalog(request.preset_key)
+
         provider = await self._provider_repo.create_provider(
             tenant_id=self.tenant_id,
             display_name=request.display_name,
@@ -131,8 +93,8 @@ class LLMProviderConfigService:
             api_base=request.api_base,
             embedding_api_base=embedding_api_base,
             api_key_encrypted=self._cipher.encrypt(request.api_key),
+            config=provider_config,
         )
-        await self.db.commit()
         return self._provider_to_dto(provider)
 
     async def update_provider(self, provider_id: int, request: UpdateLLMProviderRequest) -> LLMProviderResponseDTO:
@@ -151,7 +113,6 @@ class LLMProviderConfigService:
             update_kwargs["embedding_api_base"] = request.embedding_api_base
 
         updated = await self._provider_repo.update_provider(provider, **update_kwargs)
-        await self.db.commit()
         return self._provider_to_dto(updated)
 
     async def delete_provider(self, provider_id: int) -> None:
@@ -161,30 +122,42 @@ class LLMProviderConfigService:
             raise ValidationError("Cannot delete provider while model profiles still reference it")
 
         await self._provider_repo.delete_provider(self.tenant_id, provider_id)
-        await self.db.commit()
 
     # ---------- Profiles ----------
 
     async def list_profiles(self, *, category: ModelProfileCategory | None = None) -> list[LLMModelProfileResponseDTO]:
-        await self.ensure_migrated()
         profiles = await self._profile_repo.list_profiles(self.tenant_id, category=category)
         return [self._profile_to_dto(profile) for profile in profiles]
 
     async def create_profile(self, request: CreateLLMModelProfileRequest) -> LLMModelProfileResponseDTO:
-        await self._require_provider(request.provider_id)
-
         existing = await self._profile_repo.get_by_name(self.tenant_id, request.name)
         if existing:
             raise ValidationError(f"Model profile '{request.name}' already exists")
 
-        params = dict(request.params) if request.params else None
-        if request.catalog_model_key:
-            catalog_profile = get_provider_catalog().get_profile(request.catalog_model_key)
-            if catalog_profile and catalog_profile.default_params:
-                merged = dict(catalog_profile.default_params)
-                if params:
-                    merged.update(params)
-                params = merged
+        provider = await self._require_provider(request.provider_id)
+        preset_key = provider.preset_key.strip() if provider.preset_key and provider.preset_key.strip() else None
+        draft = LLMModelProfileDomain(
+            id=0,
+            tenant_id=self.tenant_id,
+            provider_id=request.provider_id,
+            name=request.name,
+            category=request.category,
+            model_id=request.model_id,
+            params=None,
+            reasoning_config=None,
+            catalog_model_key=request.catalog_model_key,
+            source=ModelProfileSource.PRESET,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        params = dict(request.params) if request.params is not None else seed_params_from_catalog(
+            draft, provider_preset_key=preset_key
+        )
+        reasoning_config = (
+            dict(request.reasoning_config)
+            if request.reasoning_config is not None
+            else seed_reasoning_config_from_catalog(draft, provider_preset_key=preset_key)
+        )
 
         source = ModelProfileSource(request.source)
         profile = await self._profile_repo.create_profile(
@@ -194,25 +167,42 @@ class LLMProviderConfigService:
             category=request.category,
             model_id=request.model_id,
             params=params,
+            reasoning_config=reasoning_config,
             catalog_model_key=request.catalog_model_key,
             source=source,
         )
-        await self.db.commit()
         return self._profile_to_dto(profile)
 
     async def update_profile(self, profile_id: int, request: UpdateLLMModelProfileRequest) -> LLMModelProfileResponseDTO:
         profile = await self._require_profile(profile_id)
         source = ModelProfileSource(request.source) if request.source else None
 
+        params: dict[str, Any] | None | object = _UNSET
+        reasoning_config: dict[str, Any] | None | object = _UNSET
+        if request.reset_runtime_from_catalog:
+            provider = await self._require_provider(profile.provider_id)
+            preset_key = provider.preset_key.strip() if provider.preset_key and provider.preset_key.strip() else None
+            params = seed_params_from_catalog(profile, provider_preset_key=preset_key)
+            reasoning_config = seed_reasoning_config_from_catalog(profile, provider_preset_key=preset_key)
+            await self._provider_repo.update_provider(
+                provider,
+                config=seed_provider_config_from_catalog(preset_key),
+            )
+        else:
+            if "params" in request.model_fields_set:
+                params = dict(request.params) if request.params is not None else None
+            if "reasoning_config" in request.model_fields_set:
+                reasoning_config = dict(request.reasoning_config) if request.reasoning_config is not None else None
+
         updated = await self._profile_repo.update_profile(
             profile,
             name=request.name,
             model_id=request.model_id,
-            params=dict(request.params) if request.params is not None else None,
+            params=params,
+            reasoning_config=reasoning_config,
             catalog_model_key=request.catalog_model_key,
             source=source,
         )
-        await self.db.commit()
         return self._profile_to_dto(updated)
 
     async def delete_profile(self, profile_id: int) -> None:
@@ -226,12 +216,10 @@ class LLMProviderConfigService:
             raise ValidationError("Cannot delete a profile that is configured as a tenant default")
 
         await self._profile_repo.delete_profile(self.tenant_id, profile_id)
-        await self.db.commit()
 
     # ---------- Defaults ----------
 
     async def get_defaults(self) -> LLMDefaultsResponseDTO:
-        await self.ensure_migrated()
         defaults = await self._load_defaults()
         return LLMDefaultsResponseDTO(
             agent_profile_id=defaults.agent_profile_id,
@@ -240,7 +228,6 @@ class LLMProviderConfigService:
         )
 
     async def update_defaults(self, request: UpdateLLMDefaultsRequest) -> LLMDefaultsResponseDTO:
-        await self.ensure_migrated()
         current = await self._load_defaults()
 
         agent_profile_id = request.agent_profile_id if request.agent_profile_id is not None else current.agent_profile_id
@@ -265,7 +252,6 @@ class LLMProviderConfigService:
             embedding_profile_id=embedding_profile_id,
         )
         await self._save_defaults(defaults)
-        await self.db.commit()
         return LLMDefaultsResponseDTO(
             agent_profile_id=defaults.agent_profile_id,
             mini_agent_profile_id=defaults.mini_agent_profile_id,
@@ -282,7 +268,6 @@ class LLMProviderConfigService:
             raise ValidationError(str(exc)) from exc
 
     async def resolve_profile(self, profile_id: int) -> ResolvedModelConfig:
-        await self.ensure_migrated()
         profile = await self._require_profile(profile_id)
         provider = await self._require_provider(profile.provider_id)
         if not provider.is_active():
@@ -293,14 +278,13 @@ class LLMProviderConfigService:
             api_base = provider.api_base
 
         preset_key = provider.preset_key.strip() if provider.preset_key and provider.preset_key.strip() else None
-        params = _effective_profile_params(profile, provider_preset_key=preset_key)
 
         return ResolvedModelConfig(
             profile_id=profile.id,
             profile_name=profile.name,
             category=profile.category,
             model_id=profile.model_id,
-            params=params,
+            params=deepcopy(profile.params) if profile.params else None,
             provider_id=provider.id,
             provider_display_name=provider.display_name,
             provider_type=provider.type,
@@ -308,6 +292,8 @@ class LLMProviderConfigService:
             api_base=api_base,
             api_key=self._cipher.decrypt(provider.api_key_encrypted),
             catalog_model_key=profile.catalog_model_key,
+            reasoning_config=deepcopy(profile.reasoning_config) if profile.reasoning_config else None,
+            provider_config=deepcopy(provider.config) if provider.config else None,
         )
 
     async def get_profile_binding_timestamps(self, profile_id: int) -> tuple[datetime, datetime]:
@@ -514,20 +500,6 @@ class LLMProviderConfigService:
         flag_modified(tenant, "config")
         await self.db.flush()
 
-    async def _clean_legacy_config(self) -> None:
-        tenant = await self._get_tenant_row()
-        config = dict(tenant.config or {})
-        changed = False
-        for key in ("llm_config", "embedding_config"):
-            if key in config:
-                del config[key]
-                changed = True
-        if not changed:
-            return
-        tenant.config = config
-        flag_modified(tenant, "config")
-        await self.db.flush()
-
     def _provider_to_dto(self, provider: LLMProviderDomain) -> LLMProviderResponseDTO:
         decrypted = self._cipher.decrypt(provider.api_key_encrypted)
         return LLMProviderResponseDTO(
@@ -549,6 +521,7 @@ class LLMProviderConfigService:
             category=profile.category,
             model_id=profile.model_id,
             params=profile.params,
+            reasoning_config=profile.reasoning_config,
             catalog_model_key=profile.catalog_model_key,
             source=profile.source.value,
         )

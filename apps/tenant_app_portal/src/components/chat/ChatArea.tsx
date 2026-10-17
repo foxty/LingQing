@@ -40,6 +40,8 @@ i18n.addResourceBundle('en', 'translation', {
     thinkingHigh: 'High',
     thinkingEffortUnavailable:
       'Not available for this agent’s model (catalog has no reasoning control for the resolved profile).',
+    boundModel: 'Model',
+    boundProfile: 'Profile',
   },
 }, true, true)
 
@@ -70,9 +72,19 @@ i18n.addResourceBundle('zh', 'translation', {
     thinkingMedium: '中',
     thinkingHigh: '高',
     thinkingEffortUnavailable: '当前智能体绑定的模型不支持工作台推理深度控制。',
+    boundModel: '模型',
+    boundProfile: '配置',
   },
 }, true, true)
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -82,11 +94,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import type { ThinkingEffortOption } from '@/lib/chatApi'
 import type { ArtifactsAutoOpenPreference, ThinkingEffort } from '@/lib/userPreferencesTypes'
 import { Textarea } from '@/components/ui/textarea'
 import { Message, ContextResource } from '@/types'
 import { Bot, Loader2, LockKeyhole, Send, Settings } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useChatScroll } from '@/hooks/useChatScroll'
 import { shouldShowStreamingTurn } from '@/lib/chatStream'
 import { buildStreamingTurn, StreamingToolCallState } from '@/lib/chatTurns'
@@ -102,7 +115,10 @@ interface ChatAreaProps {
   sendKeyPreference: 'enter' | 'ctrl-enter'
   artifactsAutoOpen: ArtifactsAutoOpenPreference
   thinkingEffort: ThinkingEffort
+  thinkingEffortOptions?: ThinkingEffortOption[]
   thinkingEffortControlEnabled?: boolean
+  agentModelId?: string
+  agentProfileName?: string
   threadId?: string
   isLoadingHistory?: boolean
   threadLoadError?: ThreadLoadError | null
@@ -132,7 +148,10 @@ export default function ChatArea({
   sendKeyPreference,
   artifactsAutoOpen,
   thinkingEffort,
+  thinkingEffortOptions = [],
   thinkingEffortControlEnabled = true,
+  agentModelId = '',
+  agentProfileName = '',
   threadId,
   isLoadingHistory = false,
   threadLoadError = null,
@@ -149,6 +168,19 @@ export default function ChatArea({
   onHitlRejected,
 }: ChatAreaProps) {
   const { t } = useTranslation()
+  const modelChipTitle = useMemo(() => {
+    if (!agentModelId) {
+      return ''
+    }
+    if (agentProfileName && agentProfileName !== agentModelId) {
+      return `${agentProfileName}\n${agentModelId}`
+    }
+    return agentModelId
+  }, [agentModelId, agentProfileName])
+
+  const showRuntimeBar =
+    Boolean(agentModelId) || (thinkingEffortControlEnabled && thinkingEffortOptions.length > 0)
+
   const [input, setInput] = useState('')
   const [selectedResources, setSelectedResources] = useState<ContextResource[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -325,7 +357,44 @@ export default function ChatArea({
           onRemove={handleRemoveResource}
         />
 
-        <div className="p-2 flex gap-2 items-center">
+        <div className="p-2 space-y-2">
+          {showRuntimeBar ? (
+            <div className="flex flex-wrap items-center gap-2 min-h-8">
+              {agentModelId ? (
+                <Badge
+                  variant="secondary"
+                  className="max-w-[min(100%,20rem)] font-mono font-normal truncate shrink-0"
+                  title={modelChipTitle}
+                >
+                  {agentModelId}
+                </Badge>
+              ) : null}
+              {thinkingEffortControlEnabled && thinkingEffortOptions.length > 0 ? (
+                <Select
+                  value={thinkingEffort}
+                  onValueChange={(value) => onThinkingEffortChange(value as ThinkingEffort)}
+                  disabled={inputDisabled}
+                >
+                  <SelectTrigger
+                    className="h-8 w-auto min-w-[9rem] max-w-[14rem] gap-1.5 px-2.5 text-xs font-normal"
+                    aria-label={t('workbench.thinkingEffort')}
+                  >
+                    <span className="text-muted-foreground shrink-0">{t('workbench.thinkingEffort')}</span>
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent align="start">
+                    {thinkingEffortOptions.map((option) => (
+                      <SelectItem key={option.value} value={option.value} className="text-xs">
+                        {option.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              ) : null}
+            </div>
+          ) : null}
+
+          <div className="flex gap-2 items-center">
           <div className="flex-1 relative">
             <Textarea
               value={input}
@@ -387,36 +456,13 @@ export default function ChatArea({
                   {t('workbench.artifactsAutoOpenAlways')}
                 </DropdownMenuRadioItem>
               </DropdownMenuRadioGroup>
-              <DropdownMenuSeparator />
-              <DropdownMenuLabel
-                className={!thinkingEffortControlEnabled ? 'text-muted-foreground' : undefined}
-                title={
-                  !thinkingEffortControlEnabled ? t('workbench.thinkingEffortUnavailable') : undefined
-                }
-              >
-                {t('workbench.thinkingEffort')}
-              </DropdownMenuLabel>
-              <DropdownMenuRadioGroup
-                value={thinkingEffort}
-                onValueChange={(value) => onThinkingEffortChange(value as ThinkingEffort)}
-              >
-                <DropdownMenuRadioItem value="none">{t('workbench.thinkingNone')}</DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="low" disabled={!thinkingEffortControlEnabled}>
-                  {t('workbench.thinkingLow')}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="medium" disabled={!thinkingEffortControlEnabled}>
-                  {t('workbench.thinkingMedium')}
-                </DropdownMenuRadioItem>
-                <DropdownMenuRadioItem value="high" disabled={!thinkingEffortControlEnabled}>
-                  {t('workbench.thinkingHigh')}
-                </DropdownMenuRadioItem>
-              </DropdownMenuRadioGroup>
             </DropdownMenuContent>
           </DropdownMenu>
           <Button className="min-h-11 px-4" onClick={handleSend} disabled={inputDisabled || !input.trim()}>
             <Send className="w-4 h-4 mr-2" />
             {t('workbench.send')}
           </Button>
+          </div>
         </div>
       </div>
     </div>

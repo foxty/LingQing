@@ -197,10 +197,29 @@ export default function WorkbenchPage() {
   const latestThread = accessibleThreads[0] || null
   const currentThread = sortedThreads.find((thread) => thread.id === currentThreadId) || null
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId)
-  const { thinkingEffortControlEnabled } = useAgentThinkingEffortControl(
-    selectedAgentId,
-    selectedAgent?.config
-  )
+  const {
+    thinkingEffortControlEnabled,
+    thinkingEffortOptions,
+    defaultThinkingEffortValue,
+    agentModelId,
+    agentProfileName,
+  } = useAgentThinkingEffortControl(selectedAgentId, selectedAgent?.config)
+
+  useEffect(() => {
+    if (!defaultThinkingEffortValue) {
+      return
+    }
+    const allowed = new Set(thinkingEffortOptions.map((option) => option.value))
+    const current = preferences.thinkingEffort
+    if (!current || !allowed.has(current)) {
+      updatePreferences({ thinkingEffort: defaultThinkingEffortValue })
+    }
+  }, [
+    defaultThinkingEffortValue,
+    preferences.thinkingEffort,
+    thinkingEffortOptions,
+    updatePreferences,
+  ])
   const agentAccessRevoked =
     agentsLoaded && !agentsFailed && selectedAgentId > 0 && !agents.some((agent) => agent.id === selectedAgentId)
   const sessionTitle = currentThread?.title || t('workbench.untitledThread')
@@ -408,8 +427,13 @@ export default function WorkbenchPage() {
             streamingToolCalls={isStreaming ? streamingToolCalls : []}
             sendKeyPreference={preferences.sendKey}
             artifactsAutoOpen={preferences.artifactsAutoOpen}
-            thinkingEffort={preferences.thinkingEffort}
+            thinkingEffort={
+              preferences.thinkingEffort || defaultThinkingEffortValue || ''
+            }
+            thinkingEffortOptions={thinkingEffortOptions}
             thinkingEffortControlEnabled={thinkingEffortControlEnabled}
+            agentModelId={agentModelId}
+            agentProfileName={agentProfileName}
             threadId={currentThreadId || undefined}
             isLoadingHistory={historyLoading}
             threadLoadError={threadLoadError}

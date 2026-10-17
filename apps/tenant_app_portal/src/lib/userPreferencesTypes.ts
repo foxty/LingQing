@@ -2,4 +2,5 @@
 export type ArtifactsAutoOpenPreference = 'never' | 'on-new' | 'always'
 
 /** Extended LLM reasoning level (default none). */
-export type ThinkingEffort = 'none' | 'low' | 'medium' | 'high'
+/** Selected thinking_effort_options value (wire token) from the active model profile. */
+export type ThinkingEffort = string

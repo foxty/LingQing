@@ -33,6 +33,17 @@ export interface LLMProvider {
   status: string
 }
 
+export interface ModelReasoningOption {
+  name: string
+  value: string
+}
+
+export interface ModelReasoningConfig {
+  supports_thinking?: boolean
+  thinking_effort_options?: ModelReasoningOption[]
+  exposes_thinking_content?: boolean
+}
+
 export interface LLMModelProfile {
   id: number
   provider_id: number
@@ -40,6 +51,7 @@ export interface LLMModelProfile {
   category: ModelProfileCategory
   model_id: string
   params: Record<string, unknown> | null
+  reasoning_config: ModelReasoningConfig | null
   catalog_model_key: string | null
   source: string
 }
@@ -83,8 +95,10 @@ export interface UpdateLLMModelProfileRequest {
   name?: string
   model_id?: string
   params?: Record<string, unknown> | null
+  reasoning_config?: ModelReasoningConfig | null
   catalog_model_key?: string | null
   source?: string
+  reset_runtime_from_catalog?: boolean
 }
 
 export interface UpdateLLMDefaultsRequest {

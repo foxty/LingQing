@@ -8,11 +8,9 @@ from langchain_core.embeddings import Embeddings
 from langchain_core.language_models import BaseChatModel
 
 from apps.shared.infra.llm.thinking import (
-    DEFAULT_THINKING_EFFORT,
-    ThinkingEffort,
     apply_thinking_to_chat_kwargs,
     build_thinking_request_payload,
-    normalize_thinking_effort,
+    coerce_thinking_effort_value,
 )
 from apps.shared.llm_providers.domain import ResolvedModelConfig
 from apps.shared.utils.logger import get_logger
@@ -23,14 +21,14 @@ logger = get_logger(__name__)
 def create_chat_model(
     resolved: ResolvedModelConfig,
     *,
-    thinking_effort: ThinkingEffort | str | None = None,
+    thinking_effort: str | None = None,
 ) -> BaseChatModel:
     """Create a ChatOpenAI instance from a resolved registry profile."""
     params = resolved.params or {}
     temperature = params.get("temperature", 0.1)
     max_tokens = params.get("max_tokens")
     top_p = params.get("top_p")
-    effort = normalize_thinking_effort(thinking_effort)
+    effort, _supports = coerce_thinking_effort_value(thinking_effort, resolved)
 
     logger.info(
         "Creating chat model profile=%s model_id=%s provider=%s thinking_effort=%s",
@@ -78,7 +76,7 @@ def _create_openai_compatible_chat_model(
     temperature: float,
     top_p: float | None,
     max_tokens: int | None,
-    thinking_effort: ThinkingEffort = DEFAULT_THINKING_EFFORT,
+    thinking_effort: str,
 ) -> BaseChatModel:
     from langchain_openai import ChatOpenAI
 

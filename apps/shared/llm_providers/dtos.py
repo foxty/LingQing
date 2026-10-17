@@ -1,18 +1,13 @@
 """DTOs for tenant LLM provider registry API."""
 
 from pydantic import BaseModel, Field
-from typing_extensions import TypedDict
 
 from apps.shared.llm_providers.catalog_dtos import ModelCategory
 from apps.shared.llm_providers.domain import ModelProfileCategory
+from apps.shared.llm_providers.runtime_types import ModelParams, ModelReasoningConfig
 
-
-class ModelParamsDTO(TypedDict, total=False):
-    """Typed model parameters for profile create/update requests."""
-
-    temperature: float
-    max_tokens: int
-    top_p: float
+ModelParamsDTO = ModelParams
+ModelReasoningConfigDTO = ModelReasoningConfig
 
 
 class CreateLLMProviderRequest(BaseModel):
@@ -51,6 +46,7 @@ class CreateLLMModelProfileRequest(BaseModel):
     category: ModelProfileCategory
     model_id: str = Field(..., min_length=1, max_length=255)
     params: ModelParamsDTO | None = None
+    reasoning_config: ModelReasoningConfigDTO | None = None
     catalog_model_key: str | None = None
     source: str = "preset"
 
@@ -59,8 +55,10 @@ class UpdateLLMModelProfileRequest(BaseModel):
     name: str | None = Field(default=None, min_length=1, max_length=100)
     model_id: str | None = Field(default=None, min_length=1, max_length=255)
     params: ModelParamsDTO | None = None
+    reasoning_config: ModelReasoningConfigDTO | None = None
     catalog_model_key: str | None = None
     source: str | None = None
+    reset_runtime_from_catalog: bool = False
 
 
 class LLMModelProfileResponseDTO(BaseModel):
@@ -70,6 +68,7 @@ class LLMModelProfileResponseDTO(BaseModel):
     category: ModelProfileCategory
     model_id: str
     params: dict | None
+    reasoning_config: dict | None = None
     catalog_model_key: str | None
     source: str
 

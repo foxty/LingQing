@@ -128,7 +128,20 @@ export async function getSessionMetrics(sessionId: string): Promise<SessionMetri
   return response.data
 }
 
-export async function fetchThinkingEffortControl(agentId: number): Promise<{ enabled: boolean }> {
+export interface ThinkingEffortOption {
+  name: string
+  value: string
+}
+
+export interface ThinkingEffortControl {
+  enabled: boolean
+  options: ThinkingEffortOption[]
+  default_value: string
+  model_id: string
+  profile_name: string
+}
+
+export async function fetchThinkingEffortControl(agentId: number): Promise<ThinkingEffortControl> {
   const response = await api.get<{ enabled: boolean }>('/chat/thinking-effort-control', {
     params: { agent_id: agentId },
   })

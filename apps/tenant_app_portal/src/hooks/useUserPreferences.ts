@@ -15,7 +15,7 @@ const DEFAULT_PREFERENCES: UserPreferences = {
   sendKey: 'enter',
   lastAgentId: -1,
   artifactsAutoOpen: 'never',
-  thinkingEffort: 'none',
+  thinkingEffort: '',
 }
 
 const STORAGE_KEY = 'user_preferences'

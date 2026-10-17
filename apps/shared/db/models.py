@@ -1198,6 +1198,7 @@ class LLMProvider(Base):
     api_base: Mapped[str] = mapped_column(String(1024), nullable=False)
     embedding_api_base: Mapped[str | None] = mapped_column(String(1024), nullable=True)
     api_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
@@ -1236,6 +1237,7 @@ class LLMModelProfile(Base):
     category: Mapped[str] = mapped_column(String(20), nullable=False)
     model_id: Mapped[str] = mapped_column(String(255), nullable=False)
     params: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    reasoning_config: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     catalog_model_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     source: Mapped[str] = mapped_column(String(20), nullable=False, default="preset", server_default="preset")
     created_at: Mapped[datetime] = mapped_column(

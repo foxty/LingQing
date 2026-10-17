@@ -128,17 +128,16 @@ async def chat_stream(
     )
 
 
-@router.get("/thinking-effort-control", response_model=dict[str, bool], include_in_schema=False)
+@router.get("/thinking-effort-control", response_model=dict[str, Any], include_in_schema=False)
 async def get_thinking_effort_control(
     agent_id: int = Query(..., description="Agent id for the workbench selection"),
     current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Whether the workbench reasoning effort control applies to this agent's model."""
+    """Thinking effort options from the agent model profile (DB snapshot)."""
     actor = ActorContext(tenant_id=current_user.tenant_id, user_id=current_user.id, user_role=current_user.role)
     chat_service = ChatService(current_user.tenant_id, db)
-    enabled = await chat_service.agent_thinking_effort_control_enabled(agent_id, actor)
-    return {"enabled": enabled}
+    return await chat_service.agent_thinking_effort_control(agent_id, actor)
 
 
 @router.get("/metrics/session/{session_id}", response_model=dict[str, Any], include_in_schema=False)

@@ -5,9 +5,6 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from apps.shared.infra.llm.thinking import DEFAULT_THINKING_EFFORT, ThinkingEffort
-
-
 class SimpleMessage(BaseModel):
     """Simple message model for chat requests (aligned with frontend).
 
@@ -59,9 +56,9 @@ class ChatRequest(BaseModel):
         None,
         description="HITL approve continuation only; reject is handled via HITL API",
     )
-    thinking_effort: ThinkingEffort = Field(
-        default=DEFAULT_THINKING_EFFORT,
-        description="Extended reasoning level when the agent model supports it (default none)",
+    thinking_effort: str | None = Field(
+        default=None,
+        description="Selected thinking_effort_options value from the agent model profile snapshot",
     )
 
 
