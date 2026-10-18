@@ -35,10 +35,12 @@ class Artifact(BaseModel):
 
     @classmethod
     def create_chart(cls, artifact: Any) -> "Artifact":
+        resource_id = getattr(artifact, "resource_id", None)
+        default_url = f"/charts/{resource_id}/image.svg" if resource_id else None
         return cls(
             artifact_type=ArtifactType.CHART,
             id=artifact.id,
-            url=artifact.url or "",
+            url=artifact.url or default_url,
             title=artifact.title or "Chart",
             metadata=cls._metadata(artifact),
         )

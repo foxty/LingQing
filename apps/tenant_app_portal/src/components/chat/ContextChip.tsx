@@ -4,7 +4,7 @@
  */
 
 import { Button } from '@/components/ui/button'
-import { ContextResource } from '@/types'
+import type { AttachedArtifact } from '@/types'
 import {
   BarChart3,
   FileText,
@@ -16,7 +16,7 @@ import {
 } from 'lucide-react'
 
 interface ContextChipProps {
-  resource: ContextResource
+  resource: AttachedArtifact
   onRemove?: () => void
   readOnly?: boolean
   variant?: 'input' | 'message'

@@ -1,4 +1,3 @@
-import DocumentProse from '@/components/DocumentProse'
 import ReportHtmlContent from '@/components/ReportHtmlContent'
 import { MarkdownImage } from '@/components/markdown/MarkdownImage'
 import EmptyState from '@/components/EmptyState'
@@ -43,11 +42,10 @@ i18n.addResourceBundle('zh', 'translation', {
     backToReports: '返回报告列表',
   }
 }, true, true)
-import ReactMarkdown from 'react-markdown'
+import MarkdownDocument from '@/components/markdown/MarkdownDocument'
 import { isValidElement, useMemo, useState, type ReactNode } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { useParams } from 'react-router-dom'
-import remarkGfm from 'remark-gfm'
 import DOMPurify from 'dompurify'
 
 function normalizeTitle(value: string): string {
@@ -165,13 +163,7 @@ function renderReportContent(content: string, format: string, pageTitle: string)
     default: {
       const markdown = stripLeadingMarkdownTitle(preprocessMarkdown(content), pageTitle)
       const components = createMarkdownComponents(pageTitle)
-      return (
-        <DocumentProse className="prose-pre:overflow-x-auto">
-          <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-            {markdown}
-          </ReactMarkdown>
-        </DocumentProse>
-      )
+      return <MarkdownDocument content={markdown} components={components} className="prose-pre:overflow-x-auto" />
     }
   }
 }
