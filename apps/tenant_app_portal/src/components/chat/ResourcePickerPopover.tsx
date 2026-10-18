@@ -9,10 +9,18 @@ import {
   useCallback,
   useEffect,
   useImperativeHandle,
+  useMemo,
   useState,
 } from 'react'
-import { ContextResource } from '@/types'
+import { useTranslation } from 'react-i18next'
+import type { AttachedArtifact } from '@/types'
+import './workbenchChatI18n'
 import { searchArtifactsForMention } from '@/lib/artifactContextApi'
+import {
+  extractMentionSearchTerm,
+  filterUnselectedMentionResults,
+  reduceMentionPickerKeyDown,
+} from '@/lib/chatMention'
 import {
   BarChart3,
   FileSpreadsheet,
@@ -29,7 +37,7 @@ interface ResourcePickerPopoverProps {
   inputValue: string
   open: boolean
   onOpenChange: (open: boolean) => void
-  onSelect: (resource: ContextResource) => void
+  onSelect: (resource: AttachedArtifact) => void
   selectedIds: Set<string>
 }
 
@@ -48,23 +56,23 @@ const ARTIFACT_TYPE_ICONS: Record<string, React.ReactNode> = {
   data_preview: <Table2 className="w-3.5 h-3.5" />,
 }
 
-const ARTIFACT_TYPE_LABELS: Record<string, string> = {
-  dashboard: '看板',
-  chart: '图表',
-  report: '报告',
-  scheduled_task: '定时任务',
-  app: '应用',
-  code: '代码',
-  iframe: '嵌入页',
-  data_preview: '数据预览',
+const ARTIFACT_TYPE_LABEL_KEYS: Record<string, string> = {
+  dashboard: 'workbench.artifactTypeDashboard',
+  chart: 'workbench.artifactTypeChart',
+  report: 'workbench.artifactTypeReport',
+  scheduled_task: 'workbench.artifactTypeScheduledTask',
+  app: 'workbench.artifactTypeApp',
+  code: 'workbench.artifactTypeCode',
+  iframe: 'workbench.artifactTypeIframe',
+  data_preview: 'workbench.artifactTypeDataPreview',
 }
 
-function artifactToContextResource(artifact: {
+function artifactToAttachedArtifact(artifact: {
   id: number
   artifact_type: string
   title: string
   owner_username?: string | null
-}): ContextResource {
+}): AttachedArtifact {
   return {
     artifact_id: artifact.id,
     artifact_type: artifact.artifact_type,
@@ -82,16 +90,20 @@ const ResourcePickerPopover = forwardRef<
   { inputValue, open, onOpenChange, onSelect, selectedIds },
   ref
 ) {
-  const [results, setResults] = useState<ContextResource[]>([])
+  const { t } = useTranslation()
+  const [results, setResults] = useState<AttachedArtifact[]>([])
   const [loading, setLoading] = useState(false)
   const [activeIndex, setActiveIndex] = useState(0)
 
-  const extractSearchTerm = useCallback((value: string): string | null => {
-    const match = value.match(/@([^\s]*)$/)
-    return match ? match[1] : null
-  }, [])
+  const artifactTypeLabels = useMemo(
+    () =>
+      Object.fromEntries(
+        Object.entries(ARTIFACT_TYPE_LABEL_KEYS).map(([type, key]) => [type, t(key)])
+      ),
+    [t]
+  )
 
-  const searchTerm = extractSearchTerm(inputValue) ?? ''
+  const searchTerm = extractMentionSearchTerm(inputValue) ?? ''
 
   useEffect(() => {
     if (!open) {
@@ -104,9 +116,10 @@ const ResourcePickerPopover = forwardRef<
       setLoading(true)
       try {
         const artifacts = await searchArtifactsForMention(searchTerm, 20)
-        const mapped = artifacts
-          .map(artifactToContextResource)
-          .filter((item) => !selectedIds.has(`artifact-${item.artifact_id}`))
+        const mapped = filterUnselectedMentionResults(
+          artifacts.map(artifactToAttachedArtifact),
+          selectedIds
+        )
         setResults(mapped)
         setActiveIndex(0)
       } catch {
@@ -120,7 +133,7 @@ const ResourcePickerPopover = forwardRef<
   }, [open, searchTerm, selectedIds])
 
   const handleSelect = useCallback(
-    (resource: ContextResource) => {
+    (resource: AttachedArtifact) => {
       onSelect(resource)
       onOpenChange(false)
     },
@@ -129,33 +142,31 @@ const ResourcePickerPopover = forwardRef<
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent) => {
-      if (!open) return false
+      const action = reduceMentionPickerKeyDown({
+        open,
+        resultCount: results.length,
+        activeIndex,
+        key: e.key,
+      })
 
-      if (e.key === 'Escape') {
-        e.preventDefault()
+      if (action.type === 'none') {
+        return false
+      }
+
+      e.preventDefault()
+
+      if (action.type === 'close') {
         onOpenChange(false)
         return true
       }
 
-      if (results.length === 0) return false
-
-      if (e.key === 'ArrowDown') {
-        e.preventDefault()
-        setActiveIndex((prev) => (prev + 1) % results.length)
+      if (action.type === 'move') {
+        setActiveIndex(action.nextIndex)
         return true
       }
 
-      if (e.key === 'ArrowUp') {
-        e.preventDefault()
-        setActiveIndex((prev) => (prev - 1 + results.length) % results.length)
-        return true
-      }
-
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        if (results[activeIndex]) {
-          handleSelect(results[activeIndex])
-        }
+      if (action.type === 'select' && results[action.index]) {
+        handleSelect(results[action.index])
         return true
       }
 
@@ -168,7 +179,7 @@ const ResourcePickerPopover = forwardRef<
 
   if (!open) return null
 
-  const groupedResults = results.reduce<Record<string, ContextResource[]>>(
+  const groupedResults = results.reduce<Record<string, AttachedArtifact[]>>(
     (acc, item) => {
       const type = item.artifact_type
       if (!acc[type]) {
@@ -181,7 +192,7 @@ const ResourcePickerPopover = forwardRef<
   )
 
   const typeOrder = Object.keys(groupedResults)
-  const flatItems: { resource: ContextResource; globalIndex: number }[] = []
+  const flatItems: { resource: AttachedArtifact; globalIndex: number }[] = []
   typeOrder.forEach((type) => {
     groupedResults[type].forEach((resource) => {
       flatItems.push({ resource, globalIndex: flatItems.length })
@@ -189,9 +200,13 @@ const ResourcePickerPopover = forwardRef<
   })
 
   return (
-    <div className="absolute bottom-full left-0 right-0 mb-1 z-50 rounded-md border bg-popover text-popover-foreground shadow-md max-h-72 overflow-y-auto">
-      <div className="px-3 py-2 text-xs text-muted-foreground border-b">
-        输入关键词筛选产物，或从列表选择
+    <div
+      role="listbox"
+      aria-label="Attach artifact"
+      className="absolute bottom-full left-2 right-2 z-50 mb-2 max-h-72 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-lg"
+    >
+      <div className="border-b px-3 py-2 text-xs text-muted-foreground">
+        {t('workbench.mentionPickerHint')}
       </div>
       <div className="max-h-60 overflow-y-auto">
         {loading ? (
@@ -200,7 +215,7 @@ const ResourcePickerPopover = forwardRef<
           </div>
         ) : results.length === 0 ? (
           <div className="py-8 text-center text-sm text-muted-foreground">
-            暂无可附加的产物
+            {t('workbench.mentionPickerEmpty')}
           </div>
         ) : (
           <div className="py-1">
@@ -208,7 +223,7 @@ const ResourcePickerPopover = forwardRef<
               <div key={type}>
                 <div className="flex items-center gap-1.5 bg-muted/50 px-3 py-1.5 text-xs font-medium text-muted-foreground">
                   {ARTIFACT_TYPE_ICONS[type] ?? <AppWindow className="w-3.5 h-3.5" />}
-                  {ARTIFACT_TYPE_LABELS[type] || type}
+                  {artifactTypeLabels[type] || type}
                 </div>
                 {groupedResults[type].map((resource) => {
                   const item = flatItems.find(

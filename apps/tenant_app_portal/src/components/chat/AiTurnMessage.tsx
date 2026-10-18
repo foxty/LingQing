@@ -96,17 +96,13 @@ i18n.addResourceBundle('zh', 'translation', {
 }, true, true)
 import { AlertCircle, Bot, Check, ChevronDown, ChevronUp, Copy, Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
-import { copyToClipboard, preprocessMarkdown } from '@/lib/utils'
+import { copyToClipboard } from '@/lib/utils'
 import { AiTurn, TurnProcessItem } from '@/lib/chatTurns'
 import ToolCallTimeline from './ToolCallTimeline'
 import HitlApprovalCard from './HitlApprovalCard'
 import MessageFeedbackButtons from './MessageFeedbackButtons'
-import { MarkdownImage } from '@/components/markdown/MarkdownImage'
+import MarkdownDocument from '@/components/markdown/MarkdownDocument'
 import type { MessageFeedback } from '@/types'
-
-const markdownComponents = { img: MarkdownImage }
 
 type ToolProcessItem = Extract<TurnProcessItem, { type: 'tool' }>
 type ApprovalProcessItem = Extract<TurnProcessItem, { type: 'approval' }>
@@ -295,9 +291,9 @@ export default function AiTurnMessage({
         )}
       </div>
 
-      <div className="flex-1 space-y-1 items-start">
+      <div className="flex min-w-0 flex-1 flex-col items-start space-y-1">
         {showInitialWorkingState ? (
-          <div className="rounded-lg px-4 py-3 max-w-[80%] bg-muted border border-primary/20">
+          <div className="max-w-[min(92%,42rem)] rounded-lg border border-primary/20 bg-muted px-4 py-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>{t('workbench.working')}</span>
               <span className="inline-flex gap-0.5">
@@ -309,7 +305,7 @@ export default function AiTurnMessage({
           </div>
         ) : (
         <div
-          className={`relative rounded-lg px-4 py-3 max-w-[80%] ${
+          className={`relative min-w-0 max-w-[min(92%,42rem)] rounded-lg px-4 py-3 ${
             isError ? 'bg-destructive/5 border border-destructive/20' : 'bg-muted'
           } ${isStreaming ? 'border border-primary/20' : ''}`}
         >
@@ -400,11 +396,7 @@ export default function AiTurnMessage({
                             <div className="text-[10px] text-muted-foreground/80">{itemTime}</div>
                           )}
                         </div>
-                        <div className="prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-pre:my-1">
-                          <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-                            {preprocessMarkdown(item.message.content)}
-                          </ReactMarkdown>
-                        </div>
+                        <MarkdownDocument content={item.message.content} density="compact" />
                       </div>
                     )
                   })}
@@ -439,10 +431,8 @@ export default function AiTurnMessage({
             )}
           </div>
           {hasRealFinalContent ? (
-          <div className="text-sm prose prose-sm max-w-none dark:prose-invert prose-p:my-2 prose-pre:my-2">
-            <ReactMarkdown remarkPlugins={[remarkGfm]} components={markdownComponents}>
-              {preprocessMarkdown(turn.finalMessage.content)}
-            </ReactMarkdown>
+          <div className="min-w-0 text-sm">
+            <MarkdownDocument content={turn.finalMessage.content} density="default" />
             {isStreaming ? (
               <span className="inline-block w-1 h-4 bg-primary ml-1 animate-pulse" />
             ) : null}

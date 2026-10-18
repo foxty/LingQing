@@ -156,9 +156,11 @@
   font-family: var(--font-mono);
 }
 
-.document-prose :where(table) {
-  display: block;
-  overflow-x: auto;
+.markdown-table-scroll {
+  -webkit-overflow-scrolling: touch;
+}
+
+.markdown-table-scroll :where(table) {
   font-variant-numeric: tabular-nums;
 }
 

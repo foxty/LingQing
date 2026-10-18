@@ -32,6 +32,20 @@ function nodeToReact(node: Node, key: string | number): ReactNode {
 
   const element = node as Element
   const tag = element.tagName.toLowerCase()
+  if (tag === 'table') {
+    const children = Array.from(element.childNodes)
+      .map((child, index) => nodeToReact(child, `${key}-${index}`))
+      .filter((child) => child !== null)
+    return (
+      <div key={key} className="markdown-table-scroll my-4 min-w-0 max-w-full overflow-x-auto">
+        {createElement(
+          'table',
+          { className: 'w-max border-collapse text-sm', ...elementProps(element) },
+          ...children
+        )}
+      </div>
+    )
+  }
   if (tag === 'img') {
     return (
       <MarkdownImage

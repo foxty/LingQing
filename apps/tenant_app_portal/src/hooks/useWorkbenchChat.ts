@@ -15,7 +15,7 @@ import {
   toTimestampMs,
 } from '@/lib/workbenchChatUtils'
 import type { SSEMessage } from '@/lib/sse'
-import type { Artifact, ContextResource, Message } from '@/types'
+import type { Artifact, AttachedArtifact, Message } from '@/types'
 
 interface UseWorkbenchChatOptions {
   agentId: number
@@ -204,7 +204,7 @@ export function useWorkbenchChat({
   const handleSendMessage = useCallback(
     async (
       messageText: string,
-      selectedResources: ContextResource[],
+      selectedResources: AttachedArtifact[],
       options?: {
         hidden?: boolean
         hitlProposalId?: string

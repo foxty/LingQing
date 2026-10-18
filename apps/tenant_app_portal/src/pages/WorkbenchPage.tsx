@@ -1,5 +1,6 @@
 import ArtifactsPanel from '@/components/artifacts/ArtifactsPanel'
 import ChatArea from '@/components/chat/ChatArea'
+import '@/components/chat/workbenchChatI18n'
 import ThreadSelector from '@/components/workbench/ThreadSelector'
 import { Button } from '@/components/ui/button'
 import { useArtifacts } from '@/hooks/useArtifacts'
@@ -36,8 +37,6 @@ i18n.addResourceBundle('en', 'translation', {
     viewArtifact: 'View',
     untitledThread: 'Conversation',
     selectAgent: 'Agent',
-    agentAccessRevoked: 'You no longer have access to this agent',
-    agentAccessRevokedDesc: 'This conversation is no longer listed. Start a new one with an agent you can use.',
   },
 }, true, true)
 
@@ -52,8 +51,6 @@ i18n.addResourceBundle('zh', 'translation', {
     viewArtifact: '查看',
     untitledThread: '对话',
     selectAgent: '智能体',
-    agentAccessRevoked: '你已没有此智能体的访问权限',
-    agentAccessRevokedDesc: '此对话已不再列出。请改用你仍可访问的智能体开始新对话。',
   },
 }, true, true)
 
