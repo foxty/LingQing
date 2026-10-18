@@ -18,7 +18,7 @@ i18n.addResourceBundle(
       agentAccessRevoked: 'You no longer have access to this agent',
       agentAccessRevokedDesc:
         'This conversation is no longer listed. Start a new one with an agent you can use.',
-      messagePlaceholder: 'Message…',
+      messagePlaceholder: 'Message… (@ to attach)',
       composerAttachHint: '@ to attach artifacts',
       composerSendHintEnter: 'Enter to send · Shift+Enter for new line',
       composerSendHintCtrlEnter: 'Ctrl+Enter to send · Shift+Enter for new line',
@@ -62,7 +62,7 @@ i18n.addResourceBundle(
       threadLoadFailedDesc: '加载此对话时出错。请重试或开始新对话。',
       agentAccessRevoked: '你已没有此智能体的访问权限',
       agentAccessRevokedDesc: '此对话已不再列出。请改用你仍可访问的智能体开始新对话。',
-      messagePlaceholder: '输入消息…',
+      messagePlaceholder: '输入消息…（@ 附加产物）',
       composerAttachHint: '@ 附加产物',
       composerSendHintEnter: 'Enter 发送 · Shift+Enter 换行',
       composerSendHintCtrlEnter: 'Ctrl+Enter 发送 · Shift+Enter 换行',
