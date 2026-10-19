@@ -11,6 +11,7 @@ from apps.shared.core.exceptions import (
     InternalServiceError,
     ResourceNotFoundError,
     SQLPreviewError,
+    ThreadBusyError,
     ValidationError,
 )
 from apps.shared.core.request_context import (
@@ -69,6 +70,18 @@ def register_exception_handlers(app):
             request=request,
             status_code=409,
             fallback_code="RESOURCE_CONFLICT",
+            message=exc.message,
+            details=exc.details,
+        )
+
+    @app.exception_handler(ThreadBusyError)
+    async def handle_thread_busy(request: Request, exc: ThreadBusyError):
+        ctx = format_request_context(request)
+        logger.info(f"Thread busy: {exc.message} ({ctx})")
+        return _contract_error_response(
+            request=request,
+            status_code=409,
+            fallback_code="THREAD_BUSY",
             message=exc.message,
             details=exc.details,
         )

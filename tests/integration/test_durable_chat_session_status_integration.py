@@ -14,7 +14,7 @@ from sqlalchemy.pool import NullPool
 
 from apps.shared.db.models import ChatMessage, ChatThread, Tenant, TenantMembership, User
 from apps.tenant_app_service.chat.message_repository import MessageRepository
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.server import app
 
 TEST_SECRET_KEY = "test-secret-key"
@@ -210,7 +210,7 @@ async def test_durable_turn_session_status_stale_orphaned_run_returns_completed(
         )
         await db.commit()
 
-        service = ChatService(tenant_id, db)
+        service = ThreadService(tenant_id, db)
         status = await service.get_session_status(thread_id=thread_id, agent_id=agent_id)
         assert status.status == "completed"
         assert status.has_ai_response is False
@@ -237,7 +237,7 @@ async def test_durable_turn_session_status_running_then_completed(durable_chat_s
         )
         await db.commit()
 
-        service = ChatService(tenant_id, db)
+        service = ThreadService(tenant_id, db)
         running = await service.get_session_status(thread_id=thread_id, agent_id=agent_id)
         assert running.status == "running"
         assert running.session_id == session_id
@@ -263,7 +263,7 @@ async def test_durable_turn_session_status_running_then_completed(durable_chat_s
         )
         await db.commit()
 
-        service = ChatService(tenant_id, db)
+        service = ThreadService(tenant_id, db)
         completed = await service.get_session_status(thread_id=thread_id, agent_id=agent_id)
         assert completed.status == "completed"
         assert completed.has_ai_response is True

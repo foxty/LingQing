@@ -25,6 +25,12 @@ class DuplicateResourceError(DomainException):
     pass
 
 
+class ThreadBusyError(DomainException):
+    """Thread already has an in-flight agent turn (409)."""
+
+    pass
+
+
 class ValidationError(DomainException):
     """Business validation failed (400)."""
 

@@ -16,13 +16,28 @@ from tests.slack.slack_event_factory import (
 )
 
 
+async def _wait_for_slack_side_effect(check, *, timeout_seconds: float = 8.0) -> None:
+    deadline = asyncio.get_event_loop().time() + timeout_seconds
+    last_error = None
+    while asyncio.get_event_loop().time() < deadline:
+        try:
+            await check()
+            return
+        except AssertionError as exc:
+            last_error = exc
+            await asyncio.sleep(0.1)
+    if last_error is not None:
+        raise last_error
+    raise AssertionError("Slack side effect not observed before timeout")
+
+
 class TestSlackChannelWebhook:
     @pytest.mark.asyncio
-    async def test_app_mention_in_channel_accepted(self, slack_test_setup):
-        client = slack_test_setup["client"]
-        tenant = slack_test_setup["tenants"]["tenant_a"]
-        signing_secret = slack_test_setup["secrets"]["tenant_a"]
-        fake = slack_test_setup["fake_slack"]
+    async def test_app_mention_in_channel_accepted(self, slack_committed_chat_setup):
+        client = slack_committed_chat_setup["client"]
+        tenant = slack_committed_chat_setup["tenants"]["tenant_a"]
+        signing_secret = slack_committed_chat_setup["secrets"]["tenant_a"]
+        fake = slack_committed_chat_setup["fake_slack"]
         slack_user = f"U_ch_{uuid4().hex[:8]}"
         channel_id = f"C_ch_{uuid4().hex[:8]}"
         fake.register_user(slack_user, email=tenant["admin"].email)
@@ -38,16 +53,18 @@ class TestSlackChannelWebhook:
         body = json.dumps(payload)
         headers = make_slack_signature_headers(signing_secret=signing_secret, body=body)
         resp = await client.post(
-            f"/ingress/{slack_test_setup['endpoint_keys']['tenant_a']}/events",
+            f"/ingress/{slack_committed_chat_setup['endpoint_keys']['tenant_a']}/events",
             content=body,
             headers=headers,
         )
         assert resp.status_code == 200
         assert resp.json()["status"] == "ok"
 
-        await asyncio.sleep(0.5)
-        assert fake.posted_messages, "expected bot to post thinking placeholder in channel thread"
-        assert fake.posted_messages[0]["thread_ts"] == "1700000000.000100"
+        async def _assert_thinking_posted() -> None:
+            assert fake.posted_messages, "expected bot to post thinking placeholder in channel thread"
+            assert fake.posted_messages[0]["thread_ts"] == "1700000000.000100"
+
+        await _wait_for_slack_side_effect(_assert_thinking_posted)
 
     @pytest.mark.asyncio
     async def test_thread_follow_up_without_mention_is_ignored(self, slack_test_setup):
@@ -127,18 +144,15 @@ class TestSlackChannelWebhook:
         fake.posted_messages.clear()
         fake.updated_messages.clear()
 
+        from tests.slack.chat_turn_mock import default_chat_response, patch_slack_chat_turn
+
         chat_calls: dict[str, int] = {"count": 0}
 
-        async def fake_chat(self, request, **kwargs):
+        def on_complete(_self, _request, _user, _prepared, **_kwargs):
             chat_calls["count"] += 1
-            return MagicMock(
-                response=MagicMock(content="ok", message_id="msg_test", session_id="sess_test"),
-            )
+            return default_chat_response()
 
-        monkeypatch.setattr(
-            "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.chat",
-            fake_chat,
-        )
+        patch_slack_chat_turn(on_complete=on_complete)
 
         mention = make_app_mention_event(
             user_id=slack_user,
@@ -204,15 +218,28 @@ class TestSlackChannelWebhook:
         assert resp.json()["status"] == "ignored"
 
     @pytest.mark.asyncio
-    async def test_thread_follow_up_with_mention_continues_existing_channel_thread(self, slack_test_setup):
-        client = slack_test_setup["client"]
-        tenant = slack_test_setup["tenants"]["tenant_a"]
-        signing_secret = slack_test_setup["secrets"]["tenant_a"]
-        fake = slack_test_setup["fake_slack"]
+    async def test_thread_follow_up_with_mention_continues_existing_channel_thread(
+        self, slack_committed_chat_setup, monkeypatch
+    ):
+        client = slack_committed_chat_setup["client"]
+        tenant = slack_committed_chat_setup["tenants"]["tenant_a"]
+        signing_secret = slack_committed_chat_setup["secrets"]["tenant_a"]
+        fake = slack_committed_chat_setup["fake_slack"]
         slack_user = f"U_cont_{uuid4().hex[:8]}"
         channel_id = f"C_cont_{uuid4().hex[:8]}"
         thread_root = "1700000000.000500"
         fake.register_user(slack_user, email=tenant["admin"].email)
+
+        from apps.tenant_app_service.agent_ingress.slack import chat_turn_flow
+
+        prepare_thread_ids: list[str] = []
+        real_prepare = chat_turn_flow.prepare_chat_turn_committed
+
+        async def _track_prepare(tenant_id, request, current_user, **kwargs):
+            prepare_thread_ids.append(request.thread_id)
+            return await real_prepare(tenant_id, request, current_user, **kwargs)
+
+        monkeypatch.setattr(chat_turn_flow, "prepare_chat_turn_committed", _track_prepare)
 
         mention = make_app_mention_event(
             user_id=slack_user,
@@ -225,10 +252,14 @@ class TestSlackChannelWebhook:
             make_event_callback_payload(event=mention, event_id=f"Ev_cont_m_{slack_user}", team_id="T_TENANT_A")
         )
         headers = make_slack_signature_headers(signing_secret=signing_secret, body=mention_body)
-        url = f"/ingress/{slack_test_setup['endpoint_keys']['tenant_a']}/events"
+        url = f"/ingress/{slack_committed_chat_setup['endpoint_keys']['tenant_a']}/events"
         resp1 = await client.post(url, content=mention_body, headers=headers)
         assert resp1.status_code == 200
-        await asyncio.sleep(0.5)
+
+        async def _assert_first_prepare_finished() -> None:
+            assert len(prepare_thread_ids) == 1
+
+        await _wait_for_slack_side_effect(_assert_first_prepare_finished)
         fake.posted_messages.clear()
         fake.updated_messages.clear()
 
@@ -252,8 +283,11 @@ class TestSlackChannelWebhook:
         assert resp2.status_code == 200
         assert resp2.json()["status"] == "ok"
 
-        await asyncio.sleep(0.5)
-        assert fake.posted_messages or fake.updated_messages
+        async def _assert_second_prepare_reuses_thread() -> None:
+            assert len(prepare_thread_ids) == 2
+            assert prepare_thread_ids[0] == prepare_thread_ids[1]
+
+        await _wait_for_slack_side_effect(_assert_second_prepare_reuses_thread)
 
     @pytest.mark.asyncio
     async def test_unbound_user_app_mention_posts_in_thread_error(self, slack_test_setup):

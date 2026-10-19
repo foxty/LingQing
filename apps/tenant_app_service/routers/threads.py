@@ -19,7 +19,6 @@ from apps.shared.db.session import get_db
 from apps.shared.domain.actor import ActorContext
 from apps.shared.schemas.user import UserDTO
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.chat import ChatService
 from apps.tenant_app_service.chat.schemas import (
     ConversationHistoryResponse,
     Message,
@@ -28,6 +27,7 @@ from apps.tenant_app_service.chat.schemas import (
     ThreadResponse,
     ThreadUpdate,
 )
+from apps.tenant_app_service.chat.thread_service import ThreadService
 
 router = APIRouter(prefix="/threads", tags=["threads"], include_in_schema=False)
 
@@ -60,7 +60,7 @@ async def create_thread(
     Returns:
         Created thread metadata
     """
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
 
     thread = await chat_service.create_thread(
         user_id=current_user.id,
@@ -97,7 +97,7 @@ async def list_threads(
     Returns:
         List of threads ordered by updated_at desc
     """
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
     actor = ActorContext(tenant_id=current_user.tenant_id, user_id=current_user.id, user_role=current_user.role)
 
     threads = await chat_service.list_user_threads(current_user.id, agent_id=agent_id, actor=actor)
@@ -136,7 +136,7 @@ async def get_thread(
     Raises:
         HTTPException: If thread not found or unauthorized
     """
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
 
     thread = await chat_service.get_thread(thread_id)
     if not thread:
@@ -177,7 +177,7 @@ async def update_thread(
     Raises:
         HTTPException: If thread not found or unauthorized
     """
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
 
     # Verify thread exists and user owns it
     thread = await chat_service.get_thread(thread_id)
@@ -226,7 +226,7 @@ async def delete_thread(
     Raises:
         HTTPException: If thread not found or unauthorized
     """
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
 
     # Verify thread exists and user owns it
     thread = await chat_service.get_thread(thread_id)
@@ -278,7 +278,7 @@ async def get_thread_messages(
     Raises:
         HTTPException: If thread not found or unauthorized
     """
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
 
     # Verify thread exists and user owns it
     thread = await chat_service.get_thread(thread_id)
@@ -331,7 +331,7 @@ async def get_sub_agent_messages(
     Raises:
         HTTPException: If thread not found or unauthorized
     """
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
 
     # Verify parent thread exists and user owns it
     thread = await chat_service.get_thread(thread_id)
@@ -359,7 +359,7 @@ async def get_tool_call_detail(
     db: AsyncSession = Depends(get_db),
 ):
     """Get a single tool call detail message for lazy-loading tool card details."""
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
 
     thread = await chat_service.get_thread(thread_id)
     if not thread:
@@ -384,7 +384,7 @@ async def get_thread_session_status(
     db: AsyncSession = Depends(get_db),
 ):
     """Get durable session status for polling in-progress agent turns."""
-    chat_service = ChatService(current_user.tenant_id, db)
+    chat_service = ThreadService(current_user.tenant_id, db)
 
     thread = await chat_service.get_thread(thread_id)
     if not thread:

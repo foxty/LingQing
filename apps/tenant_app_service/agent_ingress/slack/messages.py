@@ -32,6 +32,7 @@ class SlackMessageKey(enum.StrEnum):
     CHAT_RESOURCE_NOT_FOUND = "chat_resource_not_found"
     CHAT_VALIDATION_FAILED = "chat_validation_failed"
     CHAT_GENERIC_FAILURE = "chat_generic_failure"
+    THREAD_BUSY = "thread_busy"
     THINKING_PLACEHOLDER = "thinking_placeholder"
     EMPTY_REPLY_FALLBACK = "empty_reply_fallback"
 
@@ -76,6 +77,9 @@ _CATALOG: dict[str, dict[SlackMessageKey, str]] = {
             "Your request could not be processed. Please check your message and try again, or contact your admin."
         ),
         SlackMessageKey.CHAT_GENERIC_FAILURE: ("Sorry, I couldn't process that request. Please try again."),
+        SlackMessageKey.THREAD_BUSY: (
+            "I'm still working on your previous message in this thread. Please wait a moment, then try again."
+        ),
         SlackMessageKey.THINKING_PLACEHOLDER: "🤔 …",
         SlackMessageKey.EMPTY_REPLY_FALLBACK: ("The model returned no visible text. Please try again."),
     },
@@ -112,7 +116,15 @@ def slack_identity_user_message(*, action: str, reason: str | None = None, local
 
 def slack_chat_error_message(exc: Exception, *, locale: str = DEFAULT_LOCALE) -> str:
     """User-facing copy when chat invocation fails."""
-    from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError, ValidationError
+    from apps.shared.core.exceptions import (
+        AuthorizationError,
+        ResourceNotFoundError,
+        ThreadBusyError,
+        ValidationError,
+    )
+
+    if isinstance(exc, ThreadBusyError):
+        return slack_user_message(SlackMessageKey.THREAD_BUSY, locale=locale)
 
     if isinstance(exc, AuthorizationError):
         if exc.message in _AGENT_ACCESS_DENIED_MESSAGES:

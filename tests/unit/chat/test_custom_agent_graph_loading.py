@@ -1,4 +1,4 @@
-"""Unit tests for custom-agent graph loading in ChatService."""
+"""Unit tests for custom-agent graph loading in ChatTurnService."""
 
 from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock
@@ -8,7 +8,7 @@ import pytest
 from apps.shared.domain.types import ABAC_ACTION_READ
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agent_catalog.domain import AgentCapabilityProfile, CustomAgent
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.turn_service import ChatTurnService
 
 
 def _custom_agent(*, agent_id: int = 9001) -> CustomAgent:
@@ -36,7 +36,7 @@ def _custom_agent(*, agent_id: int = 9001) -> CustomAgent:
 @pytest.mark.asyncio
 async def test_get_agent_graph_custom_agent_builds_loaded_config(monkeypatch):
     db = MagicMock()
-    service = ChatService(tenant_id=1, db=db)
+    service = ChatTurnService(tenant_id=1, db=db)
     domain = _custom_agent()
 
     captured: dict = {}

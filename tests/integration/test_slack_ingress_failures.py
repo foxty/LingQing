@@ -76,14 +76,13 @@ class TestSlackIngressFailures:
 
         captured: dict[str, object] = {}
 
-        async def fake_chat(self, request, **kwargs):
+        from tests.slack.chat_turn_mock import patch_slack_chat_turn
+
+        def on_complete(_self, _request, _user, _prepared, **_kwargs):
             captured["called"] = True
             return MagicMock(response=MagicMock(content="welcome back"))
 
-        monkeypatch.setattr(
-            "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.chat",
-            fake_chat,
-        )
+        patch_slack_chat_turn(on_complete=on_complete)
 
         fake.posted_messages.clear()
         await post_slack_dm(slack_test_setup, slack_user=slack_user, wait_seconds=0)

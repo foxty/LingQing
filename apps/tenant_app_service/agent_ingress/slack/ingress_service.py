@@ -1,4 +1,4 @@
-"""Runtime Slack ingress orchestration (events → identity → chat → reply).
+"""Runtime Slack ingress orchestration (events → identity → turn flow → reply).
 
 Portal admin config lives in ``admin_service``; HTTP webhooks in ``ingress_router``.
 """
@@ -9,12 +9,13 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_settings
-from apps.shared.core.exceptions import DomainException
+from apps.shared.core.exceptions import ThreadBusyError
 from apps.shared.db.models import AgentIngressEndpoint
 from apps.shared.external_identity import BindAction
 from apps.shared.schemas.user import UserDTO
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_ingress.slack.access import is_eligible_slack_identity, user_has_chat_access
+from apps.tenant_app_service.agent_ingress.slack.chat_turn_runner import run_slack_chat_turn
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, SlackWebClient
 from apps.tenant_app_service.agent_ingress.slack.domain import (
     SlackMessageEvent,
@@ -40,7 +41,7 @@ from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.token import JwtTokenIssuer
 from apps.tenant_app_service.chat.message_repository import MessageRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.thread_service import ThreadService
 
 logger = get_logger(__name__)
 
@@ -139,40 +140,38 @@ class SlackIngressService:
             message_ts=event.ts,
         )
 
-        thinking = await self.client.chat_post_message(
-            bot_token=bot_token,
-            channel=event.channel_id,
-            text=slack_user_message(SlackMessageKey.THINKING_PLACEHOLDER),
-            thread_ts=reply_thread_ts,
+        chat_request = ChatRequest(
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            message=SimpleMessage(role="human", content=message_text),
+            thread_id=thread_id,
         )
-        thinking_ts = thinking.get("ts") if thinking else None
 
-        message_id: str | None = None
-        session_id: str | None = None
+        async def _post_thinking() -> str | None:
+            thinking = await self.client.chat_post_message(
+                bot_token=bot_token,
+                channel=event.channel_id,
+                text=slack_user_message(SlackMessageKey.THINKING_PLACEHOLDER),
+                thread_ts=reply_thread_ts,
+            )
+            return thinking.get("ts") if thinking else None
+
         try:
-            chat_service = ChatService(tenant_id, self.db)
-            chat_request = ChatRequest(
-                tenant_id=tenant_id,
-                agent_id=agent_id,
-                message=SimpleMessage(role="human", content=message_text),
-                thread_id=thread_id,
-            )
-            response = await chat_service.chat(chat_request, current_user=user_dto, access_token=access_token)
-            message_id = response.response.message_id
-            session_id = response.response.session_id
-            content = response.response.content
-            reply_text = content if isinstance(content, str) else str(content)
-        except DomainException as exc:
-            logger.warning(
-                "Slack chat failed for tenant %s user %s: %s",
+            turn = await run_slack_chat_turn(
                 tenant_id,
-                result.user_id,
-                exc.message,
+                chat_request,
+                user_dto,
+                access_token,
+                post_thinking_placeholder=_post_thinking,
             )
-            reply_text = slack_chat_error_message(exc)
-        except Exception:
-            logger.exception("Slack chat invocation failed for tenant %s user %s", tenant_id, result.user_id)
-            reply_text = slack_user_message(SlackMessageKey.CHAT_GENERIC_FAILURE)
+        except ThreadBusyError as exc:
+            await self._post_ephemeral(bot_token, event, slack_chat_error_message(exc))
+            return
+
+        message_id = turn.message_id
+        session_id = turn.session_id
+        thinking_ts = turn.thinking_ts
+        reply_text = turn.reply_text
 
         reply_text = ensure_slack_reply_text(reply_text)
         settings = get_settings()
@@ -315,8 +314,8 @@ class SlackIngressService:
     ) -> tuple[str, int]:
         """Reuse the ingress link, rebinding when the chat thread is missing or agent changed."""
         agent_id = endpoint.agent_id
-        chat_service = ChatService(tenant_id, self.db)
-        thread = await chat_service.get_thread(mapping.chat_thread_id)
+        thread_service = ThreadService(tenant_id, self.db)
+        thread = await thread_service.get_thread(mapping.chat_thread_id)
         if thread is None or thread.agent_id != agent_id:
             new_thread = await self._create_slack_thread(
                 tenant_id=tenant_id,
@@ -346,8 +345,8 @@ class SlackIngressService:
             title = f"Slack DM with {event.user_id}"
         else:
             title = f"Slack channel thread {mapping_ts or event.channel_id}"
-        chat_service = ChatService(tenant_id, self.db)
-        return await chat_service.create_thread(
+        thread_service = ThreadService(tenant_id, self.db)
+        return await thread_service.create_thread(
             user_id=user_id,
             agent_id=agent_id,
             title=title,
