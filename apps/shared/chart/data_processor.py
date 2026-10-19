@@ -4,8 +4,31 @@ Extracted from the agent chart tool so they can be shared by the Plotly SVG
 renderer, future export pipelines, and tests without importing Plotly.
 """
 
+import re
 from numbers import Number
 from typing import Any, Dict, List
+
+_FULL_CALENDAR_DATE = re.compile(
+    r"^\d{4}-\d{1,2}-\d{1,2}(?:[ T]\d{1,2}:\d{1,2}(?::\d{1,2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?)?$"
+)
+
+
+def is_full_calendar_date(value: Any) -> bool:
+    """True when value is YYYY-MM-DD (optional time / timezone suffix)."""
+    if value is None:
+        return False
+    return bool(_FULL_CALENDAR_DATE.match(str(value).strip()))
+
+
+def plotly_xaxis_type_kwargs(x_values: List[Any]) -> Dict[str, str]:
+    """Choose Plotly x-axis type so partial dates (MM-DD) are not parsed as years."""
+    if not x_values:
+        return {}
+    if all(is_full_calendar_date(v) for v in x_values):
+        return {"type": "date"}
+    if all(isinstance(v, (int, float)) and not isinstance(v, bool) for v in x_values):
+        return {}
+    return {"type": "category"}
 
 
 def coerce_numeric_value(value: Any) -> float | None:

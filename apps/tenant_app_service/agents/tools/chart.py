@@ -50,7 +50,7 @@ async def create_chart_from_structured_data(
     series_keys: List[str] | None = None,
     z_key: str | None = None,
     stacked: bool = False,
-    config: RunnableConfig | None = None,
+    config: RunnableConfig = None,
 ) -> ToolResult:
     """Create a chart (SVG) using Plotly from structured data.
 
@@ -131,6 +131,7 @@ async def create_chart_from_structured_data(
         return ToolResult.success({"markdown": markdown})
 
     except ValueError as e:
+        logger.warning("Structured chart tool failed (validation/context): %s", e)
         return ToolResult.error_result(
             code="CHART_RUNTIME_CONTEXT_REQUIRED",
             message=str(e),

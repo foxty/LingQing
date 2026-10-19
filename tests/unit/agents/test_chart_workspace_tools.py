@@ -6,11 +6,48 @@ import pandas as pd
 import pytest
 
 from apps.shared.chart.types import ChartRenderResult
-from apps.tenant_app_service.agents.tools.chart import create_chart_from_sql
+from apps.tenant_app_service.agents.tools.chart import create_chart_from_sql, create_chart_from_structured_data
 from apps.tenant_app_service.agents.tools.tool_result import ToolResultStatus
 from apps.tenant_app_service.agents.tools.workspace import create_materialized_view, join_cross_datasource
 
 PNG = b"\x89PNG\r\n\x1a\n"
+
+
+@pytest.mark.asyncio
+async def test_create_chart_from_structured_data_injects_runtime_config(monkeypatch, runnable_config):
+    render_kwargs: dict = {}
+
+    def _fake_render_chart(**kwargs):
+        render_kwargs.update(kwargs)
+        return ChartRenderResult(svg_bytes=b"<svg/>", png_bytes=PNG, title=kwargs.get("title", "Chart"))
+
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.render_chart", _fake_render_chart)
+
+    async def _fake_register(**kwargs):
+        return "\n\n![Monthly](http://127.0.0.1:8000/charts/2/image.svg)\n\n"
+
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart._register_agent_chart", _fake_register)
+
+    result = await create_chart_from_structured_data.ainvoke(
+        {
+            "chart_type": "bar",
+            "data": '[{"month":"Jan","sales":100}]',
+            "title": "Monthly",
+            "x_key": "month",
+            "y_key": "sales",
+        },
+        config=runnable_config,
+    )
+
+    payload = json.loads(result.content)
+    assert result.status == ToolResultStatus.SUCCESS
+    assert "/charts/2/image.svg" in payload["markdown"]
+    assert render_kwargs["title"] == "Monthly"
+
+
+@pytest.mark.asyncio
+async def test_create_chart_from_structured_data_schema_hides_config():
+    assert "config" not in create_chart_from_structured_data.args_schema.model_fields
 
 
 @pytest.mark.asyncio

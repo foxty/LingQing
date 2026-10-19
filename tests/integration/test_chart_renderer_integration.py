@@ -34,6 +34,20 @@ class TestRenderChartSVGGeneration:
         )
         assert b"<svg" in result.svg_bytes
 
+    def test_render_long_title_visible_in_svg(self):
+        title = "Order Intake by Country — Last Week vs Prior Week (WoW)"
+        data = '[{"country":"US","sales":100},{"country":"CN","sales":200}]'
+        result = render_chart(
+            chart_type="bar",
+            data=data,
+            title=title,
+            x_key="country",
+            y_key="sales",
+        )
+        svg_content = result.svg_bytes.decode("utf-8")
+        assert "Order Intake" in svg_content
+        assert "Prior Week" in svg_content
+
     def test_render_empty_data_raises(self):
         with pytest.raises(ValueError, match="No data provided"):
             render_chart(chart_type="bar", data="[]", title="Empty")

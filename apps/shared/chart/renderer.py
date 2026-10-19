@@ -21,6 +21,7 @@ from apps.shared.chart.data_processor import (
     format_value_labels,
     handle_duplicate_x_values,
     pivot_long_to_wide,
+    plotly_xaxis_type_kwargs,
 )
 from apps.shared.chart.types import ChartRenderResult
 from apps.shared.utils.logger import get_logger
@@ -29,6 +30,59 @@ logger = get_logger(__name__)
 
 # Kaleido PNG scale for the companion raster written beside each SVG.
 _CHART_PNG_EXPORT_SCALE = 2
+_TITLE_WRAP_CHARS = 52
+
+
+def _build_title_layout(title: str, *, has_legend: bool = False) -> tuple[dict, int]:
+    """Wrap long titles and reserve enough top margin for Kaleido export."""
+    text = title.strip()
+    words = text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for word in words:
+        extra = len(word) + (1 if current else 0)
+        if current and current_len + extra > _TITLE_WRAP_CHARS:
+            lines.append(" ".join(current))
+            current = [word]
+            current_len = len(word)
+        else:
+            current.append(word)
+            current_len += extra
+    if current:
+        lines.append(" ".join(current))
+    if len(lines) > 1:
+        text = "<br>".join(lines)
+
+    plain_len = len(title)
+    font_size = 22
+    if plain_len > 72:
+        font_size = 16
+    elif plain_len > 48:
+        font_size = 18
+
+    line_count = max(1, len(lines))
+    top_margin = 100 + (line_count - 1) * 28 + (44 if has_legend else 0)
+
+    return (
+        {
+            "text": f"<b>{text}</b>",
+            "font": dict(size=font_size, color="#2c3e50", family="Arial, sans-serif"),
+            "x": 0.5,
+            "xanchor": "center",
+            "yanchor": "top",
+        },
+        top_margin,
+    )
+
+
+def _xaxis(title_text: str, x_values: List[Any] | None, **extra: Any) -> dict:
+    axis = {
+        "title": dict(text=f"<b>{title_text}</b>", font=dict(size=14)),
+        **plotly_xaxis_type_kwargs(x_values or []),
+        **extra,
+    }
+    return axis
 
 
 def render_chart(
@@ -434,15 +488,12 @@ def _create_single_series_figure(
     else:
         raise ValueError(f"Unsupported chart type: {chart_type}")
 
+    title_layout, top_margin = _build_title_layout(title)
     fig.update_layout(
-        title=dict(
-            text=f"<b>{title}</b>",
-            font=dict(size=22, color="#2c3e50", family="Arial, sans-serif"),
-            x=0.5,
-            xanchor="center",
-        ),
-        xaxis=dict(
-            title=dict(text=f"<b>{x_label}</b>", font=dict(size=14)),
+        title=title_layout,
+        xaxis=_xaxis(
+            x_label,
+            x_values,
             showgrid=True,
             gridcolor="rgba(200, 200, 200, 0.2)",
             linecolor="rgba(200, 200, 200, 0.5)",
@@ -469,8 +520,9 @@ def _create_single_series_figure(
         showlegend=False,
         plot_bgcolor="rgba(250, 250, 250, 0.5)",
         paper_bgcolor="white",
-        margin=dict(l=90, r=90, t=120, b=120),
+        margin=dict(l=90, r=90, t=top_margin, b=120),
         height=600,
+        width=960,
         font=dict(family="Arial, sans-serif", size=12, color="#2c3e50"),
         hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor="#667eea"),
     )
@@ -541,10 +593,12 @@ def _create_multi_series_figure(
     elif chart_type == "grouped_bar":
         fig.update_layout(barmode="group")
 
+    title_layout, top_margin = _build_title_layout(title, has_legend=True)
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=22, color="#2c3e50"), x=0.5, xanchor="center"),
-        xaxis=dict(
-            title=dict(text=f"<b>{x_label}</b>", font=dict(size=14)),
+        title=title_layout,
+        xaxis=_xaxis(
+            x_label,
+            x_values,
             showgrid=True,
             gridcolor="rgba(200, 200, 200, 0.2)",
             tickangle=-45 if len(x_values) > 6 else 0,
@@ -558,8 +612,9 @@ def _create_multi_series_figure(
         hovermode="closest",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=120, b=100),
+        margin=dict(l=80, r=40, t=top_margin, b=100),
         height=600,
+        width=960,
     )
     return fig
 
@@ -605,10 +660,12 @@ def _create_multi_area_figure(
             )
         )
 
+    title_layout, top_margin = _build_title_layout(title, has_legend=True)
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=22, color="#2c3e50"), x=0.5, xanchor="center"),
-        xaxis=dict(
-            title=dict(text=f"<b>{x_label}</b>", font=dict(size=14)),
+        title=title_layout,
+        xaxis=_xaxis(
+            x_label,
+            x_values,
             showgrid=True,
             gridcolor="rgba(200, 200, 200, 0.2)",
             tickangle=-45 if len(x_values) > 6 else 0,
@@ -624,8 +681,9 @@ def _create_multi_area_figure(
         hovermode="x unified",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=120, b=100),
+        margin=dict(l=80, r=40, t=top_margin, b=100),
         height=600,
+        width=960,
     )
     return fig
 
@@ -666,13 +724,15 @@ def _create_heatmap_figure(
             colorbar=dict(title="Value", thickness=15, len=0.7),
         )
     )
+    title_layout, top_margin = _build_title_layout(title)
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=22, color="#2c3e50"), x=0.5, xanchor="center"),
-        xaxis=dict(title=dict(text=f"<b>{x_label}</b>", font=dict(size=14)), side="bottom"),
-        yaxis=dict(title=dict(text=f"<b>{y_label}</b>", font=dict(size=14))),
+        title=title_layout,
+        xaxis=_xaxis(x_label, x_values, side="bottom"),
+        yaxis=dict(title=dict(text=f"<b>{y_label}</b>", font=dict(size=14)), type="category"),
         template=theme,
-        margin=dict(l=100, r=100, t=100, b=100),
+        margin=dict(l=100, r=100, t=top_margin, b=100),
         height=600,
+        width=960,
     )
     return fig
 
@@ -726,10 +786,13 @@ def _render_scatter_categorical(
             )
         )
 
+    all_x_vals = [row[x_key] for row in data_list]
+    title_layout, top_margin = _build_title_layout(title, has_legend=True)
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=22, color="#2c3e50"), x=0.5, xanchor="center"),
-        xaxis=dict(
-            title=dict(text=f"<b>{resolved_x_label}</b>", font=dict(size=14)),
+        title=title_layout,
+        xaxis=_xaxis(
+            resolved_x_label,
+            all_x_vals,
             showgrid=True,
             gridcolor="rgba(200, 200, 200, 0.2)",
             automargin=True,
@@ -744,8 +807,9 @@ def _render_scatter_categorical(
         hovermode="closest",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=120, b=100),
+        margin=dict(l=80, r=40, t=top_margin, b=100),
         height=600,
+        width=960,
         font=dict(family="Arial, sans-serif", size=12, color="#2c3e50"),
         hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif"),
     )
