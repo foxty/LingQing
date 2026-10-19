@@ -27,6 +27,8 @@ from apps.tenant_app_service.chat.thread_turn import (
 )
 from apps.tenant_app_service.server import app
 from tests.integration.helpers.committed_chat_setup import seed_running_human_turn
+from tests.integration.helpers.slow_agent_turn import patch_fast_agent_graph, patch_in_flight_agent_graph
+from tests.slack.committed_turn_sessions import patch_committed_app_db_session
 from tests.slack.fake_slack import make_slack_signature_headers
 from tests.slack.slack_event_factory import make_app_mention_event, make_event_callback_payload
 
@@ -366,6 +368,221 @@ async def test_slack_mention_while_thread_busy_posts_ephemeral_only(
             )
         )
     assert human_count_after == human_count_before
+
+
+def _chat_post_body(committed_chat_setup: dict, *, content: str) -> dict:
+    return {
+        "tenant_id": committed_chat_setup["tenant_id"],
+        "agent_id": committed_chat_setup["agent_id"],
+        "thread_id": committed_chat_setup["thread_id"],
+        "message": {"role": "human", "content": content},
+    }
+
+
+@pytest.mark.asyncio
+async def test_overlapping_post_chat_rejects_second_while_first_in_flight(
+    committed_chat_setup: dict, monkeypatch
+):
+    import httpx
+
+    from apps.tenant_app_service.server import app
+
+    in_flight = asyncio.Event()
+    release = asyncio.Event()
+    patch_in_flight_agent_graph(monkeypatch, in_flight=in_flight, release=release)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        first_task = asyncio.create_task(
+            client.post(
+                "/chat",
+                headers=committed_chat_setup["owner_headers"],
+                json=_chat_post_body(committed_chat_setup, content="first in flight"),
+            )
+        )
+        await asyncio.wait_for(in_flight.wait(), timeout=15.0)
+
+        second = await client.post(
+            "/chat",
+            headers=committed_chat_setup["owner_headers"],
+            json=_chat_post_body(committed_chat_setup, content="must be rejected"),
+        )
+        assert second.status_code == 409, second.text
+        assert second.json()["code"] == "THREAD_BUSY"
+
+        release.set()
+        first = await asyncio.wait_for(first_task, timeout=15.0)
+        assert first.status_code == 200, first.text
+
+    async with committed_chat_setup["session_local"]() as db:
+        human_count = await db.scalar(
+            select(func.count())
+            .select_from(ChatMessage)
+            .where(
+                ChatMessage.thread_id == committed_chat_setup["thread_id"],
+                ChatMessage.type == "human",
+            )
+        )
+    assert human_count == 1
+
+
+@pytest.mark.asyncio
+async def test_racing_post_chat_admits_only_one_turn(committed_chat_setup: dict, monkeypatch):
+    import httpx
+
+    from apps.tenant_app_service.server import app
+
+    patch_fast_agent_graph(monkeypatch)
+
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        first, second = await asyncio.gather(
+            client.post(
+                "/chat",
+                headers=committed_chat_setup["owner_headers"],
+                json=_chat_post_body(committed_chat_setup, content="race-a"),
+            ),
+            client.post(
+                "/chat",
+                headers=committed_chat_setup["owner_headers"],
+                json=_chat_post_body(committed_chat_setup, content="race-b"),
+            ),
+        )
+
+    statuses = sorted([first.status_code, second.status_code])
+    assert statuses == [200, 409], (first.text, second.text)
+    for response in (first, second):
+        if response.status_code == 409:
+            assert response.json()["code"] == "THREAD_BUSY"
+
+    async with committed_chat_setup["session_local"]() as db:
+        human_count = await db.scalar(
+            select(func.count())
+            .select_from(ChatMessage)
+            .where(
+                ChatMessage.thread_id == committed_chat_setup["thread_id"],
+                ChatMessage.type == "human",
+            )
+        )
+    assert human_count == 1
+
+
+@pytest.mark.asyncio
+async def test_overlapping_slack_mentions_reject_second_while_first_in_flight(
+    slack_committed_chat_setup: dict, monkeypatch
+):
+    in_flight = asyncio.Event()
+    release = asyncio.Event()
+    patch_in_flight_agent_graph(monkeypatch, in_flight=in_flight, release=release)
+
+    session_factory = slack_committed_chat_setup["session_factory"]
+    patch_committed_app_db_session(monkeypatch, session_factory)
+
+    client = slack_committed_chat_setup["client"]
+    tenant = slack_committed_chat_setup["tenants"]["tenant_a"]
+    signing_secret = slack_committed_chat_setup["secrets"]["tenant_a"]
+    fake = slack_committed_chat_setup["fake_slack"]
+    slack_user = f"U_overlap_{uuid4().hex[:8]}"
+    channel_id = f"C_overlap_{uuid4().hex[:8]}"
+    thread_root = "1700000000.003300"
+    fake.register_user(slack_user, email=tenant["admin"].email)
+    fake.posted_messages.clear()
+    fake.ephemeral_messages.clear()
+
+    url = f"/ingress/{slack_committed_chat_setup['endpoint_keys']['tenant_a']}/events"
+
+    async def _wait_for_in_flight(*, timeout_seconds: float = 15.0) -> None:
+        deadline = asyncio.get_event_loop().time() + timeout_seconds
+        while asyncio.get_event_loop().time() < deadline:
+            if in_flight.is_set():
+                return
+            await asyncio.sleep(0.05)
+        pytest.fail("first Slack turn never reached agent invoke")
+
+    def _mention_payload(
+        *,
+        text: str,
+        event_id: str,
+        ts: str,
+        thread_ts: str | None = None,
+    ) -> tuple[str, dict]:
+        event = make_app_mention_event(
+            user_id=slack_user,
+            channel_id=channel_id,
+            text=text,
+            team_id="T_TENANT_A",
+            thread_ts=thread_ts,
+            ts=ts,
+        )
+        body = json.dumps(
+            make_event_callback_payload(event=event, event_id=event_id, team_id="T_TENANT_A")
+        )
+        headers = make_slack_signature_headers(signing_secret=signing_secret, body=body)
+        return body, headers
+
+    body1, headers1 = _mention_payload(
+        text="<@UBOT> start overlap",
+        event_id=f"Ev_overlap_1_{uuid4().hex[:8]}",
+        ts=thread_root,
+    )
+    first_webhook = asyncio.create_task(client.post(url, content=body1, headers=headers1))
+    await _wait_for_in_flight()
+
+    tenant_id = tenant["tenant"].id
+
+    async with session_factory() as db:
+        repo = SlackRepository(db)
+        endpoint = await repo.get_endpoint(tenant_id)
+        assert endpoint is not None
+        link = await repo.get_thread_link(
+            tenant_id,
+            channel_id,
+            thread_root,
+            endpoint_id=endpoint.id,
+        )
+        assert link is not None
+        chat_thread_id = link.chat_thread_id
+        human_count_before = await db.scalar(
+            select(func.count())
+            .select_from(ChatMessage)
+            .where(
+                ChatMessage.thread_id == chat_thread_id,
+                ChatMessage.type == "human",
+            )
+        )
+
+    body2, headers2 = _mention_payload(
+        text="<@UBOT> overlap while running",
+        event_id=f"Ev_overlap_2_{uuid4().hex[:8]}",
+        ts="1700000000.003301",
+        thread_ts=thread_root,
+    )
+    second_webhook = asyncio.create_task(client.post(url, content=body2, headers=headers2))
+
+    expected = slack_user_message(SlackMessageKey.THREAD_BUSY)
+    deadline = asyncio.get_event_loop().time() + 8.0
+    while asyncio.get_event_loop().time() < deadline:
+        if any(expected in m["text"] for m in fake.ephemeral_messages):
+            break
+        await asyncio.sleep(0.1)
+    else:
+        pytest.fail("expected THREAD_BUSY ephemeral for overlapping Slack mention")
+
+    release.set()
+    resp1, resp2 = await asyncio.gather(first_webhook, second_webhook)
+    assert resp1.status_code == 200
+    assert resp2.status_code == 200
+
+    async with session_factory() as db:
+        human_count_after = await db.scalar(
+            select(func.count())
+            .select_from(ChatMessage)
+            .where(
+                ChatMessage.thread_id == chat_thread_id,
+                ChatMessage.type == "human",
+            )
+        )
+    assert human_count_after == human_count_before == 1
 
 
 @pytest.mark.asyncio
