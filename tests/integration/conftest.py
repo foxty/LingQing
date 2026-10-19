@@ -353,6 +353,7 @@ async def slack_test_setup(pg_async_db_session: AsyncSession, monkeypatch):
     from tests.slack.session_factory import build_serializing_savepoint_sessions
 
     connection = await pg_async_db_session.connection()
+    pg_url = pg_async_db_session.bind.engine.url.render_as_string(hide_password=False)
     TestSessionLocal, override_get_db, fake_app_db_session = build_serializing_savepoint_sessions(
         connection
     )
@@ -495,6 +496,7 @@ async def slack_test_setup(pg_async_db_session: AsyncSession, monkeypatch):
             await seed_session.commit()
 
     setup["session_factory"] = TestSessionLocal
+    setup["pg_url"] = pg_url
 
     import httpx
 

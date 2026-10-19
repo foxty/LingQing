@@ -38,7 +38,8 @@ async def test_upsert_updates_existing_row():
 
 @pytest.mark.asyncio
 async def test_upsert_inserts_new_row_when_missing():
-    db = AsyncMock()
+    db = MagicMock()
+    db.flush = AsyncMock()
     repo = MessageFeedbackRepository(db)
     repo.get_by_user_and_message = AsyncMock(return_value=None)
 
