@@ -292,6 +292,43 @@ async def test_truncated_cell_adds_canvas_context():
 
 
 @pytest.mark.asyncio
+async def test_invalid_slack_file_error_triggers_mrkdwn_fallback():
+    slack = _SlackStub(invalid_blocks=True)
+
+    def _reject_slack_file(*_args, **_kwargs):
+        if not slack._rejected:
+            slack._rejected = True
+            raise SlackApiError(
+                "invalid",
+                {
+                    "ok": False,
+                    "error": "invalid_blocks",
+                    "response_metadata": {
+                        "messages": ["[ERROR] invalid slack file [json-pointer:/blocks/0/slack_file]"]
+                    },
+                },
+            )
+        return {"ok": True}
+
+    chat_update = AsyncMock(side_effect=_reject_slack_file)
+    slack.chat_update = chat_update  # type: ignore[method-assign]
+    text = "Hello **world**"
+
+    await deliver_markdown_to_slack(
+        client=slack,
+        bot_token="xoxb-test",
+        channel_id="C1",
+        markdown=text,
+        message_id=None,
+        thread_ts=None,
+        update_ts="9.9",
+        image_fetcher=_no_fetch,
+    )
+
+    assert chat_update.await_count == 2
+
+
+@pytest.mark.asyncio
 async def test_invalid_blocks_retries_as_mrkdwn():
     slack = _SlackStub(invalid_blocks=True)
     text = "| Name | Role |\n| --- | --- |\n| Ada | Admin |"

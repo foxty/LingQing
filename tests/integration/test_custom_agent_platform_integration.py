@@ -13,7 +13,7 @@ from apps.shared.db.models import Agent, Tenant, User
 from apps.shared.domain.actor import ActorContext
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.runtime_capability import build_agent_capability_profile
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.turn_service import ChatTurnService
 
 pytestmark = pytest.mark.integration
 
@@ -123,7 +123,7 @@ async def test_get_agent_graph_custom_agent_passes_spec_tool_limits(async_db_ses
         captured["config"] = config
         return object()
 
-    service = ChatService(tenant_id=tenant.id, db=async_db_session)
+    service = ChatTurnService(tenant_id=tenant.id, db=async_db_session)
     monkeypatch.setattr(service.agent_pool, "get_or_create_agent", capture_get_or_create)
 
     current_user = UserDTO(

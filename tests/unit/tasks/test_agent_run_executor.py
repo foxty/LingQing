@@ -59,34 +59,30 @@ async def test_execute_agent_run_task_returns_context(monkeypatch):
         async def __aexit__(self, *args):
             pass
 
-    class FakeChatService:
-        def __init__(self, tenant_id, db):
-            self.tenant_id = tenant_id
-
-        async def run_headless(self, **kwargs):
-            assert kwargs["user_id"] == 2
-            assert kwargs["agent_id"] == 10
-            assert kwargs["message"] == "Summarize docs"
-            assert kwargs["origin_thread_id"] == "thread_abc"
-            assert kwargs["task_name"] == "agent task"
-            assert "thread_mode" not in kwargs
-            return ChatResponse(
-                response=Message(
-                    role="ai",
-                    content="Summary complete.",
-                    agent_id=10,
-                    thread_id="thread_abc",
-                    session_id="session_xyz",
-                ),
+    async def fake_run_headless_chat_turn(tenant_id, db, **kwargs):
+        assert tenant_id == 1
+        assert kwargs["user_id"] == 2
+        assert kwargs["agent_id"] == 10
+        assert kwargs["message"] == "Summarize docs"
+        assert kwargs["origin_thread_id"] == "thread_abc"
+        assert kwargs["task_name"] == "agent task"
+        return ChatResponse(
+            response=Message(
+                role="ai",
+                content="Summary complete.",
                 agent_id=10,
-                tenant_id=1,
-            )
+                thread_id="thread_abc",
+                session_id="session_xyz",
+            ),
+            agent_id=10,
+            tenant_id=1,
+        )
 
     monkeypatch.setattr("apps.tenant_app_service.tasks.agent_run_executor.app_db_session", FakeSession)
     _patch_executor_auth(monkeypatch)
     monkeypatch.setattr(
-        "apps.tenant_app_service.tasks.agent_run_executor.ChatService",
-        FakeChatService,
+        "apps.tenant_app_service.tasks.agent_run_executor.run_headless_chat_turn",
+        fake_run_headless_chat_turn,
     )
     deliver_mock = AsyncMock(return_value=True)
     monkeypatch.setattr(
@@ -136,29 +132,25 @@ async def test_execute_agent_run_task_persists_origin_thread_when_missing(monkey
         async def __aexit__(self, *args):
             pass
 
-    class FakeChatService:
-        def __init__(self, tenant_id, db):
-            pass
-
-        async def run_headless(self, **kwargs):
-            assert kwargs["origin_thread_id"] is None
-            return ChatResponse(
-                response=Message(
-                    role="ai",
-                    content="Done.",
-                    agent_id=-1,
-                    thread_id=created_thread_id,
-                    session_id="session_new",
-                ),
+    async def fake_run_headless_chat_turn(tenant_id, db, **kwargs):
+        assert kwargs["origin_thread_id"] is None
+        return ChatResponse(
+            response=Message(
+                role="ai",
+                content="Done.",
                 agent_id=-1,
-                tenant_id=1,
-            )
+                thread_id=created_thread_id,
+                session_id="session_new",
+            ),
+            agent_id=-1,
+            tenant_id=1,
+        )
 
     monkeypatch.setattr("apps.tenant_app_service.tasks.agent_run_executor.app_db_session", FakeSession)
     _patch_executor_auth(monkeypatch)
     monkeypatch.setattr(
-        "apps.tenant_app_service.tasks.agent_run_executor.ChatService",
-        FakeChatService,
+        "apps.tenant_app_service.tasks.agent_run_executor.run_headless_chat_turn",
+        fake_run_headless_chat_turn,
     )
     monkeypatch.setattr(
         "apps.tenant_app_service.tasks.agent_run_executor.deliver_scheduled_agent_run_to_slack",
@@ -219,18 +211,14 @@ async def test_execute_agent_run_task_returns_failure_result(monkeypatch):
         async def __aexit__(self, *args):
             pass
 
-    class FakeChatService:
-        def __init__(self, tenant_id, db):
-            pass
-
-        async def run_headless(self, **_kwargs):
-            raise RuntimeError("chat failed")
+    async def fake_run_headless_chat_turn(tenant_id, db, **_kwargs):
+        raise RuntimeError("chat failed")
 
     monkeypatch.setattr("apps.tenant_app_service.tasks.agent_run_executor.app_db_session", FakeSession)
     _patch_executor_auth(monkeypatch)
     monkeypatch.setattr(
-        "apps.tenant_app_service.tasks.agent_run_executor.ChatService",
-        FakeChatService,
+        "apps.tenant_app_service.tasks.agent_run_executor.run_headless_chat_turn",
+        fake_run_headless_chat_turn,
     )
     deliver_mock = AsyncMock(return_value=True)
     monkeypatch.setattr(
@@ -266,18 +254,14 @@ async def test_execute_agent_run_task_failure_skips_delivery_without_origin_thre
         async def __aexit__(self, *args):
             pass
 
-    class FakeChatService:
-        def __init__(self, tenant_id, db):
-            pass
-
-        async def run_headless(self, **_kwargs):
-            raise RuntimeError("chat failed")
+    async def fake_run_headless_chat_turn(tenant_id, db, **_kwargs):
+        raise RuntimeError("chat failed")
 
     monkeypatch.setattr("apps.tenant_app_service.tasks.agent_run_executor.app_db_session", FakeSession)
     _patch_executor_auth(monkeypatch)
     monkeypatch.setattr(
-        "apps.tenant_app_service.tasks.agent_run_executor.ChatService",
-        FakeChatService,
+        "apps.tenant_app_service.tasks.agent_run_executor.run_headless_chat_turn",
+        fake_run_headless_chat_turn,
     )
     deliver_mock = AsyncMock(return_value=True)
     monkeypatch.setattr(

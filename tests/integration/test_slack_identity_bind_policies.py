@@ -13,8 +13,6 @@ from tests.integration.helpers.ingress_helpers import (
     set_workspace_bind_policy,
     wait_until_background,
 )
-
-
 class TestSlackBindPolicies:
     @pytest.mark.asyncio
     async def test_attach_policy_auto_binds_matching_email(self, slack_test_setup):
@@ -56,14 +54,13 @@ class TestSlackBindPolicies:
         captured: dict[str, object] = {}
         if bind_policy == "jit_create":
 
-            async def fake_chat(self, request, **kwargs):
+            from tests.slack.chat_turn_mock import patch_slack_chat_turn
+
+            def on_complete(_self, _request, _user, _prepared, **_kwargs):
                 captured["called"] = True
                 return MagicMock(response=MagicMock(content="ok"))
 
-            monkeypatch.setattr(
-                "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.chat",
-                fake_chat,
-            )
+            patch_slack_chat_turn(on_complete=on_complete)
 
         await post_slack_dm(slack_test_setup, slack_user=slack_user, team_id=team_id)
 

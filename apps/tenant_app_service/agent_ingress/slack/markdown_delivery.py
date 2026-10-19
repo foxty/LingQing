@@ -146,15 +146,36 @@ async def deliver_markdown_to_slack(
             api_origin=api_origin,
             policy=active,
         )
-        return await _send_messages(
-            client=client,
-            bot_token=bot_token,
-            channel_id=channel_id,
-            messages=fallback,
-            message_id=message_id,
-            thread_ts=thread_ts,
-            update_ts=update_ts,
-        )
+        try:
+            return await _send_messages(
+                client=client,
+                bot_token=bot_token,
+                channel_id=channel_id,
+                messages=fallback,
+                message_id=message_id,
+                thread_ts=thread_ts,
+                update_ts=update_ts,
+            )
+        except SlackApiError as retry_exc:
+            if not _is_invalid_blocks(retry_exc):
+                raise
+            logger.warning(
+                "Slack rejected degraded blocks (%s); sending plain mrkdwn text only.",
+                _slack_response_dict(retry_exc).get("error") or retry_exc,
+            )
+            plain = [
+                SlackOutboundMessage(text=message.text, blocks=[])
+                for message in fallback
+            ]
+            return await _send_messages(
+                client=client,
+                bot_token=bot_token,
+                channel_id=channel_id,
+                messages=plain,
+                message_id=message_id,
+                thread_ts=thread_ts,
+                update_ts=update_ts,
+            )
 
 
 async def build_outbound_messages(
@@ -360,13 +381,11 @@ def _log_plan(
 
 
 def _is_invalid_blocks(exc: SlackApiError) -> bool:
-    response = exc.response
-    if isinstance(response, dict):
-        return response.get("error") == "invalid_blocks"
-    getter = getattr(response, "get", None)
-    if getter is None:
-        return False
-    return getter("error") == "invalid_blocks"
+    detail = _slack_response_dict(exc)
+    if detail.get("error") == "invalid_blocks":
+        return True
+    messages = (detail.get("response_metadata") or {}).get("messages") or []
+    return any("invalid slack file" in str(message).lower() for message in messages)
 
 
 async def _send_messages(

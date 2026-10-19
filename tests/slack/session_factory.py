@@ -1,7 +1,7 @@
 """Savepoint session helpers for Slack integration tests.
 
 Slack ingress runs chat in a background ``app_db_session`` while the HTTP
-request and ChatService session-end work may open additional sessions.
+request and committed chat-turn work may open additional sessions.
 PostgreSQL savepoints are per-connection; concurrent sessions on one connection
 corrupt the stack. Serialize access with a lock while keeping savepoint rollback
 from ``pg_async_db_session``.

@@ -6,6 +6,8 @@ unit/integration tests can mock the HTTP boundary, not domain logic.
 
 from __future__ import annotations
 
+import asyncio
+import time
 from typing import Any, Protocol
 
 from slack_sdk.errors import SlackApiError
@@ -197,8 +199,14 @@ class SlackWebClient:
 
     async def upload_file(self, *, bot_token: str, filename: str, content: bytes) -> str:
         client = AsyncWebClient(token=bot_token)
-        resp = await client.files_upload_v2(filename=filename, content=content)
-        return _file_id(dict(resp.data or {}))
+        resp = await client.files_upload_v2(
+            filename=filename,
+            content=content,
+            request_file_info=True,
+        )
+        file_id = _file_id(dict(resp.data or {}))
+        await wait_for_slack_file_ready(client, file_id)
+        return file_id
 
     async def create_canvas(self, *, bot_token: str, title: str, markdown: str) -> str:
         client = AsyncWebClient(token=bot_token)
@@ -254,6 +262,47 @@ class SlackWebClient:
             return None
         file_obj = dict(resp.data or {}).get("file") or {}
         return file_obj.get("permalink") or file_obj.get("url_private")
+
+
+async def wait_for_slack_file_ready(
+    client: AsyncWebClient,
+    file_id: str,
+    *,
+    timeout_seconds: float = 20.0,
+    poll_interval_seconds: float = 0.25,
+) -> None:
+    """Poll ``files.info`` until Slack finishes processing an upload for Block Kit ``slack_file`` blocks."""
+    deadline = time.monotonic() + timeout_seconds
+    last_error: SlackApiError | None = None
+    while time.monotonic() < deadline:
+        try:
+            resp = await client.files_info(file=file_id)
+        except SlackApiError as exc:
+            last_error = exc
+            payload = _slack_response_dict(exc)
+            if payload.get("error") == "missing_scope":
+                logger.warning(
+                    "Slack bot token is missing files:read; cannot wait for file %s to be ready. "
+                    "Add files:read and reinstall the app, or inline images may fail.",
+                    file_id,
+                )
+                return
+            await asyncio.sleep(poll_interval_seconds)
+            continue
+
+        file_obj = dict(resp.data or {}).get("file") or {}
+        if file_obj.get("mimetype") or file_obj.get("filetype"):
+            return
+        await asyncio.sleep(poll_interval_seconds)
+
+    if last_error is not None:
+        logger.warning(
+            "Timed out waiting for Slack file %s to become ready (last error: %s)",
+            file_id,
+            last_error,
+        )
+    else:
+        logger.warning("Timed out waiting for Slack file %s to become ready", file_id)
 
 
 def _file_id(data: dict[str, Any]) -> str:

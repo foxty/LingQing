@@ -9,7 +9,7 @@ from apps.shared.core.exceptions import AuthorizationError
 from apps.shared.domain.actor import ActorContext
 from apps.tenant_app_service.chat.domain import ThreadDomain
 from apps.tenant_app_service.chat.repository import ThreadRepository
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.thread_service import ThreadService
 
 
 @pytest.fixture
@@ -27,7 +27,7 @@ def thread_repo(mock_db):
 @pytest.fixture
 def chat_service(mock_db):
     """Create chat service with mocked DB."""
-    return ChatService(tenant_id=1, db=mock_db)
+    return ThreadService(tenant_id=1, db=mock_db)
 
 
 @pytest.mark.asyncio

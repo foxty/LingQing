@@ -9,7 +9,7 @@ from datetime import UTC, datetime
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError, ValidationError
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.message_feedback.domain import (
     FEEDBACK_RATING_NEGATIVE,
     FEEDBACK_RATING_POSITIVE,
@@ -48,10 +48,10 @@ class MessageFeedbackService:
         self.tenant_id = tenant_id
         self.db = db
         self.repository = MessageFeedbackRepository(db)
-        self.chat_service = ChatService(tenant_id, db)
+        self.thread_service = ThreadService(tenant_id, db)
 
     async def _ensure_thread_access(self, thread_id: str, user_id: int) -> None:
-        thread = await self.chat_service.get_thread(thread_id)
+        thread = await self.thread_service.get_thread(thread_id)
         if not thread:
             raise ResourceNotFoundError(f"Thread {thread_id} not found")
         if thread.user_id != user_id:
@@ -66,7 +66,7 @@ class MessageFeedbackService:
     async def _resolve_agent_id(self, thread_id: str, message_agent_id: int | None) -> int:
         if message_agent_id is not None:
             return message_agent_id
-        thread = await self.chat_service.get_thread(thread_id)
+        thread = await self.thread_service.get_thread(thread_id)
         if thread is None or thread.agent_id is None:
             raise ValidationError("Unable to resolve agent for feedback")
         return thread.agent_id

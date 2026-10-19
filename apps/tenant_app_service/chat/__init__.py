@@ -1,11 +1,4 @@
-"""Chat module for agent interactions and thread management.
-
-Unified module that handles both conversation state (messages) and
-thread metadata (title, timestamps). Previously split between chat
-and thread modules, now consolidated for better cohesion.
-
-External modules should only import the service layer and public DTOs.
-"""
+"""Chat module for agent interactions and thread management."""
 
 from apps.tenant_app_service.chat.domain import MessageDomain, ThreadDomain
 from apps.tenant_app_service.chat.repository import ThreadRepository
@@ -17,10 +10,12 @@ from apps.tenant_app_service.chat.schemas import (
     ThreadResponse,
     ThreadUpdate,
 )
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.thread_service import ThreadService
+from apps.tenant_app_service.chat.turn_service import ChatTurnService
 
 __all__ = [
-    "ChatService",
+    "ChatTurnService",
+    "ThreadService",
     "MessageDomain",
     "ThreadDomain",
     "ThreadRepository",

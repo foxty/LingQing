@@ -340,9 +340,11 @@ class TestSlackWebhook:
             )
             await seed_session.commit()
 
+        from tests.slack.chat_turn_mock import patch_slack_chat_turn
+
         captured: dict[str, object] = {}
 
-        async def fake_chat(self, request, **kwargs):
+        def on_complete(_self, request, _user, _prepared, **_kwargs):
             captured["thread_id"] = request.thread_id
             captured["agent_id"] = request.agent_id
             return MagicMock(
@@ -353,10 +355,7 @@ class TestSlackWebhook:
                 )
             )
 
-        monkeypatch.setattr(
-            "apps.tenant_app_service.agent_ingress.slack.ingress_service.ChatService.chat",
-            fake_chat,
-        )
+        patch_slack_chat_turn(on_complete=on_complete)
 
         event = make_message_event(
             user_id=slack_user,
@@ -406,7 +405,7 @@ class TestSlackWebhook:
         from sqlalchemy import func, select
 
         from apps.shared.db.models import ChatThread, IngressThreadLink
-        from apps.tenant_app_service.chat.service import ChatService
+        from apps.tenant_app_service.chat.thread_service import ThreadService
         from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 
         tenant = slack_test_setup["tenants"]["tenant_a"]
@@ -444,7 +443,7 @@ class TestSlackWebhook:
             await seed_session.commit()
 
         async with session_factory() as delete_session:
-            deleted = await ChatService(tenant_id, delete_session).delete_thread(chat_thread_id)
+            deleted = await ThreadService(tenant_id, delete_session).delete_thread(chat_thread_id)
             await delete_session.commit()
             assert deleted is True
 

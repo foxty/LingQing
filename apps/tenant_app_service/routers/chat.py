@@ -19,10 +19,11 @@ from apps.shared.db.session import app_db_session, get_db
 from apps.shared.domain.actor import ActorContext
 from apps.shared.observability.service import ObservabilityService
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.chat import ChatService
 from apps.tenant_app_service.chat.adapters import chat_thread_to_domain
 from apps.tenant_app_service.chat.domain import ThreadDomain
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse
+from apps.tenant_app_service.chat.thread_service import ThreadService
+from apps.tenant_app_service.chat.turn_sessions import run_non_stream_chat_turn, stream_chat_turn_events
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -48,9 +49,9 @@ async def _validate_and_get_thread(
     if not thread_id:
         raise ValidationError("thread_id is required. Please create a thread first.")
 
-    chat_service = ChatService(current_user.tenant_id, db)
+    thread_service = ThreadService(current_user.tenant_id, db)
 
-    thread = await chat_service.get_thread(thread_id)
+    thread = await thread_service.get_thread(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
 
@@ -75,12 +76,15 @@ async def chat(
     if request.tenant_id != current_user.tenant_id:
         raise AuthorizationError(f"Access denied. You can only access tenant: {current_user.tenant_id}")
 
-    # Agent invoke still needs a session for memory/HITL. Use one short-lived
-    # app_db_session for validate + invoke instead of Depends(get_db).
     async with app_db_session() as db:
         await _validate_and_get_thread(request.thread_id, current_user, db)
-        chat_service = ChatService(current_user.tenant_id, db)
-        return await chat_service.chat(request, current_user, access_token=credentials.credentials)
+
+    return await run_non_stream_chat_turn(
+        current_user.tenant_id,
+        request,
+        current_user,
+        access_token=credentials.credentials,
+    )
 
 
 async def _stream_chat_events(
@@ -88,15 +92,15 @@ async def _stream_chat_events(
     current_user: UserDTO,
     access_token: str | None,
 ) -> AsyncIterator[str]:
-    """Validate and persist setup, then stream without holding that session."""
+    """Validate thread access, then stream via committed prepare + SSE iteration."""
     async with app_db_session() as db:
         await _validate_and_get_thread(request.thread_id, current_user, db)
-        chat_service = ChatService(current_user.tenant_id, db)
-        prepared = await chat_service.prepare_chat_stream(
-            request, current_user, access_token=access_token
-        )
-    async for item in chat_service.iter_prepared_chat_stream(
-        request, current_user, prepared, access_token=access_token
+
+    async for item in stream_chat_turn_events(
+        current_user.tenant_id,
+        request,
+        current_user,
+        access_token=access_token,
     ):
         yield item
 
@@ -136,8 +140,8 @@ async def get_thinking_effort_control(
 ):
     """Thinking effort options from the agent model profile (DB snapshot)."""
     actor = ActorContext(tenant_id=current_user.tenant_id, user_id=current_user.id, user_role=current_user.role)
-    chat_service = ChatService(current_user.tenant_id, db)
-    return await chat_service.agent_thinking_effort_control(agent_id, actor)
+    thread_service = ThreadService(current_user.tenant_id, db)
+    return await thread_service.agent_thinking_effort_control(agent_id, actor)
 
 
 @router.get("/metrics/session/{session_id}", response_model=dict[str, Any], include_in_schema=False)

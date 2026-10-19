@@ -330,7 +330,7 @@ async def sample_tenant_user_thread(pg_async_db_session):
 
 
 @pytest_asyncio.fixture
-async def slack_test_setup(pg_async_db_session: AsyncSession):
+async def slack_test_setup(pg_async_db_session: AsyncSession, monkeypatch):
     """Set up two tenants with Slack integrations and a fake Slack client.
 
     Yields a dict with:
@@ -353,6 +353,7 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
     from tests.slack.session_factory import build_serializing_savepoint_sessions
 
     connection = await pg_async_db_session.connection()
+    pg_url = pg_async_db_session.bind.engine.url.render_as_string(hide_password=False)
     TestSessionLocal, override_get_db, fake_app_db_session = build_serializing_savepoint_sessions(
         connection
     )
@@ -365,6 +366,14 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
     from apps.shared.db import session as _db_session_module
 
     _db_session_module.app_db_session = fake_app_db_session
+    from apps.tenant_app_service.chat import turn_sessions as turn_sessions_module
+
+    turn_sessions_module.app_db_session = fake_app_db_session
+
+    from apps.tenant_app_service.agent_ingress.slack import chat_turn_runner as chat_turn_runner_module
+    from tests.slack.chat_turn_mock import instant_slack_chat_turn_runner
+
+    chat_turn_runner_module.set_slack_chat_turn_runner(instant_slack_chat_turn_runner)
 
     fake_slack = FakeSlackClient()
 
@@ -487,6 +496,7 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
             await seed_session.commit()
 
     setup["session_factory"] = TestSessionLocal
+    setup["pg_url"] = pg_url
 
     import httpx
 
@@ -496,8 +506,26 @@ async def slack_test_setup(pg_async_db_session: AsyncSession):
         yield setup
 
     app.dependency_overrides.clear()
+    from apps.tenant_app_service.chat import turn_sessions as turn_sessions_module
+
+    chat_turn_runner_module.reset_slack_chat_turn_runner()
+
     if original_app_db_session is not None:
         _db_session_module.app_db_session = original_app_db_session
+        turn_sessions_module.app_db_session = original_app_db_session
+
+
+@pytest_asyncio.fixture
+async def slack_committed_chat_setup(slack_test_setup, monkeypatch):
+    """Slack setup with real prepare/complete on committed sessions (Lane B chat turns)."""
+    from apps.tenant_app_service.agent_ingress.slack import chat_turn_runner as chat_turn_runner_module
+    from tests.slack.chat_turn_mock import patch_slack_chat_turn_complete_only
+    from tests.slack.committed_turn_sessions import patch_committed_turn_sessions
+
+    chat_turn_runner_module.reset_slack_chat_turn_runner()
+    patch_committed_turn_sessions(monkeypatch, slack_test_setup["session_factory"])
+    patch_slack_chat_turn_complete_only(monkeypatch)
+    yield slack_test_setup
 
 
 def make_auth_headers(token: str) -> dict:
@@ -519,6 +547,8 @@ def fake_oidc_adapter(monkeypatch):
     monkeypatch.setattr(SsoLoginService, "__init__", patched_init)
     return fake
 
+
+from tests.integration.helpers.committed_chat_setup import committed_chat_setup  # noqa: E402,F401
 
 # expose the shared helper for slack tests
 from tests.slack.fake_slack import FakeSlackClient  # noqa: E402,F401

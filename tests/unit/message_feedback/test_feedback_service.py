@@ -1,7 +1,7 @@
 """Tests for message feedback service."""
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -12,121 +12,146 @@ from apps.tenant_app_service.message_feedback.domain import (
 )
 from apps.tenant_app_service.message_feedback.service import MessageFeedbackService
 
+_THREAD_GET = "apps.tenant_app_service.message_feedback.service.ThreadService.get_thread"
+
 
 @pytest.mark.asyncio
-async def test_upsert_feedback_validates_rating():
+async def test_upsert_feedback_validates_rating_before_thread_lookup():
     db = AsyncMock()
-    service = MessageFeedbackService(tenant_id=1, db=db)
-    service.chat_service = MagicMock()
-    service.chat_service.get_thread = AsyncMock(return_value=MagicMock(user_id=10))
-
-    with pytest.raises(ValidationError):
-        await service.upsert_feedback(
-            thread_id="thread_a",
-            message_id="msg_a",
-            user_id=10,
-            rating="invalid",  # type: ignore[arg-type]
-        )
+    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
+        service = MessageFeedbackService(tenant_id=1, db=db)
+        with pytest.raises(ValidationError):
+            await service.upsert_feedback(
+                thread_id="thread_a",
+                message_id="msg_a",
+                user_id=10,
+                rating="invalid",  # type: ignore[arg-type]
+            )
+        get_thread.assert_not_awaited()
 
 
 @pytest.mark.asyncio
 async def test_upsert_feedback_requires_ai_message_in_thread():
     db = AsyncMock()
-    service = MessageFeedbackService(tenant_id=1, db=db)
-    service.chat_service = MagicMock()
-    service.chat_service.get_thread = AsyncMock(return_value=MagicMock(user_id=10))
-    service.repository = MagicMock()
-    service.repository.get_ai_message = AsyncMock(return_value=None)
+    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
+        get_thread.return_value = MagicMock(user_id=10)
+        service = MessageFeedbackService(tenant_id=1, db=db)
+        service.repository = MagicMock()
+        service.repository.get_ai_message = AsyncMock(return_value=None)
 
-    with pytest.raises(ResourceNotFoundError):
-        await service.upsert_feedback(
-            thread_id="thread_a",
-            message_id="msg_a",
-            user_id=10,
-            rating=FEEDBACK_RATING_POSITIVE,
-        )
+        with pytest.raises(ResourceNotFoundError):
+            await service.upsert_feedback(
+                thread_id="thread_a",
+                message_id="msg_a",
+                user_id=10,
+                rating=FEEDBACK_RATING_POSITIVE,
+            )
+
+
+@pytest.mark.asyncio
+async def test_upsert_feedback_enforces_thread_owner_via_thread_service():
+    db = AsyncMock()
+    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
+        get_thread.return_value = MagicMock(user_id=99)
+        service = MessageFeedbackService(tenant_id=1, db=db)
+        service.repository = MagicMock()
+        ai_message = MagicMock()
+        ai_message.thread_id = "thread_a"
+        service.repository.get_ai_message = AsyncMock(return_value=ai_message)
+
+        with pytest.raises(AuthorizationError):
+            await service.upsert_feedback(
+                thread_id="thread_a",
+                message_id="msg_a",
+                user_id=10,
+                rating=FEEDBACK_RATING_POSITIVE,
+            )
+        get_thread.assert_awaited_once_with("thread_a")
 
 
 @pytest.mark.asyncio
 async def test_upsert_feedback_persists_rating():
     db = AsyncMock()
-    service = MessageFeedbackService(tenant_id=1, db=db)
-    service.chat_service = MagicMock()
-    service.chat_service.get_thread = AsyncMock(return_value=MagicMock(user_id=10))
+    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
+        get_thread.return_value = MagicMock(user_id=10)
+        service = MessageFeedbackService(tenant_id=1, db=db)
 
-    ai_message = MagicMock()
-    ai_message.thread_id = "thread_a"
-    ai_message.session_id = "session_a"
-    ai_message.agent_id = 5
+        ai_message = MagicMock()
+        ai_message.thread_id = "thread_a"
+        ai_message.session_id = "session_a"
+        ai_message.agent_id = 5
 
-    now = datetime.now(UTC)
-    service.repository = MagicMock()
-    service.repository.get_ai_message = AsyncMock(return_value=ai_message)
-    service.repository.upsert = AsyncMock(
-        return_value=MagicMock(
-            id=1,
-            tenant_id=1,
+        now = datetime.now(UTC)
+        service.repository = MagicMock()
+        service.repository.get_ai_message = AsyncMock(return_value=ai_message)
+        service.repository.upsert = AsyncMock(
+            return_value=MagicMock(
+                id=1,
+                tenant_id=1,
+                thread_id="thread_a",
+                session_id="session_a",
+                message_id="msg_a",
+                agent_id=5,
+                user_id=10,
+                rating=FEEDBACK_RATING_POSITIVE,
+                comment=None,
+                source=FEEDBACK_SOURCE_PORTAL,
+                external_ref=None,
+                created_at=now,
+                updated_at=now,
+            )
+        )
+
+        result = await service.upsert_feedback(
             thread_id="thread_a",
-            session_id="session_a",
             message_id="msg_a",
-            agent_id=5,
             user_id=10,
             rating=FEEDBACK_RATING_POSITIVE,
-            comment=None,
-            source=FEEDBACK_SOURCE_PORTAL,
-            external_ref=None,
-            created_at=now,
-            updated_at=now,
         )
-    )
 
-    result = await service.upsert_feedback(
-        thread_id="thread_a",
-        message_id="msg_a",
-        user_id=10,
-        rating=FEEDBACK_RATING_POSITIVE,
-    )
-
-    assert result.rating == FEEDBACK_RATING_POSITIVE
-    service.repository.upsert.assert_awaited_once()
-    db.commit.assert_not_called()
+        assert result.rating == FEEDBACK_RATING_POSITIVE
+        get_thread.assert_awaited_once_with("thread_a")
+        service.repository.upsert.assert_awaited_once()
+        db.commit.assert_not_called()
 
 
 @pytest.mark.asyncio
 async def test_update_comment_requires_thread_access():
     db = AsyncMock()
-    service = MessageFeedbackService(tenant_id=1, db=db)
-    service.repository = MagicMock()
-    existing_row = MagicMock()
-    existing_row.thread_id = "thread_a"
-    service.repository.get_by_user_and_message = AsyncMock(return_value=existing_row)
-    service.chat_service = MagicMock()
-    service.chat_service.get_thread = AsyncMock(return_value=MagicMock(user_id=99))
+    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
+        get_thread.return_value = MagicMock(user_id=99)
+        service = MessageFeedbackService(tenant_id=1, db=db)
+        service.repository = MagicMock()
+        existing_row = MagicMock()
+        existing_row.thread_id = "thread_a"
+        service.repository.get_by_user_and_message = AsyncMock(return_value=existing_row)
 
-    with pytest.raises(AuthorizationError):
-        await service.update_comment(message_id="msg_a", user_id=10, comment="note")
+        with pytest.raises(AuthorizationError):
+            await service.update_comment(message_id="msg_a", user_id=10, comment="note")
+        get_thread.assert_awaited_once_with("thread_a")
 
 
 @pytest.mark.asyncio
 async def test_resolve_message_context_uses_thread_agent_when_message_has_none():
     db = AsyncMock()
-    service = MessageFeedbackService(tenant_id=1, db=db)
-    service.repository = MagicMock()
-    ai_message = MagicMock()
-    ai_message.thread_id = "thread_a"
-    ai_message.agent_id = None
-    ai_message.session_id = "session_a"
-    ai_message.id = 77
-    service.repository.get_ai_message = AsyncMock(return_value=ai_message)
-    service.chat_service = MagicMock()
-    service.chat_service.get_thread = AsyncMock(return_value=MagicMock(agent_id=5))
+    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
+        get_thread.return_value = MagicMock(agent_id=5)
+        service = MessageFeedbackService(tenant_id=1, db=db)
+        service.repository = MagicMock()
+        ai_message = MagicMock()
+        ai_message.thread_id = "thread_a"
+        ai_message.agent_id = None
+        ai_message.session_id = "session_a"
+        ai_message.id = 77
+        service.repository.get_ai_message = AsyncMock(return_value=ai_message)
 
-    thread_id, agent_id, session_id, db_id = await service.resolve_message_context("msg_a")
+        thread_id, agent_id, session_id, db_id = await service.resolve_message_context("msg_a")
 
-    assert thread_id == "thread_a"
-    assert agent_id == 5
-    assert session_id == "session_a"
-    assert db_id == 77
+        assert thread_id == "thread_a"
+        assert agent_id == 5
+        assert session_id == "session_a"
+        assert db_id == 77
+        get_thread.assert_awaited_once_with("thread_a")
 
 
 @pytest.mark.asyncio

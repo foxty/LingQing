@@ -17,7 +17,7 @@ from apps.tenant_app_service.agent_ingress.slack.scheduled_delivery import (
 )
 from apps.tenant_app_service.agents.agent_run_preflight import preflight_agent_run
 from apps.tenant_app_service.auth.repository import UserRepository
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.headless_turn import run_headless_chat_turn
 
 logger = get_logger(__name__)
 
@@ -78,8 +78,9 @@ async def execute_agent_run_task(task: ScheduledTaskDomain) -> TaskExecutionResu
                 agent_id=agent_id,
             )
 
-            chat_service = ChatService(task.tenant_id, db_session)
-            response = await chat_service.run_headless(
+            response = await run_headless_chat_turn(
+                task.tenant_id,
+                db_session,
                 user_id=task.user_id,
                 agent_id=agent_id,
                 message=task_description,

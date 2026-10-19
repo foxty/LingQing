@@ -7,13 +7,13 @@ import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.chat.service import ChatService
+from apps.tenant_app_service.chat.turn_service import ChatTurnService
 from tests.helpers.artifact_access_fixtures import create_standalone_artifact, create_tenant_with_users
 
 
 @pytest.fixture
 def chat_service():
-    return ChatService(tenant_id=1, db=MagicMock())
+    return ChatTurnService(tenant_id=1, db=MagicMock())
 
 
 @pytest.mark.asyncio
@@ -53,7 +53,7 @@ async def test_inject_selected_artifacts_stamps_human_message(chat_service, monk
 
 @pytest.mark.asyncio
 async def test_inject_message_attachments_prefers_selected_artifact_ids(monkeypatch):
-    service = ChatService(tenant_id=1, db=MagicMock())
+    service = ChatTurnService(tenant_id=1, db=MagicMock())
     captured: list[list[int]] = []
 
     async def _capture(_msgs, ids, *, current_user):
@@ -75,7 +75,7 @@ async def test_inject_message_attachments_prefers_selected_artifact_ids(monkeypa
 
 @pytest.mark.asyncio
 async def test_inject_message_attachments_legacy_single_id(monkeypatch):
-    service = ChatService(tenant_id=1, db=MagicMock())
+    service = ChatTurnService(tenant_id=1, db=MagicMock())
     captured: list[list[int]] = []
 
     async def _capture(_msgs, ids, *, current_user):
@@ -124,7 +124,7 @@ async def test_inject_selected_artifacts_with_real_db(async_db_session):
         resource_id=3001,
         title="Inject Me",
     )
-    service = ChatService(tenant_id=tenant.id, db=async_db_session)
+    service = ChatTurnService(tenant_id=tenant.id, db=async_db_session)
     owner_dto = UserDTO(
         id=owner.id,
         username=owner.username,
