@@ -1,4 +1,4 @@
-import api from './api'
+import api, { getApiErrorMessage, mapFastApiValidationToFields } from './api'
 import type {
   GetTenantUsageEventsParams,
   TenantTokenSummary,
@@ -76,17 +76,44 @@ export interface AgentSkillCatalogItem {
   tools: string[]
 }
 
+export type AgentFormFieldErrors = {
+  name?: string
+  systemPrompt?: string
+}
+
+const AGENT_WRITE_FIELD_LOC: Record<string, keyof AgentFormFieldErrors> = {
+  name: 'name',
+  system_prompt: 'systemPrompt',
+}
+
+export function validateAgentFormFields(
+  name: string,
+  systemPrompt: string,
+  messages: { nameRequired: string; promptRequired: string }
+): AgentFormFieldErrors {
+  const errors: AgentFormFieldErrors = {}
+  if (!name.trim()) {
+    errors.name = messages.nameRequired
+  }
+  if (!systemPrompt.trim()) {
+    errors.systemPrompt = messages.promptRequired
+  }
+  return errors
+}
+
+export function hasAgentFormFieldErrors(errors: AgentFormFieldErrors): boolean {
+  return Boolean(errors.name || errors.systemPrompt)
+}
+
+export function getAgentFormFieldErrors(err: unknown): AgentFormFieldErrors {
+  const data = (err as { response?: { data?: { validation_errors?: unknown; detail?: unknown } } })
+    ?.response?.data
+  const detail = data?.validation_errors ?? data?.detail
+  return mapFastApiValidationToFields(detail, AGENT_WRITE_FIELD_LOC) as AgentFormFieldErrors
+}
+
 export function agentApiErrorMessage(err: unknown, fallback: string): string {
-  const data = (err as { response?: { data?: { message?: unknown; detail?: unknown } } })?.response
-    ?.data
-  if (typeof data?.message === 'string' && data.message.trim()) {
-    return data.message
-  }
-  if (typeof data?.detail === 'string' && data.detail.trim()) {
-    return data.detail
-  }
-  const message = err instanceof Error ? err.message : ''
-  return message || fallback
+  return getApiErrorMessage(err, fallback)
 }
 
 export async function listCatalogAgents(): Promise<CatalogAgent[]> {

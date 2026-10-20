@@ -19,6 +19,7 @@ import { Textarea } from '@/components/ui/textarea'
 import {
   filterAgentSkillIds,
   type AgentCapabilityConfig,
+  type AgentFormFieldErrors,
   type AgentSkillCatalogItem,
 } from '@/lib/agentsApi'
 import { usePlatformCapabilities } from '@/hooks/useAgents'
@@ -67,6 +68,10 @@ const agentFormResources = {
     modelProfile: 'Model',
     modelProfileHint: 'Override the tenant default LLM for this agent.',
     tenantDefaultModel: 'Tenant default',
+    validation: {
+      nameRequired: 'Name is required.',
+      promptRequired: 'System prompt is required.',
+    },
   },
   zh: {
     name: '名称',
@@ -101,6 +106,10 @@ const agentFormResources = {
     modelProfile: '模型',
     modelProfileHint: '覆盖租户默认 LLM，留空则使用租户默认。',
     tenantDefaultModel: '租户默认',
+    validation: {
+      nameRequired: '请填写名称。',
+      promptRequired: '请填写系统提示词。',
+    },
   },
 } as const
 
@@ -123,6 +132,7 @@ type AgentSettingsFormProps = {
   formPrompt: string
   formConfig: AgentCapabilityConfig
   formError: string | null
+  fieldErrors?: AgentFormFieldErrors
   skills: AgentSkillCatalogItem[]
   collections: { id: number; name: string }[]
   dataSources: { id: number; name: string }[]
@@ -158,6 +168,7 @@ export default function AgentSettingsForm({
   formPrompt,
   formConfig,
   formError,
+  fieldErrors = {},
   skills,
   collections,
   dataSources,
@@ -222,6 +233,12 @@ export default function AgentSettingsForm({
 
   return (
     <div className="space-y-4">
+      {formError ? (
+        <Alert variant="destructive">
+          <AlertDescription>{formError}</AlertDescription>
+        </Alert>
+      ) : null}
+
       <SettingsSection title={t('agents.sectionGeneral')} description={t('agents.sectionGeneralDesc')}>
         <div className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
@@ -232,6 +249,7 @@ export default function AgentSettingsForm({
                 value={formName}
                 onChange={(event) => onNameChange(event.target.value)}
                 disabled={readOnly}
+                errorMsg={fieldErrors.name}
               />
             </div>
             <div className="space-y-2">
@@ -276,6 +294,7 @@ export default function AgentSettingsForm({
               disabled={readOnly}
               className="font-mono text-sm"
               placeholder={t('agents.rolePromptPlaceholder')}
+              errorMsg={fieldErrors.systemPrompt}
             />
           </div>
         </div>
@@ -349,12 +368,6 @@ export default function AgentSettingsForm({
         </div>
       </SettingsSection>
 
-      {formError ? (
-        <Alert variant="destructive">
-          <AlertDescription>{formError}</AlertDescription>
-        </Alert>
-      ) : null}
-
       {showFormActions ? (
         <div className="flex justify-end gap-2 pt-2">
           {onCancel ? (
@@ -362,7 +375,11 @@ export default function AgentSettingsForm({
               {t('agents.cancel')}
             </Button>
           ) : null}
-          <Button type="button" onClick={onSave} disabled={!formName.trim() || saving}>
+          <Button
+            type="button"
+            onClick={onSave}
+            disabled={!formName.trim() || !formPrompt.trim() || saving}
+          >
             {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
             {t('agents.save')}
           </Button>
