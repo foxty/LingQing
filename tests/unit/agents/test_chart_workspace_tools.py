@@ -39,15 +39,28 @@ async def test_create_chart_from_structured_data_injects_runtime_config(monkeypa
         config=runnable_config,
     )
 
-    payload = json.loads(result.content)
     assert result.status == ToolResultStatus.SUCCESS
-    assert "/charts/2/image.svg" in payload["markdown"]
+    assert "/charts/2/image.svg" in result.content
+    assert "/charts/2/image.svg" in result.metadata["raw_result"]["markdown"]
     assert render_kwargs["title"] == "Monthly"
 
 
 @pytest.mark.asyncio
 async def test_create_chart_from_structured_data_schema_hides_config():
     assert "config" not in create_chart_from_structured_data.args_schema.model_fields
+
+
+def test_create_chart_from_structured_data_schema_chart_type_enum():
+    schema = create_chart_from_structured_data.args_schema.model_json_schema()
+    chart_type_schema = schema["properties"]["chart_type"]
+    assert set(chart_type_schema["enum"]) == {
+        "bar",
+        "line",
+        "area",
+        "pie",
+        "scatter",
+        "heatmap",
+    }
 
 
 @pytest.mark.asyncio
@@ -97,10 +110,8 @@ async def test_create_chart_from_sql_uses_query_data(monkeypatch, runnable_confi
         config=runnable_config,
     )
 
-    payload = json.loads(result.content)
-
     assert result.status == ToolResultStatus.SUCCESS
-    assert "/charts/1/image.svg" in payload["markdown"]
+    assert "/charts/1/image.svg" in result.content
     assert captured["tenant_id"] == 1
     assert captured["query_kwargs"]["data_source_id"] == 3
     assert captured["query_kwargs"]["actor"].user_id == 123

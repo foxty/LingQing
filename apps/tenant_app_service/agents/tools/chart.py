@@ -12,7 +12,7 @@ from langchain_core.tools import tool
 
 from apps.shared.chart.renderer import render_chart
 from apps.shared.chart.service import ChartService
-from apps.shared.chart.types import ChartRenderResult
+from apps.shared.chart.types import AgentChartInputType, ChartRenderResult
 from apps.shared.data_source import DataSourceService
 from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
 from apps.shared.db.session import app_db_session
@@ -23,6 +23,26 @@ from apps.tenant_app_service.agents.domain import AgentRuntimeContext
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 
 logger = get_logger(__name__)
+
+
+def _exception_detail(exc: BaseException) -> str:
+    """Human-readable exception text for tool errors (LLM-facing)."""
+    msg = str(exc).strip()
+    if msg:
+        return msg
+    if exc.__cause__ is not None:
+        cause_msg = str(exc.__cause__).strip()
+        if cause_msg:
+            return f"{type(exc).__name__}: {cause_msg}"
+    return type(exc).__name__
+
+
+def _chart_tool_success(markdown: str) -> ToolResult:
+    """Return chart markdown as tool content so the LLM and UI render the image."""
+    return ToolResult.success(
+        markdown,
+        metadata={"raw_result": {"markdown": markdown}},
+    )
 
 
 async def _register_agent_chart(*, rendered: ChartRenderResult, runtime: AgentRuntimeContext) -> str:
@@ -39,7 +59,7 @@ async def _register_agent_chart(*, rendered: ChartRenderResult, runtime: AgentRu
 
 @tool
 async def create_chart_from_structured_data(
-    chart_type: str,
+    chart_type: AgentChartInputType,
     data: str,
     title: str,
     x_label: str | None = None,
@@ -55,60 +75,120 @@ async def create_chart_from_structured_data(
     """Create a chart (SVG) using Plotly from structured data.
 
     Args:
-        chart_type: Type of chart — 'bar', 'line', 'pie', 'scatter', 'area', 'heatmap'.
-            Add series_key or series_keys to make bar/line/area/scatter multi-series.
-        data: JSON string of a list of dicts, e.g. '[{"month":"Jan","sales":100}, ...]'
+        chart_type: 'bar', 'line', 'pie', 'scatter', 'area', or 'heatmap'.
+            Use series_key or series_keys for multi-series bar, line, or area.
+        data: JSON array of objects, e.g. '[{"month":"Jan","sales":100}, ...]'
         title: Chart title
+        x_key: Column for the X-axis (defaults to the first column if omitted)
+        y_key: Column for values (single-series); for heatmap, the row dimension column
         x_label: X-axis label (defaults to x_key)
-        y_label: Y-axis label (defaults to y_key or first series_key)
-        x_key: Column for X-axis (auto-detected from first column if omitted)
-        y_key: Column for Y values (single-series); row-label column for heatmap
-        series_keys: Column names for multiple Y series (bar/line multi-series).
-            Accepts BOTH wide format (series as columns) and long format (series as values
-            in a category column) — auto-pivoted if needed.
-            Example: ["product_A", "product_B", "product_C"]
-        z_key: Column for Z values (heatmap only — the numeric intensity)
-        stacked: When True and chart_type='bar', renders as stacked bar instead of grouped
+        y_label: Y-axis label (defaults to y_key; set explicitly for multi-series charts)
+        series_key: Column whose values identify the series on each row (pairs with y_key)
+        series_keys: List of columns, each holding one series (e.g. ["region_a", "region_b"])
+        z_key: Value column for heatmap intensity
+        stacked: With chart_type='bar' and multiple series, stack bars instead of grouping
         config: Runtime configuration (auto-injected by LangGraph)
 
     Returns:
         ToolResult with ``markdown`` containing a persisted chart image URL (``/charts/{id}/image.svg``).
 
     Examples:
-        # Single-series bar
+        # Bar — one metric by category
         create_chart_from_structured_data(
-            chart_type="bar", data='[{"month":"Jan","sales":100},{"month":"Feb","sales":120}]',
-            x_key="month", y_key="sales", title="Monthly Sales")
+            chart_type="bar",
+            data='[{"month":"Jan","sales":100},{"month":"Feb","sales":120}]',
+            title="Monthly Sales",
+            x_key="month",
+            y_key="sales",
+            x_label="Month",
+            y_label="Sales",
+        )
 
-        # Multi-series bar using series_key (long format — PREFERRED)
+        # Line — one metric over time
+        create_chart_from_structured_data(
+            chart_type="line",
+            data='[{"week":"2026-W01","revenue":900},{"week":"2026-W02","revenue":1100}]',
+            title="Weekly Revenue",
+            x_key="week",
+            y_key="revenue",
+            y_label="Revenue",
+        )
+
+        # Pie — share by category (x_key = slice label, y_key = value)
+        create_chart_from_structured_data(
+            chart_type="pie",
+            data='[{"channel":"Web","orders":40},{"channel":"Retail","orders":25}]',
+            title="Orders by Channel",
+            x_key="channel",
+            y_key="orders",
+        )
+
+        # Multi-series bar — series name on each row (series_key + shared value column)
         create_chart_from_structured_data(
             chart_type="bar",
             data='[{"month":"Jan","product":"A","sales":100},{"month":"Jan","product":"B","sales":80}]',
-            x_key="month", y_key="sales", series_key="product", title="Sales by Product")
+            title="Sales by Product",
+            x_key="month",
+            y_key="sales",
+            series_key="product",
+            y_label="Sales",
+        )
 
-        # Stacked bar
-        create_chart_from_structured_data(
-            chart_type="bar", stacked=True,
-            data='[{"month":"Jan","product":"A","sales":100},{"month":"Jan","product":"B","sales":80}]',
-            x_key="month", y_key="sales", series_key="product", title="Stacked Sales")
-
-        # Multi-series line
+        # Multi-series line — one column per series (series_keys)
         create_chart_from_structured_data(
             chart_type="line",
-            data='[{"month":"Jan","product":"A","sales":100},{"month":"Jan","product":"B","sales":80}]',
-            x_key="month", y_key="sales", series_key="product", title="Monthly Trend")
+            data='[{"date":"2026-09-01","current":100,"prior":90},{"date":"2026-09-02","current":110,"prior":95}]',
+            title="Current vs Prior Period",
+            x_key="date",
+            series_keys=["current", "prior"],
+            x_label="Date",
+            y_label="Amount",
+        )
 
-        # Scatter colored by category
+        # Stacked bar — same data shape as multi-series bar, with stacked=True
+        create_chart_from_structured_data(
+            chart_type="bar",
+            stacked=True,
+            data='[{"month":"Jan","product":"A","sales":100},{"month":"Jan","product":"B","sales":80}]',
+            title="Stacked Sales",
+            x_key="month",
+            y_key="sales",
+            series_key="product",
+            y_label="Sales",
+        )
+
+        # Area — multi-series (series_key)
+        create_chart_from_structured_data(
+            chart_type="area",
+            data='[{"month":"Jan","segment":"X","total":50},{"month":"Feb","segment":"X","total":60}]',
+            title="Segment Trend",
+            x_key="month",
+            y_key="total",
+            series_key="segment",
+            y_label="Total",
+        )
+
+        # Scatter — points colored by category (series_key)
         create_chart_from_structured_data(
             chart_type="scatter",
             data='[{"price":10,"qty":5,"cat":"A"},{"price":20,"qty":8,"cat":"B"}]',
-            x_key="price", y_key="qty", series_key="cat", title="Price vs Qty")
+            title="Price vs Quantity",
+            x_key="price",
+            y_key="qty",
+            series_key="cat",
+            x_label="Price",
+            y_label="Quantity",
+        )
 
-        # Heatmap
+        # Heatmap — x and y are grid dimensions, z_key is the cell value
         create_chart_from_structured_data(
             chart_type="heatmap",
-            data='[{"product":"A","month":"Jan","sales":100}]',
-            x_key="month", y_key="product", z_key="sales", title="Sales Heatmap")
+            data='[{"product":"A","month":"Jan","sales":100},{"product":"B","month":"Jan","sales":80}]',
+            title="Sales Heatmap",
+            x_key="month",
+            y_key="product",
+            z_key="sales",
+        )
     """
     logger.info(f"Creating static Plotly chart: type={chart_type}, title={title}")
     try:
@@ -128,7 +208,7 @@ async def create_chart_from_structured_data(
         )
         markdown = await _register_agent_chart(rendered=rendered, runtime=runtime)
         logger.info(f"Static chart created: {title}")
-        return ToolResult.success({"markdown": markdown})
+        return _chart_tool_success(markdown)
 
     except ValueError as e:
         logger.warning("Structured chart tool failed (validation/context): %s", e)
@@ -137,10 +217,11 @@ async def create_chart_from_structured_data(
             message=str(e),
         )
     except Exception as e:
-        logger.error(f"Error creating static Plotly chart: {str(e)}", exc_info=True)
+        detail = _exception_detail(e)
+        logger.error("Error creating static Plotly chart: %s", detail, exc_info=True)
         return ToolResult.error_result(
             code="CHART_CREATE_FROM_STRUCTURED_DATA_FAILED",
-            message=f"Error creating chart: {str(e)}",
+            message=f"Error creating chart: {detail}",
         )
 
 
@@ -148,7 +229,7 @@ async def create_chart_from_structured_data(
 async def create_chart_from_sql(
     data_source_id: int,
     sql_query: str,
-    chart_type: str,
+    chart_type: AgentChartInputType,
     x_key: str,
     title: str,
     y_key: str | None = None,
@@ -165,62 +246,146 @@ async def create_chart_from_sql(
     Args:
         data_source_id: Data source ID
         sql_query: SQL SELECT query (≤100 rows recommended for readability)
-        chart_type: 'bar'|'line'|'pie'|'scatter'|'area'|'heatmap'.
-            Provide series_keys to make 'bar' or 'line' multi-series.
-        x_key: Column for X-axis
+        chart_type: 'bar', 'line', 'pie', 'scatter', 'area', or 'heatmap'
         title: Chart title
-        y_key: Column for Y values (single-series or multi-series value column); row-label column for heatmap
+        x_key: Result column for the X-axis (or slice labels for pie)
+        y_key: Result column for values (single-series); row labels for heatmap y-axis
         x_label: X-axis label (defaults to x_key)
-        y_label: Y-axis label (defaults to y_key)
-        series_key: [PREFERRED for multi-series] A single column name whose distinct values define
-            the series. The tool auto-detects all distinct values and pivots the data.
-            Use this when your SQL returns long-format data with a category column.
-            Example: series_key="product" (column contains "Product 1", "Product 2", ...)
-            Supports bar, line, area, and scatter chart types.
-        series_keys: Explicit list of series names (advanced). Use when you know the exact values
-            or column names upfront. Supports wide-format data (series as columns) and
-            long-format data (values in a category column) — auto-pivoted when needed.
-        z_key: Column for numeric Z values (heatmap only)
-        stacked: When True and chart_type='bar', renders as stacked bar instead of grouped
+        y_label: Y-axis label (defaults to y_key; set explicitly for multi-series charts)
+        series_key: Result column that names the series on each row, with y_key as the value column
+        series_keys: Result columns where each column is one series (omit series_key)
+        z_key: Result column for heatmap cell values
+        stacked: With chart_type='bar' and multiple series, stack bars instead of grouping
+        config: Runtime configuration (auto-injected by LangGraph)
 
     Returns:
         ToolResult with ``markdown`` containing a persisted chart image URL (``/charts/{id}/image.svg``).
 
     Examples:
-        # Single-series line
-        create_chart_from_sql(data_source_id=2, chart_type="line",
-            sql_query="SELECT month, SUM(sales) as total FROM orders GROUP BY month ORDER BY month",
-            x_key="month", y_key="total", title="Monthly Sales")
+        # Line — one metric
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="line",
+            sql_query="SELECT month, SUM(sales) AS total FROM orders GROUP BY month ORDER BY month",
+            title="Monthly Sales",
+            x_key="month",
+            y_key="total",
+            x_label="Month",
+            y_label="Sales",
+        )
 
-        # Multi-series line — use series_key (PREFERRED: simplest, works with long-format SQL)
-        create_chart_from_sql(data_source_id=2, chart_type="line",
-            sql_query="SELECT month, product, SUM(sales) as total FROM orders GROUP BY month, product",
-            x_key="month", y_key="total", series_key="product", title="Sales by Product")
+        # Bar — one metric
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="bar",
+            sql_query="SELECT region, SUM(revenue) AS revenue FROM sales GROUP BY region",
+            title="Revenue by Region",
+            x_key="region",
+            y_key="revenue",
+            y_label="Revenue",
+        )
 
-        # Multi-series bar (grouped)
-        create_chart_from_sql(data_source_id=2, chart_type="bar",
-            sql_query="SELECT date, platform, COUNT(*) as cnt FROM t GROUP BY date, platform",
-            x_key="date", y_key="cnt", series_key="platform", title="Daily Active Users")
+        # Pie — label and value columns
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="pie",
+            sql_query="SELECT category, COUNT(*) AS cnt FROM tickets GROUP BY category",
+            title="Tickets by Category",
+            x_key="category",
+            y_key="cnt",
+        )
 
-        # Stacked bar
-        create_chart_from_sql(data_source_id=2, chart_type="bar", stacked=True,
-            sql_query="SELECT date, platform, COUNT(*) as cnt FROM t GROUP BY date, platform",
-            x_key="date", y_key="cnt", series_key="platform", title="Stacked Platform Usage")
+        # Multi-series line — one row per (x, series) with series_key
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="line",
+            sql_query=(
+                "SELECT month, product, SUM(sales) AS total "
+                "FROM orders GROUP BY month, product ORDER BY month, product"
+            ),
+            title="Sales by Product",
+            x_key="month",
+            y_key="total",
+            series_key="product",
+            y_label="Sales",
+        )
 
-        # Multi-series area
-        create_chart_from_sql(data_source_id=2, chart_type="area",
-            sql_query="SELECT month, product, SUM(sales) as total FROM orders GROUP BY month, product",
-            x_key="month", y_key="total", series_key="product", title="Sales Area Chart")
+        # Multi-series line — one column per series (series_keys)
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="line",
+            sql_query=(
+                "SELECT dt, SUM(CASE WHEN yr=2026 THEN amt END) AS current_yr, "
+                "SUM(CASE WHEN yr=2025 THEN amt END) AS prior_yr "
+                "FROM daily GROUP BY dt ORDER BY dt"
+            ),
+            title="Current vs Prior Year",
+            x_key="dt",
+            series_keys=["current_yr", "prior_yr"],
+            x_label="Date",
+            y_label="Amount",
+        )
 
-        # Scatter colored by category
-        create_chart_from_sql(data_source_id=2, chart_type="scatter",
-            sql_query="SELECT price, quantity, category FROM products",
-            x_key="price", y_key="quantity", series_key="category", title="Price vs Quantity")
+        # Grouped bar — series_key
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="bar",
+            sql_query="SELECT day, platform, COUNT(*) AS cnt FROM events GROUP BY day, platform",
+            title="Events by Platform",
+            x_key="day",
+            y_key="cnt",
+            series_key="platform",
+            y_label="Count",
+        )
+
+        # Stacked bar — same SQL shape as grouped bar, stacked=True
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="bar",
+            stacked=True,
+            sql_query="SELECT day, platform, COUNT(*) AS cnt FROM events GROUP BY day, platform",
+            title="Stacked Events by Platform",
+            x_key="day",
+            y_key="cnt",
+            series_key="platform",
+            y_label="Count",
+        )
+
+        # Area — multi-series
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="area",
+            sql_query="SELECT week, segment, SUM(amount) AS total FROM revenue GROUP BY week, segment",
+            title="Revenue by Segment",
+            x_key="week",
+            y_key="total",
+            series_key="segment",
+            y_label="Amount",
+        )
+
+        # Scatter — color by category
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="scatter",
+            sql_query="SELECT price, quantity, category FROM products LIMIT 200",
+            title="Price vs Quantity",
+            x_key="price",
+            y_key="quantity",
+            series_key="category",
+            x_label="Price",
+            y_label="Quantity",
+        )
 
         # Heatmap
-        create_chart_from_sql(data_source_id=2, chart_type="heatmap",
-            sql_query="SELECT month, product, SUM(sales) as total FROM sales GROUP BY month, product",
-            x_key="month", y_key="product", z_key="total", title="Sales Heatmap")
+        create_chart_from_sql(
+            data_source_id=2,
+            chart_type="heatmap",
+            sql_query="SELECT month, product, SUM(sales) AS total FROM sales GROUP BY month, product",
+            title="Sales Heatmap",
+            x_key="month",
+            y_key="product",
+            z_key="total",
+        )
     """
     runtime = extract_runtime_context(config)
     tenant_id = runtime.user.tenant_id
@@ -284,12 +449,14 @@ async def create_chart_from_sql(
             markdown = await _register_agent_chart(rendered=rendered, runtime=runtime)
 
             logger.info(f"Chart created from SQL: {title} ({len(df)} data points)")
-            return ToolResult.success({"markdown": markdown})
+            return _chart_tool_success(markdown)
 
     except Exception as e:
-        error_msg = f"Error creating chart from SQL: {str(e)}"
+        detail = _exception_detail(e)
+        error_msg = f"Error creating chart from SQL: {detail}"
         logger.error(error_msg, exc_info=True)
         return ToolResult.error_result(
             code="CHART_CREATE_FROM_SQL_FAILED",
             message=error_msg,
+            hint="Check SQL syntax, column names, and data-source permissions. Fix the query and retry.",
         )

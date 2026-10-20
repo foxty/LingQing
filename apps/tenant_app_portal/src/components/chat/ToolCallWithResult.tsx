@@ -63,10 +63,9 @@ i18n.addResourceBundle('zh', 'translation', {
 }, true, true)
 import { useQuery } from '@tanstack/react-query'
 import { ChevronDown, ChevronUp, BarChart3, CheckCircle2, XCircle } from 'lucide-react'
-import ReactMarkdown from 'react-markdown'
-import remarkGfm from 'remark-gfm'
+import MarkdownDocument from '@/components/markdown/MarkdownDocument'
+import { toolResultMarkdownForDisplay } from '@/lib/toolResultContent'
 import { Message, ToolCallMetrics } from '@/types'
-import { preprocessMarkdown } from '@/lib/utils'
 import { getToolCallMetrics } from '@/lib/chatApi'
 import { useToolCallDetail } from '@/hooks/useChatHistory'
 import { ToolCallProgressStatus } from '@/lib/chatTurns'
@@ -142,14 +141,13 @@ export default function ToolCallWithResult({
   const effectiveToolMetrics = toolMetrics || lazyToolMetrics || null
 
   const resultContent = effectiveResultMessage?.content || ''
+  const resultMarkdown = toolResultMarkdownForDisplay(resultContent)
   const previewLength = compact ? RESULT_PREVIEW_LENGTH_COMPACT : RESULT_PREVIEW_LENGTH_DEFAULT
-  const shouldCollapseResult = resultContent.length > previewLength
+  const shouldCollapseResult = resultMarkdown.length > previewLength
   const displayContent = effectiveResultMessage
-    ? preprocessMarkdown(
-        shouldCollapseResult && !showFullResult
-          ? `${resultContent.slice(0, previewLength).trimEnd()}...`
-          : resultContent
-      )
+    ? shouldCollapseResult && !showFullResult
+      ? `${resultMarkdown.slice(0, previewLength).trimEnd()}...`
+      : resultMarkdown
     : null
 
   const effectiveStatus: ToolCallProgressStatus | 'error' | 'completed' =
@@ -189,9 +187,7 @@ export default function ToolCallWithResult({
           <div className="text-xs text-foreground font-medium mb-2">
             {t('components.toolCallWithResult.execResult')}
           </div>
-          <div className="text-sm prose prose-sm max-w-none dark:prose-invert prose-p:my-1 prose-pre:my-1">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>{displayContent}</ReactMarkdown>
-          </div>
+          <MarkdownDocument content={displayContent} density="compact" />
           {shouldCollapseResult && (
             <button
               onClick={() => setShowFullResult((prev) => !prev)}

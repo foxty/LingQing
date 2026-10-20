@@ -114,6 +114,18 @@ def handle_duplicate_x_values(x_values: List[Any]) -> List[Any]:
     return result
 
 
+def numeric_value_column_names(data_list: List[Dict[str, Any]], x_key: str | None) -> List[str]:
+    """Column names (excluding x_key) whose first row value is numeric."""
+    if not data_list:
+        return []
+    sample = data_list[0]
+    return [
+        col
+        for col in sample
+        if col != x_key and coerce_numeric_value(sample.get(col)) is not None
+    ]
+
+
 def pivot_long_to_wide(
     data_list: List[Dict[str, Any]],
     x_key: str,

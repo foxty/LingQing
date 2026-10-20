@@ -20,13 +20,50 @@ from apps.shared.chart.data_processor import (
     ensure_numeric_series,
     format_value_labels,
     handle_duplicate_x_values,
+    numeric_value_column_names,
     pivot_long_to_wide,
     plotly_xaxis_type_kwargs,
 )
-from apps.shared.chart.types import ChartRenderResult
+from apps.shared.chart.normalize import normalize_plotly_chart_type
+from apps.shared.chart.types import ChartRenderResult, PlotlyChartType
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _resolve_multi_series_y_label(
+    y_label: str | None,
+    y_key: str | None,
+    series_keys: List[str] | None,
+) -> str:
+    """Y-axis title for multi-series charts (avoid using a series name as the axis label)."""
+    if y_label:
+        return y_label
+    if y_key and series_keys and y_key not in series_keys:
+        return y_key
+    if y_key and not series_keys:
+        return y_key
+    return "Value"
+
+
+def _series_key_not_found_message(
+    series_key: str,
+    data_list: List[Dict[str, Any]],
+    x_key: str | None,
+) -> str:
+    columns = sorted(data_list[0].keys())
+    base = (
+        f"series_key='{series_key}' not found in data columns: {columns}. "
+        f"series_key is for LONG-format data (one column whose values name each series)."
+    )
+    wide_cols = numeric_value_column_names(data_list, x_key)
+    if len(wide_cols) >= 2 and series_key not in columns:
+        return (
+            f"{base} Your query looks WIDE-format (one column per series). "
+            f"Use series_keys={wide_cols!r} and omit series_key."
+        )
+    return f"{base} Check the column name spelling."
+
 
 # Kaleido PNG scale for the companion raster written beside each SVG.
 _CHART_PNG_EXPORT_SCALE = 2
@@ -86,7 +123,7 @@ def _xaxis(title_text: str, x_values: List[Any] | None, **extra: Any) -> dict:
 
 
 def render_chart(
-    chart_type: str,
+    chart_type: PlotlyChartType,
     data: str,
     title: str,
     x_label: str | None = None,
@@ -127,10 +164,7 @@ def render_chart(
     # series_key is the preferred API for long-format data; series_keys is the advanced form.
     if series_key and not series_keys:
         if series_key not in data_list[0]:
-            columns = sorted(data_list[0].keys())
-            raise ValueError(
-                f"series_key='{series_key}' not found in data columns: {columns}. Check the column name spelling."
-            )
+            raise ValueError(_series_key_not_found_message(series_key, data_list, x_key))
         # Scatter with series_key uses categorical coloring, not a pivot.
         if chart_type == "scatter":
             return _render_scatter_categorical(
@@ -151,7 +185,7 @@ def render_chart(
                 seen[v] = True
         series_keys = list(seen.keys())
 
-    internal_chart_type = _normalize_chart_type(chart_type, series_keys, stacked)
+    internal_chart_type = normalize_plotly_chart_type(chart_type, series_keys, stacked)
 
     if internal_chart_type not in ["grouped_bar", "stacked_bar", "multi_line", "multi_area", "heatmap"]:
         if not x_key or not y_key:
@@ -183,7 +217,7 @@ def render_chart(
         x_values = None
         y_values = None
         resolved_x_label = x_label or x_key or ""
-        resolved_y_label = y_label or (series_keys[0] if series_keys else y_key or "")
+        resolved_y_label = _resolve_multi_series_y_label(y_label, y_key, series_keys)
         series_data = {
             "data_list": data_list,
             "x_key": x_key,
@@ -208,39 +242,6 @@ def render_chart(
 # ---------------------------------------------------------------------------
 # Internal helpers — not part of the public API
 # ---------------------------------------------------------------------------
-
-
-def _normalize_chart_type(
-    chart_type: str,
-    series_keys: List[str] | None,
-    stacked: bool,
-) -> str:
-    """Map public chart_type names to internal renderer types."""
-    _valid_types = {
-        "bar",
-        "line",
-        "pie",
-        "scatter",
-        "area",
-        "heatmap",
-        "grouped_bar",
-        "stacked_bar",
-        "multi_line",
-        "multi_area",
-    }
-    if chart_type not in _valid_types:
-        raise ValueError(
-            f"Unknown chart_type '{chart_type}'. "
-            f"Valid types: 'bar', 'line', 'pie', 'scatter', 'area', 'heatmap'. "
-            f"For multi-series bar/line/area, use the type and provide series_key or series_keys."
-        )
-    if chart_type == "bar" and series_keys:
-        return "stacked_bar" if stacked else "grouped_bar"
-    if chart_type == "line" and series_keys:
-        return "multi_line"
-    if chart_type == "area" and series_keys:
-        return "multi_area"
-    return chart_type
 
 
 def _validate_data_keys(

@@ -328,6 +328,8 @@ class ToolExecutor:
                 if normalized_result.error is not None:
                     additional_kwargs["tool_error"] = normalized_result.error.to_dict()
                     reason = normalized_result.error.message
+                    if normalized_result.error.hint:
+                        reason = f"{reason} Hint: {normalized_result.error.hint}"
                     error_code = normalized_result.error.code or error_code
                 else:
                     additional_kwargs["tool_error"] = ToolError(

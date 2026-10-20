@@ -249,6 +249,26 @@ class TestExecuteSingleTool(TestToolExecutor):
         assert updated_counts["biz_error_tool"] == 1
         mock_db_session.rollback.assert_awaited_once()
 
+    async def test_execute_tool_appends_hint_to_failure_message(self, runnable_config):
+        tool_call = self._create_tool_call("hint_error_tool")
+        config = runnable_config
+
+        mock_tool = AsyncMock()
+        mock_tool.ainvoke.return_value = ToolResult.error_result(
+            "Query failed",
+            code="CHART_CREATE_FROM_SQL_FAILED",
+            hint="Fix SQL and retry.",
+        )
+
+        mock_tool_config = MagicMock()
+        mock_tool_config.tool = mock_tool
+        mock_tool_config.limit = 10
+        self.agent_config.get_tool_config.return_value = mock_tool_config
+
+        tool_message, _, _ = await self.executor.execute_single_tool(tool_call, {}, config)
+
+        assert "Hint: Fix SQL and retry." in tool_message.content
+
     async def test_execute_tool_invalid_return_contract(self, runnable_config):
         """Non-ToolResult payload should fail contract validation."""
         tool_call = self._create_tool_call("legacy_error_tool")
