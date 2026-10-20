@@ -81,6 +81,7 @@
   },
   "header": {
     "tenant": "租户",
+    "tenantMeta": "租户 · {{name}}",
     "profile": "个人资料"
   },
   "language": {

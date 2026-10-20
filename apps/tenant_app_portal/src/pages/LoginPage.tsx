@@ -15,7 +15,9 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, Loader2 } from 'lucide-react'
+import AppBrandHeader from '@/components/AppBrandHeader'
 import { getApiErrorMessage } from '@/lib/api'
+import type { PortalBranding } from '@/lib/portalBrandingApi'
 import { convertApiUserToUser } from '@/types'
 
 i18n.addResourceBundle('en', 'translation', {
@@ -72,6 +74,8 @@ export default function LoginPage() {
   const [step, setStep] = useState<LoginStep>('credentials')
   const [tenantId, setTenantId] = useState<number | null>(null)
   const [tenantName, setTenantName] = useState<string>('')
+  const [tenantSlug, setTenantSlug] = useState<string>('')
+  const [portalBranding, setPortalBranding] = useState<PortalBranding | null>(null)
   const [methods, setMethods] = useState<LoginMethod[]>([])
   const [resolvedUsername, setResolvedUsername] = useState<string>('')
   const [showPassword, setShowPassword] = useState(false)
@@ -172,6 +176,8 @@ export default function LoginPage() {
       setResolvedUsername(data.username)
       setTenantId(result.tenant_id)
       setTenantName(result.tenant_name)
+      setTenantSlug(result.tenant_slug)
+      setPortalBranding(result.portal_branding ?? null)
       setMethods(result.login_methods)
       setEmergencyPasswordAvailable(result.emergency_password_available)
 
@@ -204,6 +210,8 @@ export default function LoginPage() {
 
   const backToCredentials = () => {
     setTenantId(null)
+    setTenantSlug('')
+    setPortalBranding(null)
     setStep('credentials')
     setShowPassword(false)
     setError(null)
@@ -265,13 +273,25 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-3xl font-semibold text-center">{t('login.title')}</CardTitle>
-          <CardDescription className="text-center">
-            {step === 'credentials'
-              ? t('login.subtitle')
-              : t('login.signInTo', { name: tenantName })}
-          </CardDescription>
+        <CardHeader className="space-y-4">
+          {step === 'signin' ? (
+            <div className="flex justify-center">
+              <AppBrandHeader branding={portalBranding} compact showTenantMeta={false} />
+            </div>
+          ) : (
+            <>
+              <CardTitle className="text-3xl font-semibold text-center">{t('login.title')}</CardTitle>
+              <CardDescription className="text-center">{t('login.subtitle')}</CardDescription>
+            </>
+          )}
+          {step === 'signin' ? (
+            <CardDescription className="text-center">
+              {t('login.signInTo', { name: tenantName })}
+              {tenantSlug ? (
+                <span className="block text-xs text-muted-foreground mt-1">{tenantSlug}</span>
+              ) : null}
+            </CardDescription>
+          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (

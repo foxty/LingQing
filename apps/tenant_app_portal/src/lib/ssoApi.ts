@@ -60,6 +60,13 @@ export interface LoginMethod {
   issuer?: string | null
 }
 
+export interface PortalBranding {
+  app_title: string | null
+  app_subtitle: string | null
+  page_title: string | null
+  logo_url: string | null
+}
+
 export interface ResolveTenantMethodsResponse {
   tenant_id: number
   tenant_name: string
@@ -67,6 +74,7 @@ export interface ResolveTenantMethodsResponse {
   login_methods: LoginMethod[]
   force_sso: boolean
   emergency_password_available: boolean
+  portal_branding?: PortalBranding | null
 }
 
 export interface SsoStartResponse {

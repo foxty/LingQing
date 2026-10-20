@@ -1,11 +1,13 @@
 """Tenants router."""
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import get_current_user, require_permission
 from apps.shared.db.session import get_db
+from apps.shared.schemas.tenant import PortalBrandingDTO, UpdatePortalBrandingRequest
 from apps.shared.schemas.user import UserDTO
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.auth.password_validator import validate_password_complexity
@@ -14,6 +16,7 @@ from apps.tenant_app_service.tenant import (
     StatsResponse,
     TenantUserManagementService,
 )
+from apps.tenant_app_service.tenant.portal_branding_service import PortalBrandingService
 from apps.tenant_app_service.tenant.schemas import (
     TenantUserCreateRequest,
     TenantUserDTO,
@@ -43,6 +46,60 @@ async def get_tenant_stats(
     """
     service = SingleTenantService.create(db, current_user.tenant_id)
     return await service.get_stats()
+
+
+@router.get("/portal-branding", response_model=PortalBrandingDTO)
+async def get_portal_branding(
+    current_user: UserDTO = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PortalBrandingService(db)
+    return await service.get_for_tenant(current_user.tenant_id)
+
+
+@router.put("/portal-branding", response_model=PortalBrandingDTO)
+async def update_portal_branding(
+    request: UpdatePortalBrandingRequest,
+    current_user: UserDTO = Depends(require_permission(Permissions.TENANT_SETTINGS_WRITE)),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PortalBrandingService(db)
+    result = await service.update_for_tenant(current_user.tenant_id, request)
+    await db.commit()
+    return result
+
+
+@router.post("/portal-branding/logo", response_model=PortalBrandingDTO)
+async def upload_portal_logo(
+    file: UploadFile = File(...),
+    current_user: UserDTO = Depends(require_permission(Permissions.TENANT_SETTINGS_WRITE)),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PortalBrandingService(db)
+    result = await service.upload_logo(current_user.tenant_id, file)
+    await db.commit()
+    return result
+
+
+@router.delete("/portal-branding/logo", response_model=PortalBrandingDTO)
+async def delete_portal_logo(
+    current_user: UserDTO = Depends(require_permission(Permissions.TENANT_SETTINGS_WRITE)),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PortalBrandingService(db)
+    result = await service.delete_logo(current_user.tenant_id)
+    await db.commit()
+    return result
+
+
+@router.get("/portal-branding/logo")
+async def get_portal_logo(
+    current_user: UserDTO = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    service = PortalBrandingService(db)
+    content, media_type = await service.read_logo_bytes(current_user.tenant_id)
+    return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, max-age=300"})
 
 
 # ============ User Management Endpoints ============

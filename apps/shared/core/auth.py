@@ -16,7 +16,7 @@ from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.db.base_repository import BaseRepository
 from apps.shared.db.models import TenantMembership, User
 from apps.shared.db.session import app_db_session, get_db
-from apps.shared.schemas.tenant import LLMDefaultsDTO, TenantConfigDTO, TenantDTO
+from apps.shared.schemas.tenant import TenantDTO, tenant_config_dict_to_dto
 from apps.shared.schemas.user import UserDTO
 from apps.shared.tenant.repository import TenantRepository
 from apps.shared.utils.logger import get_logger
@@ -350,9 +350,7 @@ async def get_current_tenant(
             detail=f"Tenant {current_user.tenant_id} not found",
         )
 
-    config = None
-    if tenant.config and tenant.config.get("llm_defaults"):
-        config = TenantConfigDTO(llm_defaults=LLMDefaultsDTO(**tenant.config["llm_defaults"]))
+    config = tenant_config_dict_to_dto(tenant.config if isinstance(tenant.config, dict) else None)
 
     return TenantDTO(
         id=tenant.id,

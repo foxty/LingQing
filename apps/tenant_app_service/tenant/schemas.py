@@ -1,7 +1,7 @@
-"""DTOs for tenant module.
+"""DTOs for tenant module (tenant-app settings, stats, users).
 
-Note: TenantDTO and TenantConfigDTO moved to apps.shared.tenant.schemas
-Import from there: from apps.shared.tenant.schemas import TenantDTO, TenantConfigDTO
+Shared tenant types: ``apps.shared.schemas.tenant`` — e.g.
+``from apps.shared.schemas.tenant import TenantDTO, TenantConfigDTO``
 """
 
 from datetime import datetime

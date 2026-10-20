@@ -20,6 +20,7 @@ import ReportsPage from './pages/ReportsPage'
 import SearchPage from './pages/SearchPage'
 import SettingsPage from './pages/SettingsPage'
 import SettingsAbacTab from './pages/SettingsAbacTab'
+import SettingsAppearanceTab from './pages/SettingsAppearanceTab'
 import SettingsModelsRegistryTab from './pages/SettingsModelsRegistryTab'
 import SettingsProviderDetailPage from './pages/SettingsProviderDetailPage'
 import SettingsSubscriptionTab from './pages/SettingsSubscriptionTab'
@@ -72,6 +73,12 @@ function ProtectedRoute({
   }
 
   return withLayout ? <Layout>{children}</Layout> : <>{children}</>
+}
+
+function SettingsHomeRedirect() {
+  const { hasAny } = useAuth()
+  const target = hasAny([PERMISSIONS.TENANT_SETTINGS_WRITE]) ? 'appearance' : 'models'
+  return <Navigate to={target} replace />
 }
 
 /**
@@ -288,7 +295,8 @@ function App() {
             </ProtectedRoute>
           }
         >
-          <Route index element={<Navigate to="models" replace />} />
+          <Route index element={<SettingsHomeRedirect />} />
+          <Route path="appearance" element={<SettingsAppearanceTab />} />
           <Route path="models" element={<SettingsModelsRegistryTab />} />
           <Route path="models/providers/:providerId" element={<SettingsProviderDetailPage />} />
           <Route path="embedding" element={<Navigate to="/settings/models" replace />} />

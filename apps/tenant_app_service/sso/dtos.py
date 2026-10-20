@@ -8,6 +8,7 @@ from apps.shared.external_identity.domain import (
     POLICY_JIT,
     FirstLoginPolicy,
 )
+from apps.shared.schemas.tenant import PortalBrandingDTO
 from apps.tenant_app_service.sso.domain import PROVIDER_TYPE_OIDC, ProviderType
 
 
@@ -86,6 +87,7 @@ class ResolveTenantMethodsResponse(BaseModel):
     login_methods: list[LoginMethodDTO]
     force_sso: bool = False
     emergency_password_available: bool = False
+    portal_branding: PortalBrandingDTO | None = None
 
 
 class SsoStartResponse(BaseModel):

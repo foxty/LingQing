@@ -41,6 +41,7 @@ export default function Sidebar({ sidebarCollapsed, onToggleSidebar, isActive }:
   const settingsItems = useMemo(
     () =>
       getSettingsNavItems(t, {
+        includeAppearance: hasAny([PERMISSIONS.TENANT_SETTINGS_WRITE]),
         includeDocumentSources: hasAny(actionRules.canManageDocumentSources()),
         includeSystemJobs: hasAny([PERMISSIONS.TENANT_ADMIN]),
       }),

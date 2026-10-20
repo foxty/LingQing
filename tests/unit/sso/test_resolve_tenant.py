@@ -8,6 +8,7 @@ import pytest
 
 from apps.shared.core.exceptions import ValidationError
 from apps.tenant_app_service.sso.services import SsoAdminService
+from apps.tenant_app_service.tenant.domain import TenantConfig, TenantDomain
 
 
 def _service_with_identity_repo(identity_repo):
@@ -99,7 +100,15 @@ async def test_resolve_login_methods_omits_native_when_force_sso():
 
 @pytest.mark.asyncio
 async def test_resolve_tenant_methods_sets_emergency_password_flag():
-    tenant = SimpleNamespace(id=1, name="Acme", slug="acme", force_sso=True)
+    tenant = TenantDomain(
+        id=1,
+        name="Acme",
+        slug="acme",
+        description=None,
+        config=TenantConfig(),
+        status="active",
+    )
+    tenant.force_sso = True  # ORM-only field; login flow reads via getattr
 
     async def count_break_glass_admins(tenant_id):
         return 1
