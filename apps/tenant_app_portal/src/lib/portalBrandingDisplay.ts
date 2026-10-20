@@ -10,6 +10,17 @@ export type ResolvedPortalBrand = {
 export type PortalBrandDisplayOptions = {
   /** When true, avoid platform defaults until branding is known (no flash on refresh). */
   pending?: boolean
+  /** When true, leave subtitle null unless tenant configured app_subtitle (login chrome). */
+  omitDefaultSubtitle?: boolean
+}
+
+/** Strip HTML tags from admin-entered branding text for safe plain display. */
+export function plainTextBrandingField(value: string | null | undefined): string | null {
+  if (!value?.trim()) {
+    return null
+  }
+  const stripped = value.replace(/<[^>]*>/g, '').trim()
+  return stripped || null
 }
 
 export function resolvePortalBrandDisplay(
@@ -21,9 +32,9 @@ export function resolvePortalBrandDisplay(
     return { title: '', subtitle: null, pageTitle: '' }
   }
 
-  const title = branding?.app_title?.trim() || t('brand.title')
-  const subtitleRaw = branding?.app_subtitle?.trim()
-  const subtitle = subtitleRaw || t('brand.subtitle')
-  const pageTitle = branding?.page_title?.trim() || t('brand.pageTitle')
+  const title = plainTextBrandingField(branding?.app_title) || t('brand.title')
+  const subtitleRaw = plainTextBrandingField(branding?.app_subtitle)
+  const subtitle = subtitleRaw || (options?.omitDefaultSubtitle ? null : t('brand.subtitle'))
+  const pageTitle = plainTextBrandingField(branding?.page_title) || t('brand.pageTitle')
   return { title, subtitle, pageTitle }
 }

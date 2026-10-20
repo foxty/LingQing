@@ -25,7 +25,6 @@ i18n.addResourceBundle('en', 'translation', {
     resolve: 'Work email or account',
     resolvePlaceholder: 'you@company.com',
     resolveButton: 'Continue',
-    signInTo: 'Sign in to {{name}}',
     continueWith: 'Continue with {{provider}}',
     usePasswordInstead: 'Sign in with password instead',
     adminSignIn: 'Administrator sign-in',
@@ -47,7 +46,6 @@ i18n.addResourceBundle('zh', 'translation', {
     resolve: '工作邮箱或账号',
     resolvePlaceholder: 'you@company.com',
     resolveButton: '继续',
-    signInTo: '登录到 {{name}}',
     continueWith: '使用 {{provider}} 继续',
     usePasswordInstead: '改用密码登录',
     adminSignIn: '管理员应急登录',
@@ -73,8 +71,6 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [step, setStep] = useState<LoginStep>('credentials')
   const [tenantId, setTenantId] = useState<number | null>(null)
-  const [tenantName, setTenantName] = useState<string>('')
-  const [tenantSlug, setTenantSlug] = useState<string>('')
   const [portalBranding, setPortalBranding] = useState<PortalBranding | null>(null)
   const [methods, setMethods] = useState<LoginMethod[]>([])
   const [resolvedUsername, setResolvedUsername] = useState<string>('')
@@ -175,8 +171,6 @@ export default function LoginPage() {
       const result = await resolveTenantMethods(data.username)
       setResolvedUsername(data.username)
       setTenantId(result.tenant_id)
-      setTenantName(result.tenant_name)
-      setTenantSlug(result.tenant_slug)
       setPortalBranding(result.portal_branding ?? null)
       setMethods(result.login_methods)
       setEmergencyPasswordAvailable(result.emergency_password_available)
@@ -210,7 +204,6 @@ export default function LoginPage() {
 
   const backToCredentials = () => {
     setTenantId(null)
-    setTenantSlug('')
     setPortalBranding(null)
     setStep('credentials')
     setShowPassword(false)
@@ -273,25 +266,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-4">
+        <CardHeader className={step === 'signin' ? 'space-y-4 pb-4 pt-8' : 'space-y-4'}>
           {step === 'signin' ? (
-            <div className="flex justify-center">
-              <AppBrandHeader branding={portalBranding} compact showTenantMeta={false} />
-            </div>
+            <AppBrandHeader branding={portalBranding} centered forLogin showTenantMeta={false} />
           ) : (
             <>
               <CardTitle className="text-3xl font-semibold text-center">{t('login.title')}</CardTitle>
               <CardDescription className="text-center">{t('login.subtitle')}</CardDescription>
             </>
           )}
-          {step === 'signin' ? (
-            <CardDescription className="text-center">
-              {t('login.signInTo', { name: tenantName })}
-              {tenantSlug ? (
-                <span className="block text-xs text-muted-foreground mt-1">{tenantSlug}</span>
-              ) : null}
-            </CardDescription>
-          ) : null}
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (
