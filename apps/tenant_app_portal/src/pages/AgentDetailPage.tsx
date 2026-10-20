@@ -16,10 +16,14 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/hooks/useAuth'
 import { useAgent, useUpdateAgent } from '@/hooks/useAgents'
 import { useAgentFormOptions } from '@/hooks/useAgentFormOptions'
+import { getApiErrorMessage } from '@/lib/api'
 import {
-  agentApiErrorMessage,
+  getAgentFormFieldErrors,
+  hasAgentFormFieldErrors,
+  validateAgentFormFields,
   filterAgentSkillIds,
   type AgentCapabilityConfig,
+  type AgentFormFieldErrors,
 } from '@/lib/agentsApi'
 import { PERMISSIONS, routeRules } from '@/lib/permissionRules'
 import { useQueryClient } from '@tanstack/react-query'
@@ -140,6 +144,7 @@ export default function AgentDetailPage() {
   const [formPrompt, setFormPrompt] = useState('')
   const [formConfig, setFormConfig] = useState<AgentCapabilityConfig>(agentConfigFromAgent(undefined))
   const [formError, setFormError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<AgentFormFieldErrors>({})
   const formHydratedAt = useRef<string | null>(null)
 
   useEffect(() => {
@@ -159,6 +164,7 @@ export default function AgentDetailPage() {
     setFormPrompt(agent.system_prompt)
     setFormConfig(agentConfigFromAgent(agent.config, skills.map((s) => s.name)))
     setFormError(null)
+    setFieldErrors({})
   }, [agent, agentId, skills])
 
   const resetSettingsForm = () => {
@@ -170,6 +176,7 @@ export default function AgentDetailPage() {
     setFormPrompt(agent.system_prompt)
     setFormConfig(agentConfigFromAgent(agent.config, skills.map((s) => s.name)))
     setFormError(null)
+    setFieldErrors({})
   }
 
   useEffect(() => {
@@ -248,14 +255,24 @@ export default function AgentDetailPage() {
     if (!canEdit) {
       return
     }
+    const clientErrors = validateAgentFormFields(formName, formPrompt, {
+      nameRequired: t('agents.validation.nameRequired'),
+      promptRequired: t('agents.validation.promptRequired'),
+    })
+    if (hasAgentFormFieldErrors(clientErrors)) {
+      setFieldErrors(clientErrors)
+      setFormError(null)
+      return
+    }
     try {
       setFormError(null)
+      setFieldErrors({})
       const availableSkillNames = new Set(skills.map((s) => s.name))
       const updated = await updateMutation.mutateAsync({
         agentId: agent.id,
         payload: {
           name: formName.trim(),
-          system_prompt: formPrompt,
+          system_prompt: formPrompt.trim(),
           config: {
             ...formConfig,
             skills: filterAgentSkillIds(formConfig.skills, availableSkillNames),
@@ -267,7 +284,13 @@ export default function AgentDetailPage() {
       setFormPrompt(updated.system_prompt)
       setFormConfig(agentConfigFromAgent(updated.config, skills.map((s) => s.name)))
     } catch (error) {
-      setFormError(agentApiErrorMessage(error, t('agents.saveFailed')))
+      const apiFieldErrors = getAgentFormFieldErrors(error)
+      setFieldErrors(apiFieldErrors)
+      setFormError(
+        hasAgentFormFieldErrors(apiFieldErrors)
+          ? null
+          : getApiErrorMessage(error, t('agents.saveFailed'))
+      )
     }
   }
 
@@ -323,6 +346,7 @@ export default function AgentDetailPage() {
               formPrompt={formPrompt}
               formConfig={formConfig}
               formError={formError}
+              fieldErrors={fieldErrors}
               skills={skills}
               collections={collections}
               dataSources={dataSources}
@@ -331,8 +355,18 @@ export default function AgentDetailPage() {
               readOnly={!canEdit}
               saving={updateMutation.isPending}
               showActions={canEdit}
-              onNameChange={setFormName}
-              onPromptChange={setFormPrompt}
+              onNameChange={(value) => {
+                setFormName(value)
+                if (fieldErrors.name) {
+                  setFieldErrors((prev) => ({ ...prev, name: undefined }))
+                }
+              }}
+              onPromptChange={(value) => {
+                setFormPrompt(value)
+                if (fieldErrors.systemPrompt) {
+                  setFieldErrors((prev) => ({ ...prev, systemPrompt: undefined }))
+                }
+              }}
               onConfigChange={setFormConfig}
               onSave={() => void saveSettings()}
               onCancel={resetSettingsForm}

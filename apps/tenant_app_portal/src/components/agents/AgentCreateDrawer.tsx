@@ -11,9 +11,13 @@ import {
 } from '@/components/ui/sheet'
 import { useCreateAgent } from '@/hooks/useAgents'
 import { useAgentFormOptions } from '@/hooks/useAgentFormOptions'
+import { getApiErrorMessage } from '@/lib/api'
 import {
-  agentApiErrorMessage,
+  getAgentFormFieldErrors,
+  hasAgentFormFieldErrors,
+  validateAgentFormFields,
   type AgentCapabilityConfig,
+  type AgentFormFieldErrors,
   type CatalogAgent,
 } from '@/lib/agentsApi'
 
@@ -38,6 +42,7 @@ export default function AgentCreateDrawer({
   const [formPrompt, setFormPrompt] = useState('')
   const [formConfig, setFormConfig] = useState<AgentCapabilityConfig>(emptyAgentConfig())
   const [formError, setFormError] = useState<string | null>(null)
+  const [fieldErrors, setFieldErrors] = useState<AgentFormFieldErrors>({})
 
   useEffect(() => {
     if (!open) {
@@ -47,21 +52,39 @@ export default function AgentCreateDrawer({
     setFormPrompt(defaultPrompt)
     setFormConfig(emptyAgentConfig())
     setFormError(null)
+    setFieldErrors({})
   }, [defaultPrompt, open])
 
   const saveCreate = async () => {
+    const clientErrors = validateAgentFormFields(formName, formPrompt, {
+      nameRequired: t('agents.validation.nameRequired'),
+      promptRequired: t('agents.validation.promptRequired'),
+    })
+    if (hasAgentFormFieldErrors(clientErrors)) {
+      setFieldErrors(clientErrors)
+      setFormError(null)
+      return
+    }
+
     const payload = {
       name: formName.trim(),
-      system_prompt: formPrompt,
+      system_prompt: formPrompt.trim(),
       config: formConfig,
     }
     try {
       setFormError(null)
+      setFieldErrors({})
       const created = await createMutation.mutateAsync(payload)
       onOpenChange(false)
       onCreated(created)
     } catch (error) {
-      setFormError(agentApiErrorMessage(error, t('agents.saveFailed')))
+      const apiFieldErrors = getAgentFormFieldErrors(error)
+      setFieldErrors(apiFieldErrors)
+      setFormError(
+        hasAgentFormFieldErrors(apiFieldErrors)
+          ? null
+          : getApiErrorMessage(error, t('agents.saveFailed'))
+      )
     }
   }
 
@@ -77,6 +100,7 @@ export default function AgentCreateDrawer({
             formPrompt={formPrompt}
             formConfig={formConfig}
             formError={formError}
+            fieldErrors={fieldErrors}
             skills={skills}
             collections={collections}
             dataSources={dataSources}
@@ -84,8 +108,18 @@ export default function AgentCreateDrawer({
             llmProfiles={llmProfiles}
             saving={createMutation.isPending}
             showActions={false}
-            onNameChange={setFormName}
-            onPromptChange={setFormPrompt}
+            onNameChange={(value) => {
+              setFormName(value)
+              if (fieldErrors.name) {
+                setFieldErrors((prev) => ({ ...prev, name: undefined }))
+              }
+            }}
+            onPromptChange={(value) => {
+              setFormPrompt(value)
+              if (fieldErrors.systemPrompt) {
+                setFieldErrors((prev) => ({ ...prev, systemPrompt: undefined }))
+              }
+            }}
             onConfigChange={setFormConfig}
           />
         </div>
@@ -95,7 +129,7 @@ export default function AgentCreateDrawer({
           </Button>
           <Button
             onClick={() => void saveCreate()}
-            disabled={!formName.trim() || createMutation.isPending}
+            disabled={!formName.trim() || !formPrompt.trim() || createMutation.isPending}
           >
             {t('agents.save')}
           </Button>

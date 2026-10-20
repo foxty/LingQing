@@ -29,17 +29,79 @@ export function sanitizeUserFacingMessage(text: string, fallback: string): strin
   return value.length > 240 ? `${value.slice(0, 237)}…` : value
 }
 
+export interface FastApiValidationErrorItem {
+  type?: string
+  loc?: (string | number)[]
+  msg?: string
+  input?: unknown
+}
+
+export function parseFastApiValidationDetail(detail: unknown): FastApiValidationErrorItem[] {
+  if (!Array.isArray(detail)) {
+    return []
+  }
+  return detail.filter((item): item is FastApiValidationErrorItem => {
+    return item !== null && typeof item === 'object' && typeof (item as FastApiValidationErrorItem).msg === 'string'
+  })
+}
+
+export function formatFastApiValidationDetail(detail: unknown): string | undefined {
+  const items = parseFastApiValidationDetail(detail)
+  if (!items.length) {
+    return undefined
+  }
+  const messages = items.map((item) => item.msg!.trim()).filter(Boolean)
+  if (!messages.length) {
+    return undefined
+  }
+  return messages.join(' ')
+}
+
+/** Map FastAPI `loc` segments (e.g. system_prompt) to form field keys. */
+export function mapFastApiValidationToFields(
+  detail: unknown,
+  fieldMap: Record<string, string>
+): Record<string, string> {
+  const items = parseFastApiValidationDetail(detail)
+  const out: Record<string, string> = {}
+  for (const item of items) {
+    const loc = item.loc ?? []
+    const segment = [...loc].reverse().find((part) => typeof part === 'string' && fieldMap[part])
+    if (typeof segment !== 'string') {
+      continue
+    }
+    const mapped = fieldMap[segment]
+    const msg = item.msg?.trim()
+    if (!msg) {
+      continue
+    }
+    out[mapped] = out[mapped] ? `${out[mapped]} ${msg}` : msg
+  }
+  return out
+}
+
 export function getApiErrorMessage(err: unknown, fallback: string): string {
   const axiosErr = err as {
     apiError?: ApiErrorEnvelope
-    response?: { data?: { message?: unknown; detail?: unknown } }
+    response?: {
+      data?: {
+        message?: unknown
+        detail?: unknown
+        validation_errors?: unknown
+      }
+    }
     message?: string
   }
+
+  const validationFromResponse =
+    formatFastApiValidationDetail(axiosErr.response?.data?.validation_errors) ??
+    formatFastApiValidationDetail(axiosErr.response?.data?.detail)
 
   const candidates = [
     axiosErr.apiError?.message,
     typeof axiosErr.response?.data?.message === 'string' ? axiosErr.response.data.message : undefined,
     typeof axiosErr.response?.data?.detail === 'string' ? axiosErr.response.data.detail : undefined,
+    validationFromResponse,
     typeof axiosErr.message === 'string' ? axiosErr.message : undefined,
   ]
 
@@ -107,12 +169,13 @@ export function normalizeApiErrorPayload(data: unknown, status?: number): ApiErr
   }
 
   const payload = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>
+  const validationMessage = formatFastApiValidationDetail(payload.detail)
   const rawMessage =
     typeof payload.message === 'string'
       ? payload.message
       : typeof payload.detail === 'string'
         ? payload.detail
-        : 'Request failed'
+        : validationMessage ?? 'Request failed'
   return {
     code: typeof payload.code === 'string' ? payload.code : 'UNKNOWN_ERROR',
     message: sanitizeUserFacingMessage(rawMessage, 'Request failed'),
@@ -153,6 +216,10 @@ const createApiClient = (baseURL: string) => {
         window.location.href = '/login'
       }
 
+      const rawData = error.response?.data
+      const validationErrors = parseFastApiValidationDetail(
+        rawData && typeof rawData === 'object' ? (rawData as { detail?: unknown }).detail : undefined
+      )
       const normalized = normalizeApiErrorPayload(error.response?.data, error.response?.status)
       error.apiError = normalized
       if (error.response && error.response.data && typeof error.response.data === 'object') {
@@ -163,6 +230,7 @@ const createApiClient = (baseURL: string) => {
           detail: normalized.message,
           details: normalized.details,
           request_id: normalized.request_id,
+          ...(validationErrors.length ? { validation_errors: validationErrors } : {}),
         }
       }
       error.message = normalized.message
