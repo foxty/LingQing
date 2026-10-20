@@ -1,28 +1,60 @@
-"""Canonical chart type definitions shared across the platform.
+"""Types for server-side Plotly charts and agent chart tools.
 
-These chart types are used by both the server-side renderer and dashboard
-widgets. Keep frontend ECharts builders in sync with this literal.
+Dashboard widget chart kinds live in ``apps.shared.dashboard.types`` (ECharts).
 """
 
 from dataclasses import dataclass
 from typing import Literal
 
-# All chart types supported by the platform.
-# To add support for a new type, update both backend contracts and the
-# frontend ECharts builder in apps/tenant_app_portal/src/lib/dashboardChart.ts.
-ChartType = Literal[
-    "line",
+# What agent tools document and prefer (multi-series via series_key + stacked).
+AgentChartInputType = Literal[
     "bar",
+    "line",
     "area",
     "pie",
     "scatter",
     "heatmap",
-    "stacked_bar",
+]
+
+# All types ``render_chart`` accepts after normalization (includes legacy explicit names).
+PlotlyChartType = Literal[
+    "bar",
+    "line",
+    "area",
+    "pie",
+    "scatter",
+    "heatmap",
     "grouped_bar",
+    "stacked_bar",
     "multi_line",
     "multi_area",
-    "gauge",
 ]
+
+AGENT_CHART_INPUT_TYPES: frozenset[str] = frozenset(
+    {
+        "bar",
+        "line",
+        "area",
+        "pie",
+        "scatter",
+        "heatmap",
+    }
+)
+
+PLOTLY_CHART_TYPES: frozenset[str] = frozenset(
+    {
+        "bar",
+        "line",
+        "area",
+        "pie",
+        "scatter",
+        "heatmap",
+        "grouped_bar",
+        "stacked_bar",
+        "multi_line",
+        "multi_area",
+    }
+)
 
 
 @dataclass(frozen=True)

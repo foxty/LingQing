@@ -6,17 +6,28 @@ Centralizing types here ensures consistency and reduces duplication.
 
 from typing import Literal
 
-from apps.shared.chart.types import ChartType as SharedChartType
-
 # Widget and Chart Types
 WidgetType = Literal["chart", "table", "metric", "filter", "text"]
 """Widget type enumeration: chart, table, metric, filter, or text."""
 
-# Dashboard widget ChartType is intentionally aligned with the shared chart model.
-# Frontend ECharts builders in apps/tenant_app_portal/src/lib/dashboardChart.ts
-# must support every value in this alias.
-ChartType = SharedChartType
-"""Chart type enumeration for dashboard widgets (ECharts-rendered in browser)."""
+# ECharts widget chart kinds (browser). Keep in sync with
+# apps/tenant_app_portal/src/lib/dashboardChart.ts — not the Plotly agent renderer.
+DashboardChartType = Literal[
+    "line",
+    "bar",
+    "area",
+    "pie",
+    "scatter",
+    "heatmap",
+    "stacked_bar",
+    "grouped_bar",
+    "multi_line",
+    "multi_area",
+    "gauge",
+]
+
+# Backward-compatible alias for existing imports within the dashboard module.
+ChartType = DashboardChartType
 
 # Display Configuration Types
 LegendPosition = Literal["top", "bottom", "left", "right"]

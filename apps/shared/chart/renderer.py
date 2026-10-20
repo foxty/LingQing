@@ -20,19 +20,110 @@ from apps.shared.chart.data_processor import (
     ensure_numeric_series,
     format_value_labels,
     handle_duplicate_x_values,
+    numeric_value_column_names,
     pivot_long_to_wide,
+    plotly_xaxis_type_kwargs,
 )
-from apps.shared.chart.types import ChartRenderResult
+from apps.shared.chart.normalize import normalize_plotly_chart_type
+from apps.shared.chart.types import ChartRenderResult, PlotlyChartType
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
 
+
+def _resolve_multi_series_y_label(
+    y_label: str | None,
+    y_key: str | None,
+    series_keys: List[str] | None,
+) -> str:
+    """Y-axis title for multi-series charts (avoid using a series name as the axis label)."""
+    if y_label:
+        return y_label
+    if y_key and series_keys and y_key not in series_keys:
+        return y_key
+    if y_key and not series_keys:
+        return y_key
+    return "Value"
+
+
+def _series_key_not_found_message(
+    series_key: str,
+    data_list: List[Dict[str, Any]],
+    x_key: str | None,
+) -> str:
+    columns = sorted(data_list[0].keys())
+    base = (
+        f"series_key='{series_key}' not found in data columns: {columns}. "
+        f"series_key is for LONG-format data (one column whose values name each series)."
+    )
+    wide_cols = numeric_value_column_names(data_list, x_key)
+    if len(wide_cols) >= 2 and series_key not in columns:
+        return (
+            f"{base} Your query looks WIDE-format (one column per series). "
+            f"Use series_keys={wide_cols!r} and omit series_key."
+        )
+    return f"{base} Check the column name spelling."
+
+
 # Kaleido PNG scale for the companion raster written beside each SVG.
 _CHART_PNG_EXPORT_SCALE = 2
+_TITLE_WRAP_CHARS = 52
+
+
+def _build_title_layout(title: str, *, has_legend: bool = False) -> tuple[dict, int]:
+    """Wrap long titles and reserve enough top margin for Kaleido export."""
+    text = title.strip()
+    words = text.split()
+    lines: list[str] = []
+    current: list[str] = []
+    current_len = 0
+    for word in words:
+        extra = len(word) + (1 if current else 0)
+        if current and current_len + extra > _TITLE_WRAP_CHARS:
+            lines.append(" ".join(current))
+            current = [word]
+            current_len = len(word)
+        else:
+            current.append(word)
+            current_len += extra
+    if current:
+        lines.append(" ".join(current))
+    if len(lines) > 1:
+        text = "<br>".join(lines)
+
+    plain_len = len(title)
+    font_size = 22
+    if plain_len > 72:
+        font_size = 16
+    elif plain_len > 48:
+        font_size = 18
+
+    line_count = max(1, len(lines))
+    top_margin = 100 + (line_count - 1) * 28 + (44 if has_legend else 0)
+
+    return (
+        {
+            "text": f"<b>{text}</b>",
+            "font": dict(size=font_size, color="#2c3e50", family="Arial, sans-serif"),
+            "x": 0.5,
+            "xanchor": "center",
+            "yanchor": "top",
+        },
+        top_margin,
+    )
+
+
+def _xaxis(title_text: str, x_values: List[Any] | None, **extra: Any) -> dict:
+    axis = {
+        "title": dict(text=f"<b>{title_text}</b>", font=dict(size=14)),
+        **plotly_xaxis_type_kwargs(x_values or []),
+        **extra,
+    }
+    return axis
 
 
 def render_chart(
-    chart_type: str,
+    chart_type: PlotlyChartType,
     data: str,
     title: str,
     x_label: str | None = None,
@@ -73,10 +164,7 @@ def render_chart(
     # series_key is the preferred API for long-format data; series_keys is the advanced form.
     if series_key and not series_keys:
         if series_key not in data_list[0]:
-            columns = sorted(data_list[0].keys())
-            raise ValueError(
-                f"series_key='{series_key}' not found in data columns: {columns}. Check the column name spelling."
-            )
+            raise ValueError(_series_key_not_found_message(series_key, data_list, x_key))
         # Scatter with series_key uses categorical coloring, not a pivot.
         if chart_type == "scatter":
             return _render_scatter_categorical(
@@ -97,7 +185,7 @@ def render_chart(
                 seen[v] = True
         series_keys = list(seen.keys())
 
-    internal_chart_type = _normalize_chart_type(chart_type, series_keys, stacked)
+    internal_chart_type = normalize_plotly_chart_type(chart_type, series_keys, stacked)
 
     if internal_chart_type not in ["grouped_bar", "stacked_bar", "multi_line", "multi_area", "heatmap"]:
         if not x_key or not y_key:
@@ -129,7 +217,7 @@ def render_chart(
         x_values = None
         y_values = None
         resolved_x_label = x_label or x_key or ""
-        resolved_y_label = y_label or (series_keys[0] if series_keys else y_key or "")
+        resolved_y_label = _resolve_multi_series_y_label(y_label, y_key, series_keys)
         series_data = {
             "data_list": data_list,
             "x_key": x_key,
@@ -154,39 +242,6 @@ def render_chart(
 # ---------------------------------------------------------------------------
 # Internal helpers — not part of the public API
 # ---------------------------------------------------------------------------
-
-
-def _normalize_chart_type(
-    chart_type: str,
-    series_keys: List[str] | None,
-    stacked: bool,
-) -> str:
-    """Map public chart_type names to internal renderer types."""
-    _valid_types = {
-        "bar",
-        "line",
-        "pie",
-        "scatter",
-        "area",
-        "heatmap",
-        "grouped_bar",
-        "stacked_bar",
-        "multi_line",
-        "multi_area",
-    }
-    if chart_type not in _valid_types:
-        raise ValueError(
-            f"Unknown chart_type '{chart_type}'. "
-            f"Valid types: 'bar', 'line', 'pie', 'scatter', 'area', 'heatmap'. "
-            f"For multi-series bar/line/area, use the type and provide series_key or series_keys."
-        )
-    if chart_type == "bar" and series_keys:
-        return "stacked_bar" if stacked else "grouped_bar"
-    if chart_type == "line" and series_keys:
-        return "multi_line"
-    if chart_type == "area" and series_keys:
-        return "multi_area"
-    return chart_type
 
 
 def _validate_data_keys(
@@ -434,15 +489,12 @@ def _create_single_series_figure(
     else:
         raise ValueError(f"Unsupported chart type: {chart_type}")
 
+    title_layout, top_margin = _build_title_layout(title)
     fig.update_layout(
-        title=dict(
-            text=f"<b>{title}</b>",
-            font=dict(size=22, color="#2c3e50", family="Arial, sans-serif"),
-            x=0.5,
-            xanchor="center",
-        ),
-        xaxis=dict(
-            title=dict(text=f"<b>{x_label}</b>", font=dict(size=14)),
+        title=title_layout,
+        xaxis=_xaxis(
+            x_label,
+            x_values,
             showgrid=True,
             gridcolor="rgba(200, 200, 200, 0.2)",
             linecolor="rgba(200, 200, 200, 0.5)",
@@ -469,8 +521,9 @@ def _create_single_series_figure(
         showlegend=False,
         plot_bgcolor="rgba(250, 250, 250, 0.5)",
         paper_bgcolor="white",
-        margin=dict(l=90, r=90, t=120, b=120),
+        margin=dict(l=90, r=90, t=top_margin, b=120),
         height=600,
+        width=960,
         font=dict(family="Arial, sans-serif", size=12, color="#2c3e50"),
         hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor="#667eea"),
     )
@@ -541,10 +594,12 @@ def _create_multi_series_figure(
     elif chart_type == "grouped_bar":
         fig.update_layout(barmode="group")
 
+    title_layout, top_margin = _build_title_layout(title, has_legend=True)
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=22, color="#2c3e50"), x=0.5, xanchor="center"),
-        xaxis=dict(
-            title=dict(text=f"<b>{x_label}</b>", font=dict(size=14)),
+        title=title_layout,
+        xaxis=_xaxis(
+            x_label,
+            x_values,
             showgrid=True,
             gridcolor="rgba(200, 200, 200, 0.2)",
             tickangle=-45 if len(x_values) > 6 else 0,
@@ -558,8 +613,9 @@ def _create_multi_series_figure(
         hovermode="closest",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=120, b=100),
+        margin=dict(l=80, r=40, t=top_margin, b=100),
         height=600,
+        width=960,
     )
     return fig
 
@@ -605,10 +661,12 @@ def _create_multi_area_figure(
             )
         )
 
+    title_layout, top_margin = _build_title_layout(title, has_legend=True)
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=22, color="#2c3e50"), x=0.5, xanchor="center"),
-        xaxis=dict(
-            title=dict(text=f"<b>{x_label}</b>", font=dict(size=14)),
+        title=title_layout,
+        xaxis=_xaxis(
+            x_label,
+            x_values,
             showgrid=True,
             gridcolor="rgba(200, 200, 200, 0.2)",
             tickangle=-45 if len(x_values) > 6 else 0,
@@ -624,8 +682,9 @@ def _create_multi_area_figure(
         hovermode="x unified",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=120, b=100),
+        margin=dict(l=80, r=40, t=top_margin, b=100),
         height=600,
+        width=960,
     )
     return fig
 
@@ -666,13 +725,15 @@ def _create_heatmap_figure(
             colorbar=dict(title="Value", thickness=15, len=0.7),
         )
     )
+    title_layout, top_margin = _build_title_layout(title)
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=22, color="#2c3e50"), x=0.5, xanchor="center"),
-        xaxis=dict(title=dict(text=f"<b>{x_label}</b>", font=dict(size=14)), side="bottom"),
-        yaxis=dict(title=dict(text=f"<b>{y_label}</b>", font=dict(size=14))),
+        title=title_layout,
+        xaxis=_xaxis(x_label, x_values, side="bottom"),
+        yaxis=dict(title=dict(text=f"<b>{y_label}</b>", font=dict(size=14)), type="category"),
         template=theme,
-        margin=dict(l=100, r=100, t=100, b=100),
+        margin=dict(l=100, r=100, t=top_margin, b=100),
         height=600,
+        width=960,
     )
     return fig
 
@@ -726,10 +787,13 @@ def _render_scatter_categorical(
             )
         )
 
+    all_x_vals = [row[x_key] for row in data_list]
+    title_layout, top_margin = _build_title_layout(title, has_legend=True)
     fig.update_layout(
-        title=dict(text=f"<b>{title}</b>", font=dict(size=22, color="#2c3e50"), x=0.5, xanchor="center"),
-        xaxis=dict(
-            title=dict(text=f"<b>{resolved_x_label}</b>", font=dict(size=14)),
+        title=title_layout,
+        xaxis=_xaxis(
+            resolved_x_label,
+            all_x_vals,
             showgrid=True,
             gridcolor="rgba(200, 200, 200, 0.2)",
             automargin=True,
@@ -744,8 +808,9 @@ def _render_scatter_categorical(
         hovermode="closest",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=120, b=100),
+        margin=dict(l=80, r=40, t=top_margin, b=100),
         height=600,
+        width=960,
         font=dict(family="Arial, sans-serif", size=12, color="#2c3e50"),
         hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif"),
     )

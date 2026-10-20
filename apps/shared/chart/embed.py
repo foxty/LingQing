@@ -24,9 +24,12 @@ def path_from_url(url_or_path: str) -> str:
 
 
 def chart_image_url(chart_id: int, *, fmt: str = "svg") -> str:
-    api_base = EnvConfig.CHART_SERVICE_URL.rstrip("/")
     ext = fmt.lower()
-    return f"{api_base}/charts/{chart_id}/image.{ext}"
+    path = f"/charts/{chart_id}/image.{ext}"
+    api_base = (EnvConfig.CHART_SERVICE_URL or "").strip().rstrip("/")
+    if not api_base:
+        return path
+    return f"{api_base}{path}"
 
 
 def chart_markdown_image(title: str, chart_id: int) -> str:

@@ -324,15 +324,25 @@ class ToolExecutor:
             additional_kwargs = {**additional_kwargs, **normalized_result.metadata}
             if normalized_result.status == ToolResultStatus.ERROR:
                 reason = normalized_result.content
+                error_code = "TOOL_EXECUTION_ERROR"
                 if normalized_result.error is not None:
                     additional_kwargs["tool_error"] = normalized_result.error.to_dict()
                     reason = normalized_result.error.message
+                    if normalized_result.error.hint:
+                        reason = f"{reason} Hint: {normalized_result.error.hint}"
+                    error_code = normalized_result.error.code or error_code
                 else:
                     additional_kwargs["tool_error"] = ToolError(
                         code="TOOL_EXECUTION_ERROR",
                         message=reason,
                         retryable=False,
                     ).to_dict()
+                self.logger.warning(
+                    "Tool '%s' returned error (code=%s): %s",
+                    tool_name,
+                    error_code,
+                    reason,
+                )
                 await self._rollback_runtime_session(config, tool_name)
                 content = self._build_failure_message(tool_name, reason)
             elif cache_key:
