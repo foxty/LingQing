@@ -15,7 +15,9 @@ import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { AlertCircle, Loader2 } from 'lucide-react'
+import AppBrandHeader from '@/components/AppBrandHeader'
 import { getApiErrorMessage } from '@/lib/api'
+import type { PortalBranding } from '@/lib/portalBrandingApi'
 import { convertApiUserToUser } from '@/types'
 
 i18n.addResourceBundle('en', 'translation', {
@@ -23,7 +25,6 @@ i18n.addResourceBundle('en', 'translation', {
     resolve: 'Work email or account',
     resolvePlaceholder: 'you@company.com',
     resolveButton: 'Continue',
-    signInTo: 'Sign in to {{name}}',
     continueWith: 'Continue with {{provider}}',
     usePasswordInstead: 'Sign in with password instead',
     adminSignIn: 'Administrator sign-in',
@@ -45,7 +46,6 @@ i18n.addResourceBundle('zh', 'translation', {
     resolve: '工作邮箱或账号',
     resolvePlaceholder: 'you@company.com',
     resolveButton: '继续',
-    signInTo: '登录到 {{name}}',
     continueWith: '使用 {{provider}} 继续',
     usePasswordInstead: '改用密码登录',
     adminSignIn: '管理员应急登录',
@@ -71,7 +71,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [step, setStep] = useState<LoginStep>('credentials')
   const [tenantId, setTenantId] = useState<number | null>(null)
-  const [tenantName, setTenantName] = useState<string>('')
+  const [portalBranding, setPortalBranding] = useState<PortalBranding | null>(null)
   const [methods, setMethods] = useState<LoginMethod[]>([])
   const [resolvedUsername, setResolvedUsername] = useState<string>('')
   const [showPassword, setShowPassword] = useState(false)
@@ -171,7 +171,7 @@ export default function LoginPage() {
       const result = await resolveTenantMethods(data.username)
       setResolvedUsername(data.username)
       setTenantId(result.tenant_id)
-      setTenantName(result.tenant_name)
+      setPortalBranding(result.portal_branding ?? null)
       setMethods(result.login_methods)
       setEmergencyPasswordAvailable(result.emergency_password_available)
 
@@ -204,6 +204,7 @@ export default function LoginPage() {
 
   const backToCredentials = () => {
     setTenantId(null)
+    setPortalBranding(null)
     setStep('credentials')
     setShowPassword(false)
     setError(null)
@@ -265,13 +266,15 @@ export default function LoginPage() {
   return (
     <div className="min-h-screen flex items-center justify-center bg-background">
       <Card className="w-full max-w-md">
-        <CardHeader className="space-y-1">
-          <CardTitle className="text-3xl font-semibold text-center">{t('login.title')}</CardTitle>
-          <CardDescription className="text-center">
-            {step === 'credentials'
-              ? t('login.subtitle')
-              : t('login.signInTo', { name: tenantName })}
-          </CardDescription>
+        <CardHeader className={step === 'signin' ? 'space-y-4 pb-4 pt-8' : 'space-y-4'}>
+          {step === 'signin' ? (
+            <AppBrandHeader branding={portalBranding} centered forLogin showTenantMeta={false} />
+          ) : (
+            <>
+              <CardTitle className="text-3xl font-semibold text-center">{t('login.title')}</CardTitle>
+              <CardDescription className="text-center">{t('login.subtitle')}</CardDescription>
+            </>
+          )}
         </CardHeader>
         <CardContent className="space-y-4">
           {error && (

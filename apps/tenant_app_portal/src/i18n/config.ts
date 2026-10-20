@@ -12,7 +12,7 @@ const resources = {
 function syncDocumentI18n(lng: string = i18n.language) {
   const isZh = lng.startsWith('zh')
   document.documentElement.lang = isZh ? 'zh-CN' : 'en'
-  document.title = i18n.t('brand.pageTitle')
+  // Document title is set by Layout (tenant branding) or login flow — avoid flashing defaults here.
   document
     .querySelector('meta[name="description"]')
     ?.setAttribute('content', i18n.t('brand.pageDescription'))

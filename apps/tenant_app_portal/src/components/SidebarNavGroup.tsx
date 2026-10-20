@@ -131,7 +131,11 @@ export function getArtifactNavItems(
 
 export function getSettingsNavItems(
   t: (key: string) => string,
-  options: { includeDocumentSources?: boolean; includeSystemJobs?: boolean } = {}
+  options: {
+    includeAppearance?: boolean
+    includeDocumentSources?: boolean
+    includeSystemJobs?: boolean
+  } = {}
 ): SidebarNavItem[] {
   const items: SidebarNavItem[] = [
     { to: '/settings/models', label: t('settings.models'), matchPrefixes: ['/settings/models'] },
@@ -145,6 +149,14 @@ export function getSettingsNavItems(
     { to: '/settings/users', label: t('settings.users'), matchPrefixes: ['/settings/users'] },
     { to: '/settings/usage', label: t('settings.usage'), matchPrefixes: ['/settings/usage'] },
   ]
+
+  if (options.includeAppearance) {
+    items.unshift({
+      to: '/settings/appearance',
+      label: t('settings.appearance'),
+      matchPrefixes: ['/settings/appearance'],
+    })
+  }
 
   if (options.includeSystemJobs) {
     items.push({

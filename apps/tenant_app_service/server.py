@@ -49,6 +49,7 @@ from apps.tenant_app_service.routers import (
     message_feedback,
     notifications,
     observability,
+    public_branding,
     reports,
     scheduled_tasks,
     search,
@@ -113,6 +114,7 @@ app.mount("/static", StaticFiles(directory=get_static_path()), name="static")
 # Register routers - order matters for middleware execution
 app.include_router(health.router)
 app.include_router(auth.router)
+app.include_router(public_branding.router)
 app.include_router(tenants.router)
 app.include_router(documents.router)
 app.include_router(document_collections.router)

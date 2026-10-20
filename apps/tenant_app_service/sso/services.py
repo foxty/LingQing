@@ -28,6 +28,11 @@ from apps.tenant_app_service.sso.dtos import (
     UpdateAuthProviderRequest,
 )
 from apps.tenant_app_service.sso.repository import SsoRepository
+from apps.tenant_app_service.tenant.domain import TenantDomain
+from apps.tenant_app_service.tenant.portal_branding_service import (
+    PortalBrandingService,
+    portal_branding_from_tenant,
+)
 
 SSO_CALLBACK_PATH = "/auth/sso/callback"
 
@@ -163,6 +168,11 @@ class SsoAdminService:
         break_glass_count = (
             await self.identity_repo.count_break_glass_admins(tenant.id) if force_sso else 0
         )
+        branding_service = PortalBrandingService(self.db)
+        portal_branding = branding_service.branding_for_login_resolve(
+            portal_branding_from_tenant(tenant),
+            tenant.slug or "",
+        )
         return ResolveTenantMethodsResponse(
             tenant_id=tenant.id,
             tenant_name=tenant.name,
@@ -170,9 +180,10 @@ class SsoAdminService:
             login_methods=methods,
             force_sso=force_sso,
             emergency_password_available=force_sso and break_glass_count > 0,
+            portal_branding=portal_branding,
         )
 
-    async def _resolve_tenant(self, identifier: str) -> tuple[Tenant, str]:
+    async def _resolve_tenant(self, identifier: str) -> tuple[Tenant | TenantDomain, str]:
         if "@" not in identifier:
             raise ValidationError(
                 "Invalid sign-in identifier",

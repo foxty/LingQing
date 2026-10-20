@@ -6,6 +6,7 @@ i18n.addResourceBundle(
   'translation',
   {
     settings: {
+      appearance: 'Appearance',
       models: 'LLM Models',
       embedding: 'Embedding',
       tags: 'Tags',
@@ -28,6 +29,7 @@ i18n.addResourceBundle(
   'translation',
   {
     settings: {
+      appearance: '外观',
       models: 'LLM 模型',
       embedding: 'Embedding',
       tags: '标签',

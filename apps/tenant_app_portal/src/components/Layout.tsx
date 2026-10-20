@@ -1,7 +1,10 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useLayoutEffect } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
+import AppBrandHeader from '@/components/AppBrandHeader'
 import { useAuth } from '@/hooks/useAuth'
+import { usePortalBranding } from '@/hooks/usePortalBranding'
+import { resolvePortalBrandDisplay } from '@/lib/portalBrandingDisplay'
 import { Button } from '@/components/ui/button'
 import { ChevronDown, LogOut, Settings, UserRound } from 'lucide-react'
 import {
@@ -20,8 +23,10 @@ interface LayoutProps {
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const { t } = useTranslation()
+  const { t, i18n } = useTranslation()
   const { user, logout, hasAny } = useAuth()
+  const { data: portalBranding, isPending } = usePortalBranding()
+  const brandingPending = isPending && portalBranding === undefined
   const location = useLocation()
   const navigate = useNavigate()
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false)
@@ -33,6 +38,16 @@ export default function Layout({ children }: LayoutProps) {
       setSidebarCollapsed(saved === 'true')
     }
   }, [])
+
+  useLayoutEffect(() => {
+    if (brandingPending) {
+      return
+    }
+    const { pageTitle } = resolvePortalBrandDisplay(portalBranding, t)
+    if (pageTitle) {
+      document.title = pageTitle
+    }
+  }, [portalBranding, brandingPending, t, i18n.language])
 
   const toggleSidebar = () => {
     const newState = !sidebarCollapsed
@@ -58,22 +73,11 @@ export default function Layout({ children }: LayoutProps) {
     <div className="h-screen flex flex-col bg-background">
       <header className="border-b flex-shrink-0">
         <div className="mx-auto px-4 py-2 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0">
-            <div className="min-w-0">
-              <p className="text-xl font-semibold truncate">{t('brand.title')}</p>
-              <p className="text-xs text-muted-foreground truncate">{t('brand.subtitle')}</p>
-            </div>
-            {user?.tenantName ? (
-              <div className="hidden sm:flex flex-col justify-center rounded-md border px-2.5 py-1 min-h-11">
-                <span className="text-[11px] text-muted-foreground tracking-wide">
-                  {t('header.tenant')}
-                </span>
-                <span className="text-sm font-medium leading-tight truncate max-w-[12rem]">
-                  {user.tenantName}
-                </span>
-              </div>
-            ) : null}
-          </div>
+          <AppBrandHeader
+            branding={portalBranding}
+            tenantName={user?.tenantName}
+            pending={brandingPending}
+          />
           <div className="flex items-center gap-2">
             <LanguageSwitcher />
             <DropdownMenu>

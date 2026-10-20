@@ -1,7 +1,7 @@
 """Adapters for Tenant domain model conversions."""
 
 from apps.shared.db import models as db_models
-from apps.shared.schemas.tenant import LLMDefaultsDTO, TenantConfigDTO, TenantDTO
+from apps.shared.schemas.tenant import TenantDTO, tenant_config_dict_to_dto
 from apps.tenant_app_service.tenant.domain import TenantConfig, TenantDomain
 
 
@@ -34,9 +34,7 @@ def domain_tenant_to_db_dict(domain_tenant: TenantDomain) -> dict:
 
 def domain_tenant_to_dto(domain_tenant: TenantDomain) -> TenantDTO:
     """Convert Domain Tenant to TenantDTO."""
-    config = None
-    if domain_tenant.config.llm_defaults:
-        config = TenantConfigDTO(llm_defaults=LLMDefaultsDTO(**domain_tenant.config.llm_defaults))
+    config = tenant_config_dict_to_dto(domain_tenant.config.to_dict())
     return TenantDTO(
         id=domain_tenant.id,
         name=domain_tenant.name,
