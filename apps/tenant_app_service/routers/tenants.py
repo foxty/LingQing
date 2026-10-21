@@ -1,6 +1,6 @@
 """Tenants router."""
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -19,10 +19,12 @@ from apps.tenant_app_service.tenant import (
 from apps.tenant_app_service.tenant.portal_branding_service import PortalBrandingService
 from apps.tenant_app_service.tenant.schemas import (
     TenantUserCreateRequest,
+    TenantUserDirectoryEntry,
     TenantUserDTO,
     TenantUserResetPasswordRequest,
     TenantUserUpdateRequest,
 )
+from apps.tenant_app_service.tenant.user_directory import search_tenant_users
 
 router = APIRouter(prefix="/tenants", tags=["tenants"], include_in_schema=False)
 logger = get_logger(__name__)
@@ -100,6 +102,28 @@ async def get_portal_logo(
     service = PortalBrandingService(db)
     content, media_type = await service.read_logo_bytes(current_user.tenant_id)
     return Response(content=content, media_type=media_type, headers={"Cache-Control": "private, max-age=300"})
+
+
+# ============ User directory (collaboration pickers) ============
+
+
+@router.get("/user-directory", response_model=list[TenantUserDirectoryEntry])
+async def search_tenant_user_directory(
+    q: str = Query("", max_length=100, description="Username substring search"),
+    limit: int = Query(20, ge=1, le=50),
+    exclude_user_ids: list[int] = Query(default=[]),
+    current_user: UserDTO = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Search active tenant users for share/invite pickers (not full user admin)."""
+    rows = await search_tenant_users(
+        db,
+        tenant_id=current_user.tenant_id,
+        query=q,
+        limit=limit,
+        exclude_user_ids=set(exclude_user_ids),
+    )
+    return [TenantUserDirectoryEntry(user_id=uid, username=name) for uid, name in rows]
 
 
 # ============ User Management Endpoints ============

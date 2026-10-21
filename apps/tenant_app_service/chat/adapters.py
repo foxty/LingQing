@@ -4,7 +4,21 @@ from apps.shared.artifact.domain import ArtifactDomain
 from apps.shared.db.models import Artifact, ChatMessage, ChatThread, SessionSummary, ThreadSummary
 from apps.tenant_app_service.chat.domain import MessageDomain, SessionSummaryDomain, ThreadDomain, ThreadSummaryDomain
 from apps.tenant_app_service.chat.schemas import ConversationHistoryResponse, Message
+from apps.tenant_app_service.chat.thread_kinds import (
+    DEFAULT_THREAD_KIND,
+    THREAD_KIND_PERSONAL,
+    THREAD_KIND_SHARED,
+    ThreadKind,
+)
 from apps.tenant_app_service.hitl.utils import has_hitl_payload
+
+
+def _coerce_thread_kind(value: str | None) -> ThreadKind:
+    if value == THREAD_KIND_PERSONAL:
+        return THREAD_KIND_PERSONAL
+    if value == THREAD_KIND_SHARED:
+        return THREAD_KIND_SHARED
+    return DEFAULT_THREAD_KIND
 
 
 def chat_message_to_domain(db_msg: ChatMessage) -> MessageDomain:
@@ -40,6 +54,7 @@ def chat_message_to_domain(db_msg: ChatMessage) -> MessageDomain:
         tool_call_id=tool_call_id,
         session_id=db_msg.session_id,
         agent_id=db_msg.agent_id,
+        author_user_id=db_msg.author_user_id,
         additional_kwargs=additional_kwargs,
         message_metadata=message_meta,
     )
@@ -55,6 +70,7 @@ def chat_thread_to_domain(db_thread: ChatThread) -> ThreadDomain:
         message_count=db_thread.message_count,
         created_at=db_thread.created_at,
         updated_at=db_thread.updated_at,
+        thread_kind=_coerce_thread_kind(getattr(db_thread, "thread_kind", None)),
     )
     return thread
 
@@ -96,17 +112,21 @@ def chat_messages_to_domain_list(db_messages: list[ChatMessage]) -> list[Message
     return [chat_message_to_domain(db_msg) for db_msg in db_messages]
 
 
-def domain_message_to_api(domain_msg: MessageDomain) -> Message:
+def domain_message_to_api(domain_msg: MessageDomain, *, thread_agent_id: int | None = None) -> Message:
     """Convert Domain Message to API Message."""
     additional_kwargs = domain_msg.additional_kwargs
     role = domain_msg.role
     if role == "tool" and has_hitl_payload(domain_msg):
         role = "ai"
 
+    resolved_agent_id = domain_msg.agent_id
+    if resolved_agent_id is None and thread_agent_id is not None and role in ("ai", "tool"):
+        resolved_agent_id = thread_agent_id
+
     return Message(
         message_id=domain_msg.message_id,
         thread_id=domain_msg.thread_id,
-        agent_id=domain_msg.agent_id,
+        agent_id=resolved_agent_id if resolved_agent_id is not None else -1,
         role=role,
         content=domain_msg.content,
         timestamp=domain_msg.timestamp.isoformat() if domain_msg.timestamp else None,
@@ -115,6 +135,7 @@ def domain_message_to_api(domain_msg: MessageDomain) -> Message:
         session_id=domain_msg.session_id,
         additional_kwargs=additional_kwargs,
         message_metadata=domain_msg.message_metadata,
+        author_user_id=domain_msg.author_user_id,
     )
 
 
@@ -135,7 +156,7 @@ def domain_conversation_to_api(
     Returns:
         ConversationHistoryResponse DTO
     """
-    messages = [domain_message_to_api(msg) for msg in thread.messages]
+    messages = [domain_message_to_api(msg, thread_agent_id=thread.agent_id) for msg in thread.messages]
 
     return ConversationHistoryResponse(
         thread_id=thread.id,

@@ -172,13 +172,14 @@ async def _handle_slack_events(
 
 
 def _parse_slack_event(event: dict, *, event_id: str | None) -> SlackMessageEvent | None:
-    """Accept DMs (message.im) and channel @mentions (app_mention) only.
+    """Accept DMs, channel @mentions, and passive thread replies (mirror)."""
+    from apps.tenant_app_service.agent_ingress.slack.domain import parse_thread_reply_event
 
-    Shared-channel thread follow-ups without @bot are ignored so human side
-    conversation in a bot thread does not invoke the agent.
-    """
     event_type = event.get("type")
     if event_type == "message":
+        threaded = parse_thread_reply_event(event, event_id=event_id)
+        if threaded is not None:
+            return threaded
         return parse_message_event(event, event_id=event_id)
     if event_type == "app_mention":
         return parse_app_mention_event(event, event_id=event_id)
@@ -191,7 +192,10 @@ async def _safe_handle(event: SlackMessageEvent, endpoint_id: int) -> None:
     try:
         async with app_db_session() as bg_db:
             ingress = SlackIngressService(bg_db)
-            await ingress.handle_message(event, endpoint_id)
+            if event.source == "thread_reply":
+                await ingress.handle_passive_mirror(event, endpoint_id)
+            else:
+                await ingress.handle_message(event, endpoint_id)
     except Exception:
         logger.exception("Slack ingress background task failed for endpoint %s", endpoint_id)
 

@@ -15,6 +15,7 @@ import { buildStreamingTurn, StreamingToolCallState } from '@/lib/chatTurns'
 import type { ThreadLoadError } from '@/hooks/useChatHistory'
 import { useChatScroll } from '@/hooks/useChatScroll'
 import type { ArtifactsAutoOpenPreference, ThinkingEffort } from '@/lib/userPreferencesTypes'
+import type { ComposeMentionPayload } from '@/lib/participantMention'
 import type { AttachedArtifact, Message } from '@/types'
 import { useMemo } from 'react'
 
@@ -24,6 +25,7 @@ interface ChatAreaProps {
   isBusy?: boolean
   streamingContent: string
   streamingToolCalls?: StreamingToolCallState[]
+  streamingAgentId?: number | null
   sendKeyPreference: 'enter' | 'ctrl-enter'
   artifactsAutoOpen: ArtifactsAutoOpenPreference
   thinkingEffort: ThinkingEffort
@@ -41,12 +43,24 @@ interface ChatAreaProps {
   isLoadingMore?: boolean
   onLoadMore?: () => Promise<void>
 
-  onSendMessage: (message: string, resources: AttachedArtifact[]) => void
+  onSendMessage: (
+    message: string,
+    resources: AttachedArtifact[],
+    mentions?: ComposeMentionPayload[]
+  ) => void
   onSendKeyPreferenceChange: (value: 'enter' | 'ctrl-enter') => void
   onArtifactsAutoOpenChange: (value: ArtifactsAutoOpenPreference) => void
   onThinkingEffortChange: (value: ThinkingEffort) => void
   onHitlApprovedContinue?: (proposalId: string) => void | Promise<void>
   onHitlRejected?: (proposalId: string) => void | Promise<void>
+  isSharedThread?: boolean
+  rosterAgentOptions?: { id: number; label: string }[]
+  memberUserIds?: number[]
+  memberUserLabels?: { id: number; label: string }[]
+  currentUserId?: number
+  userNameById?: Map<number, string>
+  agentNameById?: Map<number, string>
+  fallbackAgentId?: number
 }
 
 export default function ChatArea({
@@ -55,6 +69,7 @@ export default function ChatArea({
   isBusy = false,
   streamingContent,
   streamingToolCalls = [],
+  streamingAgentId = null,
   sendKeyPreference,
   artifactsAutoOpen,
   thinkingEffort,
@@ -76,6 +91,14 @@ export default function ChatArea({
   onThinkingEffortChange,
   onHitlApprovedContinue,
   onHitlRejected,
+  isSharedThread = false,
+  rosterAgentOptions = [],
+  memberUserIds = [],
+  memberUserLabels = [],
+  currentUserId,
+  userNameById,
+  agentNameById,
+  fallbackAgentId,
 }: ChatAreaProps) {
   const { t } = useTranslation()
 
@@ -133,6 +156,11 @@ export default function ChatArea({
           messages={messages}
           threadId={threadId}
           streamingTurn={streamingTurn}
+          currentUserId={currentUserId}
+          userNameById={userNameById}
+          agentNameById={agentNameById}
+          streamingAgentId={streamingAgentId}
+          fallbackAgentId={fallbackAgentId}
           onHitlApprovedContinue={onHitlApprovedContinue}
           onHitlRejected={onHitlRejected}
         />
@@ -157,6 +185,10 @@ export default function ChatArea({
         onArtifactsAutoOpenChange={onArtifactsAutoOpenChange}
         onThinkingEffortChange={onThinkingEffortChange}
         onBeforeSend={pinToBottom}
+        isSharedThread={isSharedThread}
+        rosterAgentOptions={rosterAgentOptions}
+        memberUserIds={memberUserIds}
+        memberUserLabels={memberUserLabels}
       />
     </div>
   )

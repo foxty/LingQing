@@ -40,7 +40,7 @@ class _TrackingSession:
 async def test_chat_uses_short_session_around_invoke(monkeypatch):
     events: list[str] = []
 
-    async def _validate(thread_id, current_user, db):
+    async def _validate(thread_id, current_user, db, **kwargs):
         events.append("validate")
 
     async def _run_turn(tenant_id, request, current_user, access_token=None):
@@ -75,7 +75,7 @@ async def test_chat_uses_short_session_around_invoke(monkeypatch):
 async def test_chat_stream_releases_session_before_sse_iter(monkeypatch):
     events: list[str] = []
 
-    async def _validate(thread_id, current_user, db):
+    async def _validate(thread_id, current_user, db, **kwargs):
         events.append("validate")
 
     async def _stream_events(tenant_id, request, current_user, access_token=None):

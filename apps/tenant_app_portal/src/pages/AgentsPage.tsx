@@ -46,6 +46,7 @@ i18n.addResourceBundle(
       create: 'New agent',
       viewFeedback: 'Feedback',
       openChat: 'Open in conversation',
+      newChat: 'New conversation',
       share: 'Share',
       settings: 'Settings',
       delete: 'Delete',
@@ -76,6 +77,7 @@ i18n.addResourceBundle(
       create: '新建智能体',
       viewFeedback: '反馈分析',
       openChat: '在对话中打开',
+      newChat: '新对话',
       share: '共享',
       settings: '设置',
       delete: '删除',
@@ -189,6 +191,10 @@ export default function AgentsPage() {
                 event.stopPropagation()
                 navigate(`/workbench?agent=${agent.id}`)
               }}
+              onNewChat={(event) => {
+                event.stopPropagation()
+                navigate(`/workbench?agent=${agent.id}&new=1`)
+              }}
               onSettings={(event) => {
                 event.stopPropagation()
                 navigate(`/agents/${agent.id}?tab=settings`)
@@ -252,6 +258,7 @@ function AgentCatalogCard({
   slackIntegration,
   onOpen,
   onChat,
+  onNewChat,
   onSettings,
   onShare,
   onDelete,
@@ -260,6 +267,7 @@ function AgentCatalogCard({
   slackIntegration: SlackIntegration | undefined
   onOpen: () => void
   onChat: (event: MouseEvent) => void
+  onNewChat: (event: MouseEvent) => void
   onSettings: (event: MouseEvent) => void
   onShare: (event: MouseEvent) => void
   onDelete: (event: MouseEvent) => void
@@ -319,6 +327,11 @@ function AgentCatalogCard({
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
+              <DropdownMenuItem onClick={onNewChat}>
+                <MessageSquare className="mr-2 h-4 w-4" />
+                {t('agents.newChat')}
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem onClick={onSettings}>
                 <Settings className="mr-2 h-4 w-4" />
                 {t('agents.settings')}

@@ -317,3 +317,215 @@ class TestSlackChannelWebhook:
         assert resp.status_code == 200
         await asyncio.sleep(0.5)
         assert any("No LingQing account" in m["text"] for m in fake.ephemeral_messages)
+
+
+class TestSlackSharedThreadIngress:
+    @pytest.mark.asyncio
+    async def test_channel_app_mention_creates_shared_thread_and_link(self, slack_committed_chat_setup):
+        from sqlalchemy import select
+
+        from apps.shared.db.models import ChatThread, IngressThreadLink
+
+        client = slack_committed_chat_setup["client"]
+        tenant = slack_committed_chat_setup["tenants"]["tenant_a"]
+        signing_secret = slack_committed_chat_setup["secrets"]["tenant_a"]
+        session_factory = slack_committed_chat_setup["session_factory"]
+        fake = slack_committed_chat_setup["fake_slack"]
+        slack_user = f"U_shared_{uuid4().hex[:8]}"
+        channel_id = f"C_shared_{uuid4().hex[:8]}"
+        thread_root = "1700000010.000100"
+        fake.register_user(slack_user, email=tenant["admin"].email)
+
+        event = make_app_mention_event(
+            user_id=slack_user,
+            channel_id=channel_id,
+            text="<@UBOT> bootstrap shared",
+            team_id="T_TENANT_A",
+            ts=thread_root,
+        )
+        body = json.dumps(
+            make_event_callback_payload(event=event, event_id=f"Ev_shared_{slack_user}", team_id="T_TENANT_A")
+        )
+        headers = make_slack_signature_headers(signing_secret=signing_secret, body=body)
+        url = f"/ingress/{slack_committed_chat_setup['endpoint_keys']['tenant_a']}/events"
+        resp = await client.post(url, content=body, headers=headers)
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+        tenant_id = tenant["tenant"].id
+
+        async def _assert_shared_mapping() -> None:
+            async with session_factory() as session:
+                link = await session.scalar(
+                    select(IngressThreadLink).where(
+                        IngressThreadLink.tenant_id == tenant_id,
+                        IngressThreadLink.external_channel_id == channel_id,
+                        IngressThreadLink.external_thread_key == thread_root,
+                    )
+                )
+                assert link is not None
+                thread = await session.get(ChatThread, link.chat_thread_id)
+                assert thread is not None
+                assert thread.thread_kind == "shared"
+
+        await _wait_for_slack_side_effect(_assert_shared_mapping)
+
+    @pytest.mark.asyncio
+    async def test_passive_mirror_persists_thread_reply_after_anchor(self, slack_committed_chat_setup):
+        from sqlalchemy import select
+
+        from apps.shared.db.models import ChatMessage, IngressThreadLink
+
+        client = slack_committed_chat_setup["client"]
+        tenant = slack_committed_chat_setup["tenants"]["tenant_a"]
+        signing_secret = slack_committed_chat_setup["secrets"]["tenant_a"]
+        session_factory = slack_committed_chat_setup["session_factory"]
+        fake = slack_committed_chat_setup["fake_slack"]
+        slack_user = f"U_mirror_{uuid4().hex[:8]}"
+        channel_id = f"C_mirror_{uuid4().hex[:8]}"
+        thread_root = "1700000020.000100"
+        passive_ts = "1700000020.000200"
+        fake.register_user(slack_user, email=tenant["admin"].email)
+
+        url = f"/ingress/{slack_committed_chat_setup['endpoint_keys']['tenant_a']}/events"
+        mention = make_app_mention_event(
+            user_id=slack_user,
+            channel_id=channel_id,
+            text="<@UBOT> open mirror",
+            team_id="T_TENANT_A",
+            ts=thread_root,
+        )
+        mention_body = json.dumps(
+            make_event_callback_payload(event=mention, event_id=f"Ev_mirror_m_{slack_user}", team_id="T_TENANT_A")
+        )
+        await client.post(
+            url,
+            content=mention_body,
+            headers=make_slack_signature_headers(signing_secret=signing_secret, body=mention_body),
+        )
+
+        reply = make_channel_thread_reply_event(
+            user_id=slack_user,
+            channel_id=channel_id,
+            text="team update without bot",
+            thread_ts=thread_root,
+            team_id="T_TENANT_A",
+            ts=passive_ts,
+        )
+        reply_body = json.dumps(
+            make_event_callback_payload(event=reply, event_id=f"Ev_mirror_r_{slack_user}", team_id="T_TENANT_A")
+        )
+        resp = await client.post(
+            url,
+            content=reply_body,
+            headers=make_slack_signature_headers(signing_secret=signing_secret, body=reply_body),
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+        async def _assert_room_message() -> None:
+            async with session_factory() as session:
+                link = await session.scalar(
+                    select(IngressThreadLink).where(
+                        IngressThreadLink.external_channel_id == channel_id,
+                        IngressThreadLink.external_thread_key == thread_root,
+                    )
+                )
+                assert link is not None
+                row = await session.scalar(
+                    select(ChatMessage).where(ChatMessage.message_id == f"slack_passive_{passive_ts}")
+                )
+                assert row is not None
+                assert row.content == "team update without bot"
+                assert (row.message_metadata or {}).get("interaction") == "room_message"
+
+        await _wait_for_slack_side_effect(_assert_room_message)
+
+    @pytest.mark.asyncio
+    async def test_second_slack_user_joins_shared_thread_membership(self, slack_committed_chat_setup):
+        from sqlalchemy import func, select
+
+        from apps.shared.db.models import ChatThreadUserMember, IngressThreadLink, TenantMembership, User
+
+        client = slack_committed_chat_setup["client"]
+        tenant = slack_committed_chat_setup["tenants"]["tenant_a"]
+        signing_secret = slack_committed_chat_setup["secrets"]["tenant_a"]
+        session_factory = slack_committed_chat_setup["session_factory"]
+        fake = slack_committed_chat_setup["fake_slack"]
+        tenant_id = tenant["tenant"].id
+        email_domain = tenant["admin"].email.split("@", 1)[1]
+        channel_id = f"C_member_{uuid4().hex[:8]}"
+        thread_root = "1700000030.000100"
+
+        slack_user_a = f"U_mem_a_{uuid4().hex[:8]}"
+        slack_user_b = f"U_mem_b_{uuid4().hex[:8]}"
+        fake.register_user(slack_user_a, email=tenant["admin"].email)
+
+        async with session_factory() as session:
+            member = User(
+                username=f"member_{uuid4().hex[:8]}",
+                email=f"member_{uuid4().hex[:8]}@{email_domain}",
+                hashed_password="$2b$12$dummy",
+                tenant_id=tenant_id,
+                role="member",
+            )
+            session.add(member)
+            await session.flush()
+            session.add(TenantMembership(tenant_id=tenant_id, user_id=member.id, status="active"))
+            await session.commit()
+            member_email = member.email
+
+        fake.register_user(slack_user_b, email=member_email)
+
+        url = f"/ingress/{slack_committed_chat_setup['endpoint_keys']['tenant_a']}/events"
+        first = make_app_mention_event(
+            user_id=slack_user_a,
+            channel_id=channel_id,
+            text="<@UBOT> first user",
+            team_id="T_TENANT_A",
+            ts=thread_root,
+        )
+        first_body = json.dumps(
+            make_event_callback_payload(event=first, event_id=f"Ev_mem_a_{slack_user_a}", team_id="T_TENANT_A")
+        )
+        await client.post(
+            url,
+            content=first_body,
+            headers=make_slack_signature_headers(signing_secret=signing_secret, body=first_body),
+        )
+
+        second = make_app_mention_event(
+            user_id=slack_user_b,
+            channel_id=channel_id,
+            text="<@UBOT> second user",
+            thread_ts=thread_root,
+            team_id="T_TENANT_A",
+            ts="1700000030.000200",
+        )
+        second_body = json.dumps(
+            make_event_callback_payload(event=second, event_id=f"Ev_mem_b_{slack_user_b}", team_id="T_TENANT_A")
+        )
+        resp = await client.post(
+            url,
+            content=second_body,
+            headers=make_slack_signature_headers(signing_secret=signing_secret, body=second_body),
+        )
+        assert resp.status_code == 200
+
+        async def _assert_two_members() -> None:
+            async with session_factory() as session:
+                link = await session.scalar(
+                    select(IngressThreadLink).where(
+                        IngressThreadLink.external_channel_id == channel_id,
+                        IngressThreadLink.external_thread_key == thread_root,
+                    )
+                )
+                assert link is not None
+                count = await session.scalar(
+                    select(func.count())
+                    .select_from(ChatThreadUserMember)
+                    .where(ChatThreadUserMember.thread_id == link.chat_thread_id)
+                )
+                assert count is not None and count >= 2
+
+        await _wait_for_slack_side_effect(_assert_two_members)

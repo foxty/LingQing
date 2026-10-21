@@ -3,9 +3,9 @@
 from dataclasses import dataclass
 from typing import Any
 
-from fastapi import APIRouter, Depends, HTTPException, Path, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Path, status
 from pydantic import BaseModel, ConfigDict, Field
-from sqlalchemy import and_, delete, func, or_, select
+from sqlalchemy import and_, delete, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
@@ -72,13 +72,6 @@ class AclShareListResponse(BaseModel):
 
     shares: list[AclShareResponse]
     can_manage: bool
-
-
-class AclShareCandidateResponse(BaseModel):
-    """Candidate user item for ACL share autocomplete."""
-
-    id: int
-    username: str
 
 
 @dataclass(frozen=True)
@@ -290,45 +283,6 @@ async def _ensure_resource_acl(
     await db.flush()
 
 
-async def _list_share_candidate_users(
-    *,
-    db: AsyncSession,
-    tenant_id: int,
-    resource_type: AclShareResourceType,
-    resource_id: int,
-    requester_user_id: int,
-    query: str,
-    limit: int,
-) -> list[AclShareCandidateResponse]:
-    shared_user_stmt = select(AclGrant.principal_id).where(
-        AclGrant.tenant_id == tenant_id,
-        AclGrant.resource_type == resource_type,
-        AclGrant.resource_id == resource_id,
-        AclGrant.principal_type == "user",
-        AclGrant.effect == "allow",
-    )
-    shared_user_ids = {
-        int(principal_id)
-        for principal_id in (await db.execute(shared_user_stmt)).scalars().all()
-        if str(principal_id).isdigit()
-    }
-
-    stmt = select(User.id, User.username).where(
-        User.tenant_id == tenant_id,
-        User.id != requester_user_id,
-    )
-    if shared_user_ids:
-        stmt = stmt.where(User.id.not_in(shared_user_ids))
-
-    normalized_query = query.strip().lower()
-    if normalized_query:
-        stmt = stmt.where(func.lower(User.username).like(f"%{normalized_query}%"))
-
-    stmt = stmt.order_by(User.username.asc()).limit(limit)
-    rows = (await db.execute(stmt)).all()
-    return [AclShareCandidateResponse(id=row.id, username=row.username) for row in rows]
-
-
 @router.post(
     "/{resource_type}/{resource_id}/shares", response_model=AclShareResponse, status_code=status.HTTP_201_CREATED
 )
@@ -457,32 +411,6 @@ async def list_resource_shares(
         for grant in ordered_grants
     ]
     return AclShareListResponse(shares=shares, can_manage=can_manage)
-
-
-@router.get("/{resource_type}/{resource_id}/candidates", response_model=list[AclShareCandidateResponse])
-async def list_share_candidates(
-    resource_type: AclShareResourceType,
-    resource_id: int,
-    q: str = Query(default="", description="Username keyword for autocomplete search"),
-    limit: int = Query(default=20, ge=1, le=50, description="Maximum number of candidates to return"),
-    current_user: UserDTO = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-):
-    await _require_owner_or_manage(
-        db=db,
-        current_user=current_user,
-        resource_type=resource_type,
-        resource_id=resource_id,
-    )
-    return await _list_share_candidate_users(
-        db=db,
-        tenant_id=current_user.tenant_id,
-        resource_type=resource_type,
-        resource_id=resource_id,
-        requester_user_id=current_user.id,
-        query=q,
-        limit=limit,
-    )
 
 
 @router.delete("/{resource_type}/{resource_id}/shares/{user_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -1,24 +1,6 @@
 /**
- * Pure helpers for chat composer @-mention (artifact context attachment).
- * Keep UI components thin; unit-test behavior here.
+ * Pure helpers for the + attach artifact picker (keyboard nav, chip ids).
  */
-
-/** Trailing `@query` at end of composer text (query may be empty). */
-const TRAILING_MENTION_PATTERN = /@([^\s]*)$/
-
-export function extractMentionSearchTerm(input: string): string | null {
-  const match = input.match(TRAILING_MENTION_PATTERN)
-  return match ? match[1] : null
-}
-
-export function shouldOpenMentionPicker(input: string, isBusy: boolean): boolean {
-  if (isBusy) return false
-  return extractMentionSearchTerm(input) !== null
-}
-
-export function stripTrailingMention(input: string): string {
-  return input.replace(/@[^\s]*$/, '')
-}
 
 export type MentionPickerKeyAction =
   | { type: 'none' }

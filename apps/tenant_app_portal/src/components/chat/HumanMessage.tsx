@@ -1,14 +1,21 @@
 import { User, Paperclip } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Message } from '@/types'
 import { getMessageAttachedArtifacts } from '@/lib/messageAttachedArtifacts'
+import { formatHumanAuthorLabel, getHumanMessageKindLabel } from '@/lib/messageAuthorLabel'
 import ContextChip from './ContextChip'
 
 interface HumanMessageProps {
   message: Message
+  currentUserId?: number
+  userNameById?: Map<number, string>
 }
 
-export default function HumanMessage({ message }: HumanMessageProps) {
+export default function HumanMessage({ message, currentUserId, userNameById }: HumanMessageProps) {
+  const { t } = useTranslation()
   const contextResources = getMessageAttachedArtifacts(message.message_metadata)
+  const kind = getHumanMessageKindLabel(message)
+  const authorLabel = formatHumanAuthorLabel(message, { currentUserId, userNameById })
 
   return (
     <div className="flex items-start space-x-3 flex-row-reverse space-x-reverse">
@@ -16,6 +23,12 @@ export default function HumanMessage({ message }: HumanMessageProps) {
         <User className="h-4 w-4" />
       </div>
       <div className="flex min-w-0 flex-1 flex-col items-end space-y-1">
+        {authorLabel || kind === 'room' ? (
+          <p className="text-right text-xs text-muted-foreground">
+            {authorLabel ?? t('workbench.messageAuthorYou')}
+            {kind === 'room' ? ` · ${t('workbench.messageAuthorRoom')}` : null}
+          </p>
+        ) : null}
         <div className="ml-auto w-fit min-w-[9rem] max-w-[min(92%,42rem)] rounded-lg bg-primary px-4 py-2 text-primary-foreground">
           {contextResources && contextResources.length > 0 && (
             <div className="flex flex-wrap gap-1.5 mb-2">

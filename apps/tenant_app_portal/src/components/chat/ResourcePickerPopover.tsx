@@ -1,7 +1,7 @@
 /**
- * Artifact Picker Popover (@mention)
+ * Artifact picker popover (+ attach context).
  *
- * Artifact @mention picker — user-accessible artifacts (any thread), filterable by title.
+ * User-accessible artifacts (any thread), filterable by title via standalone search.
  */
 
 import {
@@ -16,11 +16,8 @@ import { useTranslation } from 'react-i18next'
 import type { AttachedArtifact } from '@/types'
 import './workbenchChatI18n'
 import { searchArtifactsForMention } from '@/lib/artifactContextApi'
-import {
-  extractMentionSearchTerm,
-  filterUnselectedMentionResults,
-  reduceMentionPickerKeyDown,
-} from '@/lib/chatMention'
+import { filterUnselectedMentionResults, reduceMentionPickerKeyDown } from '@/lib/chatMention'
+import { Input } from '@/components/ui/input'
 import {
   BarChart3,
   FileSpreadsheet,
@@ -34,11 +31,13 @@ import {
 } from 'lucide-react'
 
 interface ResourcePickerPopoverProps {
-  inputValue: string
   open: boolean
   onOpenChange: (open: boolean) => void
   onSelect: (resource: AttachedArtifact) => void
   selectedIds: Set<string>
+  /** When set, search is driven by the + attach picker instead of @ in the textarea. */
+  standaloneSearch?: string
+  onStandaloneSearchChange?: (value: string) => void
 }
 
 export interface ResourcePickerPopoverHandle {
@@ -87,7 +86,7 @@ const ResourcePickerPopover = forwardRef<
   ResourcePickerPopoverHandle,
   ResourcePickerPopoverProps
 >(function ResourcePickerPopover(
-  { inputValue, open, onOpenChange, onSelect, selectedIds },
+  { open, onOpenChange, onSelect, selectedIds, standaloneSearch = '', onStandaloneSearchChange },
   ref
 ) {
   const { t } = useTranslation()
@@ -103,7 +102,7 @@ const ResourcePickerPopover = forwardRef<
     [t]
   )
 
-  const searchTerm = extractMentionSearchTerm(inputValue) ?? ''
+  const searchTerm = standaloneSearch
 
   useEffect(() => {
     if (!open) {
@@ -205,8 +204,18 @@ const ResourcePickerPopover = forwardRef<
       aria-label="Attach artifact"
       className="absolute bottom-full left-2 right-2 z-50 mb-2 max-h-72 overflow-y-auto rounded-md border bg-popover text-popover-foreground shadow-lg"
     >
-      <div className="border-b px-3 py-2 text-xs text-muted-foreground">
-        {t('workbench.mentionPickerHint')}
+      <div className="space-y-2 border-b px-3 py-2">
+        {onStandaloneSearchChange ? (
+          <Input
+            value={standaloneSearch}
+            onChange={(e) => onStandaloneSearchChange(e.target.value)}
+            placeholder={t('workbench.mentionPickerHint')}
+            className="h-8 text-sm"
+            autoFocus
+          />
+        ) : (
+          <div className="text-xs text-muted-foreground">{t('workbench.mentionPickerHint')}</div>
+        )}
       </div>
       <div className="max-h-60 overflow-y-auto">
         {loading ? (

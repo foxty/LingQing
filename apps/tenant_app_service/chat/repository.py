@@ -19,6 +19,7 @@ def db_thread_to_domain(db_thread: ChatThread) -> ThreadDomain:
         message_count=db_thread.message_count,
         created_at=db_thread.created_at,
         updated_at=db_thread.updated_at,
+        thread_kind=getattr(db_thread, "thread_kind", None) or "personal",
     )
 
 
@@ -45,7 +46,13 @@ class ThreadRepository(BaseRepository[ChatThread]):
             limit: Maximum number of threads to return
             agent_id: Optional agent ID to filter threads by specific agent
         """
-        query = select(ChatThread).where(ChatThread.tenant_id == tenant_id, ChatThread.user_id == user_id)
+        from apps.tenant_app_service.chat.thread_kinds import THREAD_KIND_PERSONAL
+
+        query = select(ChatThread).where(
+            ChatThread.tenant_id == tenant_id,
+            ChatThread.user_id == user_id,
+            ChatThread.thread_kind == THREAD_KIND_PERSONAL,
+        )
 
         if agent_id is not None:
             query = query.where(ChatThread.agent_id == agent_id)
@@ -55,11 +62,35 @@ class ThreadRepository(BaseRepository[ChatThread]):
         return [db_thread_to_domain(t) for t in result.scalars().all()]
 
     async def count_by_user(self, tenant_id: int, user_id: int) -> int:
-        """Count threads for a user."""
+        """Count personal threads for a user."""
+        from apps.tenant_app_service.chat.thread_kinds import THREAD_KIND_PERSONAL
+
         result = await self.db.execute(
-            select(ChatThread).where(ChatThread.tenant_id == tenant_id, ChatThread.user_id == user_id)
+            select(ChatThread).where(
+                ChatThread.tenant_id == tenant_id,
+                ChatThread.user_id == user_id,
+                ChatThread.thread_kind == THREAD_KIND_PERSONAL,
+            )
         )
         return len(result.scalars().all())
+
+    async def list_shared_for_user(self, tenant_id: int, thread_ids: list[str], limit: int = 20) -> list[ThreadDomain]:
+        if not thread_ids:
+            return []
+        from apps.tenant_app_service.chat.thread_kinds import THREAD_KIND_SHARED
+
+        query = (
+            select(ChatThread)
+            .where(
+                ChatThread.tenant_id == tenant_id,
+                ChatThread.thread_kind == THREAD_KIND_SHARED,
+                ChatThread.id.in_(thread_ids),
+            )
+            .order_by(ChatThread.updated_at.desc())
+            .limit(limit)
+        )
+        result = await self.db.execute(query)
+        return [db_thread_to_domain(t) for t in result.scalars().all()]
 
     async def create_thread(
         self,
@@ -68,6 +99,8 @@ class ThreadRepository(BaseRepository[ChatThread]):
         user_id: int,
         agent_id: int,
         title: str | None = None,
+        *,
+        thread_kind: str = "personal",
     ) -> ThreadDomain:
         """Create a new thread."""
         thread = ChatThread(
@@ -77,6 +110,7 @@ class ThreadRepository(BaseRepository[ChatThread]):
             agent_id=agent_id,
             title=title,
             message_count=0,
+            thread_kind=thread_kind,
         )
         db_thread = await self.create(thread)
         return db_thread_to_domain(db_thread)

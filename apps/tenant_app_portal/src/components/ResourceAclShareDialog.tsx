@@ -75,22 +75,19 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group'
+import TenantUserCombobox from '@/components/TenantUserCombobox'
+import { useAuth } from '@/hooks/useAuth'
 import { useNotification } from '@/hooks/useNotification'
 import {
-  listAclShareCandidates,
   listAclResourceShares,
   revokeAclResourceShare,
   shareAclResource,
-  type AclShareCandidate,
   type AclShareEntry,
   type AclSharePermission,
   type AclShareResourceType,
 } from '@/lib/aclSharesApi'
-import { Check, ChevronsUpDown } from 'lucide-react'
 
 interface ResourceAclShareDialogProps {
   open: boolean
@@ -110,6 +107,7 @@ export default function ResourceAclShareDialog({
   hint,
 }: ResourceAclShareDialogProps) {
   const { t } = useTranslation()
+  const { user } = useAuth()
   const { showError, showSuccess } = useNotification()
 
   const [loading, setLoading] = useState(false)
@@ -117,12 +115,17 @@ export default function ResourceAclShareDialog({
   const [shares, setShares] = useState<AclShareEntry[]>([])
   const [canManage, setCanManage] = useState(false)
   const [candidatesOpen, setCandidatesOpen] = useState(false)
-  const [loadingCandidates, setLoadingCandidates] = useState(false)
-  const [candidates, setCandidates] = useState<AclShareCandidate[]>([])
-  const [candidateQuery, setCandidateQuery] = useState('')
-  const [selectedUserId, setSelectedUserId] = useState<string>('')
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [selectedUsername, setSelectedUsername] = useState('')
   const [selectedPermission, setSelectedPermission] = useState<AclSharePermission>('read')
+
+  const excludeUserIds = useMemo(() => {
+    const ids = shares.map((share) => share.shared_with_user_id)
+    if (user?.id != null) {
+      ids.push(user.id)
+    }
+    return ids
+  }, [shares, user?.id])
 
   const loadData = async () => {
     setLoading(true)
@@ -137,73 +140,32 @@ export default function ResourceAclShareDialog({
     }
   }
 
-  const loadCandidates = async (query: string) => {
-    if (!canManage) {
-      setCandidates([])
-      return
-    }
-    setLoadingCandidates(true)
-    try {
-      const rows = await listAclShareCandidates(resourceType, resourceId, {
-        q: query,
-        limit: 20,
-      })
-      setCandidates(rows)
-    } catch (error: any) {
-      showError(error?.response?.data?.detail || t('components.shareDialog.loadCandidatesFailed'))
-    } finally {
-      setLoadingCandidates(false)
-    }
-  }
-
   useEffect(() => {
     if (!open) {
       return
     }
-    setSelectedUserId('')
+    setSelectedUserId(null)
     setSelectedUsername('')
-    setCandidateQuery('')
-    setCandidates([])
     setCandidatesOpen(false)
     setSelectedPermission('read')
     setCanManage(false)
     void loadData()
   }, [open, resourceType, resourceId])
 
-  useEffect(() => {
-    if (!open || !canManage || !candidatesOpen) {
-      return
-    }
-    const timer = window.setTimeout(() => {
-      void loadCandidates(candidateQuery)
-    }, 250)
-    return () => window.clearTimeout(timer)
-  }, [open, canManage, candidatesOpen, candidateQuery, resourceType, resourceId])
-
-  const selectedCandidateLabel = useMemo(() => {
-    if (selectedUsername) {
-      return selectedUsername
-    }
-    const matchedCandidate = candidates.find((candidate) => String(candidate.id) === selectedUserId)
-    return matchedCandidate?.username ?? ''
-  }, [candidates, selectedUserId, selectedUsername])
-
   const handleShare = async () => {
-    if (!selectedUserId) {
+    if (selectedUserId == null) {
       showError(t('common.noData'))
       return
     }
     setSubmitting(true)
     try {
       await shareAclResource(resourceType, resourceId, {
-        user_id: Number(selectedUserId),
+        user_id: selectedUserId,
         permission: selectedPermission,
       })
       showSuccess(t('components.shareDialog.shareSuccess'))
-      setSelectedUserId('')
+      setSelectedUserId(null)
       setSelectedUsername('')
-      setCandidateQuery('')
-      setCandidates([])
       setCandidatesOpen(false)
       await loadData()
     } catch (error: any) {
@@ -242,58 +204,25 @@ export default function ResourceAclShareDialog({
               <div className="mt-3 grid gap-4 md:grid-cols-2">
                 <div className="space-y-2">
                   <Label htmlFor="share-user">{t('components.shareDialog.user')}</Label>
-                  <Popover open={candidatesOpen} onOpenChange={setCandidatesOpen}>
-                    <PopoverTrigger asChild>
-                      <Button
-                        id="share-user"
-                        variant="outline"
-                        role="combobox"
-                        aria-expanded={candidatesOpen}
-                        className="w-full justify-between font-normal"
-                      >
-                        <span className="truncate">
-                          {selectedCandidateLabel || t('components.shareDialog.searchUser')}
-                        </span>
-                        <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-[var(--radix-popover-trigger-width)] p-0" align="start">
-                      <div className="border-b p-2">
-                        <Input
-                          value={candidateQuery}
-                          onChange={(event) => setCandidateQuery(event.target.value)}
-                          placeholder={t('components.shareDialog.searchPlaceholder')}
-                          autoFocus
-                        />
-                      </div>
-                      <div className="max-h-64 overflow-y-auto p-1">
-                        {loadingCandidates ? (
-                          <div className="px-2 py-6 text-sm text-muted-foreground">{t('components.shareDialog.searching')}</div>
-                        ) : candidates.length === 0 ? (
-                          <div className="px-2 py-6 text-sm text-muted-foreground">{t('components.shareDialog.noUsersFound')}</div>
-                        ) : (
-                          candidates.map((candidate) => {
-                            const isSelected = selectedUserId === String(candidate.id)
-                            return (
-                              <button
-                                key={candidate.id}
-                                type="button"
-                                className="flex w-full items-center justify-between rounded-sm px-2 py-2 text-left text-sm hover:bg-accent hover:text-accent-foreground"
-                                onClick={() => {
-                                  setSelectedUserId(String(candidate.id))
-                                  setSelectedUsername(candidate.username)
-                                  setCandidatesOpen(false)
-                                }}
-                              >
-                                <span className="truncate">{candidate.username}</span>
-                                {isSelected && <Check className="ml-2 h-4 w-4 shrink-0" />}
-                              </button>
-                            )
-                          })
-                        )}
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <TenantUserCombobox
+                    id="share-user"
+                    open={candidatesOpen}
+                    onOpenChange={setCandidatesOpen}
+                    placeholder={t('components.shareDialog.searchUser')}
+                    searchPlaceholder={t('components.shareDialog.searchPlaceholder')}
+                    searchingLabel={t('components.shareDialog.searching')}
+                    emptyLabel={t('components.shareDialog.noUsersFound')}
+                    excludeUserIds={excludeUserIds}
+                    selectedUserId={selectedUserId}
+                    selectedUsername={selectedUsername}
+                    onSelect={(row) => {
+                      setSelectedUserId(row.user_id)
+                      setSelectedUsername(row.username)
+                    }}
+                    onSearchError={(message) =>
+                      showError(message || t('components.shareDialog.loadCandidatesFailed'))
+                    }
+                  />
                   <div className="text-xs text-muted-foreground">{t('components.shareDialog.hint')}</div>
                 </div>
                 <div className="space-y-2">
@@ -317,7 +246,7 @@ export default function ResourceAclShareDialog({
                 <div className="md:col-span-2 flex justify-end">
                   <Button
                     onClick={handleShare}
-                    disabled={submitting || loading || !selectedUserId}
+                    disabled={submitting || loading || selectedUserId == null}
                   >
                     {t('components.shareDialog.addShare')}
                   </Button>

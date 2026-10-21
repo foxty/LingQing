@@ -1,8 +1,9 @@
 import ArtifactsPanel from '@/components/artifacts/ArtifactsPanel'
 import ChatArea from '@/components/chat/ChatArea'
 import '@/components/chat/workbenchChatI18n'
-import ThreadSelector from '@/components/workbench/ThreadSelector'
-import { Button } from '@/components/ui/button'
+import CreateSharedThreadDialog from '@/components/workbench/CreateSharedThreadDialog'
+import SharedThreadParticipantsSheet from '@/components/workbench/SharedThreadParticipantsSheet'
+import WorkbenchThreadChrome from '@/components/workbench/WorkbenchThreadChrome'
 import { useArtifacts } from '@/hooks/useArtifacts'
 import { useAuth } from '@/hooks/useAuth'
 import { useThread, useThreads } from '@/hooks/useThreads'
@@ -13,17 +14,14 @@ import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 import { useNotification } from '@/hooks/useNotification'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { listThreadAgentRoster, listThreadMembers } from '@/lib/threadsApi'
+import { isSharedThreadsUiEnabled } from '@/lib/sharedThreadsFeature'
+import { workbenchThreadPath } from '@/lib/workbenchThreadPaths'
+import type { ChatThread } from '@/types'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
 import { useAgents } from '@/hooks/useAgents'
 import { SYSTEM_AGENT_ONE_ID } from '@/lib/agentsApi'
-import { PanelRight } from 'lucide-react'
 
 i18n.addResourceBundle('en', 'translation', {
   workbench: {
@@ -68,6 +66,9 @@ export default function WorkbenchPage() {
     Number(searchParams.get('agent')) || preferences.lastAgentId || SYSTEM_AGENT_ONE_ID
   )
   const [artifactsPanelVisible, setArtifactsPanelVisible] = useState(false)
+  const [conversationCreateOpen, setConversationCreateOpen] = useState(false)
+  const [membersPanelOpen, setMembersPanelOpen] = useState(false)
+  const sharedUiEnabled = isSharedThreadsUiEnabled()
   const [departedThreadId, setDepartedThreadId] = useState<string | null>(null)
   const initialMessageSentRef = useRef(false)
   const artifactsPanelVisibleRef = useRef(false)
@@ -121,6 +122,7 @@ export default function WorkbenchPage() {
   useEffect(() => {
     artifactsPanelDismissedForThreadRef.current = false
     setArtifactsPanelVisible(false)
+    setMembersPanelOpen(false)
   }, [currentThreadId])
 
   const setArtifactsPanelVisibleFromChat = useCallback((visible: boolean) => {
@@ -141,6 +143,89 @@ export default function WorkbenchPage() {
     setArtifactsPanelVisible(false)
   }, [])
 
+  const queryAgentId = Number(searchParams.get('agent'))
+  const hasQueryAgent = Boolean(searchParams.get('agent')) && Number.isFinite(queryAgentId)
+  const wantsNewConversation = searchParams.get('new') === '1'
+
+  const accessibleThreads = useMemo(() => {
+    const allowed = agentsLoaded && !agentsFailed ? accessibleAgentIds : null
+    return [...threads]
+      .filter(
+        (thread) =>
+          allowed == null || thread.threadKind === 'shared' || allowed.has(thread.agentId)
+      )
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+  }, [accessibleAgentIds, agentsFailed, agentsLoaded, threads])
+
+  const isSharedThread = useMemo(() => {
+    if (!isSharedThreadsUiEnabled()) return false
+    if (routeThread?.thread_kind === 'shared') return true
+    const fromList = accessibleThreads.find((t) => t.id === currentThreadId)
+    return fromList?.threadKind === 'shared'
+  }, [accessibleThreads, currentThreadId, routeThread?.thread_kind])
+
+  const { data: threadMembers = [] } = useQuery({
+    queryKey: ['threadMembers', currentThreadId],
+    queryFn: () => listThreadMembers(currentThreadId!),
+    enabled: Boolean(currentThreadId) && Boolean(user?.id),
+  })
+
+  const userNameById = useMemo(() => {
+    const map = new Map<number, string>()
+    if (user?.id && user.username) {
+      map.set(user.id, user.username)
+    }
+    for (const m of threadMembers) {
+      if (m.username) {
+        map.set(m.user_id, m.username)
+      }
+    }
+    return map
+  }, [threadMembers, user?.id, user?.username])
+
+  const { data: threadRoster = [] } = useQuery({
+    queryKey: ['threadRoster', currentThreadId],
+    queryFn: () => listThreadAgentRoster(currentThreadId!),
+    enabled: Boolean(currentThreadId),
+  })
+
+  const agentNameById = useMemo(() => {
+    const map = new Map(agents.map((a) => [a.id, a.name]))
+    for (const entry of threadRoster) {
+      const label =
+        entry.display_alias || map.get(entry.agent_id) || `#${entry.agent_id}`
+      map.set(entry.agent_id, label)
+    }
+    return map
+  }, [agents, threadRoster])
+
+  const rosterAgentOptions = useMemo(
+    () =>
+      threadRoster.map((entry) => ({
+        id: entry.agent_id,
+        label:
+          entry.display_alias ||
+          agents.find((a) => a.id === entry.agent_id)?.name ||
+          `#${entry.agent_id}`,
+      })),
+    [agents, threadRoster]
+  )
+
+  const defaultSharedAgentId = rosterAgentOptions[0]?.id ?? selectedAgentId
+
+  const threadMemberUserIds = useMemo(
+    () => threadMembers.map((m) => m.user_id),
+    [threadMembers]
+  )
+
+  const threadMemberUserLabels = useMemo(
+    () =>
+      threadMembers
+        .filter((m) => m.username)
+        .map((m) => ({ id: m.user_id, label: m.username! })),
+    [threadMembers]
+  )
+
   const {
     displayMessages,
     historyLoading,
@@ -152,11 +237,13 @@ export default function WorkbenchPage() {
     isStreaming,
     streamingContent,
     streamingToolCalls,
+    streamingAgentId,
     handleSendMessage,
     handleHitlApprovedContinue,
     handleHitlRejected,
   } = useWorkbenchChat({
     agentId,
+    chatAgentId: isSharedThread ? defaultSharedAgentId : selectedAgentId,
     threadId: currentThreadId,
     createThread,
     navigate,
@@ -179,20 +266,24 @@ export default function WorkbenchPage() {
     },
   })
 
-  const queryAgentId = Number(searchParams.get('agent'))
-  const hasQueryAgent = Boolean(searchParams.get('agent')) && Number.isFinite(queryAgentId)
-  const accessibleThreads = useMemo(() => {
-    const allowed = agentsLoaded && !agentsFailed ? accessibleAgentIds : null
-    return [...threads]
-      .filter((thread) => allowed == null || allowed.has(thread.agentId))
-      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
-  }, [accessibleAgentIds, agentsFailed, agentsLoaded, threads])
-  const sortedThreads = useMemo(
-    () => accessibleThreads.filter((thread) => thread.agentId === selectedAgentId),
-    [accessibleThreads, selectedAgentId]
+  const sortedThreads = useMemo(() => {
+    if (!sharedUiEnabled) {
+      return accessibleThreads.filter((thread) => thread.agentId === selectedAgentId)
+    }
+    return accessibleThreads.filter(
+      (thread) => thread.threadKind === 'shared' || thread.agentId === selectedAgentId
+    )
+  }, [accessibleThreads, selectedAgentId, sharedUiEnabled])
+
+  const resolveThreadPath = useCallback(
+    (thread: Pick<ChatThread, 'id' | 'threadKind'>) => workbenchThreadPath(thread),
+    []
   )
+
   const latestThread = accessibleThreads[0] || null
   const currentThread = sortedThreads.find((thread) => thread.id === currentThreadId) || null
+  const canManageMembers = Boolean(currentThread && user && currentThread.userId === user.id)
+  const showMembersControl = Boolean(sharedUiEnabled && currentThreadId)
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId)
   const {
     thinkingEffortControlEnabled,
@@ -217,8 +308,11 @@ export default function WorkbenchPage() {
     thinkingEffortOptions,
     updatePreferences,
   ])
-  const agentAccessRevoked =
-    agentsLoaded && !agentsFailed && selectedAgentId > 0 && !agents.some((agent) => agent.id === selectedAgentId)
+  const agentAccessRevoked = useMemo(() => {
+    if (!agentsLoaded || agentsFailed) return false
+    const gateAgentId = isSharedThread ? defaultSharedAgentId : selectedAgentId
+    return gateAgentId > 0 && !agents.some((agent) => agent.id === gateAgentId)
+  }, [agents, agentsFailed, agentsLoaded, defaultSharedAgentId, isSharedThread, selectedAgentId])
   const sessionTitle = currentThread?.title || t('workbench.untitledThread')
   const isArtifactSplit = artifacts.length > 0 && artifactsPanelVisible
 
@@ -264,8 +358,9 @@ export default function WorkbenchPage() {
         navigate(`/workbench?agent=${selectedAgentId}`, { replace: true })
         return
       }
-      if (accessibleAgentIds.has(routeThread.agent_id)) {
-        if (routeThread.agent_id !== selectedAgentId) {
+      const routeIsShared = routeThread.thread_kind === 'shared'
+      if (routeIsShared || accessibleAgentIds.has(routeThread.agent_id)) {
+        if (!routeIsShared && routeThread.agent_id !== selectedAgentId) {
           setSelectedAgentId(routeThread.agent_id)
           updatePreferences({ lastAgentId: routeThread.agent_id })
         }
@@ -303,15 +398,15 @@ export default function WorkbenchPage() {
     if (!agentsLoaded && !agentsFailed) {
       return
     }
-    if (hasQueryAgent) {
+    if (hasQueryAgent && !wantsNewConversation) {
       const latestForAgent = sortedThreads[0]
       if (latestForAgent) {
-        navigate(`/workbench/${latestForAgent.id}`, { replace: true })
+        navigate(resolveThreadPath(latestForAgent), { replace: true })
       }
       return
     }
     if (latestThread) {
-      navigate(`/workbench/${latestThread.id}`, { replace: true })
+      navigate(resolveThreadPath(latestThread), { replace: true })
     }
   }, [
     agentsFailed,
@@ -319,10 +414,12 @@ export default function WorkbenchPage() {
     hasQueryAgent,
     latestThread,
     navigate,
+    resolveThreadPath,
     sortedThreads,
     threadIdParam,
     threadsFetched,
     threadsLoading,
+    wantsNewConversation,
   ])
 
   useEffect(() => {
@@ -334,21 +431,32 @@ export default function WorkbenchPage() {
     }
   }, [location.state, threadIdParam, user, handleSendMessage])
 
-  const handleNewThread = useCallback(async () => {
-    try {
-      const newThread = await createThread({ agentId: selectedAgentId })
-      updatePreferences({ lastAgentId: selectedAgentId })
-      navigate(`/workbench/${newThread.id}`)
-    } catch (error) {
-      console.error('Failed to create thread:', error)
+  const handleNewConversation = useCallback(() => {
+    if (sharedUiEnabled) {
+      setConversationCreateOpen(true)
+      return
     }
-  }, [createThread, navigate, selectedAgentId, updatePreferences])
+    void (async () => {
+      try {
+        const newThread = await createThread({ agentId: selectedAgentId })
+        updatePreferences({ lastAgentId: selectedAgentId })
+        navigate(workbenchThreadPath({ id: newThread.id, threadKind: 'personal' }))
+      } catch (error) {
+        console.error('Failed to create thread:', error)
+      }
+    })()
+  }, [createThread, navigate, selectedAgentId, sharedUiEnabled, updatePreferences])
 
   const handleThreadSelect = useCallback(
     (threadId: string) => {
+      const thread = accessibleThreads.find((t) => t.id === threadId)
+      if (thread) {
+        navigate(resolveThreadPath(thread))
+        return
+      }
       navigate(`/workbench/${threadId}`)
     },
-    [navigate]
+    [accessibleThreads, navigate, resolveThreadPath]
   )
 
   const handleDeleteThread = useCallback(
@@ -358,63 +466,49 @@ export default function WorkbenchPage() {
         setDepartedThreadId(threadId)
         setCurrentThreadId(null)
         if (remainingThreads.length > 0) {
-          navigate(`/workbench/${remainingThreads[0].id}`, { replace: true })
+          navigate(resolveThreadPath(remainingThreads[0]), { replace: true })
         } else {
           navigate(`/workbench?agent=${selectedAgentId}`, { replace: true })
         }
       }
       await deleteThread(threadId)
     },
-    [currentThreadId, deleteThread, navigate, selectedAgentId, sortedThreads, threadIdParam]
+    [currentThreadId, deleteThread, navigate, resolveThreadPath, selectedAgentId, sortedThreads, threadIdParam]
   )
 
   return (
     <div id="workbench" className="flex h-full overflow-hidden">
       <div className="flex-1 flex overflow-hidden">
         <div className={`flex flex-col overflow-hidden flex-1 ${isArtifactSplit ? 'min-w-[16rem]' : ''}`}>
-          <div className="flex items-center gap-2 px-3 py-1.5 border-b min-h-11">
-            <Select
-              value={String(selectedAgentId)}
-              onValueChange={(value) => {
-                const nextId = Number(value)
-                setSelectedAgentId(nextId)
-                updatePreferences({ lastAgentId: nextId })
+          <WorkbenchThreadChrome
+            sharedUiEnabled={sharedUiEnabled}
+            selectedAgentId={selectedAgentId}
+            agentOptions={agentOptions.map((a) => ({ id: a.id, name: a.name }))}
+            onAgentChange={(nextId) => {
+              setSelectedAgentId(nextId)
+              updatePreferences({ lastAgentId: nextId })
+              if (threadIdParam) {
+                navigate(`/workbench/${threadIdParam}?agent=${nextId}`)
+              } else {
                 navigate(`/workbench?agent=${nextId}`)
-              }}
-            >
-              <SelectTrigger className="h-9 w-44 shrink-0" aria-label={t('workbench.selectAgent')}>
-                <SelectValue placeholder={t('workbench.selectAgent')} />
-              </SelectTrigger>
-              <SelectContent>
-                {agentOptions.map((agent) => (
-                  <SelectItem key={agent.id} value={String(agent.id)}>
-                    {agent.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <ThreadSelector
-              threads={sortedThreads}
-              currentThreadId={currentThreadId}
-              isLoading={threadsLoading}
-              onSelectThread={handleThreadSelect}
-              onCreateThread={handleNewThread}
-              onDeleteThread={handleDeleteThread}
-            />
-            {artifacts.length > 0 && !artifactsPanelVisible ? (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="ml-auto h-9 shrink-0 px-2"
-                onClick={handleOpenArtifactsPanel}
-                title={t('workbench.openArtifacts')}
-                aria-label={t('workbench.openArtifacts')}
-              >
-                <PanelRight className="h-4 w-4" />
-                <span className="ml-1.5 tabular-nums text-xs text-muted-foreground">{artifacts.length}</span>
-              </Button>
-            ) : null}
-          </div>
+              }
+            }}
+            threads={sortedThreads}
+            currentThreadId={currentThreadId}
+            threadsLoading={threadsLoading}
+            isSharedThread={isSharedThread}
+            showMembersButton={showMembersControl}
+            participantCount={threadMembers.length + threadRoster.length}
+            onSelectThread={handleThreadSelect}
+            onCreateConversation={handleNewConversation}
+            onDeleteThread={handleDeleteThread}
+            onOpenMembers={() => setMembersPanelOpen((open) => !open)}
+            membersPanelOpen={membersPanelOpen}
+            artifactsCount={artifacts.length}
+            artifactsPanelVisible={artifactsPanelVisible}
+            onOpenArtifactsPanel={handleOpenArtifactsPanel}
+            onCloseArtifactsPanel={handleCollapseArtifactsPanel}
+          />
 
           <ChatArea
             messages={displayMessages}
@@ -422,6 +516,7 @@ export default function WorkbenchPage() {
             isBusy={showWorkingIndicator}
             streamingContent={isStreaming ? streamingContent : ''}
             streamingToolCalls={isStreaming ? streamingToolCalls : []}
+            streamingAgentId={isStreaming ? streamingAgentId : null}
             sendKeyPreference={preferences.sendKey}
             artifactsAutoOpen={preferences.artifactsAutoOpen}
             thinkingEffort={
@@ -451,9 +546,40 @@ export default function WorkbenchPage() {
             }}
             onHitlApprovedContinue={handleHitlApprovedContinue}
             onHitlRejected={handleHitlRejected}
+            isSharedThread={isSharedThread}
+            rosterAgentOptions={rosterAgentOptions}
+            memberUserIds={threadMemberUserIds}
+            memberUserLabels={threadMemberUserLabels}
+            currentUserId={user?.id}
+            userNameById={userNameById}
+            agentNameById={agentNameById}
+            fallbackAgentId={isSharedThread ? undefined : defaultSharedAgentId ?? selectedAgentId}
           />
         </div>
       </div>
+
+      {sharedUiEnabled ? (
+        <>
+          <CreateSharedThreadDialog
+            open={conversationCreateOpen}
+            onOpenChange={setConversationCreateOpen}
+            agents={agentOptions.map((a) => ({ id: a.id, name: a.name }))}
+            defaultAgentId={selectedAgentId}
+            onCreated={(id) => {
+              navigate(workbenchThreadPath({ id, threadKind: 'shared' }))
+            }}
+          />
+          {currentThreadId ? (
+            <SharedThreadParticipantsSheet
+              open={membersPanelOpen}
+              onOpenChange={setMembersPanelOpen}
+              threadId={currentThreadId}
+              primaryAgentId={currentThread?.agentId}
+              isOwner={canManageMembers}
+            />
+          ) : null}
+        </>
+      ) : null}
 
       {isArtifactSplit ? (
         <ArtifactsPanel

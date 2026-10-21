@@ -19,9 +19,10 @@ from apps.shared.db.session import app_db_session, get_db
 from apps.shared.domain.actor import ActorContext
 from apps.shared.observability.service import ObservabilityService
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.chat.adapters import chat_thread_to_domain
 from apps.tenant_app_service.chat.domain import ThreadDomain
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse
+from apps.tenant_app_service.chat.shared_agent_turn import validate_shared_agent_turn
+from apps.tenant_app_service.chat.thread_access import require_read_thread
 from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.chat.turn_sessions import run_non_stream_chat_turn, stream_chat_turn_events
 
@@ -32,6 +33,8 @@ async def _validate_and_get_thread(
     thread_id: str,
     current_user: UserDTO,
     db: AsyncSession,
+    *,
+    agent_id: int | None = None,
 ) -> ThreadDomain:
     """Validate thread_id is provided and accessible.
 
@@ -39,6 +42,7 @@ async def _validate_and_get_thread(
         thread_id: Thread ID to validate
         current_user: Current authenticated user
         db: Database session
+        agent_id: When set, validate shared-thread roster for agent turns
 
     Returns:
         Validated thread_id
@@ -49,16 +53,14 @@ async def _validate_and_get_thread(
     if not thread_id:
         raise ValidationError("thread_id is required. Please create a thread first.")
 
+    thread_row = await require_read_thread(db, thread_id=thread_id, user=current_user)
+    if agent_id is not None:
+        await validate_shared_agent_turn(db, thread=thread_row, agent_id=agent_id)
     thread_service = ThreadService(current_user.tenant_id, db)
-
     thread = await thread_service.get_thread(thread_id)
     if not thread:
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
-
-    if thread.tenant_id != current_user.tenant_id or thread.user_id != current_user.id:
-        raise AuthorizationError(f"Access denied. Thread {thread_id} does not belong to you")
-
-    return chat_thread_to_domain(thread)
+    return thread
 
 
 @router.post("", response_model=ChatResponse, summary="Chat with an agent")
@@ -77,7 +79,12 @@ async def chat(
         raise AuthorizationError(f"Access denied. You can only access tenant: {current_user.tenant_id}")
 
     async with app_db_session() as db:
-        await _validate_and_get_thread(request.thread_id, current_user, db)
+        await _validate_and_get_thread(
+            request.thread_id,
+            current_user,
+            db,
+            agent_id=request.agent_id,
+        )
 
     return await run_non_stream_chat_turn(
         current_user.tenant_id,
@@ -94,7 +101,12 @@ async def _stream_chat_events(
 ) -> AsyncIterator[str]:
     """Validate thread access, then stream via committed prepare + SSE iteration."""
     async with app_db_session() as db:
-        await _validate_and_get_thread(request.thread_id, current_user, db)
+        await _validate_and_get_thread(
+            request.thread_id,
+            current_user,
+            db,
+            agent_id=request.agent_id,
+        )
 
     async for item in stream_chat_turn_events(
         current_user.tenant_id,

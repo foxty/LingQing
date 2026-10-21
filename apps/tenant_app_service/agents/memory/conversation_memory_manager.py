@@ -56,6 +56,17 @@ def _db_message_to_langchain(db_msg: ChatMessage) -> BaseMessage:
         additional_kwargs["timestamp"] = ts.isoformat()
 
     if db_msg.type == "human":
+        meta = db_msg.message_metadata or {}
+        if meta.get("interaction") == "room_message":
+            label = meta.get("display_name") or (
+                f"user:{db_msg.author_user_id}" if db_msg.author_user_id else "participant"
+            )
+            content = f"[{label}]: {content}"
+            additional_kwargs = {
+                **additional_kwargs,
+                "room_message": True,
+                "author_user_id": db_msg.author_user_id,
+            }
         return HumanMessage(id=message_id, content=content, additional_kwargs=additional_kwargs)
     elif db_msg.type == "ai":
         # Load tool_calls from dedicated field (only pass if not None/empty)
@@ -528,11 +539,17 @@ class ConversationMemoryManager:
 
         # Step 3: Load unsummarized messages only
         actual_limit = message_limit
-        raw_db_messages = await self.message_repo.get_unsummarized_messages(
-            thread_id=self.thread_id,
-            agent_id=self.agent_id,
-            limit=actual_limit,
-        )
+        if thread.thread_kind == "shared":
+            raw_db_messages = await self.message_repo.get_unsummarized_messages_for_shared_thread(
+                thread_id=self.thread_id,
+                limit=actual_limit,
+            )
+        else:
+            raw_db_messages = await self.message_repo.get_unsummarized_messages(
+                thread_id=self.thread_id,
+                agent_id=self.agent_id,
+                limit=actual_limit,
+            )
         # get_unsummarized_messages returns DESC; reverse to ASC chronological
         raw_db_messages.reverse()
 
@@ -606,6 +623,11 @@ class ConversationMemoryManager:
             else:
                 content = msg.content if isinstance(msg.content, str) else str(msg.content or "")
 
+            author_user_id = None
+            if msg.type == "human":
+                author_user_id = runtime_context.user.user_id
+                metadata = {**(metadata or {}), "interaction": "agent_turn"}
+
             db_msg = ChatMessage(
                 message_id=message_id,
                 thread_id=self.thread_id,
@@ -618,6 +640,7 @@ class ConversationMemoryManager:
                 tool_calls=tool_calls,
                 additional_kwargs=kwargs,
                 message_metadata=metadata,
+                author_user_id=author_user_id,
             )
             db_messages.append(db_msg)
 

@@ -51,9 +51,33 @@ export type TurnProcessItem =
       message: Message
     }
 
+export function resolvePositiveAgentId(agentId?: number | null): number | null {
+  if (agentId == null || agentId <= 0) {
+    return null
+  }
+  return agentId
+}
+
+export function resolveTurnAgentId(turn: AiTurn): number | null {
+  const scan: Message[] = [turn.finalMessage, ...turn.processMessages]
+  for (const item of turn.processItems) {
+    if (item.type === 'message') {
+      scan.push(item.message)
+    }
+  }
+  for (const msg of scan) {
+    const id = resolvePositiveAgentId(msg.agent_id)
+    if (id != null) {
+      return id
+    }
+  }
+  return resolvePositiveAgentId(turn.agentId)
+}
+
 export interface AiTurn {
   id: string
   sessionId?: string
+  agentId?: number | null
   finalMessage: Message
   metrics?: SessionMetrics
   processMessages: Message[]
@@ -72,6 +96,22 @@ function humanMessageKey(message: Message): string {
   const timestamp = message.timestamp ?? 'unknown'
   const contentPrefix = message.content.slice(0, 48)
   return `human-${timestamp}-${contentPrefix}`
+}
+
+/** Compose + agent save used to double-persist the same human row (legacy threads). */
+function isDuplicateHumanMessage(previous: Message, next: Message): boolean {
+  if (previous.content.trim() !== next.content.trim()) {
+    return false
+  }
+  if (previous.author_user_id !== next.author_user_id) {
+    return false
+  }
+  const prevTs = previous.timestamp ? Date.parse(previous.timestamp) : Number.NaN
+  const nextTs = next.timestamp ? Date.parse(next.timestamp) : Number.NaN
+  if (Number.isNaN(prevTs) || Number.isNaN(nextTs)) {
+    return false
+  }
+  return Math.abs(prevTs - nextTs) <= 5000
 }
 
 function aiTurnKey(turn: AiTurn): string {
@@ -315,11 +355,17 @@ function buildTurn(
     .flatMap((msg) => msg.tool_calls ?? [])
     .find((toolCall) => toolCall.id)?.id
 
+  const agentId =
+    [...aiMessages]
+      .map((msg) => resolvePositiveAgentId(msg.agent_id))
+      .find((id): id is number => id != null) ?? null
+
   return {
     id:
       sessionId ||
       `turn-${timestamp ?? firstToolCallId ?? finalMessage.content.slice(0, 32)}`,
     sessionId,
+    agentId,
     finalMessage,
     metrics,
     processMessages,
@@ -346,6 +392,14 @@ export function buildMessageRenderItems(
     const message = messages[index]
 
     if (message.role === 'human') {
+      const last = renderItems[renderItems.length - 1]
+      if (
+        last?.type === 'human' &&
+        isDuplicateHumanMessage(last.message, message)
+      ) {
+        index += 1
+        continue
+      }
       renderItems.push({
         type: 'human',
         key: humanMessageKey(message),

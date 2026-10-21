@@ -3,7 +3,7 @@
 from datetime import datetime
 from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class SimpleMessage(BaseModel):
@@ -34,6 +34,7 @@ class Message(BaseModel):
     session_id: str | None = None  # For linking to observability metrics
     additional_kwargs: dict[str, Any] | None = None  # Additional metadata (e.g., tool_metadata)
     message_metadata: dict[str, Any] | None = None  # Full message metadata
+    author_user_id: int | None = None
 
 
 class ChatRequest(BaseModel):
@@ -60,6 +61,10 @@ class ChatRequest(BaseModel):
     thinking_effort: str | None = Field(
         default=None,
         description="Selected thinking_effort_options value from the agent model profile snapshot",
+    )
+    skip_human_persist: bool = Field(
+        default=False,
+        description="When true, human message was already saved via compose; include it in agent state only",
     )
 
 
@@ -104,9 +109,19 @@ class ClearConversationResponse(BaseModel):
 class ThreadCreate(BaseModel):
     """Thread creation request."""
 
-    agent_id: int = Field(..., description="Agent ID for this thread")
+    agent_id: int | None = Field(None, description="Primary agent (legacy single-agent create)")
+    agent_ids: list[int] | None = Field(None, description="Agents on the conversation roster")
+    member_user_ids: list[int] | None = Field(None, description="Additional tenant users to invite")
     title: str | None = Field(None, description="Optional thread title")
     first_message: str | None = Field(None, description="Optional first message to auto-generate title")
+
+    @model_validator(mode="after")
+    def require_agent_selection(self) -> "ThreadCreate":
+        if self.agent_ids:
+            return self
+        if self.agent_id is not None:
+            return self
+        raise ValueError("agent_id or agent_ids is required")
 
 
 class ThreadUpdate(BaseModel):
@@ -124,10 +139,71 @@ class ThreadResponse(BaseModel):
     tenant_id: int = Field(..., description="Tenant ID")
     user_id: int = Field(..., description="User ID")
     agent_id: int = Field(..., description="Agent ID")
+    thread_kind: str = Field(default="personal", description="personal | shared")
     title: str | None = Field(None, description="Thread title")
     message_count: int = Field(..., description="Number of messages in thread")
     created_at: datetime = Field(..., description="Creation timestamp")
     updated_at: datetime = Field(..., description="Last update timestamp")
+
+
+class ComposeMention(BaseModel):
+    type: Literal["user", "agent"]
+    id: int
+    label: str | None = None
+
+
+class ComposeThreadMessageRequest(BaseModel):
+    content: str = Field(..., min_length=1)
+    mentions: list[ComposeMention] = Field(default_factory=list)
+    attached_artifact_ids: list[int] = Field(default_factory=list)
+
+
+class ComposeThreadMessageResponse(BaseModel):
+    message_id: str
+    thread_id: str
+    content: str
+    author_user_id: int
+    created_at: datetime
+    invoke_agent_ids: list[int] = Field(default_factory=list)
+
+
+class RoomMessageCreate(BaseModel):
+    content: str = Field(..., min_length=1)
+
+
+class RoomMessageResponse(BaseModel):
+    message_id: str
+    thread_id: str
+    content: str
+    author_user_id: int
+    created_at: datetime
+
+
+class ThreadMemberResponse(BaseModel):
+    user_id: int
+    role: str
+    username: str | None = None
+
+
+class ThreadMemberAdd(BaseModel):
+    user_id: int = Field(..., description="Tenant user id to add as member")
+
+
+class ThreadMemberRoleUpdate(BaseModel):
+    role: Literal["owner", "member", "viewer"]
+
+
+class ThreadAgentPrimaryUpdate(BaseModel):
+    is_primary: bool = Field(..., description="When true, set this agent as the thread primary agent")
+
+
+class ThreadAgentAdd(BaseModel):
+    agent_id: int = Field(..., description="Agent id to add to the roster")
+
+
+class ThreadAgentRosterResponse(BaseModel):
+    agent_id: int
+    display_alias: str | None = None
 
 
 SessionStatus = Literal[

@@ -3,19 +3,22 @@ import ContextChipsBar from './ContextChipsBar'
 import ResourcePickerPopover, {
   type ResourcePickerPopoverHandle,
 } from './ResourcePickerPopover'
+import ParticipantMentionPopover from './ParticipantMentionPopover'
 import ChatComposerToolbar from './ChatComposerToolbar'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import type { ThreadLoadError } from '@/hooks/useChatHistory'
 import type { ThinkingEffortOption } from '@/lib/chatApi'
 import {
-  mentionResourceChipId,
-  shouldOpenMentionPicker,
-  stripTrailingMention,
-} from '@/lib/chatMention'
+  mergeMentionsFromMessageText,
+  shouldOpenParticipantMentionPicker,
+  stripTrailingParticipantMention,
+  type ComposeMentionPayload,
+} from '@/lib/participantMention'
 import type { ArtifactsAutoOpenPreference, ThinkingEffort } from '@/lib/userPreferencesTypes'
+import { mentionResourceChipId } from '@/lib/chatMention'
 import type { AttachedArtifact } from '@/types'
-import { Send } from 'lucide-react'
+import { Plus, Send } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -35,11 +38,29 @@ interface ChatComposerProps {
   thinkingEffortControlEnabled: boolean
   agentModelId: string
   agentProfileName: string
-  onSendMessage: (message: string, resources: AttachedArtifact[]) => void
+  onSendMessage: (
+    message: string,
+    resources: AttachedArtifact[],
+    mentions?: ComposeMentionPayload[]
+  ) => void
   onSendKeyPreferenceChange: (value: 'enter' | 'ctrl-enter') => void
   onArtifactsAutoOpenChange: (value: ArtifactsAutoOpenPreference) => void
   onThinkingEffortChange: (value: ThinkingEffort) => void
   onBeforeSend?: () => void
+  isSharedThread?: boolean
+  rosterAgentOptions?: { id: number; label: string }[]
+  memberUserIds?: number[]
+  memberUserLabels?: { id: number; label: string }[]
+}
+
+function dedupeMention(
+  list: ComposeMentionPayload[],
+  next: ComposeMentionPayload
+): ComposeMentionPayload[] {
+  if (list.some((m) => m.type === next.type && m.id === next.id)) {
+    return list
+  }
+  return [...list, next]
 }
 
 export default function ChatComposer({
@@ -61,13 +82,21 @@ export default function ChatComposer({
   onArtifactsAutoOpenChange,
   onThinkingEffortChange,
   onBeforeSend,
+  isSharedThread = false,
+  rosterAgentOptions = [],
+  memberUserIds = [],
+  memberUserLabels = [],
 }: ChatComposerProps) {
   const { t } = useTranslation()
   const [input, setInput] = useState('')
   const [selectedResources, setSelectedResources] = useState<AttachedArtifact[]>([])
-  const [pickerOpen, setPickerOpen] = useState(false)
+  const [composeMentions, setComposeMentions] = useState<ComposeMentionPayload[]>([])
+  const [resourcePickerOpen, setResourcePickerOpen] = useState(false)
+  const [resourceSearch, setResourceSearch] = useState('')
   const resourcePickerRef = useRef<ResourcePickerPopoverHandle>(null)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+
+  const participantPickerOpen = shouldOpenParticipantMentionPicker(input, isBusy)
 
   const modelChipTitle = useMemo(() => {
     if (!agentModelId) {
@@ -110,33 +139,62 @@ export default function ChatComposer({
   }, [])
 
   useEffect(() => {
-    setPickerOpen(shouldOpenMentionPicker(input, isBusy))
-  }, [input, isBusy])
-
-  useEffect(() => {
     syncTextareaHeight()
   }, [input, syncTextareaHeight])
 
   const handleResourceSelect = useCallback((resource: AttachedArtifact) => {
     setSelectedResources((prev) => [...prev, resource])
-    setInput((prev) => stripTrailingMention(prev))
+    setResourceSearch('')
+    textareaRef.current?.focus()
   }, [])
 
   const handleRemoveResource = useCallback((resource: AttachedArtifact) => {
     setSelectedResources((prev) => prev.filter((r) => r.artifact_id !== resource.artifact_id))
   }, [])
 
+  const handleParticipantSelect = useCallback((mention: ComposeMentionPayload) => {
+    const stripped = stripTrailingParticipantMention(input)
+    const spacer = stripped.length > 0 && !stripped.endsWith(' ') ? ' ' : ''
+    setInput(`${stripped}${spacer}@${mention.label} `)
+    setComposeMentions((prev) => dedupeMention(prev, mention))
+    textareaRef.current?.focus()
+  }, [input])
+
+  const openResourcePicker = useCallback(() => {
+    if (inputDisabled) return
+    setResourceSearch('')
+    setResourcePickerOpen(true)
+  }, [inputDisabled])
+
   const handleSend = useCallback(() => {
     if (!input.trim() || inputDisabled) return
     onBeforeSend?.()
-    onSendMessage(input, selectedResources)
+    const activeMentions = mergeMentionsFromMessageText(
+      input,
+      composeMentions.filter((m) => input.includes(`@${m.label}`)),
+      rosterAgentOptions,
+      memberUserLabels
+    )
+    onSendMessage(input, selectedResources, activeMentions)
     setInput('')
     setSelectedResources([])
-  }, [input, inputDisabled, onBeforeSend, onSendMessage, selectedResources])
+    setComposeMentions([])
+    setResourcePickerOpen(false)
+    setResourceSearch('')
+  }, [
+    input,
+    inputDisabled,
+    onBeforeSend,
+    onSendMessage,
+    selectedResources,
+    composeMentions,
+    rosterAgentOptions,
+    memberUserLabels,
+  ])
 
   const handleKeyPress = useCallback(
     (e: React.KeyboardEvent) => {
-      if (pickerOpen && resourcePickerRef.current?.handleKeyDown(e)) {
+      if (resourcePickerOpen && resourcePickerRef.current?.handleKeyDown(e)) {
         return
       }
 
@@ -150,12 +208,14 @@ export default function ChatComposer({
         handleSend()
       }
     },
-    [sendKeyPreference, handleSend, pickerOpen]
+    [sendKeyPreference, handleSend, resourcePickerOpen]
   )
 
   const placeholder = agentAccessRevoked
     ? t('workbench.agentAccessRevoked')
-    : t('workbench.messagePlaceholder')
+    : isSharedThread
+      ? t('workbench.sharedConversationPlaceholder')
+      : t('workbench.messagePlaceholder')
 
   return (
     <div className="flex shrink-0 flex-col gap-2 bg-background px-3 pb-3 pt-3">
@@ -166,15 +226,36 @@ export default function ChatComposer({
 
       <div className="rounded-[var(--radius-pane)] border border-border bg-card">
         <div className="relative z-10">
+          <ParticipantMentionPopover
+            inputValue={input}
+            open={participantPickerOpen}
+            rosterAgents={rosterAgentOptions}
+            memberUserIds={memberUserIds}
+            includeUsers={isSharedThread}
+            onSelect={handleParticipantSelect}
+          />
           <ResourcePickerPopover
             ref={resourcePickerRef}
-            inputValue={input}
-            open={pickerOpen}
-            onOpenChange={setPickerOpen}
+            open={resourcePickerOpen}
+            onOpenChange={setResourcePickerOpen}
             onSelect={handleResourceSelect}
             selectedIds={selectedIds}
+            standaloneSearch={resourceSearch}
+            onStandaloneSearchChange={setResourceSearch}
           />
           <div className="flex items-end gap-2 px-2 pb-1 pt-2">
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon"
+              className="h-11 w-11 shrink-0"
+              onClick={openResourcePicker}
+              disabled={inputDisabled}
+              title={t('workbench.composerAttachHint')}
+              aria-label={t('workbench.composerAttachHint')}
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
             <div className="min-w-0 flex-1 [&>div]:mb-0">
               <Textarea
                 ref={textareaRef}

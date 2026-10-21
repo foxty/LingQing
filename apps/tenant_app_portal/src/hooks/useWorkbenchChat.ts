@@ -14,11 +14,15 @@ import {
   shouldAutoOpenArtifactsPanel,
   toTimestampMs,
 } from '@/lib/workbenchChatUtils'
+import { getApiErrorMessage } from '@/lib/api'
+import { composeThreadMessage } from '@/lib/threadsApi'
+import type { ComposeMentionPayload } from '@/lib/participantMention'
 import type { SSEMessage } from '@/lib/sse'
 import type { Artifact, AttachedArtifact, Message } from '@/types'
 
 interface UseWorkbenchChatOptions {
   agentId: number
+  chatAgentId?: number
   threadId: string | null
   createThread: (params: { agentId: number }) => Promise<{ id: string }>
   navigate: (path: string, options?: { replace?: boolean }) => void
@@ -46,6 +50,7 @@ function withOptimisticMessage(history: Message[], optimistic: Message | null): 
 
 export function useWorkbenchChat({
   agentId,
+  chatAgentId,
   threadId,
   createThread,
   navigate,
@@ -61,6 +66,7 @@ export function useWorkbenchChat({
 }: UseWorkbenchChatOptions) {
   const { t } = useTranslation()
   const { user } = useAuth()
+  const turnAgentId = chatAgentId ?? agentId
   const latestMessageTimestampBeforeSendRef = useRef(0)
   const handleHitlApprovedContinueRef = useRef<(proposalId: string) => Promise<void>>(async () => {})
   const handleStreamEventRef = useRef<(data: SSEMessage, activeThreadId: string) => Promise<void>>(
@@ -82,6 +88,7 @@ export function useWorkbenchChat({
     isStreaming,
     streamingContent,
     streamingToolCalls,
+    streamingAgentId,
     beginStream,
     runStream,
     resetStreamState,
@@ -205,6 +212,7 @@ export function useWorkbenchChat({
     async (
       messageText: string,
       selectedResources: AttachedArtifact[],
+      mentions: ComposeMentionPayload[] = [],
       options?: {
         hidden?: boolean
         hitlProposalId?: string
@@ -234,60 +242,78 @@ export function useWorkbenchChat({
       }
 
       latestMessageTimestampBeforeSendRef.current = getLatestMessageTimestamp(historyMessages)
-      notifyStreamStarted()
       const userInput = options?.hidden ? messageText : messageText.trim()
-      const abortController = beginStream(
-        options?.hidden
-          ? undefined
-          : {
-              role: 'human',
-              content: userInput,
-              timestamp: new Date().toISOString(),
-              message_metadata: {
-                attached_artifacts: selectedResources,
-              },
-            },
-        activeThreadId
-      )
+
+      let invokeAgentIds: number[] = [turnAgentId]
+      const skipHumanPersist = !options?.hidden
+
+      if (!options?.hidden) {
+        try {
+          const composed = await composeThreadMessage(activeThreadId, {
+            content: userInput,
+            mentions: mentions.map((m) => ({ type: m.type, id: m.id, label: m.label })),
+            attached_artifact_ids: selectedResources.map((r) => r.artifact_id),
+          })
+          invokeAgentIds = composed.invoke_agent_ids
+          await refreshTail()
+          if (invokeAgentIds.length === 0) {
+            if (shouldNavigateAfterStreamStart(createdThreadId)) {
+              navigate(`/workbench/${createdThreadId}`, { replace: true })
+            }
+            return
+          }
+        } catch (error) {
+          console.error('Failed to compose message:', error)
+          failStream(getApiErrorMessage(error, t('workbench.streamFailed')))
+          return
+        }
+      }
 
       if (shouldNavigateAfterStreamStart(createdThreadId)) {
         navigate(`/workbench/${createdThreadId}`, { replace: true })
       }
 
-      try {
-        await runStream(
-          {
-            token,
-            body: {
-              tenant_id: user.tenantId,
-              agent_id: agentId,
-              message: {
-                role: 'human',
-                content: userInput,
+      for (const streamAgentId of invokeAgentIds) {
+        notifyStreamStarted()
+        const abortController = beginStream(undefined, activeThreadId)
+        try {
+          await runStream(
+            {
+              token,
+              body: {
+                tenant_id: user.tenantId,
+                agent_id: streamAgentId,
+                message: {
+                  role: 'human',
+                  content: userInput,
+                },
+                thread_id: activeThreadId,
+                selected_artifact_ids: selectedResources.map((r) => r.artifact_id),
+                hitl_proposal_id: options?.hitlProposalId || null,
+                hitl_action: options?.hitlAction || null,
+                thinking_effort: thinkingEffort || null,
+                skip_human_persist: skipHumanPersist,
               },
-              thread_id: activeThreadId,
-              selected_artifact_ids: selectedResources.map((r) => r.artifact_id),
-              hitl_proposal_id: options?.hitlProposalId || null,
-              hitl_action: options?.hitlAction || null,
-              thinking_effort: thinkingEffort || null,
             },
-          },
-          activeThreadId,
-          abortController
-        )
-      } catch (error) {
-        console.error('Error sending message:', error)
-        const message = error instanceof Error ? error.message : String(error)
-        if (isStreamTransportError(message)) {
-          await recoverFromStreamTransportLoss()
+            activeThreadId,
+            abortController
+          )
+        } catch (error) {
+          console.error('Error sending message:', error)
+          const message = error instanceof Error ? error.message : String(error)
+          if (isStreamTransportError(message)) {
+            await recoverFromStreamTransportLoss()
+            return
+          }
+          notifyStreamFinished()
+          resetStreamState()
           return
         }
-        notifyStreamFinished()
-        resetStreamState()
       }
     },
     [
-      agentId,
+      turnAgentId,
+      refreshTail,
       beginStream,
       createThread,
       failStream,
@@ -303,12 +329,13 @@ export function useWorkbenchChat({
       t,
       threadId,
       user,
+      agentId,
     ]
   )
 
   const handleHitlApprovedContinue = useCallback(
     async (proposalId: string) => {
-      await handleSendMessage('continue hitl workflow', [], {
+      await handleSendMessage('continue hitl workflow', [], [], {
         hidden: true,
         hitlProposalId: proposalId,
         hitlAction: 'approved',
@@ -339,6 +366,7 @@ export function useWorkbenchChat({
     isStreaming,
     streamingContent,
     streamingToolCalls,
+    streamingAgentId,
     handleSendMessage,
     handleHitlApprovedContinue,
     handleHitlRejected,

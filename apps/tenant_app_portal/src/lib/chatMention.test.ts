@@ -1,54 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
-  extractMentionSearchTerm,
   filterUnselectedMentionResults,
   mentionResourceChipId,
   reduceMentionPickerKeyDown,
-  shouldOpenMentionPicker,
-  stripTrailingMention,
 } from '@/lib/chatMention'
-
-describe('extractMentionSearchTerm', () => {
-  it('returns empty string when input ends with bare @', () => {
-    expect(extractMentionSearchTerm('hello @')).toBe('')
-  })
-
-  it('returns query after @ at end of input', () => {
-    expect(extractMentionSearchTerm('please review @retail')).toBe('retail')
-  })
-
-  it('ignores @ that is not at the end token', () => {
-    expect(extractMentionSearchTerm('@user hello')).toBeNull()
-  })
-
-  it('ignores @ in the middle of a line', () => {
-    expect(extractMentionSearchTerm('a@b.com test')).toBeNull()
-  })
-})
-
-describe('shouldOpenMentionPicker', () => {
-  it('opens when trailing @ is present and composer is idle', () => {
-    expect(shouldOpenMentionPicker('attach @rep', false)).toBe(true)
-  })
-
-  it('does not open while busy', () => {
-    expect(shouldOpenMentionPicker('attach @rep', true)).toBe(false)
-  })
-
-  it('does not open without trailing mention', () => {
-    expect(shouldOpenMentionPicker('hello world', false)).toBe(false)
-  })
-})
-
-describe('stripTrailingMention', () => {
-  it('removes trailing @query and keeps leading text', () => {
-    expect(stripTrailingMention('draft @chart')).toBe('draft ')
-  })
-
-  it('clears input that is only a mention', () => {
-    expect(stripTrailingMention('@only')).toBe('')
-  })
-})
 
 describe('reduceMentionPickerKeyDown', () => {
   const base = { open: true, resultCount: 3, activeIndex: 0 }

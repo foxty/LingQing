@@ -50,7 +50,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { ChatThread } from '@/types'
 import { cn } from '@/lib/utils'
 import { formatDistanceToNow } from 'date-fns'
-import { ChevronDown, Loader2, Plus, Trash2 } from 'lucide-react'
+import { ChevronDown, Loader2, Plus, Trash2, Users } from 'lucide-react'
 import { useMemo, useState } from 'react'
 
 interface ThreadSelectorProps {
@@ -60,6 +60,8 @@ interface ThreadSelectorProps {
   onSelectThread: (threadId: string) => void
   onCreateThread: () => void
   onDeleteThread: (threadId: string) => Promise<void>
+  createLabel?: string
+  emptyHint?: string
 }
 
 export default function ThreadSelector({
@@ -69,6 +71,8 @@ export default function ThreadSelector({
   onSelectThread,
   onCreateThread,
   onDeleteThread,
+  createLabel,
+  emptyHint,
 }: ThreadSelectorProps) {
   const { t } = useTranslation()
   const [pickerOpen, setPickerOpen] = useState(false)
@@ -147,7 +151,9 @@ export default function ThreadSelector({
             ) : threads.length === 0 ? (
               <div className="px-3 py-6 text-center">
                 <p className="text-sm font-medium">{t('components.threadSelector.empty')}</p>
-                <p className="mt-1 text-xs text-muted-foreground">{t('components.threadSelector.emptyHint')}</p>
+                <p className="mt-1 text-xs text-muted-foreground">
+                  {emptyHint ?? t('components.threadSelector.emptyHint')}
+                </p>
               </div>
             ) : (
               <ul className="max-h-72 overflow-y-auto">
@@ -166,7 +172,12 @@ export default function ThreadSelector({
                           className="min-w-0 flex-1 rounded-md px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                           onClick={() => handleSelectThread(thread.id)}
                         >
-                          <p className="truncate text-sm">{getThreadTitle(thread.title)}</p>
+                          <p className="flex items-center gap-1.5 truncate text-sm">
+                            {thread.threadKind === 'shared' ? (
+                              <Users className="h-3.5 w-3.5 shrink-0 text-muted-foreground" aria-hidden />
+                            ) : null}
+                            <span className="truncate">{getThreadTitle(thread.title)}</span>
+                          </p>
                           <p className="text-xs text-muted-foreground">
                             {formatThreadUpdatedAt(thread.updatedAt)}
                           </p>
@@ -202,7 +213,7 @@ export default function ThreadSelector({
           className="h-9 shrink-0 px-3"
         >
           <Plus className="h-4 w-4" />
-          <span className="ml-1.5">{t('components.threadSelector.newThread')}</span>
+          <span className="ml-1.5">{createLabel ?? t('components.threadSelector.newThread')}</span>
         </Button>
       </div>
 

@@ -154,6 +154,7 @@ interface AiTurnMessageProps {
   threadId?: string
   defaultProcessOpen?: boolean
   isStreaming?: boolean
+  agentDisplayName?: string
   onHitlApprovedContinue?: (proposalId: string) => void | Promise<void>
   onHitlRejected?: (proposalId: string) => void | Promise<void>
 }
@@ -203,6 +204,7 @@ export default function AiTurnMessage({
   threadId,
   defaultProcessOpen = false,
   isStreaming = false,
+  agentDisplayName,
   onHitlApprovedContinue,
   onHitlRejected,
 }: AiTurnMessageProps) {
@@ -292,8 +294,11 @@ export default function AiTurnMessage({
       </div>
 
       <div className="flex min-w-0 flex-1 flex-col items-start space-y-1">
+        {agentDisplayName ? (
+          <p className="text-xs font-semibold text-foreground">{agentDisplayName}</p>
+        ) : null}
         {showInitialWorkingState ? (
-          <div className="max-w-[min(92%,42rem)] rounded-lg border border-primary/20 bg-muted px-4 py-3">
+          <div className="w-full min-w-[min(100%,20rem)] max-w-[min(92%,48rem)] rounded-lg border border-primary/20 bg-muted px-4 py-3">
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span>{t('workbench.working')}</span>
               <span className="inline-flex gap-0.5">
@@ -305,7 +310,7 @@ export default function AiTurnMessage({
           </div>
         ) : (
         <div
-          className={`relative min-w-0 max-w-[min(92%,42rem)] rounded-lg px-4 py-3 ${
+          className={`relative w-full min-w-[min(100%,20rem)] max-w-[min(92%,48rem)] rounded-lg px-4 py-3 ${
             isError ? 'bg-destructive/5 border border-destructive/20' : 'bg-muted'
           } ${isStreaming ? 'border border-primary/20' : ''}`}
         >
@@ -406,7 +411,13 @@ export default function AiTurnMessage({
           )}
 
           <div className="mb-1 flex items-center justify-between gap-2">
-            <div className="text-xs font-semibold text-muted-foreground">{t('workbench.finalResponse')}</div>
+            {!agentDisplayName ? (
+              <div className="text-xs font-semibold text-muted-foreground">
+                {t('workbench.finalResponse')}
+              </div>
+            ) : (
+              <div className="sr-only">{t('workbench.finalResponse')}</div>
+            )}
             {!isStreaming && (
             <div className="inline-flex items-center gap-1">
               <MessageFeedbackButtons
@@ -454,7 +465,9 @@ export default function AiTurnMessage({
 
           {!isStreaming && (
           <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground/80">
-            <span>{turn.timestamp && new Date(turn.timestamp).toLocaleTimeString()}</span>
+            <span>
+              {turn.timestamp && new Date(turn.timestamp).toLocaleTimeString()}
+            </span>
             {sessionMetrics && (
               <button
                 onClick={() => setShowSessionMetrics((prev) => !prev)}

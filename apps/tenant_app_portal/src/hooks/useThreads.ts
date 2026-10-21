@@ -3,7 +3,14 @@
  */
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
-import { listThreads, createThread, deleteThread, updateThreadTitle, getThread } from '@/lib/threadsApi'
+import {
+  listThreads,
+  createThread,
+  deleteThread,
+  updateThreadTitle,
+  getThread,
+} from '@/lib/threadsApi'
+import { isSharedThreadsUiEnabled } from '@/lib/sharedThreadsFeature'
 import { convertApiThreadToThread } from '@/types'
 import type { ChatThread } from '@/types'
 
@@ -30,7 +37,8 @@ export function useThreads(agentId?: number) {
     queryKey: ['threads', agentId ?? 'all'],
     queryFn: async () => {
       try {
-        const apiThreads = await listThreads(agentId)
+        const scope = isSharedThreadsUiEnabled() ? 'all' : 'personal'
+        const apiThreads = await listThreads(agentId, scope)
         return apiThreads.map(convertApiThreadToThread)
       } catch (err) {
         console.error('[useThreads] Query failed:', err)

@@ -607,6 +607,11 @@ class AgentBase(ABC):
         # Get all messages from state
         messages_to_save = state.get("messages", [])
 
+        if config.get("configurable", {}).get("skip_human_persist"):
+            from langchain_core.messages import HumanMessage
+
+            messages_to_save = [m for m in messages_to_save if not isinstance(m, HumanMessage)]
+
         if messages_to_save:
             await manager.add_messages(messages_to_save, config, deduplicate=True)
 

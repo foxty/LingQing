@@ -13,6 +13,7 @@ from langchain_core.messages import SystemMessage
 
 from apps.shared.db.models import ChatMessage
 from apps.shared.domain.base_domain_model import BaseDomainModel
+from apps.tenant_app_service.chat.thread_kinds import DEFAULT_THREAD_KIND, ThreadKind
 
 if TYPE_CHECKING:
     pass
@@ -39,8 +40,9 @@ class MessageDomain(BaseDomainModel):
     content: str
     message_id: str
     thread_id: str
-    session_id: str
-    agent_id: int
+    session_id: str | None = None
+    agent_id: int | None = None
+    author_user_id: int | None = None
     timestamp: datetime | None = None
     tool_calls: list[dict[str, Any]] | None = None  # For AI messages with tool calls
     tool_call_id: str | None = None  # For tool messages (references the tool call)
@@ -64,6 +66,7 @@ class ThreadDomain(BaseDomainModel):
     tenant_id: int
     user_id: int
     agent_id: int
+    thread_kind: ThreadKind = DEFAULT_THREAD_KIND
 
     # Metadata (always loaded from DB)
     title: str | None = None

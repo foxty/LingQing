@@ -144,3 +144,10 @@ class TenantUserUpdateRequest(BaseModel):
     """Update tenant user request."""
 
     role: Literal["admin", "member", "viewer"]
+
+
+class TenantUserDirectoryEntry(BaseModel):
+    """Minimal user row for tenant directory search (pickers, not admin)."""
+
+    user_id: int
+    username: str

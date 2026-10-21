@@ -200,8 +200,9 @@ class DashboardService(TenantAwareService):
             thread = thread_result.scalar_one_or_none()
             if not thread or thread.tenant_id != self.tenant_id:
                 raise ResourceNotFoundError(f"Thread {thread_id} not found")
-            if thread.user_id != owner_id:
-                raise AuthorizationError("Access denied")
+            from apps.tenant_app_service.chat.thread_access import assert_owner_can_link_artifact
+
+            await assert_owner_can_link_artifact(self.dashboard_repo.db, thread=thread, owner_id=owner_id)
 
         linked_artifact = await self.artifacts.link_on_create(
             resource_id=dashboard.id,

@@ -4,7 +4,7 @@ Provides CRUD operations and summarization helpers for chat messages.
 Shared between ConversationMemoryManager (agent use) and chat services (raw message retrieval).
 """
 
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import List
 
 from sqlalchemy import and_, func, or_, select
@@ -15,6 +15,26 @@ from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.chat.domain import MESSAGE_TYPE_AI, MESSAGE_TYPE_HUMAN
 
 logger = get_logger(__name__)
+
+
+def _message_sort_key(message: ChatMessage) -> tuple:
+    created = message.created_at or datetime.min.replace(tzinfo=UTC)
+    return (created, message.id or 0)
+
+
+def _merge_messages_chronologically(*groups: List[ChatMessage]) -> List[ChatMessage]:
+    seen_ids: set[int] = set()
+    merged: list[ChatMessage] = []
+    for group in groups:
+        for message in group:
+            mid = message.id
+            if mid is not None and mid in seen_ids:
+                continue
+            if mid is not None:
+                seen_ids.add(mid)
+            merged.append(message)
+    merged.sort(key=_message_sort_key)
+    return merged
 
 
 class MessageRepository:
@@ -222,6 +242,20 @@ class MessageRepository:
         )
         return messages
 
+    async def _fetch_sessionless_human_messages(self, thread_id: str) -> List[ChatMessage]:
+        """Human rows persisted outside agent sessions (compose / room messages)."""
+        stmt = (
+            select(ChatMessage)
+            .where(
+                ChatMessage.thread_id == thread_id,
+                ChatMessage.session_id.is_(None),
+                ChatMessage.type == MESSAGE_TYPE_HUMAN,
+            )
+            .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def get_messages_by_session_window(
         self,
         thread_id: str,
@@ -230,6 +264,7 @@ class MessageRepository:
         before_session_id: str | None = None,
         include_tool_messages: bool = True,
         session_id: str | None = None,
+        filter_agent_on_sessions: bool = True,
     ) -> tuple[List[ChatMessage], bool, str | None]:
         """Get complete messages for a window of sessions.
 
@@ -239,21 +274,23 @@ class MessageRepository:
         if session_limit <= 0:
             return [], False, None
 
-        base_where = [ChatMessage.thread_id == thread_id, ChatMessage.agent_id == agent_id]
+        session_scope = [ChatMessage.thread_id == thread_id]
+        if filter_agent_on_sessions:
+            session_scope.append(ChatMessage.agent_id == agent_id)
         if not include_tool_messages:
-            base_where.append(ChatMessage.type != "tool")
+            session_scope.append(ChatMessage.type != "tool")
 
         # Explicit session lookup keeps old behavior for filtered history views.
         if session_id is not None:
             query = (
                 select(ChatMessage)
-                .where(*base_where, ChatMessage.session_id == session_id)
+                .where(*session_scope, ChatMessage.session_id == session_id)
                 .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
             )
             result = await self.db.execute(query)
             return list(result.scalars().all()), False, None
 
-        session_where = [*base_where, ChatMessage.session_id.isnot(None)]
+        session_where = [*session_scope, ChatMessage.session_id.isnot(None)]
 
         if before_session_id:
             cursor_stmt = select(func.max(ChatMessage.id)).where(
@@ -276,28 +313,33 @@ class MessageRepository:
         session_result = await self.db.execute(session_stmt)
         session_rows = list(session_result.all())
 
+        surface_humans = await self._fetch_sessionless_human_messages(thread_id)
+
         if not session_rows:
-            return [], False, None
+            return surface_humans, False, None
 
         has_more = len(session_rows) > session_limit
         selected_rows = session_rows[:session_limit]
         session_ids = [row[0] for row in selected_rows if row[0]]
 
         if not session_ids:
-            return [], has_more, None
+            return surface_humans, has_more, None
 
         messages_stmt = (
             select(ChatMessage)
-            .where(*base_where, ChatMessage.session_id.in_(session_ids))
+            .where(*session_scope, ChatMessage.session_id.in_(session_ids))
             .order_by(ChatMessage.created_at.asc(), ChatMessage.id.asc())
         )
         messages_result = await self.db.execute(messages_stmt)
-        messages = list(messages_result.scalars().all())
+        session_messages = list(messages_result.scalars().all())
+        messages = _merge_messages_chronologically(session_messages, surface_humans)
         next_before_session_id = selected_rows[-1][0] if selected_rows else None
 
         logger.debug(
-            "Fetched %s messages across %s sessions for thread %s, agent %s",
+            "Fetched %s messages (%s session + %s surface) across %s sessions for thread %s, agent %s",
             len(messages),
+            len(session_messages),
+            len(surface_humans),
             len(session_ids),
             thread_id,
             agent_id,
@@ -402,6 +444,27 @@ class MessageRepository:
         result = await self.db.execute(query)
         messages = list(result.scalars().all())
         logger.debug(f"Fetched {len(messages)} unsummarized messages for thread {thread_id}, agent {agent_id}")
+        return messages
+
+    async def get_unsummarized_messages_for_shared_thread(
+        self,
+        thread_id: str,
+        limit: int | None = None,
+    ) -> List[ChatMessage]:
+        """Unsummarized messages for a shared thread (all agents + room lines)."""
+        query = (
+            select(ChatMessage)
+            .where(
+                ChatMessage.thread_id == thread_id,
+                ChatMessage.is_summarized == False,  # noqa: E712
+            )
+            .order_by(ChatMessage.created_at.desc(), ChatMessage.id.desc())
+        )
+        if limit is not None:
+            query = query.limit(limit)
+        result = await self.db.execute(query)
+        messages = list(result.scalars().all())
+        logger.debug(f"Fetched {len(messages)} unsummarized shared-thread messages for {thread_id}")
         return messages
 
     async def has_ai_message_after_db_id(

@@ -265,6 +265,8 @@ class SlackRepository:
             external_channel_id=external_channel_id,
             external_thread_key=external_thread_key,
             chat_thread_id=chat_thread_id,
+            platform=PLATFORM_SLACK,
+            passive_mirror_enabled=bool(external_thread_key),
         )
         self.db.add(row)
         await self.db.flush()

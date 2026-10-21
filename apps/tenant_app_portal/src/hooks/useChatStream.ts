@@ -19,6 +19,7 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
   const [isStreaming, setIsStreaming] = useState(false)
   const [streamingContent, setStreamingContent] = useState('')
   const [streamingToolCalls, setStreamingToolCalls] = useState<StreamingToolCallState[]>([])
+  const [streamingAgentId, setStreamingAgentId] = useState<number | null>(null)
   const streamingToolCallsRef = useRef<StreamingToolCallState[]>([])
   const streamingToolCallSeqRef = useRef(0)
   const streamAbortRef = useRef<AbortController | null>(null)
@@ -36,6 +37,7 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
     setStreamingToolCalls([])
     streamingToolCallsRef.current = []
     setOptimisticMessage(null)
+    setStreamingAgentId(null)
   }, [])
 
   const failStream = useCallback(
@@ -76,6 +78,10 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
   const runStream = useCallback(
     async (request: StreamRequest, activeThreadId: string, abortController: AbortController) => {
       let accumulatedContent = ''
+      const streamAgentId = request.body.agent_id
+      if (typeof streamAgentId === 'number') {
+        setStreamingAgentId(streamAgentId)
+      }
 
       await handleSSEStream({
         url: '/chat/stream',
@@ -153,6 +159,7 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
     isStreaming,
     streamingContent,
     streamingToolCalls,
+    streamingAgentId,
     beginStream,
     runStream,
     resetStreamState,

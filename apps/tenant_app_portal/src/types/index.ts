@@ -34,14 +34,17 @@ export interface Message {
   }>
   tool_call_id?: string // For tool messages (results)
   session_id?: string // For linking to observability metrics
+  agent_id?: number
   metrics?: SessionMetrics | ToolCallMetrics // Loaded metrics (session-level for AI, tool-level for tool messages)
   additional_kwargs?: {
     hitl?: HitlPayload
     [key: string]: any
   } // Provider-specific extras
+  author_user_id?: number | null
   message_metadata?: {
     // System metadata (NOT sent to LLM)
     visibility?: 'internal' | 'public'
+    interaction?: 'room_message' | 'agent_turn' | string
     capability_id?: string
     capability_name?: string
     sub_agent_id?: string // ID of the sub-agent that generated this message
@@ -158,6 +161,7 @@ export interface ChatThread {
   tenantId: number
   userId: number
   agentId: number
+  threadKind: 'personal' | 'shared'
   title: string | null
   messageCount: number
   createdAt: string
@@ -192,9 +196,15 @@ export interface ApiChatRequest {
   tenant_id: number
   agent_id: number
   message: Message
+  thread_id?: string | null
   stream?: boolean
   username?: string
   config?: Record<string, any>
+  selected_artifact_ids?: number[]
+  hitl_proposal_id?: string | null
+  hitl_action?: 'approved' | null
+  thinking_effort?: string | null
+  skip_human_persist?: boolean
 }
 
 export interface ApiChatResponse {
@@ -280,6 +290,7 @@ export interface ApiChatThread {
   tenant_id: number
   user_id: number
   agent_id: number
+  thread_kind?: 'personal' | 'shared'
   title: string | null
   message_count: number
   created_at: string
@@ -291,6 +302,7 @@ export const convertApiThreadToThread = (apiThread: ApiChatThread): ChatThread =
   tenantId: apiThread.tenant_id,
   userId: apiThread.user_id,
   agentId: apiThread.agent_id,
+  threadKind: apiThread.thread_kind ?? 'personal',
   title: apiThread.title,
   messageCount: apiThread.message_count,
   createdAt: apiThread.created_at,

@@ -1,27 +1,8 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-17T12:12:53.309130+00:00",
+  "generated_at": "2026-10-21T13:14:39.722253+00:00",
   "components": {
     "schemas": {
-      "AclShareCandidateResponse": {
-        "properties": {
-          "id": {
-            "type": "integer",
-            "title": "Id"
-          },
-          "username": {
-            "type": "string",
-            "title": "Username"
-          }
-        },
-        "type": "object",
-        "required": [
-          "id",
-          "username"
-        ],
-        "title": "AclShareCandidateResponse",
-        "description": "Candidate user item for ACL share autocomplete."
-      },
       "AclShareListResponse": {
         "properties": {
           "shares": {
@@ -2355,6 +2336,12 @@
             ],
             "title": "Thinking Effort",
             "description": "Selected thinking_effort_options value from the agent model profile snapshot"
+          },
+          "skip_human_persist": {
+            "type": "boolean",
+            "title": "Skip Human Persist",
+            "description": "When true, human message was already saved via compose; include it in agent state only",
+            "default": false
           }
         },
         "type": "object",
@@ -5822,6 +5809,17 @@
               }
             ],
             "title": "Message Metadata"
+          },
+          "author_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Author User Id"
           }
         },
         "type": "object",
@@ -8692,7 +8690,6 @@
     "DELETE_/skills/{name}": "delete_skill_skills__name__delete",
     "DELETE_/threads/{thread_id}/messages/{message_id}/feedback": "delete_message_feedback_threads__thread_id__messages__message_id__feedback_delete",
     "GET_/": "root__get",
-    "GET_/acl-shares/{resource_type}/{resource_id}/candidates": "list_share_candidates_acl_shares__resource_type___resource_id__candidates_get",
     "GET_/acl-shares/{resource_type}/{resource_id}/shares": "list_resource_shares_acl_shares__resource_type___resource_id__shares_get",
     "GET_/admin/system-tasks": "list_system_tasks_admin_system_tasks_get",
     "GET_/admin/system-tasks/{task_id}": "get_system_task_admin_system_tasks__task_id__get",
@@ -13255,91 +13252,6 @@
             "$ref": "#/components/schemas/ScheduledTaskResponseDTO"
           },
           "title": "Response List Scheduled Tasks Scheduled Tasks Get"
-        },
-        "error_statuses": [
-          "422"
-        ]
-      },
-      "constraints": {
-        "side_effect": false,
-        "idempotent": true
-      }
-    },
-    "list_share_candidates_acl_shares__resource_type___resource_id__candidates_get": {
-      "operation_key": "GET_/acl-shares/{resource_type}/{resource_id}/candidates",
-      "method": "GET",
-      "path": "/acl-shares/{resource_type}/{resource_id}/candidates",
-      "summary": "List Share Candidates",
-      "description": "",
-      "request": {
-        "path_params": [
-          {
-            "name": "resource_type",
-            "required": true,
-            "schema": {
-              "enum": [
-                "document",
-                "document_collection",
-                "asset",
-                "user",
-                "api_connector",
-                "data_source",
-                "agent",
-                "dashboard",
-                "report",
-                "scheduled_task",
-                "app"
-              ],
-              "type": "string",
-              "title": "Resource Type"
-            },
-            "description": ""
-          },
-          {
-            "name": "resource_id",
-            "required": true,
-            "schema": {
-              "type": "integer",
-              "title": "Resource Id"
-            },
-            "description": ""
-          }
-        ],
-        "query_params": [
-          {
-            "name": "q",
-            "required": false,
-            "schema": {
-              "type": "string",
-              "description": "Username keyword for autocomplete search",
-              "default": "",
-              "title": "Q"
-            },
-            "description": "Username keyword for autocomplete search"
-          },
-          {
-            "name": "limit",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 50,
-              "minimum": 1,
-              "description": "Maximum number of candidates to return",
-              "default": 20,
-              "title": "Limit"
-            },
-            "description": "Maximum number of candidates to return"
-          }
-        ]
-      },
-      "response": {
-        "success_status": "200",
-        "success_schema": {
-          "type": "array",
-          "items": {
-            "$ref": "#/components/schemas/AclShareCandidateResponse"
-          },
-          "title": "Response List Share Candidates Acl Shares  Resource Type   Resource Id  Candidates Get"
         },
         "error_statuses": [
           "422"

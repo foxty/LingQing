@@ -36,11 +36,6 @@ export interface AclShareListResponse {
   can_manage: boolean
 }
 
-export interface AclShareCandidate {
-  id: number
-  username: string
-}
-
 export async function shareAclResource(
   resourceType: AclShareResourceType,
   resourceId: number,
@@ -59,20 +54,6 @@ export async function listAclResourceShares(
 ): Promise<AclShareListResponse> {
   const response = await api.get<AclShareListResponse>(
     `/acl-shares/${resourceType}/${resourceId}/shares`
-  )
-  return response.data
-}
-
-export async function listAclShareCandidates(
-  resourceType: AclShareResourceType,
-  resourceId: number,
-  params: { q?: string; limit?: number } = {}
-): Promise<AclShareCandidate[]> {
-  const response = await api.get<AclShareCandidate[]>(
-    `/acl-shares/${resourceType}/${resourceId}/candidates`,
-    {
-      params,
-    }
   )
   return response.data
 }

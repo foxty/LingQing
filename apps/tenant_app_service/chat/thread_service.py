@@ -10,9 +10,18 @@ from apps.tenant_app_service.chat.adapters import (
     domain_message_to_api,
 )
 from apps.tenant_app_service.chat.domain import ThreadDomain
+from apps.tenant_app_service.chat.membership_repository import ThreadMembershipRepository
 from apps.tenant_app_service.chat.schemas import Message, SessionStatusResponse
 from apps.tenant_app_service.chat.service_base import MAX_THREADS_PER_USER, ChatServiceBase
 from apps.tenant_app_service.chat.session_status import resolve_session_status
+from apps.tenant_app_service.chat.thread_kinds import (
+    MEMBER_ROLE_MEMBER,
+    MEMBER_ROLE_OWNER,
+    MEMBER_ROLE_VIEWER,
+    THREAD_KIND_PERSONAL,
+    THREAD_KIND_SHARED,
+)
+from apps.tenant_app_service.chat.thread_roster_rules import distinct_user_count, is_shared_roster
 
 
 class ThreadService(ChatServiceBase):
@@ -60,9 +69,325 @@ class ThreadService(ChatServiceBase):
             agent_id=agent_id,
             title=title,
         )
+        await self._seed_thread_roster(
+            thread_id=thread_id,
+            owner_user_id=user_id,
+            agent_ids=[agent_id],
+        )
 
         self.logger.info("Created thread %s for user %s", thread_id, user_id)
         return thread
+
+    async def create_conversation(
+        self,
+        *,
+        owner_user_id: int,
+        agent_ids: list[int],
+        title: str | None = None,
+        first_message: str | None = None,
+        member_user_ids: list[int] | None = None,
+    ) -> ThreadDomain:
+        """Create personal (1 user + 1 agent) or shared from roster size."""
+        if not agent_ids:
+            raise ValueError("At least one agent is required")
+        unique_agents = list(dict.fromkeys(agent_ids))
+        users = distinct_user_count(owner_user_id=owner_user_id, member_user_ids=member_user_ids)
+        if is_shared_roster(agent_count=len(unique_agents), distinct_user_count=users):
+            return await self.create_shared_thread(
+                owner_user_id=owner_user_id,
+                agent_ids=unique_agents,
+                title=title,
+                member_user_ids=member_user_ids,
+            )
+        return await self.create_thread(
+            user_id=owner_user_id,
+            agent_id=unique_agents[0],
+            title=title,
+            first_message=first_message,
+        )
+
+    async def create_shared_thread(
+        self,
+        *,
+        owner_user_id: int,
+        agent_ids: list[int],
+        title: str | None = None,
+        member_user_ids: list[int] | None = None,
+    ) -> ThreadDomain:
+        if not agent_ids:
+            raise ValueError("At least one agent is required for a shared thread")
+        primary_agent_id = agent_ids[0]
+        thread_uuid = str(uuid4())
+        thread_id = f"{self.tenant_id}_shared_{thread_uuid}"
+        users = distinct_user_count(owner_user_id=owner_user_id, member_user_ids=member_user_ids)
+        thread_kind = (
+            THREAD_KIND_SHARED
+            if is_shared_roster(agent_count=len(agent_ids), distinct_user_count=users)
+            else THREAD_KIND_PERSONAL
+        )
+        thread = await self.thread_repo.create_thread(
+            thread_id=thread_id,
+            tenant_id=self.tenant_id,
+            user_id=owner_user_id,
+            agent_id=primary_agent_id,
+            title=title or "Shared thread",
+            thread_kind=thread_kind,
+        )
+        await self._seed_thread_roster(
+            thread_id=thread_id,
+            owner_user_id=owner_user_id,
+            agent_ids=agent_ids,
+            member_user_ids=member_user_ids,
+        )
+        return thread
+
+    async def add_user_member_to_thread(
+        self,
+        *,
+        thread_id: str,
+        owner_user_id: int,
+        user_id: int,
+    ) -> bool:
+        """Add a user; auto-promote personal threads when roster expands."""
+        from apps.shared.db.models import ChatThread
+
+        db_thread = await self.db.get(ChatThread, thread_id)
+        if db_thread is None:
+            return False
+        if not await self._is_thread_owner(db_thread, owner_user_id):
+            return False
+        await self.ensure_baseline_roster(db_thread)
+        membership = ThreadMembershipRepository(self.db)
+        existing = await membership.get_user_member(thread_id, user_id)
+        if existing is not None:
+            return True
+        await membership.add_user_member(
+            tenant_id=self.tenant_id,
+            thread_id=thread_id,
+            user_id=user_id,
+            role=MEMBER_ROLE_MEMBER,
+        )
+        await self.sync_thread_kind_from_roster(thread_id)
+        return True
+
+    async def remove_user_member_from_thread(
+        self,
+        *,
+        thread_id: str,
+        owner_user_id: int,
+        user_id: int,
+    ) -> bool:
+        """Remove a non-owner member; may demote shared → personal from roster."""
+        from apps.shared.db.models import ChatThread
+
+        db_thread = await self.db.get(ChatThread, thread_id)
+        if db_thread is None:
+            return False
+        if not await self._is_thread_owner(db_thread, owner_user_id):
+            return False
+        membership = ThreadMembershipRepository(self.db)
+        existing = await membership.get_user_member(thread_id, user_id)
+        if existing is None:
+            return True
+        if existing.role == MEMBER_ROLE_OWNER:
+            return False
+        await membership.remove_user_member(thread_id, user_id)
+        await self.sync_thread_kind_from_roster(thread_id)
+        return True
+
+    async def update_user_member_role_on_thread(
+        self,
+        *,
+        thread_id: str,
+        owner_user_id: int,
+        user_id: int,
+        role: str,
+    ) -> bool:
+        from apps.shared.db.models import ChatThread
+
+        if role not in {MEMBER_ROLE_OWNER, MEMBER_ROLE_MEMBER, MEMBER_ROLE_VIEWER}:
+            return False
+        db_thread = await self.db.get(ChatThread, thread_id)
+        if db_thread is None:
+            return False
+        if not await self._is_thread_owner(db_thread, owner_user_id):
+            return False
+        if user_id == owner_user_id:
+            return False
+        membership = ThreadMembershipRepository(self.db)
+        existing = await membership.get_user_member(thread_id, user_id)
+        if existing is None:
+            return False
+        if role == MEMBER_ROLE_OWNER:
+            owner_row = await membership.get_user_member(thread_id, db_thread.user_id)
+            if owner_row is not None and owner_row.role == MEMBER_ROLE_OWNER:
+                owner_row.role = MEMBER_ROLE_MEMBER
+            existing.role = MEMBER_ROLE_OWNER
+            db_thread.user_id = user_id
+        else:
+            if existing.role == MEMBER_ROLE_OWNER:
+                return False
+            existing.role = role
+        await self.db.flush()
+        return True
+
+    async def remove_agent_from_thread(
+        self,
+        *,
+        thread_id: str,
+        owner_user_id: int,
+        agent_id: int,
+    ) -> bool:
+        from apps.shared.db.models import ChatThread
+
+        db_thread = await self.db.get(ChatThread, thread_id)
+        if db_thread is None:
+            return False
+        if not await self._is_thread_owner(db_thread, owner_user_id):
+            return False
+        membership = ThreadMembershipRepository(self.db)
+        roster = await membership.list_agent_members(thread_id)
+        if len(roster) <= 1:
+            return False
+        if await membership.get_agent_member(thread_id, agent_id) is None:
+            return True
+        if db_thread.agent_id == agent_id:
+            replacement = next((row.agent_id for row in roster if row.agent_id != agent_id), None)
+            if replacement is None:
+                return False
+            db_thread.agent_id = replacement
+        await membership.remove_agent_member(thread_id, agent_id)
+        await self.sync_thread_kind_from_roster(thread_id)
+        return True
+
+    async def set_primary_agent_on_thread(
+        self,
+        *,
+        thread_id: str,
+        owner_user_id: int,
+        agent_id: int,
+    ) -> bool:
+        from apps.shared.db.models import ChatThread
+
+        db_thread = await self.db.get(ChatThread, thread_id)
+        if db_thread is None:
+            return False
+        if not await self._is_thread_owner(db_thread, owner_user_id):
+            return False
+        membership = ThreadMembershipRepository(self.db)
+        if await membership.get_agent_member(thread_id, agent_id) is None:
+            return False
+        db_thread.agent_id = agent_id
+        await self.db.flush()
+        return True
+
+    async def add_agent_member_to_thread(
+        self,
+        *,
+        thread_id: str,
+        owner_user_id: int,
+        agent_id: int,
+        display_alias: str | None = None,
+    ) -> bool:
+        """Add an agent to the roster; auto-promote personal threads when needed."""
+        from apps.shared.db.models import ChatThread
+
+        db_thread = await self.db.get(ChatThread, thread_id)
+        if db_thread is None:
+            return False
+        if not await self._is_thread_owner(db_thread, owner_user_id):
+            return False
+        await self.ensure_baseline_roster(db_thread)
+        membership = ThreadMembershipRepository(self.db)
+        existing = await membership.get_agent_member(thread_id, agent_id)
+        if existing is not None:
+            return True
+        await membership.add_agent_member(
+            tenant_id=self.tenant_id,
+            thread_id=thread_id,
+            agent_id=agent_id,
+            display_alias=display_alias,
+        )
+        await self.sync_thread_kind_from_roster(thread_id)
+        return True
+
+    async def _seed_thread_roster(
+        self,
+        *,
+        thread_id: str,
+        owner_user_id: int,
+        agent_ids: list[int],
+        member_user_ids: list[int] | None = None,
+    ) -> None:
+        membership = ThreadMembershipRepository(self.db)
+        await membership.add_user_member(
+            tenant_id=self.tenant_id,
+            thread_id=thread_id,
+            user_id=owner_user_id,
+            role=MEMBER_ROLE_OWNER,
+        )
+        for uid in member_user_ids or []:
+            if uid == owner_user_id:
+                continue
+            await membership.add_user_member(
+                tenant_id=self.tenant_id,
+                thread_id=thread_id,
+                user_id=uid,
+                role=MEMBER_ROLE_MEMBER,
+            )
+        for aid in agent_ids:
+            await membership.add_agent_member(
+                tenant_id=self.tenant_id,
+                thread_id=thread_id,
+                agent_id=aid,
+            )
+
+    async def ensure_baseline_roster(self, db_thread) -> None:
+        """Idempotent owner + primary agent rows from chat_threads columns."""
+        membership = ThreadMembershipRepository(self.db)
+        await membership.add_user_member(
+            tenant_id=db_thread.tenant_id,
+            thread_id=db_thread.id,
+            user_id=db_thread.user_id,
+            role=MEMBER_ROLE_OWNER,
+        )
+        await membership.add_agent_member(
+            tenant_id=db_thread.tenant_id,
+            thread_id=db_thread.id,
+            agent_id=db_thread.agent_id,
+        )
+
+    async def sync_thread_kind_from_roster(self, thread_id: str) -> None:
+        from apps.shared.db.models import ChatThread
+
+        db_thread = await self.db.get(ChatThread, thread_id)
+        if db_thread is None:
+            return
+        membership = ThreadMembershipRepository(self.db)
+        user_count = len(await membership.list_user_members(thread_id))
+        agent_count = len(await membership.list_agent_members(thread_id))
+        if user_count == 0 and agent_count == 0:
+            return
+        db_thread.thread_kind = (
+            THREAD_KIND_SHARED
+            if is_shared_roster(agent_count=agent_count, distinct_user_count=user_count)
+            else THREAD_KIND_PERSONAL
+        )
+        await self.db.flush()
+
+    async def _is_thread_owner(self, db_thread, owner_user_id: int) -> bool:
+        if db_thread.user_id != owner_user_id:
+            return False
+        membership = ThreadMembershipRepository(self.db)
+        row = await membership.get_user_member(db_thread.id, owner_user_id)
+        if row is not None and row.role != MEMBER_ROLE_OWNER:
+            return False
+        return True
+
+    async def list_shared_threads_for_user(self, user_id: int) -> list[ThreadDomain]:
+        membership = ThreadMembershipRepository(self.db)
+        thread_ids = await membership.list_thread_ids_for_user(self.tenant_id, user_id)
+        return await self.thread_repo.list_shared_for_user(self.tenant_id, thread_ids, limit=50)
 
     async def get_thread(self, thread_id: str) -> ThreadDomain | None:
         """Get thread by ID."""
@@ -240,6 +565,7 @@ class ThreadService(ChatServiceBase):
 
         # Get thread metadata from DB
         thread = await self.thread_repo.get_by_id(thread_id)
+        filter_agent_on_sessions = thread.thread_kind != THREAD_KIND_SHARED
         db_messages, has_more, next_before_session_id = await self.message_repo.get_messages_by_session_window(
             thread_id=thread_id,
             agent_id=agent_id,
@@ -247,6 +573,7 @@ class ThreadService(ChatServiceBase):
             before_session_id=before_session_id,
             include_tool_messages=include_tool_messages if include_tool_messages is not None else True,
             session_id=session_id,
+            filter_agent_on_sessions=filter_agent_on_sessions,
         )
 
         if not db_messages:

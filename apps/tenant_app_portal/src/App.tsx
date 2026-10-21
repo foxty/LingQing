@@ -1,4 +1,4 @@
-import { BrowserRouter, Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { useTranslation } from 'react-i18next'
 import Layout from './components/Layout'
 import { Toaster } from './components/ui/sonner'
@@ -98,6 +98,11 @@ function RedirectWithSearch({ to }: { to: string }) {
   return <Navigate to={`${to}${location.search}`} replace />
 }
 
+function WorkbenchSharedThreadRedirect() {
+  const { threadId } = useParams<{ threadId: string }>()
+  return <Navigate to={threadId ? `/workbench/${threadId}` : '/workbench'} replace />
+}
+
 function App() {
   return (
     <BrowserRouter>
@@ -121,6 +126,22 @@ function App() {
           element={
             <ProtectedRoute permission={PERMISSIONS.CHAT_ACCESS}>
               <WorkbenchPage />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/workbench/shared"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.CHAT_ACCESS}>
+              <Navigate to="/workbench" replace />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/workbench/shared/:threadId"
+          element={
+            <ProtectedRoute permission={PERMISSIONS.CHAT_ACCESS}>
+              <WorkbenchSharedThreadRedirect />
             </ProtectedRoute>
           }
         />

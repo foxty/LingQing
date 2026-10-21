@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-16T02:15:56.152157+00:00",
+  "generated_at": "2026-10-21T13:14:39.722253+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -95,11 +95,6 @@
     {
       "operation_key": "GET_/",
       "summary": "Root",
-      "risk_level": "read"
-    },
-    {
-      "operation_key": "GET_/acl-shares/{resource_type}/{resource_id}/candidates",
-      "summary": "List Share Candidates",
       "risk_level": "read"
     },
     {

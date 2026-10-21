@@ -74,6 +74,7 @@ class EnvConfig:
     CORS_ORIGINS: list[str] = os.getenv("CORS_ORIGINS", "*").split(",")
     CHART_SERVICE_URL: str = os.getenv("CHART_SERVICE_URL")
     LOG_LEVEL: str = os.getenv("LOG_LEVEL", "INFO").upper()
+    SHARED_THREADS_ENABLED: bool = _env_bool("SHARED_THREADS_ENABLED", default=True)
 
     # ============ LLM Configuration ============
     # LLM configuration has been migrated to tenant-level settings.
@@ -355,6 +356,7 @@ def get_settings():
         CORS_ORIGINS = EnvConfig.CORS_ORIGINS
         DATA_ROOT_PATH = EnvConfig.DATA_ROOT_PATH
         LOG_LEVEL = EnvConfig.LOG_LEVEL
+        SHARED_THREADS_ENABLED = EnvConfig.SHARED_THREADS_ENABLED
         PORTAL_ORIGIN = EnvConfig.PORTAL_ORIGIN
         TENANT_APP_API_ORIGIN = EnvConfig.TENANT_APP_API_ORIGIN
 

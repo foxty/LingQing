@@ -120,11 +120,21 @@ class ChatTurnService(ChatServiceBase):
             return None
 
     async def _resolve_agent_id(self, request: ChatRequest) -> int:
-        """Use the thread's immutable agent when a thread already exists."""
+        """Personal threads keep thread agent; shared threads use request agent_id."""
+        from apps.tenant_app_service.chat.thread_kinds import THREAD_KIND_SHARED
+
         if not request.thread_id:
             return request.agent_id
         thread = await ThreadService(self.tenant_id, self.db).get_thread(request.thread_id)
         if thread is None:
+            return request.agent_id
+        if thread.thread_kind == THREAD_KIND_SHARED:
+            from apps.shared.db.models import ChatThread
+            from apps.tenant_app_service.chat.shared_agent_turn import validate_shared_agent_turn
+
+            db_thread = await self.db.get(ChatThread, thread.id)
+            if db_thread is not None:
+                await validate_shared_agent_turn(self.db, thread=db_thread, agent_id=request.agent_id)
             return request.agent_id
         return thread.agent_id
 
@@ -277,6 +287,7 @@ class ChatTurnService(ChatServiceBase):
                 "runtime": runtime_ctx.model_dump(),
                 "thinking_effort": request.thinking_effort,
                 "history_message_limit": history_message_limit,
+                "skip_human_persist": request.skip_human_persist,
                 # On HITL resume: signals agent_base._load_history to rewrite the stale
                 # PENDING ToolMessage, and tool_executor._handle_hitl_gate to use the
                 # known proposal_id directly (avoids arg-hash drift from LLM re-generation).
@@ -490,9 +501,11 @@ class ChatTurnService(ChatServiceBase):
 
         Normal sends persist the human message before invocation, so only ephemeral
         system context is passed in state. HITL continuations include the hidden human
-        resume signal.
+        resume signal. Compose + skip_human_persist passes the human in state only.
         """
         if self._is_hitl_continuation(request):
+            return lc_messages
+        if request.skip_human_persist:
             return lc_messages
         return [message for message in lc_messages if isinstance(message, SystemMessage)]
 
@@ -722,7 +735,7 @@ class ChatTurnService(ChatServiceBase):
                 skip_busy_check=self._is_hitl_continuation(request),
             )
 
-        if not self._is_hitl_continuation(request):
+        if not self._is_hitl_continuation(request) and not request.skip_human_persist:
             await self._persist_incoming_human_message(
                 lc_messages=lc_messages,
                 config=config,

@@ -105,7 +105,16 @@ export function mergeLatestPageIntoCachedHistory(
 
   const latestPageOldestSessionId = findOldestSessionId(latestPageMessages)
   if (!latestPageOldestSessionId) {
-    return latestPageMessages
+    const seen = new Set(
+      cachedMessages.map((m) => m.message_id ?? `${m.timestamp ?? ''}-${m.role}-${m.content.slice(0, 48)}`)
+    )
+    const appended = latestPageMessages.filter(
+      (m) => !seen.has(m.message_id ?? `${m.timestamp ?? ''}-${m.role}-${m.content.slice(0, 48)}`)
+    )
+    if (appended.length === 0) {
+      return cachedMessages
+    }
+    return [...cachedMessages, ...appended]
   }
 
   const overlapIndex = cachedMessages.findIndex(

@@ -51,11 +51,31 @@ class MessageFeedbackService:
         self.thread_service = ThreadService(tenant_id, db)
 
     async def _ensure_thread_access(self, thread_id: str, user_id: int) -> None:
-        thread = await self.thread_service.get_thread(thread_id)
+        from apps.shared.db.models import ChatThread
+        from apps.shared.schemas.user import UserDTO
+        from apps.tenant_app_service.auth.repository import UserRepository
+        from apps.tenant_app_service.chat.thread_access import require_read_thread
+        from apps.tenant_app_service.tenant.repository import TenantRepository
+
+        thread = await self.db.get(ChatThread, thread_id)
         if not thread:
             raise ResourceNotFoundError(f"Thread {thread_id} not found")
-        if thread.user_id != user_id:
+        user_repo = UserRepository(self.db)
+        membership = await user_repo.get_user_membership(self.tenant_id, user_id)
+        if not membership:
             raise AuthorizationError("Access denied")
+        user, _ = membership
+        tenant_repo = TenantRepository(self.db)
+        tenant = await tenant_repo.get_by_id(self.tenant_id)
+        dto = UserDTO(
+            id=user.id,
+            username=user.username,
+            email=user.email or "",
+            role=user.role,
+            tenant_id=self.tenant_id,
+            tenant_name=tenant.name if tenant else "",
+        )
+        await require_read_thread(self.db, thread_id=thread_id, user=dto)
 
     async def _resolve_ai_message(self, thread_id: str, message_id: str):
         ai_message = await self.repository.get_ai_message(self.tenant_id, message_id)

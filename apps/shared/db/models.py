@@ -479,6 +479,13 @@ class ChatThread(Base):
         onupdate=lambda: datetime.now(UTC),
         server_default=text("CURRENT_TIMESTAMP"),
     )
+    thread_kind: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="personal",
+        server_default="personal",
+        comment="personal | shared",
+    )
 
     # Relationships
     tenant: Mapped["Tenant"] = relationship("Tenant", lazy="noload")
@@ -568,6 +575,12 @@ class ChatMessage(Base):
         nullable=True,
         comment="System metadata (NOT sent to LLM): {parent_message_id, parent_agent_id, session_context, internal_flags}",
     )
+    author_user_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        comment="Human author for shared/ingress messages",
+    )
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
@@ -577,6 +590,55 @@ class ChatMessage(Base):
 
     # Relationships
     thread: Mapped["ChatThread"] = relationship("ChatThread", back_populates="messages")
+
+
+class ChatThreadUserMember(Base):
+    """User membership on a shared chat thread."""
+
+    __tablename__ = "chat_thread_user_members"
+    __table_args__ = (
+        UniqueConstraint("thread_id", "user_id", name="uq_chat_thread_user_member"),
+        Index("idx_chat_thread_user_members_tenant", "tenant_id"),
+        Index("idx_chat_thread_user_members_user", "tenant_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    thread_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("chat_threads.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="member", server_default="member")
+    joined_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+
+class ChatThreadAgentMember(Base):
+    """Agent roster entry for a shared chat thread."""
+
+    __tablename__ = "chat_thread_agent_members"
+    __table_args__ = (
+        UniqueConstraint("thread_id", "agent_id", name="uq_chat_thread_agent_member"),
+        Index("idx_chat_thread_agent_members_tenant", "tenant_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    thread_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("chat_threads.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    display_alias: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
 
 
 class MessageFeedback(Base):
@@ -2513,6 +2575,11 @@ class IngressThreadLink(Base):
     external_channel_id: Mapped[str] = mapped_column(String(50), nullable=False)
     external_thread_key: Mapped[str] = mapped_column(String(50), nullable=False, default="", server_default="")
     chat_thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    platform: Mapped[str] = mapped_column(String(20), nullable=False, default="slack", server_default="slack")
+    passive_mirror_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    link_metadata: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
