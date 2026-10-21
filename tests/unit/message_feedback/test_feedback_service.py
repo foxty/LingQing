@@ -13,6 +13,9 @@ from apps.tenant_app_service.message_feedback.domain import (
 from apps.tenant_app_service.message_feedback.service import MessageFeedbackService
 
 _THREAD_GET = "apps.tenant_app_service.message_feedback.service.ThreadService.get_thread"
+_ENSURE_ACCESS = (
+    "apps.tenant_app_service.message_feedback.service.MessageFeedbackService._ensure_thread_access"
+)
 
 
 @pytest.mark.asyncio
@@ -49,10 +52,10 @@ async def test_upsert_feedback_requires_ai_message_in_thread():
 
 
 @pytest.mark.asyncio
-async def test_upsert_feedback_enforces_thread_owner_via_thread_service():
+async def test_upsert_feedback_enforces_thread_access():
     db = AsyncMock()
-    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
-        get_thread.return_value = MagicMock(user_id=99)
+    with patch(_ENSURE_ACCESS, new_callable=AsyncMock) as ensure_access:
+        ensure_access.side_effect = AuthorizationError("Access denied")
         service = MessageFeedbackService(tenant_id=1, db=db)
         service.repository = MagicMock()
         ai_message = MagicMock()
@@ -66,14 +69,13 @@ async def test_upsert_feedback_enforces_thread_owner_via_thread_service():
                 user_id=10,
                 rating=FEEDBACK_RATING_POSITIVE,
             )
-        get_thread.assert_awaited_once_with("thread_a")
+        ensure_access.assert_awaited_once_with("thread_a", 10)
 
 
 @pytest.mark.asyncio
 async def test_upsert_feedback_persists_rating():
     db = AsyncMock()
-    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
-        get_thread.return_value = MagicMock(user_id=10)
+    with patch(_ENSURE_ACCESS, new_callable=AsyncMock) as ensure_access:
         service = MessageFeedbackService(tenant_id=1, db=db)
 
         ai_message = MagicMock()
@@ -110,7 +112,7 @@ async def test_upsert_feedback_persists_rating():
         )
 
         assert result.rating == FEEDBACK_RATING_POSITIVE
-        get_thread.assert_awaited_once_with("thread_a")
+        ensure_access.assert_awaited_once_with("thread_a", 10)
         service.repository.upsert.assert_awaited_once()
         db.commit.assert_not_called()
 
@@ -118,8 +120,8 @@ async def test_upsert_feedback_persists_rating():
 @pytest.mark.asyncio
 async def test_update_comment_requires_thread_access():
     db = AsyncMock()
-    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
-        get_thread.return_value = MagicMock(user_id=99)
+    with patch(_ENSURE_ACCESS, new_callable=AsyncMock) as ensure_access:
+        ensure_access.side_effect = AuthorizationError("Access denied")
         service = MessageFeedbackService(tenant_id=1, db=db)
         service.repository = MagicMock()
         existing_row = MagicMock()
@@ -128,7 +130,7 @@ async def test_update_comment_requires_thread_access():
 
         with pytest.raises(AuthorizationError):
             await service.update_comment(message_id="msg_a", user_id=10, comment="note")
-        get_thread.assert_awaited_once_with("thread_a")
+        ensure_access.assert_awaited_once_with("thread_a", 10)
 
 
 @pytest.mark.asyncio
