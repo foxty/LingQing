@@ -136,8 +136,10 @@ async def test_acl_deny_does_not_block_abac_visible_connector_in_list(async_db_s
     )
     await async_db_session.flush()
 
-    rows = await service.list_connectors_for_actor(
-        actor=ActorContext(tenant_id=tenant.id, user_id=viewer.id, user_role=viewer.role)
+    rows, _ = await service.list_connectors_paginated_for_actor(
+        actor=ActorContext(tenant_id=tenant.id, user_id=viewer.id, user_role=viewer.role),
+        page=1,
+        page_size=100,
     )
 
     listed_ids = {row.id for row in rows}
@@ -192,8 +194,10 @@ async def test_acl_allow_includes_connector_in_list(async_db_session):
     )
     await async_db_session.flush()
 
-    rows = await service.list_connectors_for_actor(
-        actor=ActorContext(tenant_id=tenant.id, user_id=viewer.id, user_role=viewer.role)
+    rows, _ = await service.list_connectors_paginated_for_actor(
+        actor=ActorContext(tenant_id=tenant.id, user_id=viewer.id, user_role=viewer.role),
+        page=1,
+        page_size=100,
     )
     listed_ids = {row.id for row in rows}
     assert connector.id in listed_ids
@@ -246,8 +250,10 @@ async def test_acl_inactive_does_not_block_abac_visible_connector_in_list(async_
     )
     await async_db_session.flush()
 
-    rows = await service.list_connectors_for_actor(
-        actor=ActorContext(tenant_id=tenant.id, user_id=viewer.id, user_role=viewer.role)
+    rows, _ = await service.list_connectors_paginated_for_actor(
+        actor=ActorContext(tenant_id=tenant.id, user_id=viewer.id, user_role=viewer.role),
+        page=1,
+        page_size=100,
     )
     listed_ids = {row.id for row in rows}
     assert connector.id in listed_ids

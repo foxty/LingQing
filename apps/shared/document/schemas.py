@@ -3,6 +3,7 @@
 from pydantic import BaseModel, Field
 
 from apps.shared.document.types import BlockType, DocumentStatus, IntakeSource
+from apps.shared.schemas.pagination import PaginatedResponse
 
 
 class DocumentInfo(BaseModel):
@@ -106,3 +107,7 @@ class DocumentCollectionResponse(BaseModel):
     last_synced_at: str | None = None
     created_at: str
     updated_at: str
+
+
+class DocumentCollectionListResponse(PaginatedResponse[DocumentCollectionResponse]):
+    """Paginated document collection list response."""

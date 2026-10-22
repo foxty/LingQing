@@ -15,6 +15,7 @@ import {
   type GoogleDriveSourceConfigUpsert,
 } from '@/lib/documentSourcesApi'
 import { getApiErrorMessage } from '@/lib/api'
+import { invalidateAgentAttachmentPickerQueries } from '@/lib/agentAttachmentPicker'
 import { useNotification } from '@/hooks/useNotification'
 import i18n from '@/i18n/config'
 import { useAuth } from './useAuth'
@@ -147,6 +148,7 @@ export function useTriggerSyncConnector(collectionId: number) {
       })
       queryClient.invalidateQueries({ queryKey: ['documents', user?.tenantId] })
       queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+      invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
       showSuccess(
         i18n.t('collectionSync.syncSuccess', {
           added: result.added,

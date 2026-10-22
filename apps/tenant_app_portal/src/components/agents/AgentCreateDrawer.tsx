@@ -36,7 +36,7 @@ export default function AgentCreateDrawer({
 }: AgentCreateDrawerProps) {
   const { t } = useTranslation()
   const createMutation = useCreateAgent()
-  const { skills, collections, dataSources, connectors, llmProfiles } = useAgentFormOptions(open)
+  const { skills, llmProfiles } = useAgentFormOptions(open)
 
   const [formName, setFormName] = useState('')
   const [formPrompt, setFormPrompt] = useState('')
@@ -102,9 +102,7 @@ export default function AgentCreateDrawer({
             formError={formError}
             fieldErrors={fieldErrors}
             skills={skills}
-            collections={collections}
-            dataSources={dataSources}
-            connectors={connectors}
+            formResourceKey={open ? 'create' : 'closed'}
             llmProfiles={llmProfiles}
             saving={createMutation.isPending}
             showActions={false}

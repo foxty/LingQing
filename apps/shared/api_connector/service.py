@@ -45,7 +45,11 @@ from apps.shared.api_connector.schemas import (
     ApiOperationStatsResponse,
     SyncSchemaSummaryDTO,
 )
-from apps.shared.authz.authz_query_builder import build_unified_resource_filter, evaluate_resource_action
+from apps.shared.authz.authz_query_builder import (
+    AuthzSqlFilter,
+    build_unified_resource_filter,
+    evaluate_resource_action,
+)
 from apps.shared.core.exceptions import (
     AuthorizationError,
     DuplicateResourceError,
@@ -142,9 +146,13 @@ class ApiConnectorService:
             connector_entity_to_domain(created_with_owner or created, cipher=self.cipher)
         )
 
-    async def list_connectors_for_actor(self, *, actor: ActorContext) -> list[ApiConnectorResponse]:
-        """List connectors for actor, returning response DTOs directly."""
-        abac_scope = await build_unified_resource_filter(
+    async def _connector_rows_to_responses(self, rows: list[ApiConnector]) -> list[ApiConnectorResponse]:
+        return [
+            connector_domain_to_response(connector_entity_to_domain(row, cipher=self.cipher)) for row in rows
+        ]
+
+    async def _connector_abac_scope(self, *, actor: ActorContext) -> AuthzSqlFilter:
+        return await build_unified_resource_filter(
             db_session=self.db_session,
             tenant_id=self.tenant_id,
             user_id=actor.user_id,
@@ -153,19 +161,41 @@ class ApiConnectorService:
             action=ABAC_ACTION_READ,
             resource_model=ApiConnector,
         )
+
+    @staticmethod
+    def _connector_row_matches_query(row: ApiConnector, query: str | None) -> bool:
+        normalized_query = query.strip().lower() if query else None
+        if not normalized_query:
+            return True
+        searchable = " ".join(
+            part
+            for part in (row.name, row.description, row.base_url)
+            if part
+        ).lower()
+        return normalized_query in searchable
+
+    async def _readable_connector_rows_for_actor(
+        self,
+        *,
+        actor: ActorContext,
+        abac_scope: AuthzSqlFilter,
+        query: str | None = None,
+    ) -> list[ApiConnector]:
         if abac_scope.deny_all:
             return []
 
+        scope_clause = None if abac_scope.allow_all else abac_scope.clause
         rows = await self.connector_repo.list_by_tenant(
             self.tenant_id,
-            scope_clause=abac_scope.clause,
+            scope_clause=scope_clause,
         )
         if abac_scope.allow_all:
-            return [connector_domain_to_response(connector_entity_to_domain(row, cipher=self.cipher)) for row in rows]
+            return [row for row in rows if self._connector_row_matches_query(row, query)]
 
-        # Fallback path (small result size): per-row authorization check for correctness.
-        allowed: list[ApiConnectorResponse] = []
+        allowed: list[ApiConnector] = []
         for row in rows:
+            if not self._connector_row_matches_query(row, query):
+                continue
             ok = await evaluate_resource_action(
                 db_session=self.db_session,
                 tenant_id=self.tenant_id,
@@ -177,8 +207,58 @@ class ApiConnectorService:
                 action=ABAC_ACTION_READ,
             )
             if ok:
-                allowed.append(connector_domain_to_response(connector_entity_to_domain(row, cipher=self.cipher)))
+                allowed.append(row)
         return allowed
+
+    async def _readable_connector_ids_for_actor(self, *, actor: ActorContext) -> list[int]:
+        abac_scope = await self._connector_abac_scope(actor=actor)
+        rows = await self._readable_connector_rows_for_actor(actor=actor, abac_scope=abac_scope)
+        return [row.id for row in rows]
+
+    async def list_connectors_paginated_for_actor(
+        self,
+        *,
+        actor: ActorContext,
+        page: int,
+        page_size: int,
+        query: str | None = None,
+    ) -> tuple[list[ApiConnectorResponse], PaginationRequest]:
+        abac_scope = await self._connector_abac_scope(actor=actor)
+        if abac_scope.deny_all:
+            return [], PaginationRequest.with_total(page=page, page_size=page_size, total=0)
+
+        if abac_scope.allow_all:
+            scope_clause = None
+            total = await self.connector_repo.count_by_tenant_filtered(
+                self.tenant_id,
+                scope_clause=scope_clause,
+                query=query,
+            )
+            pagination = PaginationRequest.with_total(page=page, page_size=page_size, total=total)
+            if total == 0:
+                return [], pagination
+
+            rows = await self.connector_repo.list_by_tenant_paginated(
+                self.tenant_id,
+                limit=pagination.page_size,
+                offset=pagination.offset,
+                scope_clause=scope_clause,
+                query=query,
+            )
+            return await self._connector_rows_to_responses(rows), pagination
+
+        allowed_rows = await self._readable_connector_rows_for_actor(
+            actor=actor,
+            abac_scope=abac_scope,
+            query=query,
+        )
+        total = len(allowed_rows)
+        pagination = PaginationRequest.with_total(page=page, page_size=page_size, total=total)
+        if total == 0:
+            return [], pagination
+
+        page_rows = allowed_rows[pagination.offset : pagination.offset + pagination.page_size]
+        return await self._connector_rows_to_responses(page_rows), pagination
 
     async def get_connector_for_actor(self, *, connector_id: int, actor: ActorContext) -> ApiConnectorResponse:
         connector = await self.connector_repo.get_by_id_and_tenant(connector_id, self.tenant_id)
@@ -711,8 +791,7 @@ class ApiConnectorService:
         elif require_connector_scope:
             raise ValidationError("connector_id is required")
         else:
-            connectors = await self.list_connectors_for_actor(actor=actor)
-            scoped_connector_ids = [connector.id for connector in connectors]
+            scoped_connector_ids = await self._readable_connector_ids_for_actor(actor=actor)
             if not scoped_connector_ids:
                 pagination = PaginationRequest.with_total(page=page, page_size=page_size, total=0)
                 return [], pagination

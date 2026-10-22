@@ -42,24 +42,35 @@ export function useApiConnectors() {
   const [operationsPage, setOperationsPage] = useState(1)
   const [operationsPageSize, setOperationsPageSize] = useState(10)
   const [operationsTotalPages, setOperationsTotalPages] = useState(0)
+  const [connectorsPage, setConnectorsPage] = useState(1)
+  const [connectorsPageSize, setConnectorsPageSize] = useState(10)
+  const [connectorsTotal, setConnectorsTotal] = useState(0)
+  const [connectorsTotalPages, setConnectorsTotalPages] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const fetchConnectors = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const rows = await listApiConnectors()
-      setConnectors(rows)
-      return rows
-    } catch (err: any) {
-      const message = getErrorMessage(err, 'Failed to fetch API connectors')
-      setError(message)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const fetchConnectors = useCallback(
+    async (pageNum: number = 1, pageSizeNum: number = 10, query?: string) => {
+      setLoading(true)
+      setError(null)
+      try {
+        const result = await listApiConnectors(pageNum, pageSizeNum, query)
+        setConnectors(result.items)
+        setConnectorsTotal(result.total)
+        setConnectorsPage(result.page)
+        setConnectorsPageSize(result.page_size)
+        setConnectorsTotalPages(result.total_pages)
+        return result
+      } catch (err: any) {
+        const message = getErrorMessage(err, 'Failed to fetch API connectors')
+        setError(message)
+        throw err
+      } finally {
+        setLoading(false)
+      }
+    },
+    []
+  )
 
   const addConnector = useCallback(async (payload: ApiConnectorCreateRequest) => {
     setLoading(true)
@@ -272,6 +283,10 @@ export function useApiConnectors() {
 
   return {
     connectors,
+    connectorsPage,
+    connectorsPageSize,
+    connectorsTotal,
+    connectorsTotalPages,
     operations,
     operationsTotal,
     operationStats,

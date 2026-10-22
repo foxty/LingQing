@@ -8,6 +8,35 @@ import type {
 
 export const SYSTEM_AGENT_ONE_ID = -1
 
+/** Hydration key for agent settings; null while skill catalog is still loading. */
+export function buildAgentSettingsHydrationKey(params: {
+  agentId: number
+  updatedAt: string | null | undefined
+  formOptionsEnabled: boolean
+  formOptionsLoading: boolean
+  skillNames: readonly string[]
+}): string | null {
+  if (params.formOptionsEnabled && params.formOptionsLoading) {
+    return null
+  }
+  const catalogPart = params.formOptionsEnabled
+    ? [...params.skillNames].sort().join('\0')
+    : 'options-idle'
+  return `${params.agentId}:${params.updatedAt ?? ''}:${catalogPart}`
+}
+
+/** When undefined, agentConfigFromAgent keeps config.skills as stored (no catalog filter). */
+export function skillNamesForAgentConfigMerge(
+  formOptionsEnabled: boolean,
+  formOptionsLoading: boolean,
+  skills: readonly { name: string }[]
+): Iterable<string> | undefined {
+  if (!formOptionsEnabled || formOptionsLoading) {
+    return undefined
+  }
+  return skills.map((s) => s.name)
+}
+
 /** Keep only catalog skill ids (drops stale entries hidden from the multi-select UI). */
 export function filterAgentSkillIds(
   skills: string[],

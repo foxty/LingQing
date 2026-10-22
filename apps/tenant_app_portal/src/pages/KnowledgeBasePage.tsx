@@ -1,6 +1,7 @@
 import ContainerRowActions from '@/components/ContainerRowActions'
 import CollectionsDialogs from '@/components/knowledge-base/CollectionsDialogs'
 import ListIndexToolbar from '@/components/ListIndexToolbar'
+import PaginationBar from '@/components/PaginationBar'
 import TagChips from '@/components/TagChips'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -12,7 +13,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { useCollectionsPage } from '@/hooks/useCollectionsPage'
+import { COLLECTIONS_PAGE_SIZE, useCollectionsPage } from '@/hooks/useCollectionsPage'
 import { formatDate } from '@/lib/dateTime'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import i18n from '@/i18n/config'
@@ -167,7 +168,7 @@ export default function KnowledgeBasePage() {
 
       {page.collectionsLoading && page.collections.length === 0 ? (
         <p className="text-center text-sm text-muted-foreground py-8">{t('common.loading')}</p>
-      ) : page.collections.length === 0 ? (
+      ) : page.collectionsTotal === 0 && !page.collectionSearch.trim() ? (
         <div className="text-center py-12 border rounded-lg bg-card">
           <FolderOpen className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
           <p className="text-sm font-medium">{t('knowledgeBase.noCollections')}</p>
@@ -178,11 +179,12 @@ export default function KnowledgeBasePage() {
             </Button>
           )}
         </div>
-      ) : page.filteredCollections.length === 0 ? (
+      ) : page.collections.length === 0 ? (
         <p className="text-center text-sm text-muted-foreground py-8">
           {t('knowledgeBase.noMatchingCollections')}
         </p>
       ) : (
+        <div className="space-y-3">
         <div className="overflow-hidden rounded-lg border bg-card">
           <Table className="table-fixed w-full">
             <TableHeader>
@@ -197,7 +199,7 @@ export default function KnowledgeBasePage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {page.filteredCollections.map((collection) => (
+              {page.collections.map((collection) => (
                 <TableRow key={collection.id}>
                   <TableCell className="py-2.5 max-w-0">
                     <button
@@ -283,6 +285,15 @@ export default function KnowledgeBasePage() {
               ))}
             </TableBody>
           </Table>
+        </div>
+        <PaginationBar
+          page={page.collectionsPage}
+          pageSize={COLLECTIONS_PAGE_SIZE}
+          total={page.collectionsTotal}
+          totalPages={page.collectionsTotalPages}
+          onPageChange={page.setCollectionsPage}
+          showWhenSinglePage={true}
+        />
         </div>
       )}
 

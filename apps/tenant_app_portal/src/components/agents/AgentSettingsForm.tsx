@@ -1,8 +1,11 @@
 import { Loader2 } from 'lucide-react'
-import { useMemo } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
+import AsyncMultiSelectField from '@/components/agents/AsyncMultiSelectField'
 import MultiSelectField from '@/components/agents/MultiSelectField'
+import { useAuth } from '@/hooks/useAuth'
 import SettingsSection from '@/components/SettingsSection'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -18,10 +21,19 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import {
   filterAgentSkillIds,
+  type AgentAttachmentAccessItem,
   type AgentCapabilityConfig,
   type AgentFormFieldErrors,
   type AgentSkillCatalogItem,
 } from '@/lib/agentsApi'
+import {
+  AGENT_ATTACHMENT_RESOURCE,
+  attachmentLabelKey,
+  buildAttachmentLabelMap,
+  searchAgentAttachmentPicker,
+  selectedAttachmentOptions,
+  type AgentAttachmentPickerKind,
+} from '@/lib/agentAttachmentPicker'
 import { usePlatformCapabilities } from '@/hooks/useAgents'
 import type { LLMModelProfile } from '@/lib/llmConfigApi'
 
@@ -61,6 +73,7 @@ const agentFormResources = {
     multiSelectSearch: 'Search…',
     multiSelectEmpty: 'Nothing available to add.',
     multiSelectNoResults: 'No matches.',
+    multiSelectLoading: 'Searching…',
     save: 'Save',
     saveSuccess: 'Agent saved',
     saveFailed: 'Failed to save agent',
@@ -99,6 +112,7 @@ const agentFormResources = {
     multiSelectSearch: '搜索…',
     multiSelectEmpty: '暂无可添加项。',
     multiSelectNoResults: '无匹配结果。',
+    multiSelectLoading: '搜索中…',
     save: '保存',
     saveSuccess: '智能体已保存',
     saveFailed: '保存智能体失败',
@@ -134,9 +148,9 @@ type AgentSettingsFormProps = {
   formError: string | null
   fieldErrors?: AgentFormFieldErrors
   skills: AgentSkillCatalogItem[]
-  collections: { id: number; name: string }[]
-  dataSources: { id: number; name: string }[]
-  connectors: { id: number; name: string }[]
+  attachmentAccess?: AgentAttachmentAccessItem[]
+  /** Resets picker label cache when switching agents or after save. */
+  formResourceKey?: string
   llmProfiles: LLMModelProfile[]
   readOnly?: boolean
   saving?: boolean
@@ -170,9 +184,8 @@ export default function AgentSettingsForm({
   formError,
   fieldErrors = {},
   skills,
-  collections,
-  dataSources,
-  connectors,
+  attachmentAccess,
+  formResourceKey,
   llmProfiles,
   readOnly = false,
   saving = false,
@@ -184,7 +197,50 @@ export default function AgentSettingsForm({
   showActions = true,
 }: AgentSettingsFormProps) {
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const tenantId = user?.tenantId ?? 0
   const { data: platformCapabilities = [] } = usePlatformCapabilities()
+  const [extraLabels, setExtraLabels] = useState<Record<string, string>>({})
+
+  useEffect(() => {
+    setExtraLabels({})
+  }, [formResourceKey])
+
+  const attachmentLabelMap = useMemo(
+    () => buildAttachmentLabelMap(attachmentAccess),
+    [attachmentAccess]
+  )
+
+  const rememberPickedLabel = useCallback((resourceType: string, option: { id: string; label: string }) => {
+    const id = Number(option.id)
+    if (!Number.isFinite(id)) {
+      return
+    }
+    setExtraLabels((prev) => ({
+      ...prev,
+      [attachmentLabelKey(resourceType, id)]: option.label,
+    }))
+  }, [])
+
+  const makeAttachmentSearch = useCallback(
+    (kind: AgentAttachmentPickerKind) => (query: string) =>
+      searchAgentAttachmentPicker(queryClient, tenantId, kind, query),
+    [queryClient, tenantId]
+  )
+
+  const searchDataSources = useMemo(
+    () => makeAttachmentSearch('data_source'),
+    [makeAttachmentSearch]
+  )
+  const searchCollections = useMemo(
+    () => makeAttachmentSearch('document_collection'),
+    [makeAttachmentSearch]
+  )
+  const searchConnectors = useMemo(
+    () => makeAttachmentSearch('api_connector'),
+    [makeAttachmentSearch]
+  )
 
   const skillOptions = useMemo(
     () =>
@@ -196,17 +252,35 @@ export default function AgentSettingsForm({
     [skills]
   )
 
-  const collectionOptions = useMemo(
-    () => collections.map((c) => ({ id: String(c.id), label: c.name })),
-    [collections]
+  const knowledgeSelectedOptions = useMemo(
+    () =>
+      selectedAttachmentOptions(
+        formConfig.knowledge_base_ids,
+        AGENT_ATTACHMENT_RESOURCE.knowledge,
+        attachmentLabelMap,
+        extraLabels
+      ),
+    [attachmentLabelMap, extraLabels, formConfig.knowledge_base_ids]
   )
-  const dataSourceOptions = useMemo(
-    () => dataSources.map((s) => ({ id: String(s.id), label: s.name })),
-    [dataSources]
+  const dataSourceSelectedOptions = useMemo(
+    () =>
+      selectedAttachmentOptions(
+        formConfig.data_source_ids,
+        AGENT_ATTACHMENT_RESOURCE.dataSource,
+        attachmentLabelMap,
+        extraLabels
+      ),
+    [attachmentLabelMap, extraLabels, formConfig.data_source_ids]
   )
-  const connectorOptions = useMemo(
-    () => connectors.map((c) => ({ id: String(c.id), label: c.name })),
-    [connectors]
+  const connectorSelectedOptions = useMemo(
+    () =>
+      selectedAttachmentOptions(
+        formConfig.api_connector_ids,
+        AGENT_ATTACHMENT_RESOURCE.apiConnector,
+        attachmentLabelMap,
+        extraLabels
+      ),
+    [attachmentLabelMap, extraLabels, formConfig.api_connector_ids]
   )
 
   const platformOptions = useMemo(
@@ -227,6 +301,7 @@ export default function AgentSettingsForm({
     searchPlaceholder: t('agents.multiSelectSearch'),
     emptyOptionsMessage: t('agents.multiSelectEmpty'),
     noResultsMessage: t('agents.multiSelectNoResults'),
+    loadingMessage: t('agents.multiSelectLoading'),
   }
 
   const showFormActions = showActions && !readOnly && onSave
@@ -326,11 +401,13 @@ export default function AgentSettingsForm({
             />
           ) : null}
 
-          <MultiSelectField
+          <AsyncMultiSelectField
             label={t('agents.knowledge')}
-            options={collectionOptions}
+            selectedOptions={knowledgeSelectedOptions}
             selectedIds={formConfig.knowledge_base_ids.map(String)}
             disabled={readOnly}
+            searchOptions={searchCollections}
+            onPickOption={(option) => rememberPickedLabel(AGENT_ATTACHMENT_RESOURCE.knowledge, option)}
             onChange={(ids) =>
               onConfigChange({
                 ...formConfig,
@@ -339,11 +416,13 @@ export default function AgentSettingsForm({
             }
             {...multiSelectMessages}
           />
-          <MultiSelectField
+          <AsyncMultiSelectField
             label={t('agents.dataSources')}
-            options={dataSourceOptions}
+            selectedOptions={dataSourceSelectedOptions}
             selectedIds={formConfig.data_source_ids.map(String)}
             disabled={readOnly}
+            searchOptions={searchDataSources}
+            onPickOption={(option) => rememberPickedLabel(AGENT_ATTACHMENT_RESOURCE.dataSource, option)}
             onChange={(ids) =>
               onConfigChange({
                 ...formConfig,
@@ -352,11 +431,13 @@ export default function AgentSettingsForm({
             }
             {...multiSelectMessages}
           />
-          <MultiSelectField
+          <AsyncMultiSelectField
             label={t('agents.apis')}
-            options={connectorOptions}
+            selectedOptions={connectorSelectedOptions}
             selectedIds={formConfig.api_connector_ids.map(String)}
             disabled={readOnly}
+            searchOptions={searchConnectors}
+            onPickOption={(option) => rememberPickedLabel(AGENT_ATTACHMENT_RESOURCE.apiConnector, option)}
             onChange={(ids) =>
               onConfigChange({
                 ...formConfig,

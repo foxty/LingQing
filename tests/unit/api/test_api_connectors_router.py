@@ -105,9 +105,10 @@ def app(monkeypatch):
                 "updated_at": "2026-04-20T00:00:00Z",
             }
 
-        async def list_connectors_for_actor(self, **kwargs):
-            """Mock list connectors that returns DTOs directly."""
-            return []
+        async def list_connectors_paginated_for_actor(self, **kwargs):
+            _ = kwargs
+            pagination = PaginationRequest.with_total(page=1, page_size=20, total=0)
+            return [], pagination
 
         async def get_connector_for_actor(self, **kwargs):
             """Mock get connector that returns DTO directly."""
@@ -284,6 +285,17 @@ def app(monkeypatch):
     monkeypatch.setattr(api_connectors, "ApiConnectorExecutionService", _FakeExecutionService)
 
     return api
+
+
+def test_list_connectors_returns_paginated_envelope(app):
+    client = TestClient(app)
+    response = client.get("/api-connectors", params={"page": 1, "page_size": 20})
+    assert response.status_code == 200
+    body = response.json()
+    assert body["items"] == []
+    assert body["page"] == 1
+    assert body["page_size"] == 20
+    assert body["total"] == 0
 
 
 def test_connector_crud_sync_and_call_flow(app):

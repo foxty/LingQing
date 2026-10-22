@@ -21,7 +21,9 @@ import {
   getAgentFormFieldErrors,
   hasAgentFormFieldErrors,
   validateAgentFormFields,
+  buildAgentSettingsHydrationKey,
   filterAgentSkillIds,
+  skillNamesForAgentConfigMerge,
   type AgentCapabilityConfig,
   type AgentFormFieldErrors,
 } from '@/lib/agentsApi'
@@ -136,8 +138,7 @@ export default function AgentDetailPage() {
   const { data: agent, isLoading, isError } = useAgent(Number.isFinite(agentId) ? agentId : undefined)
   const settingsTabActive = activeTab === TAB_SETTINGS
   const formOptionsEnabled = settingsTabActive && !!agent && !agent.is_system
-  const { skills, collections, dataSources, connectors, llmProfiles } =
-    useAgentFormOptions(formOptionsEnabled)
+  const { skills, llmProfiles, isLoading: formOptionsLoading } = useAgentFormOptions(formOptionsEnabled)
   const updateMutation = useUpdateAgent()
 
   const [formName, setFormName] = useState('')
@@ -155,26 +156,51 @@ export default function AgentDetailPage() {
     if (!agent || agent.id !== agentId) {
       return
     }
-    const hydrationKey = `${agent.id}:${agent.updated_at ?? ''}`
-    if (formHydratedAt.current === hydrationKey) {
+    const hydrationKey = buildAgentSettingsHydrationKey({
+      agentId: agent.id,
+      updatedAt: agent.updated_at,
+      formOptionsEnabled,
+      formOptionsLoading,
+      skillNames: skills.map((s) => s.name),
+    })
+    if (hydrationKey === null || formHydratedAt.current === hydrationKey) {
       return
     }
     formHydratedAt.current = hydrationKey
     setFormName(agent.name)
     setFormPrompt(agent.system_prompt)
-    setFormConfig(agentConfigFromAgent(agent.config, skills.map((s) => s.name)))
+    setFormConfig(
+      agentConfigFromAgent(
+        agent.config,
+        skillNamesForAgentConfigMerge(formOptionsEnabled, formOptionsLoading, skills)
+      )
+    )
     setFormError(null)
     setFieldErrors({})
-  }, [agent, agentId, skills])
+  }, [agent, agentId, skills, formOptionsEnabled, formOptionsLoading])
 
   const resetSettingsForm = () => {
     if (!agent) {
       return
     }
-    formHydratedAt.current = `${agent.id}:${agent.updated_at ?? ''}`
+    const hydrationKey = buildAgentSettingsHydrationKey({
+      agentId: agent.id,
+      updatedAt: agent.updated_at,
+      formOptionsEnabled,
+      formOptionsLoading,
+      skillNames: skills.map((s) => s.name),
+    })
+    if (hydrationKey !== null) {
+      formHydratedAt.current = hydrationKey
+    }
     setFormName(agent.name)
     setFormPrompt(agent.system_prompt)
-    setFormConfig(agentConfigFromAgent(agent.config, skills.map((s) => s.name)))
+    setFormConfig(
+      agentConfigFromAgent(
+        agent.config,
+        skillNamesForAgentConfigMerge(formOptionsEnabled, formOptionsLoading, skills)
+      )
+    )
     setFormError(null)
     setFieldErrors({})
   }
@@ -255,6 +281,9 @@ export default function AgentDetailPage() {
     if (!canEdit) {
       return
     }
+    if (formOptionsEnabled && formOptionsLoading) {
+      return
+    }
     const clientErrors = validateAgentFormFields(formName, formPrompt, {
       nameRequired: t('agents.validation.nameRequired'),
       promptRequired: t('agents.validation.promptRequired'),
@@ -279,10 +308,21 @@ export default function AgentDetailPage() {
           },
         },
       })
-      formHydratedAt.current = `${updated.id}:${updated.updated_at ?? ''}`
+      formHydratedAt.current = buildAgentSettingsHydrationKey({
+        agentId: updated.id,
+        updatedAt: updated.updated_at,
+        formOptionsEnabled,
+        formOptionsLoading,
+        skillNames: skills.map((s) => s.name),
+      })
       setFormName(updated.name)
       setFormPrompt(updated.system_prompt)
-      setFormConfig(agentConfigFromAgent(updated.config, skills.map((s) => s.name)))
+      setFormConfig(
+        agentConfigFromAgent(
+          updated.config,
+          skillNamesForAgentConfigMerge(formOptionsEnabled, formOptionsLoading, skills)
+        )
+      )
     } catch (error) {
       const apiFieldErrors = getAgentFormFieldErrors(error)
       setFieldErrors(apiFieldErrors)
@@ -348,12 +388,11 @@ export default function AgentDetailPage() {
               formError={formError}
               fieldErrors={fieldErrors}
               skills={skills}
-              collections={collections}
-              dataSources={dataSources}
-              connectors={connectors}
+              attachmentAccess={agent.attachment_access}
+              formResourceKey={`${agent.id}:${agent.updated_at ?? ''}`}
               llmProfiles={llmProfiles}
               readOnly={!canEdit}
-              saving={updateMutation.isPending}
+              saving={updateMutation.isPending || (formOptionsEnabled && formOptionsLoading)}
               showActions={canEdit}
               onNameChange={(value) => {
                 setFormName(value)
