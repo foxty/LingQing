@@ -10,6 +10,7 @@ from apps.shared.api_connector.domain import OperationStatus
 from apps.shared.api_connector.execution import ApiConnectorExecutionService
 from apps.shared.api_connector.schemas import (
     ApiConnectorCreateRequest,
+    ApiConnectorListResponse,
     ApiConnectorResponse,
     ApiConnectorUpdateRequest,
     ApiOperationCallRequest,
@@ -77,15 +78,30 @@ async def create_connector(
     )
 
 
-@router.get("", response_model=list[ApiConnectorResponse])
+@router.get("", response_model=ApiConnectorListResponse)
 async def list_connectors(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(100, ge=1, le=100, description="Items per page"),
+    query: str | None = Query(None, min_length=1, description="Search query"),
     db: AsyncSession = Depends(get_db),
     current_user: UserDTO = Depends(
         require_permission([Permissions.API_CONNECTORS_CREATE, Permissions.API_CONNECTORS_MANAGE])
     ),
 ):
     service = await _service(db, current_user.tenant_id)
-    return await service.list_connectors_for_actor(actor=_actor_ctx(current_user))
+    items, pagination = await service.list_connectors_paginated_for_actor(
+        actor=_actor_ctx(current_user),
+        page=page,
+        page_size=page_size,
+        query=query,
+    )
+    return ApiConnectorListResponse(
+        items=items,
+        total=pagination.total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=pagination.total_pages,
+    )
 
 
 @router.get("/{connector_id}", response_model=ApiConnectorResponse)

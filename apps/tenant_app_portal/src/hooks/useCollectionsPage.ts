@@ -4,7 +4,7 @@ import { useConfirmation, type UseConfirmationReturn } from '@/hooks/useConfirma
 import {
   useCreateDocumentCollection,
   useDeleteDocumentCollection,
-  useDocumentCollections,
+  useDocumentCollectionsList,
   useUpdateDocumentCollection,
 } from '@/hooks/useDocumentCollections'
 import { useDriveOAuthCallback } from '@/hooks/useDriveOAuthCallback'
@@ -12,10 +12,12 @@ import { useNotification } from '@/hooks/useNotification'
 import type { DocumentCollection } from '@/lib/documentCollectionsApi'
 import { actionRules } from '@/lib/permissionRules'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useNavigate } from 'react-router-dom'
 import { useResourceListTags } from '@/hooks/useResourceListTags'
+
+export const COLLECTIONS_PAGE_SIZE = 10
 
 export function useCollectionsPage() {
   const { t } = useTranslation()
@@ -24,6 +26,7 @@ export function useCollectionsPage() {
   useDriveOAuthCallback()
 
   const [collectionSearch, setCollectionSearch] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
   const [shareOpen, setShareOpen] = useState(false)
   const [tagsOpen, setTagsOpen] = useState(false)
   const [formOpen, setFormOpen] = useState(false)
@@ -35,7 +38,16 @@ export function useCollectionsPage() {
   const canManageTags = hasAny(actionRules.canManageTags())
   const canUpload = hasAny(actionRules.canUploadDocument())
 
-  const { data: collections = [], isLoading: collectionsLoading, refetch } = useDocumentCollections()
+  const searchQuery = collectionSearch.trim() || undefined
+  const {
+    data: collectionsPage,
+    isLoading: collectionsLoading,
+    refetch,
+  } = useDocumentCollectionsList(currentPage, COLLECTIONS_PAGE_SIZE, searchQuery)
+  const collections = collectionsPage?.items ?? []
+  const collectionsTotal = collectionsPage?.total ?? 0
+  const collectionsTotalPages = collectionsPage?.total_pages ?? 0
+
   const { tagKeys, tagsMap: collectionTagsMap, setTagsForResource: setCollectionTags } =
     useResourceListTags(TAG_RESOURCE_TYPES.DOCUMENT_COLLECTION, collections, canReadTags)
 
@@ -44,16 +56,10 @@ export function useCollectionsPage() {
   const deleteCollection = useDeleteDocumentCollection()
   const deleteCollectionConfirm = useConfirmation<DocumentCollection | null>(null)
 
-  const filteredCollections = useMemo(() => {
-    const q = collectionSearch.trim().toLowerCase()
-    if (!q) return collections
-    return collections.filter(
-      (c) =>
-        c.name.toLowerCase().includes(q) ||
-        (c.description?.toLowerCase().includes(q) ?? false) ||
-        (c.sync_folder_name?.toLowerCase().includes(q) ?? false)
-    )
-  }, [collections, collectionSearch])
+  const setCollectionSearchAndResetPage = (value: string) => {
+    setCurrentPage(1)
+    setCollectionSearch(value)
+  }
 
   const openCreateDialog = () => {
     setActiveCollection(null)
@@ -80,24 +86,13 @@ export function useCollectionsPage() {
   const handleCollectionFormSubmit = async (values: CollectionFormValues) => {
     try {
       if (formMode === 'create') {
-        const created = await createCollection.mutateAsync({
-          name: values.name,
-          description: values.description || null,
-        })
+        await createCollection.mutateAsync(values)
         showSuccess(t('knowledgeBase.createCollectionSuccess'))
-        setFormOpen(false)
-        navigate(`/knowledge/collections/${created.id}`)
       } else if (activeCollection) {
-        await updateCollection.mutateAsync({
-          collectionId: activeCollection.id,
-          payload: {
-            name: values.name,
-            description: values.description || null,
-          },
-        })
+        await updateCollection.mutateAsync({ collectionId: activeCollection.id, payload: values })
         showSuccess(t('knowledgeBase.updateCollectionSuccess'))
-        setFormOpen(false)
       }
+      setFormOpen(false)
     } catch (error: unknown) {
       const message =
         (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail ||
@@ -111,7 +106,9 @@ export function useCollectionsPage() {
   }
 
   const handleDeleteCollectionConfirm = async (collection: DocumentCollection | null) => {
-    if (!collection) return
+    if (!collection) {
+      return
+    }
     if (collection.document_count > 0) {
       showError(t('knowledgeBase.collectionNotEmpty', { count: collection.document_count }))
       deleteCollectionConfirm.close()
@@ -139,9 +136,12 @@ export function useCollectionsPage() {
   return {
     collections,
     collectionsLoading,
-    filteredCollections,
+    collectionsTotal,
+    collectionsTotalPages,
+    collectionsPage: currentPage,
+    setCollectionsPage: setCurrentPage,
     collectionSearch,
-    setCollectionSearch,
+    setCollectionSearch: setCollectionSearchAndResetPage,
     refetchCollections: refetch,
     canUpload,
     canReadTags,

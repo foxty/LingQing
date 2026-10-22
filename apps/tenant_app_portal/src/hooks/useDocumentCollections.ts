@@ -2,26 +2,56 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createDocumentCollection,
   deleteDocumentCollection,
+  getDocumentCollection,
   listDocumentCollections,
   reindexDocumentCollection,
   reparseDocumentCollection,
   updateDocumentCollection,
-  type DocumentCollection,
   type DocumentCollectionCreate,
   type DocumentCollectionUpdate,
 } from '@/lib/documentCollectionsApi'
 import { useNotification } from '@/hooks/useNotification'
 import i18n from '@/i18n/config'
+import { invalidateAgentAttachmentPickerQueries } from '@/lib/agentAttachmentPicker'
 import { useAuth } from './useAuth'
 
-export function useDocumentCollections() {
-  const { user } = useAuth()
+export function documentCollectionsListQueryKey(
+  tenantId: number | undefined,
+  page: number,
+  pageSize: number,
+  query?: string
+) {
+  return ['document-collections', tenantId, page, pageSize, query ?? ''] as const
+}
 
-  return useQuery<DocumentCollection[]>({
-    queryKey: ['document-collections', user?.tenantId],
-    queryFn: listDocumentCollections,
+export function useDocumentCollectionsList(page: number, pageSize: number, query?: string) {
+  const { user } = useAuth()
+  const normalizedQuery = query?.trim() || undefined
+
+  return useQuery({
+    queryKey: documentCollectionsListQueryKey(user?.tenantId, page, pageSize, normalizedQuery),
+    queryFn: () => listDocumentCollections(page, pageSize, normalizedQuery),
     enabled: !!user,
   })
+}
+
+export function useDocumentCollection(collectionId: number | undefined) {
+  const { user } = useAuth()
+
+  return useQuery({
+    queryKey: ['document-collection', user?.tenantId, collectionId],
+    queryFn: () => getDocumentCollection(collectionId!),
+    enabled: !!user && collectionId != null && !Number.isNaN(collectionId),
+  })
+}
+
+function invalidateCollectionQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  tenantId: number | undefined
+) {
+  void queryClient.invalidateQueries({ queryKey: ['document-collections', tenantId] })
+  void queryClient.invalidateQueries({ queryKey: ['document-collection', tenantId] })
+  invalidateAgentAttachmentPickerQueries(queryClient, tenantId)
 }
 
 export function useCreateDocumentCollection() {
@@ -31,7 +61,7 @@ export function useCreateDocumentCollection() {
   return useMutation({
     mutationFn: (payload: DocumentCollectionCreate) => createDocumentCollection(payload),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+      invalidateCollectionQueries(queryClient, user?.tenantId)
     },
   })
 }
@@ -48,8 +78,11 @@ export function useUpdateDocumentCollection() {
       collectionId: number
       payload: DocumentCollectionUpdate
     }) => updateDocumentCollection(collectionId, payload),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+    onSuccess: (_data, variables) => {
+      invalidateCollectionQueries(queryClient, user?.tenantId)
+      void queryClient.invalidateQueries({
+        queryKey: ['document-collection', user?.tenantId, variables.collectionId],
+      })
     },
   })
 }
@@ -61,7 +94,7 @@ export function useDeleteDocumentCollection() {
   return useMutation({
     mutationFn: (collectionId: number) => deleteDocumentCollection(collectionId),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+      invalidateCollectionQueries(queryClient, user?.tenantId)
     },
   })
 }

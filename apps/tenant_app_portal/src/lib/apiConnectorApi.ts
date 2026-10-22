@@ -1,6 +1,7 @@
 import { API_ENDPOINTS } from '@/constants/api'
 import api from '@/lib/api'
 import type { PaginatedResponse } from '@/lib/documentsApi'
+import type { PaginatedListResponse } from '@/lib/paginatedList'
 
 export type ApiConnectorAuthType = 'none' | 'api_key' | 'bearer' | 'basic' | 'custom'
 export type ApiConnectorSchemaSourceType = 'manual' | 'openapi_url' | 'openapi_upload'
@@ -125,8 +126,15 @@ export interface ApiOperationCallResponse {
   error: string | null
 }
 
-export async function listApiConnectors(): Promise<ApiConnector[]> {
-  const response = await api.get<ApiConnector[]>(API_ENDPOINTS.apiConnectors)
+export type ApiConnectorListResponse = PaginatedListResponse<ApiConnector>
+
+export async function listApiConnectors(
+  page = 1,
+  pageSize = 100,
+  query?: string
+): Promise<ApiConnectorListResponse> {
+  const params = { page, page_size: pageSize, ...(query ? { query } : {}) }
+  const response = await api.get<ApiConnectorListResponse>(API_ENDPOINTS.apiConnectors, { params })
   return response.data
 }
 

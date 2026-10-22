@@ -13,6 +13,7 @@ import {
 import type { Document } from '@/types'
 import { convertApiDocumentToDocument } from '@/types'
 import { useNotification } from '@/hooks/useNotification'
+import { invalidateAgentAttachmentPickerQueries } from '@/lib/agentAttachmentPicker'
 import i18n from '@/i18n/config'
 
 /**
@@ -61,6 +62,7 @@ export function useDeleteDocuments() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['documents', user?.tenantId] })
       queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+      invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
     },
     onError: (error: any) => {
       let errorMsg = 'Failed to delete documents'
@@ -91,6 +93,7 @@ export function useUploadDocument(collectionId: number) {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['documents', user?.tenantId] })
       queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+      invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
     },
   })
 }
@@ -110,6 +113,7 @@ function useInvalidateDocuments() {
   return () => {
     queryClient.invalidateQueries({ queryKey: ['documents', user?.tenantId] })
     queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+    invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
   }
 }
 

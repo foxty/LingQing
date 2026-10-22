@@ -1,4 +1,5 @@
 import api from './api'
+import type { PaginatedListResponse } from '@/lib/paginatedList'
 
 export interface DocumentCollection {
   id: number
@@ -28,8 +29,20 @@ export interface DocumentCollectionUpdate {
   description?: string | null
 }
 
-export async function listDocumentCollections(): Promise<DocumentCollection[]> {
-  const response = await api.get<DocumentCollection[]>('/document-collections')
+export type DocumentCollectionListResponse = PaginatedListResponse<DocumentCollection>
+
+export async function listDocumentCollections(
+  page = 1,
+  pageSize = 100,
+  query?: string
+): Promise<DocumentCollectionListResponse> {
+  const params = { page, page_size: pageSize, ...(query ? { query } : {}) }
+  const response = await api.get<DocumentCollectionListResponse>('/document-collections', { params })
+  return response.data
+}
+
+export async function getDocumentCollection(collectionId: number): Promise<DocumentCollection> {
+  const response = await api.get<DocumentCollection>(`/document-collections/${collectionId}`)
   return response.data
 }
 

@@ -165,6 +165,10 @@ class ApiConnectorResponse(BaseModel):
     updated_at: datetime
 
 
+class ApiConnectorListResponse(PaginatedResponse[ApiConnectorResponse]):
+    """Paginated API connector list response."""
+
+
 class SyncSchemaRequest(BaseModel):
     file_content: str | None = None
 

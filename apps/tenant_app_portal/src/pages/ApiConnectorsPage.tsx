@@ -7,6 +7,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import AddApiConnectorDialog from '@/components/AddApiConnectorDialog'
 import ContainerRowActions from '@/components/ContainerRowActions'
 import ListIndexToolbar from '@/components/ListIndexToolbar'
+import PaginationBar from '@/components/PaginationBar'
 import ResourceAclShareDialog from '@/components/ResourceAclShareDialog'
 import TagChips from '@/components/TagChips'
 import { Badge } from '@/components/ui/badge'
@@ -87,6 +88,9 @@ export default function ApiConnectorsPage() {
   const { t } = useTranslation()
   const {
     connectors,
+    connectorsPage,
+    connectorsTotal,
+    connectorsTotalPages,
     loading,
     error,
     fetchConnectors,
@@ -112,27 +116,21 @@ export default function ApiConnectorsPage() {
   const { tagKeys, tagsMap: connectorTagsMap, setTagsForResource: setConnectorTags } =
     useResourceListTags(TAG_RESOURCE_TYPES.API_CONNECTOR, connectors, canReadTags)
 
-  const normalizedQuery = searchQuery.trim().toLowerCase()
-  const filteredConnectors = normalizedQuery
-    ? connectors.filter((connector) => {
-        const searchable = [
-          connector.name,
-          connector.owner_name || '',
-          connector.base_url,
-          connector.auth_type,
-          connector.schema_source_type,
-        ]
-          .join(' ')
-          .toLowerCase()
-        return searchable.includes(normalizedQuery)
-      })
-    : connectors
+  const CONNECTORS_PAGE_SIZE = 10
+  const [currentPage, setCurrentPage] = useState(1)
+  const searchParam = searchQuery.trim() || undefined
 
   useEffect(() => {
-    fetchConnectors().catch((err: any) => {
+    fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam).catch((err: any) => {
       showError(err.response?.data?.detail || t('apiConnectors.fetchError'))
     })
-  }, [fetchConnectors, showError])
+  }, [fetchConnectors, currentPage, searchParam, showError, t])
+
+  useEffect(() => {
+    if (connectorsPage !== currentPage) {
+      setCurrentPage(connectorsPage)
+    }
+  }, [connectorsPage, currentPage])
 
   const openCreateConnectorForm = () => {
     setAddDialogOpen(true)
@@ -176,9 +174,15 @@ export default function ApiConnectorsPage() {
         <ListIndexToolbar
           searchQuery={searchQuery}
           searchPlaceholder={t('apiConnectors.searchPlaceholder')}
-          onSearchQueryChange={setSearchQuery}
-          onClearSearchQuery={() => setSearchQuery('')}
-          onRefresh={() => fetchConnectors()}
+          onSearchQueryChange={(value) => {
+            setCurrentPage(1)
+            setSearchQuery(value)
+          }}
+          onClearSearchQuery={() => {
+            setCurrentPage(1)
+            setSearchQuery('')
+          }}
+          onRefresh={() => fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam)}
           refreshing={loading}
           refreshLabel={t('common.refresh')}
           primaryAction={{
@@ -190,12 +194,15 @@ export default function ApiConnectorsPage() {
 
         {loading && connectors.length === 0 ? (
           <p className="text-center text-sm text-muted-foreground py-8">{t('common.loading')}</p>
-        ) : filteredConnectors.length === 0 ? (
+        ) : connectorsTotal === 0 && !searchParam ? (
           <div className="text-center py-12 border rounded-lg bg-card">
             <Cable className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
-            <p className="text-sm text-muted-foreground">
-              {connectors.length === 0 ? t('apiConnectors.noConnectors') : t('apiConnectors.noMatchingConnectors')}
-            </p>
+            <p className="text-sm text-muted-foreground">{t('apiConnectors.noConnectors')}</p>
+          </div>
+        ) : connectors.length === 0 ? (
+          <div className="text-center py-12 border rounded-lg bg-card">
+            <Cable className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
+            <p className="text-sm text-muted-foreground">{t('apiConnectors.noMatchingConnectors')}</p>
           </div>
         ) : (
           <div className="space-y-3">
@@ -213,7 +220,7 @@ export default function ApiConnectorsPage() {
                   </TableRow>
                 </TableHeader>
                 <TableBody>
-                  {filteredConnectors.map((connector) => (
+                  {connectors.map((connector) => (
                     <TableRow key={connector.id}>
                       <TableCell className="py-2.5">
                         <div className="flex flex-col gap-1">
@@ -273,6 +280,14 @@ export default function ApiConnectorsPage() {
                 </TableBody>
               </Table>
             </div>
+            <PaginationBar
+              page={currentPage}
+              pageSize={CONNECTORS_PAGE_SIZE}
+              total={connectorsTotal}
+              totalPages={connectorsTotalPages}
+              onPageChange={setCurrentPage}
+              showWhenSinglePage={true}
+            />
           </div>
         )}
       </div>

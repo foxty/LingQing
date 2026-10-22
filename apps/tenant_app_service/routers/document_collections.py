@@ -1,6 +1,6 @@
 """Document collections router."""
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_file_storage
@@ -11,6 +11,7 @@ from apps.shared.db.session import get_db
 from apps.shared.document.collection_service import DocumentCollectionService
 from apps.shared.document.schemas import (
     DocumentCollectionCreate,
+    DocumentCollectionListResponse,
     DocumentCollectionResponse,
     DocumentCollectionUpdate,
     DocumentQueueResponse,
@@ -55,13 +56,28 @@ def _actor_from_user(current_user: UserDTO) -> ActorContext:
     )
 
 
-@router.get("", response_model=list[DocumentCollectionResponse])
+@router.get("", response_model=DocumentCollectionListResponse)
 async def list_document_collections(
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(100, ge=1, le=100, description="Items per page"),
+    query: str | None = Query(None, min_length=1, description="Search query"),
     current_user: UserDTO = Depends(require_permission(Permissions.DOCUMENTS_READ)),
     db: AsyncSession = Depends(get_db),
 ):
     service = _create_service(db, current_user.tenant_id)
-    return await service.list_collections_for_actor(actor=_actor_from_user(current_user))
+    items, pagination = await service.list_collections_paginated_for_actor(
+        actor=_actor_from_user(current_user),
+        page=page,
+        page_size=page_size,
+        query=query,
+    )
+    return DocumentCollectionListResponse(
+        items=items,
+        total=pagination.total,
+        page=pagination.page,
+        page_size=pagination.page_size,
+        total_pages=pagination.total_pages,
+    )
 
 
 @router.post("", response_model=DocumentCollectionResponse, status_code=status.HTTP_201_CREATED)

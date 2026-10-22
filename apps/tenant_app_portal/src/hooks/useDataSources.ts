@@ -21,9 +21,77 @@ import {
   type DataSourceUpdate,
   type QueryResult,
 } from '@/lib/dataSourceApi'
+import { invalidateAgentAttachmentPickerQueries } from '@/lib/agentAttachmentPicker'
+import type { DashboardConfig } from '@/lib/dashboardApi'
+import { useAuth } from '@/hooks/useAuth'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { useCallback, useState } from 'react'
 
+/** Backend max page size for GET /data-sources */
+export const DATA_SOURCE_LIST_MAX_PAGE_SIZE = 100
+
+export function dataSourceSelectOptionsQueryKey(
+  tenantId: number | undefined,
+  ensureIds: number[]
+): readonly ['data-sources', 'select-options', number | undefined, string] {
+  const ensureKey = [...new Set(ensureIds)].sort((a, b) => a - b).join(',')
+  return ['data-sources', 'select-options', tenantId, ensureKey] as const
+}
+
+export function collectDataSourceIdsFromDashboard(
+  config: DashboardConfig | null | undefined
+): number[] {
+  const ids = new Set<number>()
+  for (const widget of config?.widgets ?? []) {
+    if (widget.dataSourceId != null) {
+      ids.add(widget.dataSourceId)
+    }
+  }
+  for (const filter of config?.filters ?? []) {
+    if (filter.dataSourceId != null) {
+      ids.add(filter.dataSourceId)
+    }
+  }
+  return [...ids]
+}
+
+/** Paginated list (first page, max size) plus any referenced IDs not on that page. */
+export function useDataSourceSelectOptions(ensureIds: number[] = []) {
+  const { user } = useAuth()
+
+  return useQuery({
+    queryKey: dataSourceSelectOptionsQueryKey(user?.tenantId, ensureIds),
+    queryFn: async (): Promise<DataSource[]> => {
+      const response = await listDataSources(1, DATA_SOURCE_LIST_MAX_PAGE_SIZE)
+      const byId = new Map(response.items.map((ds) => [ds.id, ds]))
+      for (const id of ensureIds) {
+        if (byId.has(id)) {
+          continue
+        }
+        try {
+          byId.set(id, await getDataSource(id))
+        } catch {
+          // Missing or denied — omit from dropdown
+        }
+      }
+      return [...byId.values()].sort((a, b) => a.name.localeCompare(b.name))
+    },
+    enabled: !!user,
+  })
+}
+
+function invalidateDataSourceQueries(
+  queryClient: ReturnType<typeof useQueryClient>,
+  tenantId: number | undefined
+): void {
+  void queryClient.invalidateQueries({ queryKey: ['data-sources'] })
+  invalidateAgentAttachmentPickerQueries(queryClient, tenantId)
+}
+
+
 export function useDataSources() {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [dataSources, setDataSources] = useState<DataSource[]>([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -73,6 +141,7 @@ export function useDataSources() {
     try {
       const newDataSource = await createDataSource(data)
       setDataSources((prev) => [...prev, newDataSource])
+      invalidateDataSourceQueries(queryClient, user?.tenantId)
       return newDataSource
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || 'Failed to create data source'
@@ -81,7 +150,7 @@ export function useDataSources() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [queryClient, user?.tenantId])
 
   const modifyDataSource = useCallback(async (id: number, data: DataSourceUpdate) => {
     setLoading(true)
@@ -89,6 +158,7 @@ export function useDataSources() {
     try {
       const updated = await updateDataSource(id, data)
       setDataSources((prev) => prev.map((ds) => (ds.id === id ? updated : ds)))
+      invalidateDataSourceQueries(queryClient, user?.tenantId)
       return updated
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || 'Failed to update data source'
@@ -97,7 +167,7 @@ export function useDataSources() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [queryClient, user?.tenantId])
 
   const removeDataSource = useCallback(async (id: number) => {
     setLoading(true)
@@ -105,6 +175,7 @@ export function useDataSources() {
     try {
       await deleteDataSource(id)
       setDataSources((prev) => prev.filter((ds) => ds.id !== id))
+      invalidateDataSourceQueries(queryClient, user?.tenantId)
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || 'Failed to delete data source'
       setError(errorMsg)
@@ -112,7 +183,7 @@ export function useDataSources() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [queryClient, user?.tenantId])
 
   return {
     dataSources,

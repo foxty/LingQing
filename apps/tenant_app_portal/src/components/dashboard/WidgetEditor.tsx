@@ -34,6 +34,7 @@ i18n.addResourceBundle('zh', 'translation', {
 import type { CSSProperties } from 'react'
 import { Eye, Database, GitBranch } from 'lucide-react'
 import type { DashboardFilter, DashboardWidget } from '@/lib/dashboardApi'
+import type { DataSource } from '@/lib/dataSourceApi'
 import DataSourceEditor from '@/components/dashboard/editors/DataSourceEditor'
 import FieldMappingEditor from '@/components/dashboard/editors/FieldMappingEditor'
 import DisplayConfigEditor from '@/components/dashboard/editors/DisplayConfigEditor'
@@ -47,6 +48,7 @@ interface WidgetEditorProps {
   dashboardId: number
   widget: DashboardWidget
   filters: DashboardFilter[]
+  dataSources: DataSource[]
   onFieldChange: (
     field: 'query' | 'displayConfig' | 'fieldMapping' | 'dataSourceId',
     value: any
@@ -62,6 +64,7 @@ export default function WidgetEditor({
   dashboardId,
   widget,
   filters,
+  dataSources,
   onFieldChange,
   onSave,
   onRemove,
@@ -145,6 +148,7 @@ export default function WidgetEditor({
             <DataSourceEditor
               widget={widget}
               filters={filters}
+              dataSources={dataSources}
               preview={preview}
               isPreviewLoading={isPreviewLoading}
               previewError={previewError}

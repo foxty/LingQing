@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-17T12:12:53.309130+00:00",
+  "generated_at": "2026-10-22T08:28:59.154780+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -593,6 +593,53 @@
           "schema_source_type"
         ],
         "title": "ApiConnectorCreateRequest"
+      },
+      "ApiConnectorListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApiConnectorResponse"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "List of items for the current page"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Total number of items across all pages"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Page",
+            "description": "Current page number (1-indexed)"
+          },
+          "page_size": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "description": "Number of items per page"
+          },
+          "total_pages": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Pages",
+            "description": "Total number of pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "ApiConnectorListResponse",
+        "description": "Paginated API connector list response."
       },
       "ApiConnectorResponse": {
         "properties": {
@@ -4114,6 +4161,53 @@
           "name"
         ],
         "title": "DocumentCollectionCreate"
+      },
+      "DocumentCollectionListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/DocumentCollectionResponse"
+            },
+            "type": "array",
+            "title": "Items",
+            "description": "List of items for the current page"
+          },
+          "total": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total",
+            "description": "Total number of items across all pages"
+          },
+          "page": {
+            "type": "integer",
+            "minimum": 1.0,
+            "title": "Page",
+            "description": "Current page number (1-indexed)"
+          },
+          "page_size": {
+            "type": "integer",
+            "maximum": 100.0,
+            "minimum": 1.0,
+            "title": "Page Size",
+            "description": "Number of items per page"
+          },
+          "total_pages": {
+            "type": "integer",
+            "minimum": 0.0,
+            "title": "Total Pages",
+            "description": "Total number of pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "DocumentCollectionListResponse",
+        "description": "Paginated document collection list response."
       },
       "DocumentCollectionResponse": {
         "properties": {
@@ -9306,14 +9400,14 @@
       "description": "",
       "request": {
         "body_schema": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/ApiConnectorCreateRequest"
               }
             }
-          },
-          "required": true
+          }
         }
       },
       "response": {
@@ -9371,14 +9465,14 @@
       "description": "",
       "request": {
         "body_schema": {
+          "required": true,
           "content": {
             "application/json": {
               "schema": {
                 "$ref": "#/components/schemas/DocumentCollectionCreate"
               }
             }
-          },
-          "required": true
+          }
         }
       },
       "response": {
@@ -12192,16 +12286,61 @@
       "path": "/api-connectors",
       "summary": "List Connectors",
       "description": "",
-      "request": {},
+      "request": {
+        "query_params": [
+          {
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number (1-indexed)",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number (1-indexed)"
+          },
+          {
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Items per page",
+              "default": 100,
+              "title": "Page Size"
+            },
+            "description": "Items per page"
+          },
+          {
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search query",
+              "title": "Query"
+            },
+            "description": "Search query"
+          }
+        ]
+      },
       "response": {
         "success_status": "200",
         "success_schema": {
-          "items": {
-            "$ref": "#/components/schemas/ApiConnectorResponse"
-          },
-          "type": "array",
-          "title": "Response List Connectors Api Connectors Get"
-        }
+          "$ref": "#/components/schemas/ApiConnectorListResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
       },
       "constraints": {
         "side_effect": false,
@@ -12340,16 +12479,61 @@
       "path": "/document-collections",
       "summary": "List Document Collections",
       "description": "",
-      "request": {},
+      "request": {
+        "query_params": [
+          {
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "description": "Page number (1-indexed)",
+              "default": 1,
+              "title": "Page"
+            },
+            "description": "Page number (1-indexed)"
+          },
+          {
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "description": "Items per page",
+              "default": 100,
+              "title": "Page Size"
+            },
+            "description": "Items per page"
+          },
+          {
+            "name": "query",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string",
+                  "minLength": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Search query",
+              "title": "Query"
+            },
+            "description": "Search query"
+          }
+        ]
+      },
       "response": {
         "success_status": "200",
         "success_schema": {
-          "items": {
-            "$ref": "#/components/schemas/DocumentCollectionResponse"
-          },
-          "type": "array",
-          "title": "Response List Document Collections Document Collections Get"
-        }
+          "$ref": "#/components/schemas/DocumentCollectionListResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
       },
       "constraints": {
         "side_effect": false,

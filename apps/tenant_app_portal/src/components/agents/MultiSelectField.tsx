@@ -24,7 +24,7 @@ type MultiSelectFieldProps = {
   onChange: (selectedIds: string[]) => void
 }
 
-function SelectionSurface({
+export function MultiSelectSelectionSurface({
   selectedOptions,
   placeholder,
   disabled,
@@ -69,7 +69,7 @@ function SelectionSurface({
   )
 }
 
-const triggerClassName = cn(
+export const multiSelectTriggerClassName = cn(
   'flex min-h-9 w-full items-center gap-2 rounded-md border border-input bg-background px-2 py-1.5 text-sm',
   'focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2',
   'disabled:cursor-not-allowed disabled:opacity-50'
@@ -163,8 +163,8 @@ export default function MultiSelectField({
       <Label>{label}</Label>
       {help ? <p className="text-xs text-muted-foreground">{help}</p> : null}
       {disabled ? (
-        <div className={cn(triggerClassName, 'cursor-default')}>
-          <SelectionSurface selectedOptions={selectedOptions} placeholder={placeholder} disabled />
+        <div className={cn(multiSelectTriggerClassName, 'cursor-default')}>
+          <MultiSelectSelectionSurface selectedOptions={selectedOptions} placeholder={placeholder} disabled />
         </div>
       ) : (
         <Popover open={open} onOpenChange={setOpen}>
@@ -173,9 +173,9 @@ export default function MultiSelectField({
               role="combobox"
               tabIndex={0}
               aria-expanded={open}
-              className={cn(triggerClassName, 'cursor-pointer')}
+              className={cn(multiSelectTriggerClassName, 'cursor-pointer')}
             >
-              <SelectionSurface
+              <MultiSelectSelectionSurface
                 selectedOptions={selectedOptions}
                 placeholder={placeholder}
                 onRemove={removeOption}

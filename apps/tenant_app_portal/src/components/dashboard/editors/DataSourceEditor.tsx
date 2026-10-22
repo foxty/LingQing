@@ -1,6 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
-import { useEffect, useMemo } from 'react'
+import { useMemo } from 'react'
 
 i18n.addResourceBundle('en', 'translation', {
   components: {
@@ -53,11 +53,12 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { Button } from '@/components/ui/button'
-import { useDataSources } from '@/hooks/useDataSources'
+import type { DataSource } from '@/lib/dataSourceApi'
 
 interface DataSourceEditorProps {
   widget: DashboardWidget
   filters: DashboardFilter[]
+  dataSources: DataSource[]
   preview?: QueryPreviewResult
   isPreviewLoading?: boolean
   previewError?: any
@@ -68,6 +69,7 @@ interface DataSourceEditorProps {
 export default function DataSourceEditor({
   widget,
   filters,
+  dataSources,
   preview,
   isPreviewLoading,
   previewError,
@@ -75,15 +77,8 @@ export default function DataSourceEditor({
   onFieldChange,
 }: DataSourceEditorProps) {
   const { t } = useTranslation()
-  const { dataSources, loading: dsLoading, fetchDataSources } = useDataSources()
 
   const sqlExtensions = useMemo(() => [sql()], [])
-
-  useEffect(() => {
-    if (dataSources.length === 0 && !dsLoading) {
-      fetchDataSources()
-    }
-  }, [dataSources.length, dsLoading, fetchDataSources])
 
   const selectedDs = dataSources.find((ds) => ds.id === widget.dataSourceId)
   const previewErrorMessage = useMemo(() => {

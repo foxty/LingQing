@@ -1,7 +1,7 @@
 import { useAuth } from '@/hooks/useAuth'
 import { useConfirmation, type UseConfirmationReturn } from '@/hooks/useConfirmation'
 import {
-  useDocumentCollections,
+  useDocumentCollection,
   useReindexDocumentCollection,
   useReparseDocumentCollection,
 } from '@/hooks/useDocumentCollections'
@@ -11,7 +11,7 @@ import { useFileUpload } from '@/hooks/useFileUpload'
 import type { PaginatedResponse } from '@/lib/documentsApi'
 import { actionRules } from '@/lib/permissionRules'
 import type { Document } from '@/types'
-import { useMemo, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
 
 const ITEMS_PER_PAGE = 10
@@ -30,11 +30,7 @@ export function useCollectionDocumentsPage() {
   const canUpload = hasAny(actionRules.canUploadDocument())
   const canDelete = hasAny(actionRules.canDeleteDocument())
 
-  const { data: collections = [], isLoading: collectionsLoading } = useDocumentCollections()
-  const collection = useMemo(
-    () => (collectionId != null ? collections.find((c) => c.id === collectionId) : undefined),
-    [collectionId, collections]
-  )
+  const { data: collection, isLoading: collectionsLoading } = useDocumentCollection(collectionId)
 
   const normalizedQuery = searchQuery.trim() || undefined
   const { data, isLoading: documentsLoading } = useDocuments(

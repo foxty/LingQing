@@ -335,13 +335,13 @@ class TestDocumentSourceSyncFlow:
 
         owner_collections = await client.get("/document-collections", headers=make_auth_headers(member_token))
         assert owner_collections.status_code == 200, owner_collections.text
-        owner_row = next(item for item in owner_collections.json() if item["id"] == collection_id)
+        owner_row = next(item for item in owner_collections.json()["items"] if item["id"] == collection_id)
         assert owner_row["can_write"] is True
         assert owner_row["can_manage"] is True
 
         sharee_collections = await client.get("/document-collections", headers=make_auth_headers(viewer_token))
         assert sharee_collections.status_code == 200, sharee_collections.text
-        sharee_row = next(item for item in sharee_collections.json() if item["id"] == collection_id)
+        sharee_row = next(item for item in sharee_collections.json()["items"] if item["id"] == collection_id)
         assert sharee_row["can_write"] is False
         assert sharee_row["can_manage"] is False
 

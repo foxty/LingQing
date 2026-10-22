@@ -494,22 +494,56 @@ class DocumentCollectionRepository(BaseRepository[DocumentCollection]):
         )
         return result.scalar_one_or_none()
 
-    async def list_by_tenant(
+    async def list_by_tenant_paginated(
         self,
         tenant_id: int,
         *,
+        limit: int,
+        offset: int,
         scope_clause: ColumnElement[bool] | None = None,
+        query: str | None = None,
     ) -> list[DocumentCollection]:
         stmt = (
             select(DocumentCollection)
             .options(selectinload(DocumentCollection.owner_user))
             .where(DocumentCollection.tenant_id == tenant_id)
-            .order_by(DocumentCollection.name)
         )
         if scope_clause is not None:
             stmt = stmt.where(scope_clause)
+        normalized_query = query.strip() if query else None
+        if normalized_query:
+            pattern = f"%{normalized_query}%"
+            stmt = stmt.where(
+                or_(
+                    DocumentCollection.name.ilike(pattern),
+                    DocumentCollection.description.ilike(pattern),
+                )
+            )
+        stmt = stmt.order_by(DocumentCollection.name).offset(offset).limit(limit)
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
+
+    async def count_by_tenant_filtered(
+        self,
+        tenant_id: int,
+        *,
+        scope_clause: ColumnElement[bool] | None = None,
+        query: str | None = None,
+    ) -> int:
+        stmt = select(func.count(DocumentCollection.id)).where(DocumentCollection.tenant_id == tenant_id)
+        if scope_clause is not None:
+            stmt = stmt.where(scope_clause)
+        normalized_query = query.strip() if query else None
+        if normalized_query:
+            pattern = f"%{normalized_query}%"
+            stmt = stmt.where(
+                or_(
+                    DocumentCollection.name.ilike(pattern),
+                    DocumentCollection.description.ilike(pattern),
+                )
+            )
+        result = await self.db.execute(stmt)
+        return int(result.scalar_one())
 
     async def count_documents_by_collection(self, tenant_id: int, collection_ids: list[int]) -> dict[int, int]:
         if not collection_ids:

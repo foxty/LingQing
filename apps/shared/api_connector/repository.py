@@ -70,6 +70,57 @@ class ApiConnectorRepository(BaseRepository[ApiConnector]):
         result = await self.db.execute(stmt)
         return list(result.scalars().all())
 
+    async def list_by_tenant_paginated(
+        self,
+        tenant_id: int,
+        *,
+        limit: int,
+        offset: int,
+        scope_clause: ColumnElement[bool] | None = None,
+        query: str | None = None,
+    ) -> list[ApiConnector]:
+        stmt = select(ApiConnector).options(selectinload(ApiConnector.owner_user)).where(
+            ApiConnector.tenant_id == tenant_id
+        )
+        if scope_clause is not None:
+            stmt = stmt.where(scope_clause)
+        normalized_query = query.strip() if query else None
+        if normalized_query:
+            pattern = f"%{normalized_query}%"
+            stmt = stmt.where(
+                or_(
+                    ApiConnector.name.ilike(pattern),
+                    ApiConnector.description.ilike(pattern),
+                    ApiConnector.base_url.ilike(pattern),
+                )
+            )
+        stmt = stmt.order_by(ApiConnector.created_at.desc()).offset(offset).limit(limit)
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
+    async def count_by_tenant_filtered(
+        self,
+        tenant_id: int,
+        *,
+        scope_clause: ColumnElement[bool] | None = None,
+        query: str | None = None,
+    ) -> int:
+        stmt = select(func.count(ApiConnector.id)).where(ApiConnector.tenant_id == tenant_id)
+        if scope_clause is not None:
+            stmt = stmt.where(scope_clause)
+        normalized_query = query.strip() if query else None
+        if normalized_query:
+            pattern = f"%{normalized_query}%"
+            stmt = stmt.where(
+                or_(
+                    ApiConnector.name.ilike(pattern),
+                    ApiConnector.description.ilike(pattern),
+                    ApiConnector.base_url.ilike(pattern),
+                )
+            )
+        result = await self.db.execute(stmt)
+        return int(result.scalar_one())
+
 
 class ApiOperationIndexRepository(BaseRepository[ApiOperationIndex]):
     """Data access for ApiOperationIndex."""

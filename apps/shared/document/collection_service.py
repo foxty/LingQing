@@ -35,6 +35,7 @@ from apps.shared.domain.types import (
     AbacAction,
 )
 from apps.shared.utils.logger import get_logger
+from apps.shared.utils.pagination import PaginationRequest
 
 logger = get_logger(__name__)
 
@@ -192,15 +193,14 @@ class DocumentCollectionService(TenantAwareService):
         )
         return can_write, can_manage
 
-    async def list_collections_for_actor(self, *, actor: ActorContext) -> list[DocumentCollectionResponse]:
-        scope = await self._build_collection_auth_scope(actor=actor, action=ABAC_ACTION_READ)
-        if scope.deny_all:
+    async def _collections_to_responses(
+        self,
+        collections: list[DocumentCollection],
+        *,
+        actor: ActorContext,
+    ) -> list[DocumentCollectionResponse]:
+        if not collections:
             return []
-
-        collections = await self._repo.list_by_tenant(
-            self.tenant_id,
-            scope_clause=None if scope.allow_all else scope.clause,
-        )
         collection_ids = [c.id for c in collections]
         counts = await self._repo.count_documents_by_collection(self.tenant_id, collection_ids)
         connectors = await DocumentSyncRepository(self.db_session).map_connectors_by_collection(
@@ -224,6 +224,37 @@ class DocumentCollectionService(TenantAwareService):
                 ),
             )
         return responses
+
+    async def list_collections_paginated_for_actor(
+        self,
+        *,
+        actor: ActorContext,
+        page: int,
+        page_size: int,
+        query: str | None = None,
+    ) -> tuple[list[DocumentCollectionResponse], PaginationRequest]:
+        scope = await self._build_collection_auth_scope(actor=actor, action=ABAC_ACTION_READ)
+        if scope.deny_all:
+            return [], PaginationRequest.with_total(page=page, page_size=page_size, total=0)
+
+        scope_clause = None if scope.allow_all else scope.clause
+        total = await self._repo.count_by_tenant_filtered(
+            self.tenant_id,
+            scope_clause=scope_clause,
+            query=query,
+        )
+        pagination = PaginationRequest.with_total(page=page, page_size=page_size, total=total)
+        if total == 0:
+            return [], pagination
+
+        rows = await self._repo.list_by_tenant_paginated(
+            self.tenant_id,
+            limit=pagination.page_size,
+            offset=pagination.offset,
+            scope_clause=scope_clause,
+            query=query,
+        )
+        return await self._collections_to_responses(rows, actor=actor), pagination
 
     async def get_collection_for_actor(self, *, collection_id: int, actor: ActorContext) -> DocumentCollectionResponse:
         collection = await self.require_collection_access(
