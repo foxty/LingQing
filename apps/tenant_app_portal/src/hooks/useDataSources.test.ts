@@ -7,7 +7,7 @@ import {
 describe('useDataSources helpers', () => {
   it('collectDataSourceIdsFromDashboard gathers widget and filter ids', () => {
     const ids = collectDataSourceIdsFromDashboard({
-      layout: { cols: 12, rows: 12, gap: 16, rowHeight: 80 },
+      layout: { type: 'grid', cols: 12, rows: 12, gap: 16, rowHeight: 80 },
       widgets: [{ id: 'w1', dataSourceId: 3 } as any],
       filters: [{ id: 'f1', dataSourceId: 7 } as any],
     })
