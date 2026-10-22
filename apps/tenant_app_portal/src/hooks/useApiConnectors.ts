@@ -1,5 +1,8 @@
 import { useCallback, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 
+import { useAuth } from '@/hooks/useAuth'
+import { invalidateAgentAttachmentPickerQueries } from '@/lib/agentAttachmentPicker'
 import {
   callApiOperation,
   createApiConnector,
@@ -27,6 +30,8 @@ const getErrorMessage = (err: any, fallback: string) =>
   err.response?.data?.message || err.response?.data?.detail || fallback
 
 export function useApiConnectors() {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
   const [connectors, setConnectors] = useState<ApiConnector[]>([])
   const [operations, setOperations] = useState<ApiOperation[]>([])
   const [operationsTotal, setOperationsTotal] = useState(0)
@@ -78,6 +83,7 @@ export function useApiConnectors() {
     try {
       const created = await createApiConnector(payload)
       setConnectors((prev) => [created, ...prev])
+      invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
       return created
     } catch (err: any) {
       const message = getErrorMessage(err, 'Failed to create API connector')
@@ -86,7 +92,7 @@ export function useApiConnectors() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [queryClient, user?.tenantId])
 
   const removeConnector = useCallback(async (connectorId: number) => {
     setLoading(true)
@@ -95,6 +101,7 @@ export function useApiConnectors() {
       await deleteApiConnector(connectorId)
       setConnectors((prev) => prev.filter((item) => item.id !== connectorId))
       setOperations((prev) => prev.filter((item) => item.connector_id !== connectorId))
+      invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
     } catch (err: any) {
       const message = getErrorMessage(err, 'Failed to delete API connector')
       setError(message)
@@ -102,7 +109,7 @@ export function useApiConnectors() {
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [queryClient, user?.tenantId])
 
   const modifyConnector = useCallback(
     async (connectorId: number, payload: ApiConnectorUpdateRequest) => {
@@ -111,6 +118,7 @@ export function useApiConnectors() {
       try {
         const updated = await updateApiConnector(connectorId, payload)
         setConnectors((prev) => prev.map((item) => (item.id === connectorId ? updated : item)))
+        invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
         return updated
       } catch (err: any) {
         const message = getErrorMessage(err, 'Failed to update API connector')
@@ -120,7 +128,7 @@ export function useApiConnectors() {
         setLoading(false)
       }
     },
-    []
+    [queryClient, user?.tenantId]
   )
 
   const syncSchema = useCallback(async (connectorId: number, fileContent?: string) => {

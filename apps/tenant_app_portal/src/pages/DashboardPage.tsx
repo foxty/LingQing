@@ -20,7 +20,10 @@ import {
   useUpdateDashboardFilter,
   useUpdateDashboardWidget,
 } from '@/hooks/useDashboard'
-import { useDataSources } from '@/hooks/useDataSources'
+import {
+  collectDataSourceIdsFromDashboard,
+  useDataSourceSelectOptions,
+} from '@/hooks/useDataSources'
 import { useResizable } from '@/hooks/useResizable'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
 import type { DashboardConfig, DashboardFilter } from '@/lib/dashboardApi'
@@ -80,8 +83,6 @@ export default function DashboardEmbedPage() {
   const { mutateAsync: createDashboardFilter } = useCreateDashboardFilter()
   const { mutateAsync: updateDashboardFilter } = useUpdateDashboardFilter()
   const { mutateAsync: removeDashboardFilter } = useRemoveDashboardFilter()
-  const { dataSources, fetchDataSources } = useDataSources()
-
   const [selectedWidgetId, setSelectedWidgetId] = useState<string | null>(null)
   const [selectedFilterId, setSelectedFilterId] = useState<string | null>(null)
   const [newFilterId, setNewFilterId] = useState<string | null>(null)
@@ -120,10 +121,6 @@ export default function DashboardEmbedPage() {
     setDraftConfig((prev) => prev ?? dashboard.config)
   }, [dashboard, newFilterId])
 
-  useEffect(() => {
-    void fetchDataSources()
-  }, [fetchDataSources])
-
   const layout = useMemo(
     () => ({
       cols: 12,
@@ -137,6 +134,12 @@ export default function DashboardEmbedPage() {
 
   const widgets = useMemo(() => draftConfig?.widgets ?? [], [draftConfig])
   const filters = useMemo(() => draftConfig?.filters ?? [], [draftConfig])
+
+  const ensureDataSourceIds = useMemo(
+    () => collectDataSourceIdsFromDashboard(draftConfig ?? dashboard?.config),
+    [draftConfig, dashboard?.config]
+  )
+  const { data: dataSources = [] } = useDataSourceSelectOptions(ensureDataSourceIds)
 
   const selectedWidget = useMemo(
     () => widgets.find((widget) => widget.id === selectedWidgetId) ?? null,
@@ -373,6 +376,7 @@ export default function DashboardEmbedPage() {
               dashboardId={dashboardId}
               widget={selectedWidget}
               filters={draftConfig?.filters ?? []}
+              dataSources={dataSources}
               onFieldChange={handleWidgetFieldChange}
               onSave={handleSaveWidget}
               onRemove={handleRemoveWidget}
