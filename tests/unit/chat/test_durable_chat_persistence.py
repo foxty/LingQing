@@ -14,10 +14,46 @@ from langchain_core.messages import HumanMessage, SystemMessage
 
 from apps.shared.core.exceptions import ValidationError
 from apps.shared.schemas.user import UserDTO
+from uuid import uuid4
+
+from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain, AgentRunStatus
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
-from apps.tenant_app_service.chat.session_status import resolve_session_status
+from apps.tenant_app_service.chat.application import iter_prepared_chat_stream_committed
+
+
+async def _committed_stream(chat_service, chat_request, current_user, access_token=None):
+    prepared = await chat_service.prepare_chat_stream(chat_request, current_user, access_token)
+    async for item in iter_prepared_chat_stream_committed(
+        chat_service.tenant_id,
+        chat_request,
+        current_user,
+        prepared,
+        access_token=access_token,
+    ):
+        yield item
+
+
+def _mock_send_human_and_runs(agent_id: int = -1, thread_id: str = "thread-1"):
+    run_id = str(uuid4())
+    session_id = str(uuid4())
+    trigger = f"human-{uuid4().hex[:8]}"
+    return trigger, [
+        AgentRunDomain(
+            id=run_id,
+            tenant_id=1,
+            thread_id=thread_id,
+            agent_id=agent_id,
+            trigger_message_id=trigger,
+            invoke_index=0,
+            status=AgentRunStatus.QUEUED,
+            session_id=session_id,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+    ]
+
 from apps.tenant_app_service.chat.streaming import (
     PreparedChatStream,
     SSE_HEARTBEAT_PAYLOAD,
@@ -129,235 +165,13 @@ def test_build_initial_agent_messages_includes_human_for_hitl_continuation(chat_
 
 
 @pytest.mark.asyncio
-async def test_persist_incoming_human_message_calls_manager(chat_service):
-    human = HumanMessage(id="human-1", content="Hello")
-    config = {
-        "configurable": {
-            "runtime": {
-                "session_id": "session-1",
-                "agent_id": -1,
-                "thread_id": "thread-1",
-                "user": {"id": 1, "username": "u", "role": "user", "tenant_id": 1, "tenant_name": "t"},
-                "tenant": {"tenant_id": 1, "tenant_name": "t", "config": {}},
-                "agent_name": "agent",
-            }
-        }
-    }
-
-    mock_manager = MagicMock()
-    mock_manager.add_messages = AsyncMock()
-    runtime = MagicMock(session_id="session-1", agent_id=-1)
-
-    with (
-        patch(
-            "apps.tenant_app_service.chat.turn_service.extract_runtime_context",
-            return_value=runtime,
-        ),
-        patch(
-            "apps.tenant_app_service.agents.memory.conversation_memory_manager.ConversationMemoryManager",
-            return_value=mock_manager,
-        ),
-    ):
-        await chat_service._persist_incoming_human_message(
-            lc_messages=[human],
-            config=config,
-            thread_id="thread-1",
-        )
-
-    mock_manager.add_messages.assert_awaited_once_with([human], config, deduplicate=True)
-
-
-@pytest.mark.asyncio
-async def test_get_session_status_returns_awaiting_hitl(thread_service):
-    pending = SimpleNamespace(
-        proposal_id="hitl_1",
-        tool_name="bash",
-        session_id="session-hitl",
-    )
-
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=pending)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=None)
-        thread_service.message_repo.has_ai_message_for_session = AsyncMock(return_value=True)
-
-        status = await thread_service.get_session_status(thread_id="thread-1", agent_id=-1)
-
-    assert status.status == "awaiting_hitl"
-    assert status.pending_hitl is not None
-    assert status.pending_hitl.proposal_id == "hitl_1"
-
-
-@pytest.mark.asyncio
-async def test_get_session_status_returns_running_when_human_without_ai(thread_service):
-    latest_human = SimpleNamespace(
-        session_id="session-running",
-        created_at=datetime.now(UTC),
-    )
-
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=None)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=None)
-
-        thread_service.message_repo.get_latest_human_message = AsyncMock(return_value=latest_human)
-        thread_service.message_repo.has_ai_message_for_session = AsyncMock(return_value=False)
-
-        status = await thread_service.get_session_status(thread_id="thread-1", agent_id=-1)
-
-    assert status.status == "running"
-    assert status.session_id == "session-running"
-    assert status.has_ai_response is False
-
-
-@pytest.mark.asyncio
-async def test_get_session_status_completed_when_orphaned_run_is_stale(thread_service):
-    latest_human = SimpleNamespace(
-        session_id="session-stale",
-        created_at=datetime.now(UTC) - timedelta(minutes=20),
-    )
-
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=None)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=None)
-
-        thread_service.message_repo.get_latest_human_message = AsyncMock(return_value=latest_human)
-        thread_service.message_repo.has_ai_message_for_session = AsyncMock(return_value=False)
-
-        status = await thread_service.get_session_status(thread_id="thread-1", agent_id=-1)
-
-    assert status.status == "completed"
-    assert status.has_ai_response is False
-
-
-@pytest.mark.asyncio
-async def test_get_session_status_returns_completed_when_human_has_ai(thread_service):
-    latest_human = SimpleNamespace(session_id="session-done")
-
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=None)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=None)
-
-        thread_service.message_repo.get_latest_human_message = AsyncMock(return_value=latest_human)
-        thread_service.message_repo.has_ai_message_for_session = AsyncMock(return_value=True)
-
-        status = await thread_service.get_session_status(thread_id="thread-1", agent_id=-1)
-
-    assert status.status == "completed"
-    assert status.has_ai_response is True
-
-
-@pytest.mark.asyncio
-async def test_get_session_status_returns_hitl_approved_pending_continue(thread_service):
-    approved = SimpleNamespace(
-        proposal_id="hitl_approved",
-        tool_name="bash",
-        session_id="session-old",
-        approved_at=datetime.now(UTC),
-    )
-
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=None)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=approved)
-
-        thread_service.message_repo.has_messages_after_timestamp = AsyncMock(return_value=False)
-
-        status = await thread_service.get_session_status(thread_id="thread-1", agent_id=-1)
-
-    assert status.status == "hitl_approved_pending_continue"
-    assert status.approved_hitl is not None
-    assert status.approved_hitl.proposal_id == "hitl_approved"
-
-
-@pytest.mark.asyncio
-async def test_pending_hitl_takes_priority_over_running_human(chat_service):
-    pending = SimpleNamespace(
-        proposal_id="hitl_1",
-        tool_name="bash",
-        session_id="session-hitl",
-    )
-    latest_human = SimpleNamespace(session_id="session-running")
-
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=pending)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=None)
-        chat_service.message_repo.get_latest_human_message = AsyncMock(return_value=latest_human)
-        chat_service.message_repo.has_ai_message_for_session = AsyncMock(return_value=False)
-
-        status = await resolve_session_status(
-            tenant_id=1,
-            db=chat_service.db,
-            message_repo=chat_service.message_repo,
-            thread_id="thread-1",
-            agent_id=-1,
-        )
-
-    assert status.status == "awaiting_hitl"
-    chat_service.message_repo.get_latest_human_message.assert_not_called()
-
-
-@pytest.mark.asyncio
-async def test_hitl_approved_with_followup_is_not_pending_continue(thread_service):
-    approved = SimpleNamespace(
-        proposal_id="hitl_approved",
-        tool_name="bash",
-        session_id="session-old",
-        approved_at=datetime.now(UTC),
-    )
-    latest_human = SimpleNamespace(session_id="session-new")
-
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=None)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=approved)
-        thread_service.message_repo.has_messages_after_timestamp = AsyncMock(return_value=True)
-        thread_service.message_repo.get_latest_human_message = AsyncMock(return_value=latest_human)
-        thread_service.message_repo.has_ai_message_for_session = AsyncMock(return_value=True)
-
-        status = await thread_service.get_session_status(thread_id="thread-1", agent_id=-1)
-
-    assert status.status == "completed"
-
-
-@pytest.mark.asyncio
-async def test_get_session_status_completed_when_no_human(thread_service):
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=None)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=None)
-        thread_service.message_repo.get_latest_human_message = AsyncMock(return_value=None)
-
-        status = await thread_service.get_session_status(thread_id="thread-1", agent_id=-1)
-
-    assert status.status == "completed"
-
-
-@pytest.mark.asyncio
-async def test_get_session_status_completed_when_human_has_no_session_id(thread_service):
-    latest_human = SimpleNamespace(session_id=None)
-
-    with patch("apps.tenant_app_service.chat.session_status.HitlApprovalRepository") as repo_cls:
-        repo = repo_cls.return_value
-        repo.get_latest_pending_by_thread = AsyncMock(return_value=None)
-        repo.get_latest_approved_by_thread = AsyncMock(return_value=None)
-        thread_service.message_repo.get_latest_human_message = AsyncMock(return_value=latest_human)
-
-        status = await thread_service.get_session_status(thread_id="thread-1", agent_id=-1)
-
-    assert status.status == "completed"
-
-
-@pytest.mark.asyncio
 async def test_chat_stream_persists_before_session_started(chat_service, chat_request, current_user):
     call_order: list[str] = []
     background_started = asyncio.Event()
 
-    async def track_persist(**kwargs):
-        call_order.append("persist")
+    async def track_send(**kwargs):
+        call_order.append("send_human")
+        return _mock_send_human_and_runs(agent_id=chat_request.agent_id, thread_id=chat_request.thread_id)
 
     async def fake_run_agent_and_emit(**kwargs):
         call_order.append("background")
@@ -383,16 +197,21 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
             return_value={"configurable": {"thread_id": chat_request.thread_id}},
         ),
         patch.object(chat_service, "_cancel_superseded_hitl_if_needed", AsyncMock()),
-        patch.object(chat_service, "_persist_incoming_human_message", side_effect=track_persist),
+        patch.object(chat_service, "_reconcile_active_runs_before_new_turn", AsyncMock()),
+        patch(
+            "apps.tenant_app_service.chat.turn_service.ThreadRunService.send_human_and_create_runs",
+            side_effect=track_send,
+        ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
-        patch.object(chat_service, "_run_agent_and_emit", side_effect=fake_run_agent_and_emit),
+        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
+        patch("apps.tenant_app_service.chat.turn_service.AgentRunRepository.set_status", AsyncMock()),
     ):
         events = []
-        async for item in chat_service.chat_stream(chat_request, current_user):
+        async for item in _committed_stream(chat_service, chat_request, current_user):
             events.append(json.loads(item.removeprefix("data: ").strip()))
         await asyncio.wait_for(background_started.wait(), timeout=1)
 
-    assert call_order[:2] == ["persist", "background"]
+    assert call_order[:2] == ["send_human", "background"]
     assert events[0]["type"] == "session_started"
 
 
@@ -400,7 +219,7 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
 async def test_chat_stream_skips_persist_for_hitl_continuation(chat_service, chat_request, current_user):
     chat_request.hitl_proposal_id = "hitl_abc"
     chat_request.hitl_action = "approved"
-    persist_mock = AsyncMock()
+    send_mock = AsyncMock()
 
     async def fake_run_agent_and_emit(**kwargs):
         await kwargs["event_queue"].put(None)
@@ -422,14 +241,21 @@ async def test_chat_stream_skips_persist_for_hitl_continuation(chat_service, cha
             "_build_runtime_config",
             return_value={"configurable": {"thread_id": chat_request.thread_id}},
         ),
-        patch.object(chat_service, "_persist_incoming_human_message", persist_mock),
+        patch(
+            "apps.tenant_app_service.chat.turn_service.ThreadRunService.send_human_and_create_runs",
+            send_mock,
+        ),
+        patch(
+            "apps.tenant_app_service.hitl.repository.HitlApprovalRepository.get_by_proposal_id",
+            AsyncMock(return_value=None),
+        ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
-        patch.object(chat_service, "_run_agent_and_emit", side_effect=fake_run_agent_and_emit),
+        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
     ):
-        async for _ in chat_service.chat_stream(chat_request, current_user):
+        async for _ in _committed_stream(chat_service, chat_request, current_user):
             pass
 
-    persist_mock.assert_not_called()
+    send_mock.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -458,13 +284,18 @@ async def test_chat_stream_sse_disconnect_leaves_background_running(chat_service
             return_value={"configurable": {"thread_id": chat_request.thread_id}},
         ),
         patch.object(chat_service, "_cancel_superseded_hitl_if_needed", AsyncMock()),
-        patch.object(chat_service, "_persist_incoming_human_message", AsyncMock()),
+        patch.object(chat_service, "_reconcile_active_runs_before_new_turn", AsyncMock()),
+        patch(
+            "apps.tenant_app_service.chat.turn_service.ThreadRunService.send_human_and_create_runs",
+            AsyncMock(return_value=_mock_send_human_and_runs()),
+        ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
-        patch.object(chat_service, "_run_agent_and_emit", side_effect=fake_run_agent_and_emit),
+        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
+        patch("apps.tenant_app_service.chat.turn_service.AgentRunRepository.set_status", AsyncMock()),
     ):
 
         async def consume_stream():
-            async for _ in chat_service.chat_stream(chat_request, current_user):
+            async for _ in _committed_stream(chat_service, chat_request, current_user):
                 pass
 
         consumer = asyncio.create_task(consume_stream())
@@ -505,12 +336,17 @@ async def test_chat_stream_delivers_background_events(chat_service, chat_request
             return_value={"configurable": {"thread_id": chat_request.thread_id}},
         ),
         patch.object(chat_service, "_cancel_superseded_hitl_if_needed", AsyncMock()),
-        patch.object(chat_service, "_persist_incoming_human_message", AsyncMock()),
+        patch.object(chat_service, "_reconcile_active_runs_before_new_turn", AsyncMock()),
+        patch(
+            "apps.tenant_app_service.chat.turn_service.ThreadRunService.send_human_and_create_runs",
+            AsyncMock(return_value=_mock_send_human_and_runs()),
+        ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
-        patch.object(chat_service, "_run_agent_and_emit", side_effect=fake_run_agent_and_emit),
+        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
+        patch("apps.tenant_app_service.chat.turn_service.AgentRunRepository.set_status", AsyncMock()),
     ):
         chunks = []
-        async for item in chat_service.chat_stream(chat_request, current_user):
+        async for item in _committed_stream(chat_service, chat_request, current_user):
             chunks.append(item)
 
         await asyncio.wait_for(background_started.wait(), timeout=1)
@@ -536,17 +372,25 @@ async def test_chat_stream_emits_heartbeat_while_agent_is_idle(chat_service, cha
     chunks: list[str] = []
 
     async def collect_stream():
-        async for item in chat_service.iter_prepared_chat_stream(
+        async for item in iter_prepared_chat_stream_committed(
+            chat_service.tenant_id,
             chat_request,
             current_user,
             prepared,
         ):
             chunks.append(item)
 
+    async def _with_same_service(_tenant_id, operation):
+        return await operation(chat_service)
+
     with (
-        patch.object(chat_service, "_run_agent_and_emit", side_effect=fake_run_agent_and_emit),
         patch(
-            "apps.tenant_app_service.chat.turn_service.SSE_HEARTBEAT_INTERVAL_SECONDS",
+            "apps.tenant_app_service.chat.application.turn_flow.with_chat_service",
+            side_effect=_with_same_service,
+        ),
+        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
+        patch(
+            "apps.tenant_app_service.chat.streaming.SSE_HEARTBEAT_INTERVAL_SECONDS",
             0.05,
         ),
     ):

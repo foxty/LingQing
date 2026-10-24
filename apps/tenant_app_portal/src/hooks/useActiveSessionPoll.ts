@@ -4,18 +4,17 @@ import { getSessionStatus, SESSION_STATUS, type SessionStatus } from '@/lib/chat
 const INITIAL_POLL_MS = 2000
 const MAX_POLL_MS = 8000
 
+/** Durable session status while a turn may outlive the SSE connection (not HITL card state). */
 interface UseActiveSessionPollOptions {
   threadId: string | undefined
   enabled?: boolean
   onHistoryRefresh?: () => void | Promise<void>
-  onHitlApprovedContinue?: (proposalId: string) => void | Promise<void>
 }
 
 export function useActiveSessionPoll({
   threadId,
   enabled = true,
   onHistoryRefresh,
-  onHitlApprovedContinue,
 }: UseActiveSessionPollOptions) {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus>(SESSION_STATUS.COMPLETED)
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
@@ -23,13 +22,10 @@ export function useActiveSessionPoll({
   const pollTimeoutRef = useRef<number | null>(null)
   const pollDelayRef = useRef(INITIAL_POLL_MS)
   const pollLoopRef = useRef<(() => void) | null>(null)
-  const autoContinueRef = useRef<string | null>(null)
   const lastStatusRef = useRef<SessionStatus | null>(null)
   const onHistoryRefreshRef = useRef(onHistoryRefresh)
-  const onHitlApprovedContinueRef = useRef(onHitlApprovedContinue)
 
   onHistoryRefreshRef.current = onHistoryRefresh
-  onHitlApprovedContinueRef.current = onHitlApprovedContinue
 
   const clearPollTimeout = useCallback(() => {
     if (pollTimeoutRef.current !== null) {
@@ -64,20 +60,13 @@ export function useActiveSessionPoll({
         return status
       }
 
-      if (status.status === SESSION_STATUS.AWAITING_HITL) {
+      if (
+        status.status === SESSION_STATUS.AWAITING_HITL ||
+        status.status === SESSION_STATUS.HITL_APPROVED_PENDING_CONTINUE
+      ) {
         setIsAgentWorking(false)
         if (statusChanged) {
           await onHistoryRefreshRef.current?.()
-        }
-        return status
-      }
-
-      if (status.status === SESSION_STATUS.HITL_APPROVED_PENDING_CONTINUE && status.approved_hitl) {
-        setIsAgentWorking(false)
-        const proposalId = status.approved_hitl.proposal_id
-        if (autoContinueRef.current !== proposalId) {
-          autoContinueRef.current = proposalId
-          await onHitlApprovedContinueRef.current?.(proposalId)
         }
         return status
       }
@@ -102,7 +91,6 @@ export function useActiveSessionPoll({
   useEffect(() => {
     clearPollTimeout()
     pollDelayRef.current = INITIAL_POLL_MS
-    autoContinueRef.current = null
     lastStatusRef.current = null
 
     if (!threadId || !enabled) {

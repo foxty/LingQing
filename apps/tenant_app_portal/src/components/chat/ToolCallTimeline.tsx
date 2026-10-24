@@ -36,6 +36,7 @@ interface ToolCallTimelineProps {
   items: TurnToolCallItem[]
   itemKeys: string[]
   threadId: string
+  sessionId?: string
   isStreaming?: boolean
 }
 
@@ -63,10 +64,11 @@ function getEffectiveStatus(
 interface TimelineRowProps {
   item: TurnToolCallItem
   threadId: string
+  sessionId?: string
   isLast: boolean
 }
 
-function TimelineRow({ item, threadId, isLast }: TimelineRowProps) {
+function TimelineRow({ item, threadId, sessionId, isLast }: TimelineRowProps) {
   const [expanded, setExpanded] = useState(false)
   const status = getEffectiveStatus(item)
   const durationMs = getItemDurationMs(item)
@@ -123,6 +125,7 @@ function TimelineRow({ item, threadId, isLast }: TimelineRowProps) {
             toolCall={item.toolCall}
             resultMessage={item.resultMessage}
             threadId={threadId}
+            sessionId={sessionId}
             status={item.status}
             variant="details-only"
           />
@@ -136,6 +139,7 @@ export default function ToolCallTimeline({
   items,
   itemKeys,
   threadId,
+  sessionId,
   isStreaming = false,
 }: ToolCallTimelineProps) {
   const { t } = useTranslation()
@@ -248,6 +252,7 @@ export default function ToolCallTimeline({
             key={itemKeys[index] || `${item.toolCall.id}-${index}`}
             item={item}
             threadId={threadId}
+            sessionId={sessionId}
             isLast={index === items.length - 1}
           />
         ))}

@@ -69,6 +69,9 @@ export type MessageRenderItem =
   | { type: 'ai-turn'; key: string; turn: AiTurn }
 
 function humanMessageKey(message: Message): string {
+  if (message.message_id) {
+    return `human-${message.message_id}`
+  }
   const timestamp = message.timestamp ?? 'unknown'
   const contentPrefix = message.content.slice(0, 48)
   return `human-${timestamp}-${contentPrefix}`
@@ -112,6 +115,23 @@ function applyHitlStatusMap(
       hitlStatusMap[proposalId]
     )
   }
+}
+
+function normalizeHitlPayload(
+  raw: HitlPayload | undefined,
+  toolName?: string
+): HitlPayload | undefined {
+  if (!raw?.proposal_id) {
+    return undefined
+  }
+  return {
+    ...raw,
+    tool_name: raw.tool_name || toolName,
+  }
+}
+
+function hitlFromMessage(message: Message | undefined, toolName?: string): HitlPayload | undefined {
+  return normalizeHitlPayload(message?.additional_kwargs?.hitl, toolName)
 }
 
 function buildTurn(
@@ -172,6 +192,8 @@ function buildTurn(
       }
 
       const resultMessage = toolResultsMap.get(toolCall.id)
+      const resultHitl = hitlFromMessage(resultMessage, toolCall.name)
+      const toolHitl = hasHitl ? normalizedHitl : resultHitl
       const toolItem: TurnToolCallItem = {
         toolCall: {
           id: toolCall.id,
@@ -179,14 +201,12 @@ function buildTurn(
           args: toolCall.args || {},
         },
         resultMessage,
-        hitl: hasHitl ? normalizedHitl : undefined,
-        status: hasHitl
+        hitl: toolHitl,
+        status: toolHitl
           ? resolveHitlToolStatus(
-              normalizedHitl,
+              toolHitl,
               resultMessage,
-              normalizedHitl?.proposal_id
-                ? hitlStatusMap?.[normalizedHitl.proposal_id]
-                : undefined
+              toolHitl.proposal_id ? hitlStatusMap?.[toolHitl.proposal_id] : undefined
             )
           : undefined,
       }
@@ -199,6 +219,18 @@ function buildTurn(
         toolItem,
       })
       processOrder += 1
+
+      if (toolHitl?.proposal_id && approvalItemIndex.get(toolHitl.proposal_id) === undefined) {
+        processItems.push({
+          type: 'approval',
+          key: `approval-${toolHitl.proposal_id}`,
+          timestamp: resultMessage?.timestamp || aiMsg.timestamp,
+          order: processOrder,
+          approval: toolHitl,
+        })
+        approvalItemIndex.set(toolHitl.proposal_id, processItems.length - 1)
+        processOrder += 1
+      }
     })
 
     if (normalizedHitl?.proposal_id) {
@@ -339,6 +371,7 @@ export function buildMessageRenderItems(
 ): MessageRenderItem[] {
   const toolResultsMap = new Map<string, Message>()
   const renderItems: MessageRenderItem[] = []
+  const seenHumanMessageIds = new Set<string>()
   let index = 0
   let turnIndex = 0
 
@@ -346,6 +379,13 @@ export function buildMessageRenderItems(
     const message = messages[index]
 
     if (message.role === 'human') {
+      if (message.message_id && seenHumanMessageIds.has(message.message_id)) {
+        index += 1
+        continue
+      }
+      if (message.message_id) {
+        seenHumanMessageIds.add(message.message_id)
+      }
       renderItems.push({
         type: 'human',
         key: humanMessageKey(message),

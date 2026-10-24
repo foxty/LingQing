@@ -1,24 +1,41 @@
-"""Chat turn execution across short DB sessions.
+"""Committed chat turn flows (application layer).
 
-``ChatTurnService`` is bound to one ``AsyncSession``. Prepare (lock + persist) and
-agent invoke must not share a session that stays open for the LLM/SSE wait.
-Committed session boundaries for HTTP, Slack, streaming, and headless turns.
-Channel-specific steps (e.g. Slack thinking) live in ingress use-case modules.
+**Role:** Orchestrate use cases that span multiple DB transactions and optional SSE
+transport. This module owns *when* sessions open/close and *how* streaming is wired;
+it does not embed turn business rules (those live on ``ChatTurnService`` and domain).
+
+**Callers:** HTTP router, Slack ingress, headless runners — not unit tests that
+exercise a single prepare/invoke phase (those construct ``ChatTurnService`` with a
+mock ``AsyncSession`` instead).
+
+**Must not:** SQL, repository calls, LangGraph invoke, or inline domain invariants.
+
+Streaming HTTP:
+  1. ``prepare_chat_stream_committed`` — short DB session, commit, ``PreparedChatStream``
+  2. ``iter_prepared_chat_stream_committed`` — SSE only; agent uses its own sessions
 """
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING
 
 from apps.shared.core.exceptions import AuthorizationError
 from apps.shared.db.session import app_db_session
 from apps.shared.schemas.user import UserDTO
+from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse
-from apps.tenant_app_service.chat.streaming import PreparedChatStream
+from apps.tenant_app_service.chat.streaming import (
+    PreparedChatStream,
+    iter_sse_from_event_queue,
+    prepared_stream_opening_sse,
+)
 
 if TYPE_CHECKING:
     from apps.tenant_app_service.chat.turn_service import ChatTurnService
+
+logger = get_logger(__name__)
 
 
 async def with_chat_turn_service(
@@ -34,7 +51,7 @@ async def with_chat_turn_service(
 
 
 async def with_chat_service(tenant_id: int, operation: Callable[..., Awaitable]):
-    """Alias for ``with_chat_turn_service`` (legacy name)."""
+    """Alias for ``with_chat_turn_service``."""
     return await with_chat_turn_service(tenant_id, operation)
 
 
@@ -132,43 +149,35 @@ async def iter_prepared_chat_stream_committed(
     prepared: PreparedChatStream,
     access_token: str | None = None,
 ) -> AsyncIterator[str]:
-    """Yield SSE for a prepared stream turn (agent uses its own DB sessions)."""
-    from apps.tenant_app_service.chat.turn_service import ChatTurnService
+    """Yield SSE for a prepared stream turn without pinning a DB session for the wait."""
+    event_queue: asyncio.Queue[str | None] = asyncio.Queue()
 
-    async with app_db_session() as db:
-        service = ChatTurnService(tenant_id, db)
-    async for item in service.iter_prepared_chat_stream(
-        request,
-        current_user,
-        prepared,
-        access_token=access_token,
-    ):
-        yield item
+    for line in prepared_stream_opening_sse(prepared):
+        yield line
 
+    async def _background() -> None:
+        async def _run(service: ChatTurnService) -> None:
+            await service.run_agent_and_emit_prepared(
+                event_queue=event_queue,
+                request=request,
+                current_user=current_user,
+                prepared=prepared,
+                access_token=access_token,
+            )
 
-async def stream_chat_turn_events(
-    tenant_id: int,
-    request: ChatRequest,
-    current_user: UserDTO,
-    access_token: str | None = None,
-) -> AsyncIterator[str]:
-    """Prepare in one session, stream in another (HTTP SSE)."""
-    if request.tenant_id != tenant_id:
-        raise AuthorizationError(
-            f"Tenant mismatch: request tenant {request.tenant_id} != service tenant {tenant_id}"
+        await with_chat_service(tenant_id, _run)
+
+    asyncio.create_task(_background())
+
+    def _log_disconnect(session_id: str) -> None:
+        logger.info(
+            "SSE client disconnected for session %s; agent continues in background",
+            session_id,
         )
 
-    prepared = await prepare_chat_stream_committed(
-        tenant_id,
-        request,
-        current_user,
-        access_token=access_token,
-    )
-    async for item in iter_prepared_chat_stream_committed(
-        tenant_id,
-        request,
-        current_user,
-        prepared,
-        access_token=access_token,
+    async for line in iter_sse_from_event_queue(
+        event_queue,
+        session_id=prepared.session_id,
+        on_client_disconnect=_log_disconnect,
     ):
-        yield item
+        yield line

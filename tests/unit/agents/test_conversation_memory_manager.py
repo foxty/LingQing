@@ -5,7 +5,7 @@ No database (SQLite or Postgres) is touched in this file.
 
 What is tested here:
   - Assembly logic of load_messages_with_summary (output order, limits, filtering)
-  - _ensure_hitl_context injection logic
+  - _ensure_hitl_context_run injection logic
   - add_messages preprocessing (filter SystemMessages, dedup, field mapping)
 
 What is NOT tested here (belongs in integration tests):
@@ -23,6 +23,7 @@ from langchain_core.runnables import RunnableConfig
 
 from apps.shared.db.models import ChatMessage
 from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
+from apps.tenant_app_service.chat.agent_run_domain import ThreadMainMessageDomain
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -33,7 +34,9 @@ _T0 = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
 _TSR_PATH = "apps.tenant_app_service.chat.thread_summary_repository.ThreadSummaryRepository"
 _SSR_PATH = "apps.tenant_app_service.chat.session_summary_repository.SessionSummaryRepository"
-_MR_PATH = "apps.tenant_app_service.chat.message_repository.MessageRepository"
+_RUN_MR_PATH = "apps.tenant_app_service.chat.agent_run_message_repository.AgentRunMessageRepository"
+_MAIN_MR_PATH = "apps.tenant_app_service.chat.main_message_repository.MainMessageRepository"
+RUN_ID = "run-unit-1"
 _HITL_BLOCKING_PATH = "apps.tenant_app_service.hitl.history.is_hitl_proposal_blocking"
 
 # ─── Builders ─────────────────────────────────────────────────────────────────
@@ -73,27 +76,72 @@ def _thread_summary(version: int, content: str) -> MagicMock:
     return ts
 
 
-def _session_summary(text: str) -> MagicMock:
+def _main_domain(
+    msg_id: str,
+    msg_type: str,
+    content: str,
+    *,
+    session_id: str | None = None,
+    agent_id: int = AGENT_ID,
+    row_id: int = 1,
+) -> ThreadMainMessageDomain:
+    return ThreadMainMessageDomain(
+        id=row_id,
+        message_id=msg_id,
+        thread_id=THREAD_ID,
+        type=msg_type,
+        content=content,
+        timestamp=_T0,
+        agent_id=agent_id,
+        session_id=session_id,
+        created_at=_T0,
+    )
+
+
+def _session_summary(text: str, session_id: str = "session-summary-1") -> MagicMock:
     ss = MagicMock()
     ss.summary_text = text
+    ss.session_id = session_id
     return ss
 
 
 def _make_manager() -> tuple:
-    """Return (manager, db_mock, repo_mock) with MessageRepository patched."""
+    """Return (manager, db_mock, run_repo_mock, main_repo_mock) with run stores patched."""
     db_mock = AsyncMock()
     thread_mock = MagicMock()
     thread_mock.message_count = 0
     db_mock.get.return_value = thread_mock
 
-    with patch(_MR_PATH) as MockMR:
-        repo_mock = AsyncMock()
-        repo_mock.get_tool_message_by_call_id.return_value = None
-        repo_mock.has_ai_message_after_db_id_in_session.return_value = False
-        MockMR.return_value = repo_mock
-        mgr = ConversationMemoryManager(db_mock, THREAD_ID, tenant_id=TENANT_ID, agent_id=AGENT_ID)
+    with (
+        patch(_RUN_MR_PATH) as MockRunMR,
+        patch(_MAIN_MR_PATH) as MockMainMR,
+        patch(_TSR_PATH) as MockTSR,
+        patch(_SSR_PATH) as MockSSR,
+    ):
+        run_repo_mock = AsyncMock()
+        run_repo_mock.get_tool_message_by_call_id.return_value = None
+        run_repo_mock.has_ai_message_after_db_id_in_session.return_value = False
+        MockRunMR.return_value = run_repo_mock
+        main_repo_mock = AsyncMock()
+        main_repo_mock.list_for_thread.return_value = []
+        main_repo_mock.get_promoted_ai_for_run.return_value = None
+        MockMainMR.return_value = main_repo_mock
+        thread_summary_repo_mock = AsyncMock()
+        thread_summary_repo_mock.get_recent_summaries.return_value = []
+        MockTSR.return_value = thread_summary_repo_mock
+        session_summary_repo_mock = AsyncMock()
+        session_summary_repo_mock.get_unsummarized_sessions.return_value = []
+        session_summary_repo_mock.list_session_ids_in_thread_summary.return_value = []
+        MockSSR.return_value = session_summary_repo_mock
+        mgr = ConversationMemoryManager(
+            db_mock,
+            THREAD_ID,
+            tenant_id=TENANT_ID,
+            agent_id=AGENT_ID,
+            run_id=RUN_ID,
+        )
 
-    return mgr, db_mock, repo_mock
+    return mgr, db_mock, run_repo_mock
 
 
 async def _load(
@@ -114,20 +162,14 @@ async def _load(
     repo_mock.get_last_ai_message_with_tool_calls.return_value = last_ai_tool
     repo_mock.get_messages_from_db_id.return_value = list(tail_msgs or [])
 
-    with patch(_TSR_PATH) as MockTSR, patch(_SSR_PATH) as MockSSR:
-        tsr_inst = AsyncMock()
-        tsr_inst.get_recent_summaries.return_value = list(thread_summaries or [])
-        MockTSR.return_value = tsr_inst
+    mgr.thread_summary_repo.get_recent_summaries.return_value = list(thread_summaries or [])
+    mgr.session_summary_repo.get_unsummarized_sessions.return_value = list(session_summaries or [])
 
-        ssr_inst = AsyncMock()
-        ssr_inst.get_unsummarized_sessions.return_value = list(session_summaries or [])
-        MockSSR.return_value = ssr_inst
-
-        return await mgr.load_messages_with_summary(
-            thread_summary_limit=thread_summary_limit,
-            session_summary_limit=session_summary_limit,
-            message_limit=message_limit,
-        )
+    return await mgr.load_messages_with_summary(
+        thread_summary_limit=thread_summary_limit,
+        session_summary_limit=session_summary_limit,
+        message_limit=message_limit,
+    )
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -251,7 +293,7 @@ class TestAssemblyLogic:
         await _load(mgr, repo_mock, message_limit=0)
 
         repo_mock.get_unsummarized_messages.assert_called_once_with(
-            thread_id=THREAD_ID,
+            run_id=RUN_ID,
             agent_id=AGENT_ID,
             limit=0,
         )
@@ -262,7 +304,7 @@ class TestAssemblyLogic:
         await _load(mgr, repo_mock, message_limit=None)
 
         repo_mock.get_unsummarized_messages.assert_called_once_with(
-            thread_id=THREAD_ID,
+            run_id=RUN_ID,
             agent_id=AGENT_ID,
             limit=None,
         )
@@ -273,7 +315,7 @@ class TestAssemblyLogic:
         await _load(mgr, repo_mock, message_limit=5)
 
         repo_mock.get_unsummarized_messages.assert_called_once_with(
-            thread_id=THREAD_ID,
+            run_id=RUN_ID,
             agent_id=AGENT_ID,
             limit=5,
         )
@@ -317,6 +359,73 @@ class TestAssemblyLogic:
         loaded = await _load(mgr, repo_mock, thread_summary_limit=0, session_summary_limit=0)
         assert loaded == []
 
+    async def test_main_promoted_ai_omitted_when_session_has_summary(self):
+        """Session summary + main promoted AI for same session → no duplicate AI in tail."""
+        mgr, _, repo_mock = _make_manager()
+        sid = "session-covered-1"
+        mgr.main_message_repo.list_for_thread.return_value = [
+            _main_domain("h1", "human", "Question"),
+            _main_domain("a1", "ai", "Answer", session_id=sid, row_id=2),
+        ]
+
+        loaded = await _load(
+            mgr,
+            repo_mock,
+            session_summaries=[_session_summary("Session recap", session_id=sid)],
+            thread_summary_limit=0,
+        )
+
+        conv = [m for m in loaded if not isinstance(m, SystemMessage)]
+        assert len(conv) == 1
+        assert conv[0].content == "Question"
+
+    async def test_main_ai_omitted_when_session_in_thread_summary_rollup(self):
+        mgr, _, repo_mock = _make_manager()
+        sid = "session-in-thread-summary"
+        mgr.main_message_repo.list_for_thread.return_value = [
+            _main_domain("h1", "human", "Old question"),
+            _main_domain("a1", "ai", "Old answer", session_id=sid, row_id=2),
+        ]
+
+        mgr.thread_summary_repo.get_recent_summaries.return_value = [_thread_summary(1, "Long thread recap")]
+        mgr.session_summary_repo.get_unsummarized_sessions.return_value = []
+        mgr.session_summary_repo.list_session_ids_in_thread_summary.return_value = [sid]
+        repo_mock.get_unsummarized_messages.return_value = []
+
+        loaded = await mgr.load_messages_with_summary(
+            thread_summary_limit=1,
+            session_summary_limit=0,
+        )
+
+        conv = [m for m in loaded if not isinstance(m, SystemMessage)]
+        assert len(conv) == 1
+        assert conv[0].content == "Old question"
+
+    async def test_run_ai_omitted_when_duplicates_promoted_main(self):
+        """Promoted main AI should not appear again from agent_run_messages."""
+        mgr, _, repo_mock = _make_manager()
+        mgr.main_message_repo.list_for_thread.return_value = [
+            _main_domain("h1", "human", "Question"),
+            _main_domain("a1", "ai", "Final answer", session_id="sess-1", row_id=2),
+        ]
+        mgr.main_message_repo.get_promoted_ai_for_run.return_value = _main_domain(
+            "a1", "ai", "Final answer", session_id="sess-1", row_id=2
+        )
+        run_ai = _db_msg(1, "a1", "ai", "Final answer", session_id="sess-1")
+
+        loaded = await _load(
+            mgr,
+            repo_mock,
+            unsummarized_msgs=[run_ai],
+            thread_summary_limit=0,
+            session_summary_limit=0,
+        )
+
+        conv = [m for m in loaded if not isinstance(m, SystemMessage)]
+        assert len(conv) == 2
+        assert conv[0].content == "Question"
+        assert conv[1].content == "Final answer"
+
 
 # ─────────────────────────────────────────────────────────────────────────────
 # TestEnsureHitlContext
@@ -325,7 +434,7 @@ class TestAssemblyLogic:
 
 @pytest.mark.asyncio
 class TestEnsureHitlContext:
-    """Verify _ensure_hitl_context injection logic in isolation."""
+    """Verify _ensure_hitl_context_run injection logic in isolation."""
 
     async def test_no_last_ai_returns_messages_unchanged(self):
         """get_last_ai_message_with_tool_calls returns None → list untouched."""
@@ -333,7 +442,7 @@ class TestEnsureHitlContext:
         repo_mock.get_last_ai_message_with_tool_calls.return_value = None
 
         msgs = [_db_msg(1, "m1", "human", "Q"), _db_msg(2, "m2", "ai", "A")]
-        result = await mgr._ensure_hitl_context(msgs)
+        result = await mgr._ensure_hitl_context_run(msgs)
 
         assert result is msgs
         repo_mock.get_messages_from_db_id.assert_not_called()
@@ -346,7 +455,7 @@ class TestEnsureHitlContext:
         repo_mock.get_last_ai_message_with_tool_calls.return_value = anchor
 
         msgs = [anchor, _db_msg(20, "tool-1", "tool", "Result")]
-        result = await mgr._ensure_hitl_context(msgs)
+        result = await mgr._ensure_hitl_context_run(msgs)
 
         assert result is msgs
         repo_mock.get_messages_from_db_id.assert_not_called()
@@ -361,10 +470,10 @@ class TestEnsureHitlContext:
         repo_mock.get_messages_from_db_id.return_value = [anchor, tool_msg]
 
         later_q = _db_msg(30, "h-1", "human", "Follow-up")
-        result = await mgr._ensure_hitl_context([later_q])
+        result = await mgr._ensure_hitl_context_run([later_q])
 
         repo_mock.get_messages_from_db_id.assert_called_once_with(
-            thread_id=THREAD_ID,
+            run_id=RUN_ID,
             agent_id=AGENT_ID,
             from_db_id=10,
         )
@@ -383,7 +492,7 @@ class TestEnsureHitlContext:
         repo_mock.get_messages_from_db_id.return_value = [anchor, tool_msg, later_q]
 
         # later_q is already in loaded; should appear only once
-        result = await mgr._ensure_hitl_context([later_q])
+        result = await mgr._ensure_hitl_context_run([later_q])
 
         assert len(result) == 3
         assert [m.id for m in result] == [10, 20, 30]
@@ -397,7 +506,7 @@ class TestEnsureHitlContext:
         repo_mock.get_messages_from_db_id.return_value = []
 
         later_q = _db_msg(30, "h-1", "human", "Q")
-        result = await mgr._ensure_hitl_context([later_q])
+        result = await mgr._ensure_hitl_context_run([later_q])
 
         assert result == [later_q]
 
@@ -411,7 +520,7 @@ class TestEnsureHitlContext:
         repo_mock.has_ai_message_after_db_id_in_session.return_value = True
 
         later_q = _db_msg(40, "h-1", "human", "Follow-up")
-        result = await mgr._ensure_hitl_context([later_q])
+        result = await mgr._ensure_hitl_context_run([later_q])
 
         assert result == [later_q]
         repo_mock.get_messages_from_db_id.assert_not_called()
@@ -434,7 +543,7 @@ class TestIsToolChainResolved:
 
         assert await mgr._is_tool_chain_resolved(anchor) is True
 
-        repo_mock.get_tool_message_by_call_id.assert_called_once_with(THREAD_ID, "tc1")
+        repo_mock.get_tool_message_by_call_id.assert_called_once_with(THREAD_ID, "tc1", run_id=RUN_ID)
         repo_mock.has_ai_message_after_db_id_in_session.assert_called_once_with(
             THREAD_ID, AGENT_ID, 20, "session-1"
         )
@@ -460,7 +569,7 @@ class TestIsToolChainResolved:
         mgr, _, repo_mock = _make_manager()
         anchor = _db_msg(10, "ai-1", "ai", "AI", tool_calls=[{"id": "tc1"}, {"id": "tc2"}])
 
-        async def get_tool_side_effect(thread_id, tool_call_id):
+        async def get_tool_side_effect(thread_id, tool_call_id, run_id=None):
             if tool_call_id == "tc1":
                 return _db_msg(20, "tool-1", "tool", "R1")
             return None
@@ -557,6 +666,7 @@ class TestAddMessages:
                 "thread_id": THREAD_ID,
                 "runtime": ctx.model_dump(),
                 "session_id": ctx.session_id,
+                "run_id": RUN_ID,
             }
         )
 
@@ -565,7 +675,6 @@ class TestAddMessages:
         await mgr.add_messages([], self._runnable_config())
 
         repo_mock.save_messages_batch.assert_not_called()
-        db_mock.commit.assert_not_called()
 
     async def test_system_messages_are_filtered_out(self):
         """SystemMessages must never reach save_messages_batch."""
@@ -573,30 +682,30 @@ class TestAddMessages:
         repo_mock.get_messages_by_ids.return_value = []
 
         await mgr.add_messages(
-            [SystemMessage(content="context"), HumanMessage(id="h1", content="Hello")],
+            [SystemMessage(content="context"), AIMessage(id="ai1", content="Hello")],
             self._runnable_config(),
         )
 
         saved = repo_mock.save_messages_batch.call_args[0][0]
         assert len(saved) == 1
-        assert saved[0].type == "human"
+        assert saved[0].type == "ai"
 
     async def test_duplicate_message_ids_are_skipped(self):
         """Messages whose IDs already exist in the DB are not re-saved."""
         mgr, _, repo_mock = _make_manager()
 
         existing = MagicMock()
-        existing.message_id = "h1"
+        existing.message_id = "ai1"
         repo_mock.get_messages_by_ids.return_value = [existing]
 
         await mgr.add_messages(
-            [HumanMessage(id="h1", content="Already saved"), HumanMessage(id="h2", content="New")],
+            [AIMessage(id="ai1", content="Already saved"), AIMessage(id="ai2", content="New")],
             self._runnable_config(),
         )
 
         saved = repo_mock.save_messages_batch.call_args[0][0]
         assert len(saved) == 1
-        assert saved[0].message_id == "h2"
+        assert saved[0].message_id == "ai2"
 
     async def test_thread_not_found_skips_save(self):
         """Missing thread → save is aborted, no DB writes."""
@@ -636,8 +745,8 @@ class TestAddMessages:
         saved = repo_mock.save_messages_batch.call_args[0][0]
         assert saved[0].tool_calls == tc
 
-    async def test_message_count_incremented_by_saved_count(self):
-        """Thread.message_count is increased by exactly the number of persisted messages."""
+    async def test_add_messages_does_not_mutate_thread_message_count(self):
+        """Run-scoped persistence does not bump legacy thread.message_count."""
         mgr, db_mock, repo_mock = _make_manager()
         repo_mock.get_messages_by_ids.return_value = []
         db_mock.get.return_value.message_count = 3
@@ -647,4 +756,4 @@ class TestAddMessages:
             self._runnable_config(),
         )
 
-        assert db_mock.get.return_value.message_count == 5  # 3 + 2
+        assert db_mock.get.return_value.message_count == 3

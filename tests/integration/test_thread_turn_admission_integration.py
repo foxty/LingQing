@@ -20,13 +20,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from apps.shared.core.exceptions import ThreadBusyError
-from apps.shared.db.models import ChatMessage, ChatThread
+from apps.shared.db.models import ChatMessage, ChatThread, ThreadMainMessage
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agent_ingress.slack.messages import SlackMessageKey, slack_user_message
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
-from apps.tenant_app_service.chat.thread_turn import (
+from apps.tenant_app_service.chat.turn_admission import (
     guard_thread_turn_start,
     try_acquire_thread_turn_xact_lock,
 )
@@ -86,17 +86,26 @@ async def test_guard_allows_thread_after_ai_response(committed_chat_setup: dict)
             tenant_id=tenant_id,
             user_id=committed_chat_setup["owner_id"],
         )
+        from apps.shared.db.models import AgentRunMessage
+        from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
+        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+
+        run = await AgentRunRepository(db).get_by_session_id(session_id)
+        assert run is not None
         db.add(
-            ChatMessage(
+            AgentRunMessage(
                 message_id=f"{thread_id}-ai",
+                run_id=run.id,
                 thread_id=thread_id,
                 type="ai",
                 content="done",
                 session_id=session_id,
                 agent_id=agent_id,
+                timestamp=datetime.now(UTC),
                 created_at=datetime.now(UTC),
             )
         )
+        await AgentRunRepository(db).set_status(run.id, status=AgentRunStatus.COMPLETED)
         await db.commit()
 
     async with committed_chat_setup["session_local"]() as db:
@@ -156,7 +165,7 @@ async def test_advisory_xact_lock_blocks_second_connection(committed_chat_setup:
 
 
 @pytest.mark.asyncio
-async def test_prepare_chat_turn_rejects_busy_thread_without_persisting(committed_chat_setup: dict):
+async def test_prepare_chat_turn_rejects_while_run_in_progress(committed_chat_setup: dict):
     thread_id = committed_chat_setup["thread_id"]
     tenant_id = committed_chat_setup["tenant_id"]
     agent_id = committed_chat_setup["agent_id"]
@@ -172,7 +181,9 @@ async def test_prepare_chat_turn_rejects_busy_thread_without_persisting(committe
 
     async with committed_chat_setup["session_local"]() as db:
         before = await db.scalar(
-            select(func.count()).select_from(ChatMessage).where(ChatMessage.thread_id == thread_id)
+            select(func.count())
+            .select_from(ThreadMainMessage)
+            .where(ThreadMainMessage.thread_id == thread_id, ThreadMainMessage.type == "human")
         )
 
     service = ChatTurnService(tenant_id, AsyncMock())
@@ -187,7 +198,6 @@ async def test_prepare_chat_turn_rejects_busy_thread_without_persisting(committe
     service._build_runtime_config = MagicMock(
         return_value={"configurable": {"thread_id": thread_id}},
     )
-    service._persist_incoming_human_message = AsyncMock()
     service.create_thread_title_if_1st_message = AsyncMock(return_value=None)
     service._build_initial_agent_messages = lambda lc_messages, request: lc_messages
     service._is_hitl_continuation = lambda request: False
@@ -211,11 +221,11 @@ async def test_prepare_chat_turn_rejects_busy_thread_without_persisting(committe
         with pytest.raises(ThreadBusyError):
             await service.prepare_chat_turn(request, user)
 
-    service._persist_incoming_human_message.assert_not_awaited()
-
     async with committed_chat_setup["session_local"]() as db:
         after = await db.scalar(
-            select(func.count()).select_from(ChatMessage).where(ChatMessage.thread_id == thread_id)
+            select(func.count())
+            .select_from(ThreadMainMessage)
+            .where(ThreadMainMessage.thread_id == thread_id, ThreadMainMessage.type == "human")
         )
         assert after == before
 
@@ -233,6 +243,8 @@ async def test_post_chat_returns_409_thread_busy(committed_chat_setup: dict):
             thread_id=thread_id,
             agent_id=agent_id,
             session_id=session_id,
+            tenant_id=tenant_id,
+            user_id=committed_chat_setup["owner_id"],
         )
 
     client = TestClient(app)
@@ -320,10 +332,10 @@ async def test_slack_mention_while_thread_busy_posts_ephemeral_only(
     async with session_factory() as db:
         human_count_before = await db.scalar(
             select(func.count())
-            .select_from(ChatMessage)
+            .select_from(ThreadMainMessage)
             .where(
-                ChatMessage.thread_id == chat_thread_id,
-                ChatMessage.type == "human",
+                ThreadMainMessage.thread_id == chat_thread_id,
+                ThreadMainMessage.type == "human",
             )
         )
     assert human_count_before == 1
@@ -365,10 +377,10 @@ async def test_slack_mention_while_thread_busy_posts_ephemeral_only(
     async with session_factory() as db:
         human_count_after = await db.scalar(
             select(func.count())
-            .select_from(ChatMessage)
+            .select_from(ThreadMainMessage)
             .where(
-                ChatMessage.thread_id == chat_thread_id,
-                ChatMessage.type == "human",
+                ThreadMainMessage.thread_id == chat_thread_id,
+                ThreadMainMessage.type == "human",
             )
         )
     assert human_count_after == human_count_before
@@ -421,10 +433,10 @@ async def test_overlapping_post_chat_rejects_second_while_first_in_flight(
     async with committed_chat_setup["session_local"]() as db:
         human_count = await db.scalar(
             select(func.count())
-            .select_from(ChatMessage)
+            .select_from(ThreadMainMessage)
             .where(
-                ChatMessage.thread_id == committed_chat_setup["thread_id"],
-                ChatMessage.type == "human",
+                ThreadMainMessage.thread_id == committed_chat_setup["thread_id"],
+                ThreadMainMessage.type == "human",
             )
         )
     assert human_count == 1
@@ -462,10 +474,10 @@ async def test_racing_post_chat_admits_only_one_turn(committed_chat_setup: dict,
     async with committed_chat_setup["session_local"]() as db:
         human_count = await db.scalar(
             select(func.count())
-            .select_from(ChatMessage)
+            .select_from(ThreadMainMessage)
             .where(
-                ChatMessage.thread_id == committed_chat_setup["thread_id"],
-                ChatMessage.type == "human",
+                ThreadMainMessage.thread_id == committed_chat_setup["thread_id"],
+                ThreadMainMessage.type == "human",
             )
         )
     assert human_count == 1

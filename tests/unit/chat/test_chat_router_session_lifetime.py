@@ -78,14 +78,20 @@ async def test_chat_stream_releases_session_before_sse_iter(monkeypatch):
     async def _validate(thread_id, current_user, db):
         events.append("validate")
 
-    async def _stream_events(tenant_id, request, current_user, access_token=None):
+    async def _prepare(tenant_id, request, current_user, access_token=None):
         _ = tenant_id, request, current_user, access_token
+        events.append("prepare")
+        return SimpleNamespace(session_id="session-1")
+
+    async def _stream_prepared(tenant_id, request, current_user, prepared, access_token=None):
+        _ = tenant_id, request, current_user, prepared, access_token
         events.append("stream_turn")
         yield 'data: {"type":"done","session_id":"session-1"}\n\n'
 
     monkeypatch.setattr(chat_router, "app_db_session", lambda: _TrackingSession(events))
     monkeypatch.setattr(chat_router, "_validate_and_get_thread", _validate)
-    monkeypatch.setattr(chat_router, "stream_chat_turn_events", _stream_events)
+    monkeypatch.setattr(chat_router, "prepare_chat_stream_committed", _prepare)
+    monkeypatch.setattr(chat_router, "iter_prepared_chat_stream_committed", _stream_prepared)
 
     response = await chat_router.chat_stream(
         request=_request(),
@@ -98,5 +104,5 @@ async def test_chat_stream_releases_session_before_sse_iter(monkeypatch):
     async for chunk in response.body_iterator:
         chunks.append(chunk)
 
-    assert events == ["session_enter", "validate", "session_exit", "stream_turn"]
+    assert events == ["session_enter", "validate", "session_exit", "prepare", "stream_turn"]
     assert any("session-1" in chunk for chunk in chunks)

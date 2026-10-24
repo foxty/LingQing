@@ -13,9 +13,13 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from apps.shared.db.models import ChatMessage, ChatThread, Tenant, TenantMembership, User
+from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
+from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.message_repository import MessageRepository
 from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.server import app
+from tests.integration.helpers.committed_chat_setup import seed_running_human_turn
+from tests.integration.helpers.thread_run_seed import seed_stale_running_turn
 
 TEST_SECRET_KEY = "test-secret-key"
 
@@ -194,19 +198,15 @@ async def test_durable_turn_session_status_stale_orphaned_run_returns_completed(
     tenant_id = durable_chat_setup["tenant_id"]
     agent_id = durable_chat_setup["agent_id"]
     session_id = f"sess-{uuid4().hex[:8]}"
-    stale_created_at = datetime.now(UTC) - timedelta(minutes=20)
 
     async with durable_chat_setup["session_local"]() as db:
-        db.add(
-            ChatMessage(
-                message_id=f"{thread_id}-stale-human",
-                thread_id=thread_id,
-                type="human",
-                content="hello",
-                session_id=session_id,
-                agent_id=agent_id,
-                created_at=stale_created_at,
-            )
+        await seed_stale_running_turn(
+            db,
+            thread_id=thread_id,
+            tenant_id=tenant_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            stale_minutes=20,
         )
         await db.commit()
 
@@ -225,15 +225,12 @@ async def test_durable_turn_session_status_running_then_completed(durable_chat_s
     client = TestClient(app)
 
     async with durable_chat_setup["session_local"]() as db:
-        db.add(
-            ChatMessage(
-                message_id=f"{thread_id}-human",
-                thread_id=thread_id,
-                type="human",
-                content="hello",
-                session_id=session_id,
-                agent_id=agent_id,
-            )
+        await seed_running_human_turn(
+            db,
+            thread_id=thread_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            tenant_id=tenant_id,
         )
         await db.commit()
 
@@ -251,16 +248,21 @@ async def test_durable_turn_session_status_running_then_completed(durable_chat_s
     assert running_http.json()["status"] == "running"
 
     async with durable_chat_setup["session_local"]() as db:
-        db.add(
-            ChatMessage(
-                message_id=f"{thread_id}-ai",
-                thread_id=thread_id,
-                type="ai",
-                content="response",
-                session_id=session_id,
-                agent_id=agent_id,
-            )
+        from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+
+        run = await AgentRunRepository(db).get_by_session_id(session_id)
+        assert run is not None
+        await MainMessageRepository(db).insert_promoted_ai(
+            message_id=f"{thread_id}-ai",
+            thread_id=thread_id,
+            content="response",
+            agent_id=agent_id,
+            trigger_message_id=run.trigger_message_id,
+            agent_run_id=run.id,
+            invoke_index=0,
+            session_id=session_id,
         )
+        await AgentRunRepository(db).set_status(run.id, status=AgentRunStatus.COMPLETED)
         await db.commit()
 
         service = ThreadService(tenant_id, db)

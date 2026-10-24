@@ -4,8 +4,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import SessionSummary
 from apps.shared.utils.logger import get_logger
+from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
 from apps.tenant_app_service.chat.domain import MessageDomain, SessionSummaryDomain
-from apps.tenant_app_service.chat.message_repository import MessageRepository
 from apps.tenant_app_service.chat.session_summary_repository import SessionSummaryRepository
 
 logger = get_logger(__name__)
@@ -24,7 +24,7 @@ class SessionSummaryManager:
         self.db = db
         self.tenant_id = tenant_id
         self.repo = SessionSummaryRepository(db)
-        self.message_repo = MessageRepository(db)
+        self.run_message_repo = AgentRunMessageRepository(db)
         self._mini_agent_service = None
 
     async def create_session_summary(
@@ -42,8 +42,10 @@ class SessionSummaryManager:
             Created SessionSummary or None if creation failed
         """
         try:
-            # 1. Load messages from DB
-            db_messages = await self.message_repo.get_messages_by_session(session_id)
+            from apps.tenant_app_service.agents.message_persistence_adapters import agent_run_messages_to_chat_messages
+
+            run_rows = await self.run_message_repo.get_messages_by_session(session_id)
+            db_messages = agent_run_messages_to_chat_messages(run_rows)
 
             if not db_messages:
                 logger.warning(f"No messages found for session {session_id}, skipping summary")
@@ -98,7 +100,7 @@ class SessionSummaryManager:
 
             # Mark session messages as summarized.
             message_ids = [m.message_id for m in db_messages if m.message_id]
-            await self.message_repo.mark_messages_as_summarized(message_ids, session_summary.id)
+            await self.run_message_repo.mark_messages_as_summarized(message_ids, session_summary.id)
 
             logger.info(
                 f"Created session summary for session {session_id}: "

@@ -5,7 +5,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from apps.tenant_app_service.hitl.domain import HITL_STATUS_EXPIRED, HITL_STATUS_PENDING, HITL_STATUS_REJECTED
+from apps.tenant_app_service.hitl.domain import (
+    HITL_STATUS_EXPIRED,
+    HITL_STATUS_PENDING,
+    HITL_STATUS_REJECTED,
+)
 from apps.tenant_app_service.hitl.service import HitlApprovalService
 from apps.shared.core.exceptions import ValidationError
 
@@ -110,6 +114,36 @@ class TestHitlApprovalService:
         assert result is existing
         service.repository.save.assert_not_awaited()
 
+    async def test_get_or_create_pending_reopens_rejected_for_retry(self):
+        db = AsyncMock()
+        service = HitlApprovalService(tenant_id=1, db=db)
+
+        existing = MagicMock()
+        existing.status = HITL_STATUS_REJECTED
+        existing.version = 2
+
+        service.repository = MagicMock()
+        service.repository.get_by_proposal_id = AsyncMock(return_value=existing)
+        service.repository.save = AsyncMock(return_value=existing)
+
+        result = await service.get_or_create_pending(
+            tenant_id=1,
+            thread_id="thread_1",
+            session_id="session_2",
+            agent_id=10,
+            proposal_id="hitl_1",
+            tool_name="search",
+            tool_args={"query": "abc"},
+            risk_level="medium",
+            requested_by=99,
+            expires_in_seconds=900,
+        )
+
+        assert result is existing
+        assert existing.status == HITL_STATUS_PENDING
+        assert existing.version == 3
+        service.repository.save.assert_awaited_once_with(existing)
+
     async def test_get_or_create_pending_reopens_existing_expired_pending(self):
         db = AsyncMock()
         service = HitlApprovalService(tenant_id=1, db=db)
@@ -165,36 +199,6 @@ class TestHitlApprovalService:
         assert exc_info.value.details.get("status") == HITL_STATUS_EXPIRED
         assert existing.status == HITL_STATUS_EXPIRED
         service.repository.save.assert_awaited_once_with(existing)
-
-    async def test_get_or_create_pending_keeps_rejected_when_proposal_id_reused(self):
-        db = AsyncMock()
-        service = HitlApprovalService(tenant_id=1, db=db)
-
-        existing = MagicMock()
-        existing.status = HITL_STATUS_REJECTED
-        existing.session_id = "session_1"
-        existing.version = 2
-
-        service.repository = MagicMock()
-        service.repository.get_by_proposal_id = AsyncMock(return_value=existing)
-        service.repository.save = AsyncMock(return_value=existing)
-
-        result = await service.get_or_create_pending(
-            tenant_id=1,
-            thread_id="thread_1",
-            session_id="session_1",
-            agent_id=10,
-            proposal_id="hitl_1",
-            tool_name="hitl_test_echo",
-            tool_args={"text": "HITL approval flow test"},
-            risk_level="medium",
-            requested_by=99,
-            expires_in_seconds=900,
-        )
-
-        assert result is existing
-        assert existing.status == HITL_STATUS_REJECTED
-        service.repository.save.assert_not_awaited()
 
     async def test_cancel_superseded_pending_for_thread(self):
         db = AsyncMock()

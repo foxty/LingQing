@@ -1,7 +1,7 @@
 """Conversation memory manager for optimized message storage and retrieval.
 
 This module provides efficient message management with:
-- Independent message storage in chat_messages table
+- Run-scoped storage in agent_run_messages; human/promoted AI on thread_main_messages
 - LangChain message format conversion
 - Automatic conversation summarization
 - Token-based context management
@@ -15,75 +15,20 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
-    ToolMessage,
 )
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.db.models import ChatMessage, ChatThread
+from apps.shared.db.models import AgentRunMessage, ChatMessage, ChatThread
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.message_content import normalize_message_content
-
-
-def _db_message_to_langchain(db_msg: ChatMessage) -> BaseMessage:
-    """Convert database message to LangChain message.
-
-    Args:
-        db_msg: Database message model
-
-    Returns:
-        Corresponding LangChain message
-    """
-    logger = get_logger(__name__)
-
-    # Use message_id if available, otherwise use database id as string
-    message_id = db_msg.message_id if db_msg.message_id else str(db_msg.id)
-    content = db_msg.content
-
-    # Merge metadata into additional_kwargs for backward compatibility
-    # LangChain messages expect all context in additional_kwargs
-    additional_kwargs = db_msg.additional_kwargs or {}
-    if db_msg.message_metadata:
-        additional_kwargs = {**additional_kwargs}
-        ts = db_msg.timestamp
-        if ts.tzinfo is None:
-            # Localize naive datetime to UTC
-            ts = ts.replace(tzinfo=UTC)
-        else:
-            # Convert to UTC if not already
-            ts = ts.astimezone(UTC)
-        additional_kwargs["timestamp"] = ts.isoformat()
-
-    if db_msg.type == "human":
-        return HumanMessage(id=message_id, content=content, additional_kwargs=additional_kwargs)
-    elif db_msg.type == "ai":
-        # Load tool_calls from dedicated field (only pass if not None/empty)
-        ai_kwargs = {"id": message_id, "content": content, "additional_kwargs": additional_kwargs}
-        if db_msg.tool_calls:
-            ai_kwargs["tool_calls"] = db_msg.tool_calls
-        return AIMessage(**ai_kwargs)
-    elif db_msg.type == "system":
-        return SystemMessage(id=message_id, content=content, additional_kwargs=additional_kwargs)
-    elif db_msg.type == "tool":
-        # ToolMessage requires tool_call_id (stored in additional_kwargs)
-        tool_call_id = db_msg.additional_kwargs.get("tool_call_id") if db_msg.additional_kwargs else None
-        if not tool_call_id:
-            logger.warning(
-                f"ToolMessage {message_id} missing tool_call_id in additional_kwargs. "
-                f"This should not happen in normal operation."
-            )
-            # Fallback: use message id as tool_call_id (last resort)
-            tool_call_id = message_id
-        return ToolMessage(
-            id=message_id,
-            content=content,
-            tool_call_id=tool_call_id,
-            additional_kwargs=additional_kwargs,
-        )
-    else:
-        logger.warning(f"Unknown message type: {db_msg.type}, defaulting to HumanMessage")
-        return HumanMessage(id=message_id, content=content, additional_kwargs=additional_kwargs)
+from apps.tenant_app_service.agents.message_persistence_adapters import (
+    agent_run_message_to_chat_message,
+    agent_run_message_to_langchain,
+    agent_run_messages_to_chat_messages,
+    thread_main_message_domain_to_langchain,
+)
 
 
 def _serialize_additional_kwargs(kwargs: dict | None) -> dict | None:
@@ -163,28 +108,38 @@ class ConversationMemoryManager:
         thread_id: str,
         tenant_id: int,
         agent_id: int,
+        run_id: str,
     ):
-        """Initialize memory manager.
+        """Initialize memory manager scoped to one agent run.
 
         Args:
             db_session: Database session for message operations
             thread_id: Thread ID for this conversation
             tenant_id: Tenant ID for mini-agent service
             agent_id: Agent ID for context isolation
+            run_id: Agent run ID for run-scoped message persistence
         """
         self.db = db_session
         self.thread_id = thread_id
         self.tenant_id = tenant_id
         self.agent_id = agent_id
+        self.run_id = run_id
         self.logger = get_logger(__name__)
         # Lazy import to avoid circular dependency
-        from apps.tenant_app_service.chat.message_repository import MessageRepository
+        from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
+        from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+        from apps.tenant_app_service.chat.session_summary_repository import SessionSummaryRepository
+        from apps.tenant_app_service.chat.thread_summary_repository import ThreadSummaryRepository
 
-        self.message_repo = MessageRepository(db_session)
+        self.run_message_repo = AgentRunMessageRepository(db_session)
+        self.main_message_repo = MainMessageRepository(db_session)
+        self.session_summary_repo = SessionSummaryRepository(db_session)
+        self.thread_summary_repo = ThreadSummaryRepository(db_session)
         self._mini_agent_service = None  # Lazy load when needed
 
         self.logger.info(
-            f"Initialized ConversationMemoryManager for thread {thread_id} (tenant_id={tenant_id}, agent_id={agent_id})"
+            f"Initialized ConversationMemoryManager for thread {thread_id} "
+            f"(tenant_id={tenant_id}, agent_id={agent_id}, run_id={run_id})"
         )
 
     def _extract_message_timestamp(self, kwargs: dict) -> datetime:
@@ -272,8 +227,12 @@ class ConversationMemoryManager:
         if not raw_messages:
             return []
 
-        # Step 1: Filter out SystemMessages
-        messages_to_process = [msg for msg in raw_messages if not isinstance(msg, SystemMessage)]
+        # Step 1: Filter out SystemMessages and human rows (persisted on main timeline for runs)
+        messages_to_process = [
+            msg
+            for msg in raw_messages
+            if not isinstance(msg, SystemMessage) and not isinstance(msg, HumanMessage)
+        ]
 
         if len(messages_to_process) < len(raw_messages):
             skipped = len(raw_messages) - len(messages_to_process)
@@ -291,8 +250,8 @@ class ConversationMemoryManager:
         message_ids_to_check = [msg.id for msg in messages_to_process if msg.id]
 
         if message_ids_to_check:
-            existing_messages = await self.message_repo.get_messages_by_ids(message_ids_to_check)
-            existing_message_ids = {msg.message_id for msg in existing_messages}
+            existing_messages = await self.run_message_repo.get_messages_by_ids(message_ids_to_check)
+            existing_message_ids = {msg.message_id for msg in existing_messages if msg.message_id}
 
         # Filter out existing messages
         messages_to_save = [msg for msg in messages_to_process if msg.id not in existing_message_ids]
@@ -320,13 +279,10 @@ class ConversationMemoryManager:
             self.logger.warning(f"Thread {self.thread_id} not found")
             return []
 
-        # Agent-scoped loading for sub-agents
-        db_messages = await self.message_repo.get_messages_by_agent(
-            thread_id=self.thread_id, agent_id=self.agent_id, limit=limit
-        )
-        # Reverse to ASC order
-        db_messages.reverse()
-        return db_messages
+        run_rows = await self.run_message_repo.list_for_run(self.run_id)
+        if limit and len(run_rows) > limit:
+            run_rows = run_rows[-limit:]
+        return agent_run_messages_to_chat_messages(run_rows)
 
     async def _is_tool_chain_resolved(self, anchor: ChatMessage) -> bool:
         """Check whether an anchor AI tool-call chain is fully complete."""
@@ -342,7 +298,10 @@ class ConversationMemoryManager:
         resolved_tool_call_ids: set[str] = set()
         terminal_hitl_only = True
         for tool_call_id in tool_call_ids:
-            tool_msg = await self.message_repo.get_tool_message_by_call_id(self.thread_id, tool_call_id)
+            run_tool = await self.run_message_repo.get_tool_message_by_call_id(
+                self.thread_id, tool_call_id, run_id=self.run_id
+            )
+            tool_msg = agent_run_message_to_chat_message(run_tool) if run_tool is not None else None
             if tool_msg is None:
                 return False
 
@@ -371,7 +330,7 @@ class ConversationMemoryManager:
                 return True
             return False
 
-        has_final_ai = await self.message_repo.has_ai_message_after_db_id_in_session(
+        has_final_ai = await self.run_message_repo.has_ai_message_after_db_id_in_session(
             self.thread_id,
             self.agent_id,
             last_tool_msg_id,
@@ -381,56 +340,142 @@ class ConversationMemoryManager:
             return True
         return is_tool_chain_resolved(tool_call_ids, resolved_tool_call_ids, has_final_ai)
 
-    async def _ensure_hitl_context(self, db_messages: list[ChatMessage]) -> list[ChatMessage]:
-        """Guarantee in-flight tool/HITL chains are included in the loaded window.
-
-        When a message_limit truncates the unsummarized window, the most recent
-        AIMessage with tool_calls (and any ToolMessages that follow it) may be
-        excluded, breaking HITL approval flows.  This method detects that case
-        and injects the missing tail block.
-
-        Completed chains (all tool responses present and a final AI reply after
-        them) are left summarized — no raw tail re-injection.
-
-        Args:
-            db_messages: Unsummarized messages already loaded, in ASC chronological order.
-
-        Returns:
-            Same list, potentially extended at the front with the HITL tail block.
-        """
-        last_ai_msg = await self.message_repo.get_last_ai_message_with_tool_calls(self.thread_id, self.agent_id)
+    async def _ensure_hitl_context_run(self, db_messages: list[AgentRunMessage]) -> list[AgentRunMessage]:
+        """HITL tail injection for this ``run_id`` only (not other parallel agent runs)."""
+        last_ai_msg = await self.run_message_repo.get_last_ai_message_with_tool_calls(self.run_id, self.agent_id)
         if not last_ai_msg:
             return db_messages
-
-        if await self._is_tool_chain_resolved(last_ai_msg):
-            self.logger.debug(
-                f"HITL guarantee: skipping resolved tool chain (anchor db_id={last_ai_msg.id}) "
-                f"for thread {self.thread_id}"
-            )
+        anchor = agent_run_message_to_chat_message(last_ai_msg)
+        if await self._is_tool_chain_resolved(anchor):
             return db_messages
-
         loaded_ids = {msg.id for msg in db_messages}
         if last_ai_msg.id in loaded_ids:
-            return db_messages  # Already included, nothing to do
-
-        # The anchor AI message was cut off by the limit (or was summarized).
-        # Load it and everything after it so the full tool_call chain is present.
-        tail_messages = await self.message_repo.get_messages_from_db_id(
-            thread_id=self.thread_id,
+            return db_messages
+        tail_messages = await self.run_message_repo.get_messages_from_db_id(
+            run_id=self.run_id,
             agent_id=self.agent_id,
             from_db_id=last_ai_msg.id,
         )
         if not tail_messages:
             return db_messages
-
         tail_id_set = {msg.id for msg in tail_messages}
         merged = tail_messages + [msg for msg in db_messages if msg.id not in tail_id_set]
         merged.sort(key=lambda m: (m.created_at, m.id))
-        self.logger.info(
-            f"HITL guarantee: injected {len(tail_messages)} messages "
-            f"(anchor AI tool_call db_id={last_ai_msg.id}) for thread {self.thread_id}"
-        )
         return merged
+
+    async def _load_thread_summary_messages(
+        self,
+        *,
+        thread_summary_limit: int,
+        covered_session_ids: set[str],
+    ) -> list[BaseMessage]:
+        if thread_summary_limit <= 0:
+            return []
+
+        thread_summaries = await self.thread_summary_repo.get_recent_summaries(
+            self.thread_id, limit=thread_summary_limit
+        )
+        if not thread_summaries:
+            return []
+
+        summary_parts = []
+        for i, ts in enumerate(reversed(thread_summaries), 1):
+            summary_parts.append(
+                f"## Thread Summary v{ts.version}\n"
+                f"(Sessions: {ts.session_range}, Messages: {ts.message_range})\n\n"
+                f"{ts.summary_content}"
+            )
+        combined_summary = "\n\n---\n\n".join(summary_parts)
+        messages = [
+            SystemMessage(
+                content=f"# Thread History Summaries\n\n{combined_summary}",
+                additional_kwargs={
+                    "summary_type": "thread_summary",
+                    "summary_count": len(thread_summaries),
+                },
+            )
+        ]
+        covered_session_ids.update(
+            await self.session_summary_repo.list_session_ids_in_thread_summary(self.thread_id)
+        )
+        return messages
+
+    async def _load_session_summary_messages(
+        self,
+        *,
+        session_summary_limit: int,
+        covered_session_ids: set[str],
+    ) -> list[BaseMessage]:
+        if session_summary_limit <= 0:
+            return []
+
+        unsummarized_sessions = await self.session_summary_repo.get_unsummarized_sessions(self.thread_id)
+        if len(unsummarized_sessions) > session_summary_limit:
+            unsummarized_sessions = unsummarized_sessions[-session_summary_limit:]
+
+        if not unsummarized_sessions:
+            return []
+
+        session_lines = [f"{i}. {ss.summary_text}" for i, ss in enumerate(unsummarized_sessions, 1)]
+        session_context = "\n".join(session_lines)
+        covered_session_ids.update(ss.session_id for ss in unsummarized_sessions)
+        return [
+            SystemMessage(
+                content=f"# Recent Session Summaries\n\n{session_context}",
+                additional_kwargs={
+                    "summary_type": "session_summary",
+                    "session_summary_count": len(unsummarized_sessions),
+                },
+            )
+        ]
+
+    async def _load_main_timeline_messages(
+        self,
+        *,
+        message_limit: int | None,
+        covered_session_ids: frozenset[str],
+    ) -> list[BaseMessage]:
+        from apps.tenant_app_service.chat.agent_run_domain import (
+            filter_main_timeline_for_context_load,
+            sort_timeline_trigger_anchored,
+        )
+
+        main_rows = await self.main_message_repo.list_for_thread(self.thread_id)
+        main_rows = sort_timeline_trigger_anchored(main_rows)
+        main_rows = filter_main_timeline_for_context_load(
+            main_rows,
+            agent_id=self.agent_id,
+            covered_session_ids=covered_session_ids,
+        )
+        main_lc: list[BaseMessage] = []
+        for row in main_rows:
+            if row.type == "human" or (row.type == "ai" and row.agent_id == self.agent_id):
+                main_lc.append(thread_main_message_domain_to_langchain(row))
+        if message_limit is not None and message_limit >= 0:
+            main_lc = main_lc[-message_limit:] if message_limit else []
+        return main_lc
+
+    async def _load_agent_run_messages(
+        self,
+        *,
+        message_limit: int | None,
+    ) -> list[AgentRunMessage]:
+        from apps.tenant_app_service.chat.agent_run_domain import drop_run_rows_duplicating_promoted_main
+
+        promoted_main = await self.main_message_repo.get_promoted_ai_for_run(self.run_id)
+        promoted_message_id = promoted_main.message_id if promoted_main else None
+
+        raw_run_messages = await self.run_message_repo.get_unsummarized_messages(
+            run_id=self.run_id,
+            agent_id=self.agent_id,
+            limit=message_limit,
+        )
+        raw_run_messages.reverse()
+        raw_run_messages = drop_run_rows_duplicating_promoted_main(
+            raw_run_messages,
+            promoted_main_message_id=promoted_message_id,
+        )
+        return await self._ensure_hitl_context_run(raw_run_messages)
 
     async def load_messages_with_summary(
         self,
@@ -445,8 +490,10 @@ class ConversationMemoryManager:
         2. Load unsummarized session summaries — sessions not yet rolled into a
            thread summary (``included_in_thread_summary=False``).  ``session_summary_limit``
            caps the number of sessions shown (most recent N).
-        3. Load unsummarized messages (``is_summarized=False``), capped at
-              ``message_limit`` (``None`` = no cap, ``0`` = zero messages).
+        3. Load main timeline tail (human + this agent's promoted AI), omitting AI whose
+           ``session_id`` is covered by loaded session summaries or thread rollup; then
+           load unsummarized ``agent_run_messages`` for this ``run_id`` (also capped at
+           ``message_limit``), dropping run AI that duplicates promoted main.
         4. HITL guarantee: ensure the last AIMessage with tool_calls and all
            subsequent messages are always present so HITL approval can continue.
 
@@ -466,87 +513,50 @@ class ConversationMemoryManager:
             self.logger.warning(f"Thread {self.thread_id} not found")
             return []
 
-        messages = []
-        thread_summary_count = 0
-        session_summary_count = 0
+        covered_session_ids: set[str] = set()
+        messages: list[BaseMessage] = []
 
-        # Step 1: Load thread summaries from ThreadSummary table
-        if thread_summary_limit > 0:
-            from apps.tenant_app_service.chat.thread_summary_repository import ThreadSummaryRepository
-
-            thread_summary_repo = ThreadSummaryRepository(self.db)
-            thread_summaries = await thread_summary_repo.get_recent_summaries(
-                self.thread_id, limit=thread_summary_limit
-            )
-
-            if thread_summaries:
-                # Combine all thread summaries into single SystemMessage
-                summary_parts = []
-                for i, ts in enumerate(reversed(thread_summaries), 1):
-                    summary_parts.append(
-                        f"## Thread Summary v{ts.version}\n"
-                        f"(Sessions: {ts.session_range}, Messages: {ts.message_range})\n\n"
-                        f"{ts.summary_content}"
-                    )
-
-                combined_summary = "\n\n---\n\n".join(summary_parts)
-                messages.append(
-                    SystemMessage(
-                        content=f"# Thread History Summaries\n\n{combined_summary}",
-                        additional_kwargs={
-                            "summary_type": "thread_summary",
-                            "summary_count": len(thread_summaries),
-                        },
-                    )
-                )
-            thread_summary_count = len(thread_summaries)
-
-        # Step 2: Load unsummarized session summaries
-        # (sessions not yet rolled into any thread summary)
-        if session_summary_limit > 0:
-            from apps.tenant_app_service.chat.session_summary_repository import SessionSummaryRepository
-
-            session_repo = SessionSummaryRepository(self.db)
-            # Returns ASC order (oldest first); apply limit to take most recent N
-            unsummarized_sessions = await session_repo.get_unsummarized_sessions(self.thread_id)
-            if len(unsummarized_sessions) > session_summary_limit:
-                unsummarized_sessions = unsummarized_sessions[-session_summary_limit:]
-
-            if unsummarized_sessions:
-                session_lines = []
-                for i, ss in enumerate(unsummarized_sessions, 1):
-                    session_lines.append(f"{i}. {ss.summary_text}")
-
-                session_context = "\n".join(session_lines)
-                messages.append(
-                    SystemMessage(
-                        content=f"# Recent Session Summaries\n\n{session_context}",
-                        additional_kwargs={"summary_type": "session_summary"},
-                    )
-                )
-                session_summary_count = len(unsummarized_sessions)
-
-        # Step 3: Load unsummarized messages only
-        actual_limit = message_limit
-        raw_db_messages = await self.message_repo.get_unsummarized_messages(
-            thread_id=self.thread_id,
-            agent_id=self.agent_id,
-            limit=actual_limit,
+        thread_msgs = await self._load_thread_summary_messages(
+            thread_summary_limit=thread_summary_limit,
+            covered_session_ids=covered_session_ids,
         )
-        # get_unsummarized_messages returns DESC; reverse to ASC chronological
-        raw_db_messages.reverse()
+        messages.extend(thread_msgs)
 
-        # Step 4: HITL guarantee — inject last AI tool_call block if cut off
-        raw_db_messages = await self._ensure_hitl_context(raw_db_messages)
+        session_msgs = await self._load_session_summary_messages(
+            session_summary_limit=session_summary_limit,
+            covered_session_ids=covered_session_ids,
+        )
+        messages.extend(session_msgs)
 
-        lc_messages = [_db_message_to_langchain(msg) for msg in raw_db_messages]
-        messages.extend(lc_messages)
+        messages.extend(
+            await self._load_main_timeline_messages(
+                message_limit=message_limit,
+                covered_session_ids=frozenset(covered_session_ids),
+            )
+        )
 
+        raw_run_messages = await self._load_agent_run_messages(message_limit=message_limit)
+        main_ai_ids = {
+            m.id
+            for m in messages
+            if isinstance(m, AIMessage) and m.id is not None
+        }
+        for msg in raw_run_messages:
+            if msg.type == "ai" and msg.message_id and msg.message_id in main_ai_ids:
+                continue
+            messages.append(agent_run_message_to_langchain(msg))
+
+        thread_summary_count = (
+            thread_msgs[0].additional_kwargs.get("summary_count", 0) if thread_msgs else 0
+        )
+        session_summary_count = (
+            session_msgs[0].additional_kwargs.get("session_summary_count", 0) if session_msgs else 0
+        )
         self.logger.info(
             f"Loaded context for thread {self.thread_id}, agent_id: {self.agent_id}: "
             f"{thread_summary_count} thread summaries, "
             f"{session_summary_count} unsummarized session summaries, "
-            f"{len(raw_db_messages)} unsummarized messages"
+            f"{len(raw_run_messages)} unsummarized run messages"
         )
         return messages
 
@@ -580,59 +590,45 @@ class ConversationMemoryManager:
             self.logger.warning(f"Thread {self.thread_id} not found, cannot add messages")
             return
 
-        # Convert to ChatMessage
-        db_messages = []
         cap_context = config.get("configurable", {}).get("capability_call_context", {})
         runtime_context = extract_runtime_context(config)
 
+        run_rows: list[AgentRunMessage] = []
         for msg in messages_to_save:
             message_id = msg.id
             kwargs = msg.additional_kwargs or {}
             kwargs = _serialize_additional_kwargs(kwargs)
-
-            # Extract timestamp and metadata from message
             msg_timestamp = self._extract_message_timestamp(kwargs)
             metadata = self._extract_message_metadata(kwargs, cap_context)
-
             if msg.type == "tool" and hasattr(msg, "tool_call_id"):
                 kwargs = {**(kwargs or {}), "tool_call_id": msg.tool_call_id}
-
             tool_calls = None
             if msg.type == "ai" and hasattr(msg, "tool_calls") and msg.tool_calls:
                 tool_calls = _serialize_additional_kwargs(msg.tool_calls)
-
             if msg.type == "ai":
                 content = normalize_message_content(msg.content)
             else:
                 content = msg.content if isinstance(msg.content, str) else str(msg.content or "")
-
-            db_msg = ChatMessage(
-                message_id=message_id,
-                thread_id=self.thread_id,
-                session_id=runtime_context.session_id,
-                agent_id=runtime_context.agent_id,
-                type=msg.type,
-                content=content,
-                timestamp=msg_timestamp,
-                is_summarized=False,
-                tool_calls=tool_calls,
-                additional_kwargs=kwargs,
-                message_metadata=metadata,
+            run_rows.append(
+                AgentRunMessage(
+                    message_id=message_id,
+                    run_id=self.run_id,
+                    thread_id=self.thread_id,
+                    type=msg.type,
+                    content=content,
+                    timestamp=msg_timestamp,
+                    is_summarized=False,
+                    tool_calls=tool_calls,
+                    additional_kwargs=kwargs,
+                    session_id=runtime_context.session_id,
+                    agent_id=runtime_context.agent_id,
+                    message_metadata=metadata,
+                )
             )
-            db_messages.append(db_msg)
+        await self.run_message_repo.save_messages_batch(run_rows)
+        self.logger.info(f"Added {len(run_rows)} run messages to run {self.run_id}")
 
-        # Batch save
-        await self.message_repo.save_messages_batch(db_messages)
-
-        # Update thread message count
-        thread.message_count = thread.message_count + len(db_messages)
-        await self.db.commit()
-
-        self.logger.info(
-            f"Added {len(db_messages)} messages to thread {self.thread_id} (total: {thread.message_count})"
-        )
-
-    async def get_last_message(self) -> ChatMessage | None:
+    async def get_last_message(self):
         """Get the last message from database.
 
         Returns:

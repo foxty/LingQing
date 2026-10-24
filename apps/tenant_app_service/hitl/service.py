@@ -140,7 +140,7 @@ class HitlApprovalService:
 
         if existing:
             existing = await self._expire_if_needed(existing)
-            if existing.status == HITL_STATUS_EXPIRED:
+            if existing.status in (HITL_STATUS_EXPIRED, HITL_STATUS_REJECTED):
                 self._reset_approval_for_new_attempt(
                     existing,
                     session_id=session_id,
@@ -290,7 +290,9 @@ class HitlApprovalService:
         from apps.tenant_app_service.agents.memory.conversation_memory_manager import (
             ConversationMemoryManager,
         )
-        from apps.tenant_app_service.chat.message_repository import MessageRepository
+        from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
+        from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
+        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 
         tool_name = approval.tool_name or "tool"
         ai_content = build_hitl_rejected_ai_message(tool_name)
@@ -302,9 +304,24 @@ class HitlApprovalService:
             )
             return ai_content
 
-        message_repository = MessageRepository(self.db)
-        for message in await message_repository.get_messages_by_session(approval.session_id):
+        run_repo = AgentRunRepository(self.db)
+        run = await run_repo.get_by_session_id(approval.session_id)
+        if not run:
+            self.logger.warning(
+                "Terminal HITL resolution missing agent run for session_id=%s proposal_id=%s",
+                approval.session_id,
+                approval.proposal_id,
+            )
+            return ai_content
+
+        run_message_repo = AgentRunMessageRepository(self.db)
+        for message in await run_message_repo.get_messages_by_session(approval.session_id):
             if message.type == "ai" and message.content == ai_content:
+                await run_repo.set_status(
+                    run.id,
+                    status=AgentRunStatus.COMPLETED,
+                    completed_at=datetime.now(UTC),
+                )
                 return None
 
         ai_message = AIMessage(
@@ -312,13 +329,21 @@ class HitlApprovalService:
             content=ai_content,
             additional_kwargs={"session_id": approval.session_id},
         )
+        config = self._build_persistence_config(approval)
+        config["configurable"]["run_id"] = run.id
         manager = ConversationMemoryManager(
             db_session=self.db,
             thread_id=approval.thread_id,
             tenant_id=self.tenant_id,
             agent_id=approval.agent_id,
+            run_id=run.id,
         )
-        await manager.add_messages([ai_message], self._build_persistence_config(approval), deduplicate=True)
+        await manager.add_messages([ai_message], config, deduplicate=True)
+        await run_repo.set_status(
+            run.id,
+            status=AgentRunStatus.COMPLETED,
+            completed_at=datetime.now(UTC),
+        )
         return ai_content
 
     async def mark_executed(self, proposal_id: str, success: bool, error: str | None = None) -> None:

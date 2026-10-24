@@ -36,18 +36,24 @@ async def test_reject_persists_ai_ack_without_tool_message_mutation():
     service.repository = MagicMock()
     service.repository.save = AsyncMock(return_value=approval)
 
-    message_repo = MagicMock()
-    message_repo.get_messages_by_session = AsyncMock(return_value=[])
+    run_message_repo = MagicMock()
+    run_message_repo.get_messages_by_session = AsyncMock(return_value=[])
+    run_domain = MagicMock(id="run-1")
 
     with (
         patch(
-            "apps.tenant_app_service.chat.message_repository.MessageRepository",
-            return_value=message_repo,
+            "apps.tenant_app_service.chat.agent_run_message_repository.AgentRunMessageRepository",
+            return_value=run_message_repo,
         ),
+        patch(
+            "apps.tenant_app_service.chat.agent_run_repository.AgentRunRepository"
+        ) as run_repo_cls,
         patch(
             "apps.tenant_app_service.agents.memory.conversation_memory_manager.ConversationMemoryManager"
         ) as manager_cls,
     ):
+        run_repo_cls.return_value.get_by_session_id = AsyncMock(return_value=run_domain)
+        run_repo_cls.return_value.set_status = AsyncMock()
         manager = manager_cls.return_value
         manager.add_messages = AsyncMock()
 
@@ -61,6 +67,7 @@ async def test_reject_persists_ai_ack_without_tool_message_mutation():
     assert result.needs_agent_resume is False
     assert result.ack_message == build_hitl_rejected_ai_message("hitl_test_echo")
     manager.add_messages.assert_awaited_once()
+    run_repo_cls.return_value.set_status.assert_awaited_once()
 
 
 @pytest.mark.asyncio

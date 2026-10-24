@@ -17,7 +17,7 @@ from apps.tenant_app_service.agent_ingress.slack.scheduled_delivery import (
 )
 from apps.tenant_app_service.agents.agent_run_preflight import preflight_agent_run
 from apps.tenant_app_service.auth.repository import UserRepository
-from apps.tenant_app_service.chat.headless_turn import run_headless_chat_turn
+from apps.tenant_app_service.chat.application import run_headless_chat_turn
 
 logger = get_logger(__name__)
 

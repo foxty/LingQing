@@ -78,6 +78,7 @@ interface ToolCallWithResultProps {
   }
   resultMessage?: Message
   threadId: string
+  sessionId?: string
   compact?: boolean
   status?: ToolCallProgressStatus
   variant?: 'card' | 'details-only'
@@ -94,6 +95,7 @@ export default function ToolCallWithResult({
   toolCall,
   resultMessage,
   threadId,
+  sessionId,
   compact = false,
   status,
   variant = 'card',
@@ -109,7 +111,7 @@ export default function ToolCallWithResult({
   const { data: lazyDetailMessage, isLoading: loadingToolDetail } = useToolCallDetail(
     threadId,
     toolCall.id,
-    resultMessage?.session_id,
+    resultMessage?.session_id ?? sessionId,
     canFetchToolDetail
   )
 

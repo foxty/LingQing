@@ -20,13 +20,19 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.schemas.user import UserDTO
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.chat.schemas import (
+    AgentRunSummary,
     ConversationHistoryResponse,
     Message,
+    SendThreadMessageRequest,
+    SendThreadMessageResponse,
     SessionStatusResponse,
     ThreadCreate,
     ThreadResponse,
+    ThreadTimelineResponse,
     ThreadUpdate,
+    TriggerRunsResponse,
 )
+from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 from apps.tenant_app_service.chat.thread_service import ThreadService
 
 router = APIRouter(prefix="/threads", tags=["threads"], include_in_schema=False)
@@ -245,6 +251,84 @@ async def delete_thread(
 # ============================================================================
 # Conversation History Operations (nested under thread)
 # ============================================================================
+
+
+def _run_to_summary(run) -> AgentRunSummary:
+    return AgentRunSummary(
+        run_id=run.id,
+        agent_id=run.agent_id,
+        invoke_index=run.invoke_index,
+        session_id=run.session_id,
+        status=run.status,
+    )
+
+
+@router.post("/{thread_id}/messages", response_model=SendThreadMessageResponse)
+async def send_thread_message(
+    thread_id: str,
+    body: SendThreadMessageRequest,
+    current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Persist a human message on the main timeline and optionally queue agent runs."""
+    chat_service = ThreadService(current_user.tenant_id, db)
+    thread = await chat_service.get_thread(thread_id)
+    if not thread:
+        raise ResourceNotFoundError(f"Thread {thread_id} not found")
+    _assert_user_owns_thread(thread, current_user)
+
+    agent_ids = body.agent_ids if body.agent_ids is not None else [thread.agent_id]
+    if body.agent_ids == []:
+        agent_ids = []
+
+    run_service = ThreadRunService(db, current_user.tenant_id)
+    message_id, runs = await run_service.send_human_and_create_runs(
+        thread_id=thread_id,
+        content=body.content,
+        agent_ids=agent_ids,
+    )
+    return SendThreadMessageResponse(
+        message_id=message_id,
+        thread_id=thread_id,
+        runs=[_run_to_summary(run) for run in runs],
+    )
+
+
+@router.get("/{thread_id}/timeline", response_model=ThreadTimelineResponse)
+async def get_thread_timeline(
+    thread_id: str,
+    current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Trigger-anchored main timeline (human + promoted AI)."""
+    chat_service = ThreadService(current_user.tenant_id, db)
+    thread = await chat_service.get_thread(thread_id)
+    if not thread:
+        raise ResourceNotFoundError(f"Thread {thread_id} not found")
+    _assert_user_owns_thread(thread, current_user)
+
+    messages = await chat_service.get_main_timeline_messages(thread)
+    return ThreadTimelineResponse(thread_id=thread_id, messages=messages)
+
+
+@router.get("/{thread_id}/messages/{trigger_message_id}/runs", response_model=TriggerRunsResponse)
+async def list_runs_for_trigger(
+    thread_id: str,
+    trigger_message_id: str,
+    current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
+    db: AsyncSession = Depends(get_db),
+):
+    chat_service = ThreadService(current_user.tenant_id, db)
+    thread = await chat_service.get_thread(thread_id)
+    if not thread:
+        raise ResourceNotFoundError(f"Thread {thread_id} not found")
+    _assert_user_owns_thread(thread, current_user)
+
+    runs = await chat_service.list_runs_for_trigger(thread_id, trigger_message_id)
+    return TriggerRunsResponse(
+        trigger_message_id=trigger_message_id,
+        runs=[_run_to_summary(run) for run in runs],
+    )
 
 
 @router.get("/{thread_id}/messages", response_model=ConversationHistoryResponse)

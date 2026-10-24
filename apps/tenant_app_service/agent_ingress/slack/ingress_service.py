@@ -39,7 +39,6 @@ from apps.tenant_app_service.agent_ingress.slack.messages import (
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.token import JwtTokenIssuer
-from apps.tenant_app_service.chat.message_repository import MessageRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.thread_service import ThreadService
 
@@ -176,9 +175,8 @@ class SlackIngressService:
         reply_text = ensure_slack_reply_text(reply_text)
         settings = get_settings()
 
-        message_repo = MessageRepository(self.db)
         message_id = await resolve_feedback_message_id(
-            message_repo,
+            self.db,
             message_id=message_id,
             session_id=session_id,
             thread_id=thread_id,
@@ -190,13 +188,12 @@ class SlackIngressService:
             text=reply_text,
             message_id=message_id,
             thread_ts=reply_thread_ts,
-            message_repo=message_repo,
+            db_session=self.db,
             update_ts=thinking_ts,
             portal_origin=settings.PORTAL_ORIGIN,
             api_origin=settings.TENANT_APP_API_ORIGIN,
             slack_user_id=event.user_id,
             channel_type=event.channel_type,
-            db_session=self.db,
             tenant_id=tenant_id,
             requester_user_id=user_dto.id,
             requester_role=user_dto.role,

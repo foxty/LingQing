@@ -366,9 +366,9 @@ async def slack_test_setup(pg_async_db_session: AsyncSession, monkeypatch):
     from apps.shared.db import session as _db_session_module
 
     _db_session_module.app_db_session = fake_app_db_session
-    from apps.tenant_app_service.chat import turn_sessions as turn_sessions_module
+    from apps.tenant_app_service.chat.application import turn_flow as turn_flow_module
 
-    turn_sessions_module.app_db_session = fake_app_db_session
+    turn_flow_module.app_db_session = fake_app_db_session
 
     from apps.tenant_app_service.agent_ingress.slack import chat_turn_runner as chat_turn_runner_module
     from tests.slack.chat_turn_mock import instant_slack_chat_turn_runner
@@ -506,13 +506,13 @@ async def slack_test_setup(pg_async_db_session: AsyncSession, monkeypatch):
         yield setup
 
     app.dependency_overrides.clear()
-    from apps.tenant_app_service.chat import turn_sessions as turn_sessions_module
+    from apps.tenant_app_service.chat.application import turn_flow as turn_flow_module
 
     chat_turn_runner_module.reset_slack_chat_turn_runner()
 
     if original_app_db_session is not None:
         _db_session_module.app_db_session = original_app_db_session
-        turn_sessions_module.app_db_session = original_app_db_session
+        turn_flow_module.app_db_session = original_app_db_session
 
 
 @pytest_asyncio.fixture

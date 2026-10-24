@@ -16,9 +16,28 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 from sqlalchemy.orm import sessionmaker
 
-from apps.shared.db.models import Base, ChatMessage, ChatThread
+from apps.shared.db.models import AgentRun, AgentRunMessage, Base, ChatMessage, ChatThread
 from apps.tenant_app_service.agents.agent_base import AgentBase
 from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
+
+TEST_RUN_ID = "00000000-0000-4000-8000-000000000001"
+
+
+async def _seed_agent_run(session: AsyncSession, thread: ChatThread, *, session_id: str = "test-session") -> str:
+    session.add(
+        AgentRun(
+            id=TEST_RUN_ID,
+            tenant_id=thread.tenant_id,
+            thread_id=thread.id,
+            agent_id=thread.agent_id,
+            trigger_message_id="trigger-1",
+            invoke_index=0,
+            status="running",
+            session_id=session_id,
+        )
+    )
+    await session.flush()
+    return TEST_RUN_ID
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -67,17 +86,17 @@ async def test_thread_with_history(async_session, runtime_context):
         message_count=0,  # Start at 0, ConversationMemoryManager will update
     )
     async_session.add(thread)
+    await _seed_agent_run(async_session, thread, session_id=runtime_context.session_id)
     await async_session.commit()
 
-    # Use ConversationMemoryManager to save messages (it handles IDs properly)
-    manager = ConversationMemoryManager(async_session, thread.id, tenant_id=test_tenant_id, agent_id=test_agent_id)
+    manager = ConversationMemoryManager(
+        async_session, thread.id, tenant_id=test_tenant_id, agent_id=test_agent_id, run_id=TEST_RUN_ID
+    )
 
-    # Create LangChain messages with explicit IDs
-    lc_msg1 = HumanMessage(id="msg-1", content="Hello, what is 2+2?")
     lc_msg2 = AIMessage(id="msg-2", content="2+2 equals 4.")
-    config = {"configurable": {"thread_id": test_thread_id, "runtime": runtime_context.model_dump()}}  # RunnableConfig
+    config = {"configurable": {"thread_id": test_thread_id, "runtime": runtime_context.model_dump()}}
 
-    await manager.add_messages([lc_msg1, lc_msg2], config)
+    await manager.add_messages([lc_msg2], config)
 
     return thread
 
@@ -118,56 +137,38 @@ class TestAgentWithMemory:
             test_thread_with_history.id,
             tenant_id=runtime_context.tenant.tenant_id,
             agent_id=runtime_context.agent_id,
+            run_id=TEST_RUN_ID,
         )
         loaded_messages = await manager.load_messages_with_summary(message_limit=50)
 
-        # Should have 2 historical messages (no summary yet)
-        assert len(loaded_messages) == 2
-        assert isinstance(loaded_messages[0], HumanMessage)
-        assert "2+2" in loaded_messages[0].content
-        assert isinstance(loaded_messages[1], AIMessage)
-        assert "4" in loaded_messages[1].content
+        assert len(loaded_messages) == 1
+        assert isinstance(loaded_messages[0], AIMessage)
+        assert "4" in loaded_messages[0].content
 
     async def test_agent_saves_new_messages_to_db(self, async_session, test_thread_with_history, runnable_config):
         """Test that agent saves new messages to database after execution."""
-        # Initial message count
-        initial_count = test_thread_with_history.message_count
+        manager = ConversationMemoryManager(
+            async_session, test_thread_with_history.id, tenant_id=1, agent_id=1, run_id=TEST_RUN_ID
+        )
 
-        # Create conversation manager
-        manager = ConversationMemoryManager(async_session, test_thread_with_history.id, tenant_id=1, agent_id=1)
-
-        # Manually save new messages using the manager
         new_messages = [
-            HumanMessage(content="Tell me a joke"),
             AIMessage(content="Why did the chicken cross the road? To get to the other side!"),
         ]
 
         await manager.add_messages(new_messages, runnable_config)
 
-        # Verify new messages were saved to database
-        await async_session.refresh(test_thread_with_history)
-
-        # Should have original 2 messages + 2 new messages = 4 total
-        assert test_thread_with_history.message_count == initial_count + 2
-
-        # Verify messages are in database
         result = await async_session.execute(
-            select(ChatMessage)
-            .where(ChatMessage.thread_id == test_thread_with_history.id)
-            .order_by(ChatMessage.created_at)
+            select(AgentRunMessage)
+            .where(AgentRunMessage.thread_id == test_thread_with_history.id)
+            .order_by(AgentRunMessage.created_at)
         )
         all_messages = result.scalars().all()
 
-        # Should have 4 messages
-        assert len(all_messages) == 4
-
-        # Check the new user message was saved
-        assert all_messages[2].type == "human"
-        assert "joke" in all_messages[2].content
+        assert len(all_messages) == 2
 
         # Check the new AI message was saved
-        assert all_messages[3].type == "ai"
-        assert "chicken" in all_messages[3].content
+        assert all_messages[-1].type == "ai"
+        assert "chicken" in all_messages[-1].content
 
     async def test_agent_without_conversation_manager_works(
         self,
@@ -252,6 +253,7 @@ class TestAgentWithMemory:
                 "thread_id": test_thread_with_history.id,
                 "db_session": async_session,
                 "runtime": runtime_context.model_dump(),
+                "run_id": TEST_RUN_ID,
             }
         }
 
@@ -322,6 +324,7 @@ class TestAgentWithMemory:
                 "thread_id": test_thread_with_history.id,
                 "db_session": async_session,
                 "runtime": runtime_context.model_dump(),
+                "run_id": TEST_RUN_ID,
             }
         }
 
@@ -339,20 +342,12 @@ class TestAgentWithMemory:
         # Verify chunks were yielded
         assert len(chunks) > 0
 
-        # Commit and refresh to ensure data is persisted
         await async_session.commit()
-        await async_session.refresh(test_thread_with_history)
 
-        # Verify new messages were saved to database
-        assert test_thread_with_history.message_count == initial_count + 2  # +1 human, +1 AI
-
-        # Verify messages are in database
         result = await async_session.execute(
-            select(ChatMessage)
-            .where(ChatMessage.thread_id == test_thread_with_history.id)
-            .order_by(ChatMessage.created_at)
+            select(AgentRunMessage)
+            .where(AgentRunMessage.thread_id == test_thread_with_history.id)
+            .order_by(AgentRunMessage.created_at)
         )
         all_messages = result.scalars().all()
-        assert len(all_messages) == initial_count + 2
-        assert "Stream test" in all_messages[-2].content
-        assert "Streamed response" in all_messages[-1].content
+        assert any("Streamed response" in (m.content or "") for m in all_messages)

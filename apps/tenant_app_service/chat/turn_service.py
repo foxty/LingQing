@@ -1,4 +1,9 @@
-"""Agent turn execution: prepare, complete, streaming, headless runs."""
+"""Session-scoped chat turn executor (one ``AsyncSession`` per instance).
+
+**Role:** Implement prepare / invoke / complete for a *single* DB transaction.
+**Callers:** ``chat.application.turn_flow`` (production), or tests with a mock session.
+**Must not:** Open ``app_db_session`` for multi-step HTTP/SSE flows — use application layer.
+"""
 
 from __future__ import annotations
 
@@ -16,6 +21,8 @@ from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.context import create_thread_id, extract_runtime_context
 from apps.tenant_app_service.agents.metrics import session_tracker
 from apps.tenant_app_service.chat.adapters import db_artifact_to_domain
+from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
+from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse, Message
 from apps.tenant_app_service.chat.service_base import (
     DEFAULT_HISTORY_MESSAGE_LIMIT,
@@ -24,20 +31,19 @@ from apps.tenant_app_service.chat.service_base import (
 )
 from apps.tenant_app_service.chat.session_summary_manager import SessionSummaryManager
 from apps.tenant_app_service.chat.streaming import (
-    SSE_HEARTBEAT_INTERVAL_SECONDS,
-    SSE_HEARTBEAT_PAYLOAD,
     PreparedChatStream,
     format_user_stream_error,
     user_stream_error_sse_payload,
 )
+from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.chat.thread_summary_manager import ThreadSummaryManager
-from apps.tenant_app_service.chat.thread_turn import guard_thread_turn_start
+from apps.tenant_app_service.chat.turn_admission import guard_thread_turn_start
 from apps.tenant_app_service.tenant.domain import TenantDomain
 
 
 class ChatTurnService(ChatServiceBase):
-    """Prepare/complete agent turns and SSE streaming."""
+    """Prepare, invoke, and complete agent turns within one database session."""
 
     def _convert_to_langchain_messages(self, messages: list) -> list:
         """Convert SimpleMessage (from ChatRequest) to LangChain messages.
@@ -67,7 +73,7 @@ class ChatTurnService(ChatServiceBase):
         task_name: str | None = None,
     ) -> ChatResponse:
         """Run a chat turn on behalf of a user without an HTTP request."""
-        from apps.tenant_app_service.chat.headless_turn import run_headless_chat_turn
+        from apps.tenant_app_service.chat.application import run_headless_chat_turn
 
         return await run_headless_chat_turn(
             self.tenant_id,
@@ -85,7 +91,7 @@ class ChatTurnService(ChatServiceBase):
 
     async def chat(self, request: ChatRequest, current_user: UserDTO, access_token: str | None = None) -> ChatResponse:
         """Handle non-streaming chat (prepare + complete via short DB sessions)."""
-        from apps.tenant_app_service.chat.turn_sessions import run_non_stream_chat_turn
+        from apps.tenant_app_service.chat.application.turn_flow import run_non_stream_chat_turn
 
         return await run_non_stream_chat_turn(
             self.tenant_id,
@@ -215,6 +221,9 @@ class ChatTurnService(ChatServiceBase):
         access_token: str | None = None,
         db_session: AsyncSession | None = None,
         capability_profile=None,
+        run_id: str | None = None,
+        trigger_message_id: str | None = None,
+        invoke_index: int = 0,
     ) -> dict:
         """Build configuration for agent invocation.
 
@@ -281,6 +290,9 @@ class ChatTurnService(ChatServiceBase):
                 # PENDING ToolMessage, and tool_executor._handle_hitl_gate to use the
                 # known proposal_id directly (avoids arg-hash drift from LLM re-generation).
                 **(({"hitl_resume": hitl_resume}) if hitl_resume else {}),
+                **({"run_id": run_id} if run_id else {}),
+                **({"trigger_message_id": trigger_message_id} if trigger_message_id else {}),
+                "invoke_index": invoke_index,
             },
             "recursion_limit": 999,  # Safety net, should be higher than MAX_ITERATIONS
         }
@@ -485,6 +497,29 @@ class ChatTurnService(ChatServiceBase):
                 request.thread_id,
             )
 
+    async def _reconcile_active_runs_before_new_turn(self, thread_id: str, agent_id: int) -> None:
+        """Close orphan agent runs so a new user message is not blocked after terminal HITL."""
+        from datetime import UTC, datetime
+
+        from apps.tenant_app_service.chat.session_domain import is_stale_running_session
+        from apps.tenant_app_service.hitl.repository import HitlApprovalRepository
+
+        run_repo = AgentRunRepository(self.db)
+        hitl_repo = HitlApprovalRepository(self.db)
+        pending = await hitl_repo.get_latest_pending_by_thread(self.tenant_id, thread_id)
+        pending_session_id = pending.session_id if pending else None
+        now = datetime.now(UTC)
+
+        for run in await run_repo.list_active_for_thread_agent(thread_id, agent_id):
+            if pending_session_id and run.session_id == pending_session_id:
+                continue
+            if run.status == AgentRunStatus.AWAITING_HITL or is_stale_running_session(run.created_at, now=now):
+                await run_repo.set_status(
+                    run.id,
+                    status=AgentRunStatus.COMPLETED,
+                    completed_at=now,
+                )
+
     def _build_initial_agent_messages(self, lc_messages: list, request: ChatRequest) -> list:
         """Build agent initial state messages.
 
@@ -495,36 +530,6 @@ class ChatTurnService(ChatServiceBase):
         if self._is_hitl_continuation(request):
             return lc_messages
         return [message for message in lc_messages if isinstance(message, SystemMessage)]
-
-    async def _persist_incoming_human_message(
-        self,
-        *,
-        lc_messages: list,
-        config: dict,
-        thread_id: str,
-    ) -> None:
-        """Persist the incoming human message before the agent starts."""
-        from apps.tenant_app_service.agents.memory.conversation_memory_manager import (
-            ConversationMemoryManager,
-        )
-
-        human_messages = [message for message in lc_messages if isinstance(message, HumanMessage)]
-        if not human_messages:
-            return
-
-        runtime = extract_runtime_context(config)
-        manager = ConversationMemoryManager(
-            db_session=self.db,
-            thread_id=thread_id,
-            tenant_id=self.tenant_id,
-            agent_id=runtime.agent_id,
-        )
-        await manager.add_messages(human_messages, config, deduplicate=True)
-        self.logger.info(
-            "Persisted incoming human message for thread %s session %s",
-            thread_id,
-            runtime.session_id,
-        )
 
     @staticmethod
     def _stream_event_to_sse(event: dict) -> str | None:
@@ -568,20 +573,12 @@ class ChatTurnService(ChatServiceBase):
         agent_name: str,
         access_token: str | None,
         initial_messages: list,
+        run_id: str | None = None,
+        trigger_message_id: str | None = None,
+        invoke_index: int = 0,
     ) -> AsyncIterator[str]:
         """Execute one streaming turn and yield SSE payload lines."""
         tenant = await self.get_tenant_domain()
-        config = self._build_runtime_config(
-            tenant=tenant,
-            current_user=current_user,
-            request=request,
-            agent_id=agent_id,
-            agent_name=agent_name,
-            session_id=session_id,
-            access_token=access_token,
-            db_session=self.db,
-            capability_profile=None,
-        )
         agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
         config = self._build_runtime_config(
             tenant=tenant,
@@ -593,22 +590,33 @@ class ChatTurnService(ChatServiceBase):
             access_token=access_token,
             db_session=self.db,
             capability_profile=capability_profile,
+            run_id=run_id,
+            trigger_message_id=trigger_message_id,
+            invoke_index=invoke_index,
         )
         runtime_context = extract_runtime_context(config)
 
-        async with session_tracker(runtime_context):
-            async for event in agent_graph.astream_events(
-                {
-                    "messages": initial_messages,
-                    "loop_count": 0,
-                    "tool_call_counts": {},
-                },
-                config=config,
-                version="v2",
-            ):
-                sse_payload = self._stream_event_to_sse(event)
-                if sse_payload:
-                    yield sse_payload
+        if run_id:
+            await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.RUNNING)
+
+        try:
+            async with session_tracker(runtime_context):
+                async for event in agent_graph.astream_events(
+                    {
+                        "messages": initial_messages,
+                        "loop_count": 0,
+                        "tool_call_counts": {},
+                    },
+                    config=config,
+                    version="v2",
+                ):
+                    sse_payload = self._stream_event_to_sse(event)
+                    if sse_payload:
+                        yield sse_payload
+        except Exception:
+            if run_id:
+                await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.FAILED)
+            raise
 
         self.logger.info(
             "Background stream completed for agent %s session %s",
@@ -620,37 +628,31 @@ class ChatTurnService(ChatServiceBase):
             thread_id=request.thread_id or runtime_context.thread_id,
         )
 
-    async def _run_agent_and_emit(
+    async def run_agent_and_emit_prepared(
         self,
         *,
         event_queue: asyncio.Queue[str | None],
-        tenant_id: int,
         request: ChatRequest,
         current_user: UserDTO,
-        session_id: str,
-        agent_id: int,
-        agent_name: str,
-        access_token: str | None,
-        initial_messages: list,
+        prepared: PreparedChatStream,
+        access_token: str | None = None,
     ) -> None:
-        """Run the agent in the background and push SSE payloads into a queue."""
-        from apps.tenant_app_service.chat.turn_sessions import with_chat_service
-
+        """Run a prepared stream turn and push SSE payloads into a queue."""
+        session_id = prepared.session_id
         try:
-
-            async def _stream(service: ChatTurnService) -> None:
-                async for payload in service.run_stream_turn(
-                    request=request,
-                    current_user=current_user,
-                    session_id=session_id,
-                    agent_id=agent_id,
-                    agent_name=agent_name,
-                    access_token=access_token,
-                    initial_messages=initial_messages,
-                ):
-                    await event_queue.put(payload)
-
-            await with_chat_service(tenant_id, _stream)
+            async for payload in self.run_stream_turn(
+                request=request,
+                current_user=current_user,
+                session_id=session_id,
+                agent_id=prepared.agent_id,
+                agent_name=prepared.agent_name,
+                access_token=access_token,
+                initial_messages=prepared.initial_messages,
+                run_id=prepared.run_id,
+                trigger_message_id=prepared.trigger_message_id,
+                invoke_index=prepared.invoke_index,
+            ):
+                await event_queue.put(payload)
         except Exception as exc:
             self.logger.error(
                 "Background agent run failed for session %s: %s",
@@ -690,7 +692,27 @@ class ChatTurnService(ChatServiceBase):
 
         await self._cancel_superseded_hitl_if_needed(request)
 
+        run_id: str | None = None
+        trigger_message_id: str | None = None
+        invoke_index = 0
         session_id = str(uuid4())
+
+        if self._is_hitl_continuation(request) and request.hitl_proposal_id:
+            from apps.tenant_app_service.hitl.repository import HitlApprovalRepository
+
+            approval = await HitlApprovalRepository(self.db).get_by_proposal_id(
+                self.tenant_id, request.hitl_proposal_id
+            )
+            if approval and approval.session_id:
+                session_id = approval.session_id
+                existing_run = await AgentRunRepository(self.db).get_by_session_id(session_id)
+                if existing_run:
+                    run_id = existing_run.id
+                    trigger_message_id = existing_run.trigger_message_id
+                    invoke_index = existing_run.invoke_index
+                    agent_id = existing_run.agent_id
+                    await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.RUNNING)
+
         agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
         lc_messages = self._convert_to_langchain_messages([request.message])
         lc_messages = await self._inject_message_attachments(
@@ -713,6 +735,8 @@ class ChatTurnService(ChatServiceBase):
         )
 
         effective_thread_id = request.thread_id or config["configurable"]["thread_id"]
+        if request.thread_id and not self._is_hitl_continuation(request):
+            await self._reconcile_active_runs_before_new_turn(effective_thread_id, agent_id)
         if request.thread_id:
             await guard_thread_turn_start(
                 self.db,
@@ -722,11 +746,48 @@ class ChatTurnService(ChatServiceBase):
                 skip_busy_check=self._is_hitl_continuation(request),
             )
 
-        if not self._is_hitl_continuation(request):
-            await self._persist_incoming_human_message(
-                lc_messages=lc_messages,
-                config=config,
+        if request.run_id and not self._is_hitl_continuation(request):
+            run_repo = AgentRunRepository(self.db)
+            existing_run = await run_repo.get_run(self.tenant_id, request.run_id)
+            if not existing_run:
+                from apps.shared.core.exceptions import ResourceNotFoundError
+
+                raise ResourceNotFoundError(f"Agent run {request.run_id} not found")
+            run_id = existing_run.id
+            trigger_message_id = existing_run.trigger_message_id
+            invoke_index = existing_run.invoke_index
+            session_id = existing_run.session_id
+            agent_id = existing_run.agent_id
+            await run_repo.set_status(run_id, status=AgentRunStatus.RUNNING)
+        elif effective_thread_id and not self._is_hitl_continuation(request):
+            run_service = ThreadRunService(self.db, self.tenant_id)
+            agent_ids = request.agent_ids if request.agent_ids is not None else [agent_id]
+            _, runs = await run_service.send_human_and_create_runs(
                 thread_id=effective_thread_id,
+                content=request.message.content,
+                agent_ids=agent_ids,
+            )
+            matching = next((r for r in runs if r.agent_id == agent_id), runs[0] if runs else None)
+            if matching:
+                run_id = matching.id
+                trigger_message_id = matching.trigger_message_id
+                invoke_index = matching.invoke_index
+                session_id = matching.session_id
+                await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.RUNNING)
+
+        if run_id:
+            config = self._build_runtime_config(
+                tenant=tenant,
+                current_user=current_user,
+                request=request,
+                agent_id=agent_id,
+                agent_name=agent_graph.get_name(),
+                session_id=session_id,
+                access_token=access_token,
+                capability_profile=capability_profile,
+                run_id=run_id,
+                trigger_message_id=trigger_message_id,
+                invoke_index=invoke_index,
             )
 
         thread_title = await self.create_thread_title_if_1st_message(
@@ -741,6 +802,9 @@ class ChatTurnService(ChatServiceBase):
             agent_name=agent_graph.get_name(),
             initial_messages=self._build_initial_agent_messages(lc_messages, request),
             thread_title=thread_title,
+            run_id=run_id,
+            trigger_message_id=trigger_message_id,
+            invoke_index=invoke_index,
         )
 
     async def prepare_chat_stream(
@@ -783,10 +847,15 @@ class ChatTurnService(ChatServiceBase):
             session_id=session_id,
             access_token=access_token,
             capability_profile=capability_profile,
+            run_id=prepared.run_id,
+            trigger_message_id=prepared.trigger_message_id,
+            invoke_index=prepared.invoke_index,
         )
         runtime_ctx = extract_runtime_context(config)
 
         try:
+            if prepared.run_id:
+                await AgentRunRepository(self.db).set_status(prepared.run_id, status=AgentRunStatus.RUNNING)
             async with session_tracker(runtime_ctx):
                 result = await agent_graph.ainvoke(
                     {
@@ -837,79 +906,9 @@ class ChatTurnService(ChatServiceBase):
             )
             from apps.shared.core.exceptions import InternalServiceError
 
+            if prepared.run_id:
+                await AgentRunRepository(self.db).set_status(prepared.run_id, status=AgentRunStatus.FAILED)
             raise InternalServiceError(f"Error invoking agent: {str(e)}") from e
         finally:
             self.schedule_session_end(session_id=session_id, thread_id=request.thread_id)
 
-    async def iter_prepared_chat_stream(
-        self,
-        request: ChatRequest,
-        current_user: UserDTO,
-        prepared: PreparedChatStream,
-        access_token: str | None = None,
-    ) -> AsyncIterator[str]:
-        """Emit SSE for a prepared turn. Does not use the setup DB session."""
-        event_queue: asyncio.Queue[str | None] = asyncio.Queue()
-        yield f"data: {json.dumps({'type': 'session_started', 'session_id': prepared.session_id})}\n\n"
-        if prepared.thread_title:
-            yield f"data: {json.dumps({'type': 'update_thread_title', 'title': prepared.thread_title})}\n\n"
-
-        asyncio.create_task(
-            self._run_agent_and_emit(
-                event_queue=event_queue,
-                tenant_id=self.tenant_id,
-                request=request,
-                current_user=current_user,
-                session_id=prepared.session_id,
-                agent_id=prepared.agent_id,
-                agent_name=prepared.agent_name,
-                access_token=access_token,
-                initial_messages=prepared.initial_messages,
-            )
-        )
-
-        try:
-            while True:
-                try:
-                    item = await asyncio.wait_for(
-                        event_queue.get(),
-                        timeout=SSE_HEARTBEAT_INTERVAL_SECONDS,
-                    )
-                except TimeoutError:
-                    yield SSE_HEARTBEAT_PAYLOAD
-                    continue
-                if item is None:
-                    break
-                yield item
-        except asyncio.CancelledError:
-            self.logger.info(
-                "SSE client disconnected for session %s; agent continues in background",
-                prepared.session_id,
-            )
-            return
-
-    async def chat_stream(
-        self,
-        request: ChatRequest,
-        current_user: UserDTO,
-        access_token: str | None = None,
-    ) -> AsyncIterator[str]:
-        """Handle streaming chat request with durable background agent execution."""
-        session_id = ""
-        try:
-            prepared = await self.prepare_chat_stream(request, current_user, access_token)
-            session_id = prepared.session_id
-            async for item in self.iter_prepared_chat_stream(request, current_user, prepared, access_token):
-                yield item
-        except asyncio.CancelledError:
-            raise
-        except Exception as e:
-            error_message = str(e)
-            self.logger.error(
-                f"Error streaming from agent {request.agent_id} for tenant {self.tenant_id}: {error_message}",
-                exc_info=True,
-            )
-            error_data = user_stream_error_sse_payload(e)
-            yield f"data: {json.dumps(error_data)}\n\n"
-            done_data = {"type": "done", "session_id": session_id}
-            yield f"data: {json.dumps(done_data)}\n\n"

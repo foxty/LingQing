@@ -27,10 +27,10 @@ def chat_service():
         return_value=MagicMock(config=MagicMock(to_dict=lambda: {})),
     )
     service._build_runtime_config = MagicMock(return_value={"configurable": {"thread_id": "1_10_-1_abc"}})
-    service._persist_incoming_human_message = AsyncMock()
     service.create_thread_title_if_1st_message = AsyncMock(return_value=None)
     service._build_initial_agent_messages = lambda lc_messages, request: lc_messages
     service._is_hitl_continuation = lambda request: False
+    service._reconcile_active_runs_before_new_turn = AsyncMock()
     return service
 
 
@@ -57,11 +57,17 @@ def chat_request():
 
 @pytest.mark.asyncio
 async def test_prepare_chat_turn_raises_thread_busy(chat_service, chat_request, current_user):
-    with patch(
-        "apps.tenant_app_service.chat.turn_service.guard_thread_turn_start",
-        AsyncMock(side_effect=ThreadBusyError("busy", details={"code": "THREAD_BUSY"})),
+    with (
+        patch(
+            "apps.tenant_app_service.chat.turn_service.guard_thread_turn_start",
+            AsyncMock(side_effect=ThreadBusyError("busy", details={"code": "THREAD_BUSY"})),
+        ),
+        patch(
+            "apps.tenant_app_service.chat.turn_service.ThreadRunService.send_human_and_create_runs",
+            AsyncMock(),
+        ) as send_mock,
     ):
         with pytest.raises(ThreadBusyError):
             await chat_service.prepare_chat_turn(chat_request, current_user)
 
-    chat_service._persist_incoming_human_message.assert_not_awaited()
+    send_mock.assert_not_called()
