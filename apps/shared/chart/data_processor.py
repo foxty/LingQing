@@ -90,6 +90,29 @@ def format_value_labels(values: List[Any]) -> List[str]:
     return [format_value_label(v) for v in values]
 
 
+def infer_axis_tickformat(values: List[float]) -> str:
+    """Plotly y-axis tickformat from value magnitude (readable defaults for reports)."""
+    if not values:
+        return ",.2f"
+    abs_max = max(abs(v) for v in values)
+    if abs_max >= 1_000_000:
+        return "~s"
+    if abs_max >= 10_000:
+        return ",.0f"
+    if abs_max >= 100:
+        return ",.1f"
+    return ",.2f"
+
+
+def infer_percent_tickformat(values: List[float]) -> str:
+    """Tick format when axis represents rates (0–1) or percentages (0–100)."""
+    if not values:
+        return ".0%"
+    if max(abs(v) for v in values) <= 1.0:
+        return ".0%"
+    return ".1f"
+
+
 def handle_duplicate_x_values(x_values: List[Any]) -> List[Any]:
     """Handle duplicate x-axis values by appending indices to make them unique.
 

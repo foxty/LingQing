@@ -62,3 +62,20 @@ class TestRenderChartSVGGeneration:
                 x_key="x",
                 y_key="y",
             )
+
+    def test_render_waterfall_returns_bytes(self):
+        data = (
+            '[{"step":"Start","amount":100,"kind":"absolute"},'
+            '{"step":"Add","amount":20,"kind":"relative"}]'
+        )
+        result = render_chart(
+            chart_type="waterfall",
+            data=data,
+            title="Bridge",
+            x_key="step",
+            y_key="amount",
+            measure_key="kind",
+        )
+        assert result.png_bytes.startswith(b"\x89PNG\r\n\x1a\n")
+        svg_content = result.svg_bytes.decode("utf-8")
+        assert "Bridge" in svg_content

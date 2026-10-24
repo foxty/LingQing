@@ -20,12 +20,14 @@ from apps.shared.chart.data_processor import (
     ensure_numeric_series,
     format_value_labels,
     handle_duplicate_x_values,
+    infer_axis_tickformat,
     numeric_value_column_names,
     pivot_long_to_wide,
     plotly_xaxis_type_kwargs,
 )
+from apps.shared.chart.enhancements import apply_chart_enhancements, parse_json_list
 from apps.shared.chart.normalize import normalize_plotly_chart_type
-from apps.shared.chart.types import ChartRenderResult, PlotlyChartType
+from apps.shared.chart.types import ChartRenderResult, DistributionChartType, PlotlyChartType
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -68,9 +70,13 @@ def _series_key_not_found_message(
 # Kaleido PNG scale for the companion raster written beside each SVG.
 _CHART_PNG_EXPORT_SCALE = 2
 _TITLE_WRAP_CHARS = 52
+_CHART_FONT = dict(family="Arial, sans-serif", size=12, color="#2c3e50")
+_CHART_ACCENT = "#667eea"
+_GRID_COLOR = "rgba(200, 200, 200, 0.2)"
+_AXIS_LINE_COLOR = "rgba(200, 200, 200, 0.5)"
 
 
-def _build_title_layout(title: str, *, has_legend: bool = False) -> tuple[dict, int]:
+def _build_title_layout(title: str, *, subtitle: str | None = None, has_legend: bool = False) -> tuple[dict, int]:
     """Wrap long titles and reserve enough top margin for Kaleido export."""
     text = title.strip()
     words = text.split()
@@ -90,6 +96,9 @@ def _build_title_layout(title: str, *, has_legend: bool = False) -> tuple[dict, 
         lines.append(" ".join(current))
     if len(lines) > 1:
         text = "<br>".join(lines)
+
+    if subtitle and subtitle.strip():
+        text = f"{text}<br><sub>{subtitle.strip()}</sub>"
 
     plain_len = len(title)
     font_size = 22
@@ -122,6 +131,48 @@ def _xaxis(title_text: str, x_values: List[Any] | None, **extra: Any) -> dict:
     return axis
 
 
+def _x_tick_layout_kwargs(x_values: List[Any]) -> dict[str, Any]:
+    """Category/date tick angle and font for readable report charts."""
+    if not x_values:
+        return {"tickangle": 0}
+    labels = [str(v) for v in x_values]
+    max_len = max(len(label) for label in labels)
+    count = len(labels)
+    if max_len > 14 or count > 6:
+        tickfont: dict[str, Any] = dict(size=11)
+        if max_len > 22:
+            tickfont["size"] = 10
+        return {"tickangle": -45, "tickfont": tickfont}
+    return {"tickangle": 0, "tickfont": dict(size=11)}
+
+
+def _layout_bottom_margin(x_values: List[Any], tickangle: int) -> int:
+    if tickangle != 0:
+        labels = [str(v) for v in x_values]
+        max_len = max((len(label) for label in labels), default=0)
+        return 120 + min(max_len * 2, 80)
+    return 100
+
+
+def _yaxis_layout(y_label: str, y_values: List[float] | None = None, **extra: Any) -> dict[str, Any]:
+    tickformat = infer_axis_tickformat(y_values or [])
+    axis: dict[str, Any] = {
+        "title": dict(text=f"<b>{y_label}</b>", font=dict(size=14)),
+        "showgrid": True,
+        "gridcolor": _GRID_COLOR,
+        "linecolor": _AXIS_LINE_COLOR,
+        "linewidth": 1,
+        "mirror": True,
+        "tickfont": dict(size=11),
+        "tickformat": tickformat,
+        "zeroline": True,
+        "zerolinecolor": "rgba(200, 200, 200, 0.3)",
+        "automargin": True,
+        **extra,
+    }
+    return axis
+
+
 def render_chart(
     chart_type: PlotlyChartType,
     data: str,
@@ -134,6 +185,11 @@ def render_chart(
     series_keys: List[str] | None = None,
     z_key: str | None = None,
     stacked: bool = False,
+    subtitle: str | None = None,
+    reference_lines_json: str | None = None,
+    annotations_json: str | None = None,
+    y_axis_percent: bool = False,
+    measure_key: str | None = None,
 ) -> ChartRenderResult:
     r"""Render chart from JSON data and return SVG + PNG bytes.
 
@@ -160,6 +216,9 @@ def render_chart(
     if not data_list:
         raise ValueError("No data provided for visualization")
 
+    reference_lines = parse_json_list(reference_lines_json, field_name="reference_lines_json")
+    annotations = parse_json_list(annotations_json, field_name="annotations_json")
+
     # Resolve series_key (single column name) into series_keys (list of distinct values).
     # series_key is the preferred API for long-format data; series_keys is the advanced form.
     if series_key and not series_keys:
@@ -167,16 +226,32 @@ def render_chart(
             raise ValueError(_series_key_not_found_message(series_key, data_list, x_key))
         # Scatter with series_key uses categorical coloring, not a pivot.
         if chart_type == "scatter":
-            return _render_scatter_categorical(
+            keys = list(data_list[0].keys())
+            resolved_x = x_key or keys[0]
+            resolved_y = y_key or (keys[1] if len(keys) > 1 else keys[0])
+            fig = _create_scatter_categorical_figure(
                 data_list,
-                x_key,
-                y_key,
+                resolved_x,
+                resolved_y,
                 series_key,
                 x_label,
                 y_label,
                 title,
                 "plotly_white",
+                subtitle=subtitle,
             )
+            y_numeric_samples = [
+                float(v) for row in data_list if (v := coerce_numeric_value(row[resolved_y])) is not None
+            ]
+            apply_chart_enhancements(
+                fig,
+                subtitle=None,
+                reference_lines=reference_lines,
+                annotations=annotations,
+                y_axis_percent=y_axis_percent,
+                y_numeric_samples=y_numeric_samples,
+            )
+            return _plotly_figure_to_result(fig, title)
         # All other types: extract distinct values in order of first appearance.
         seen: dict = {}
         for row in data_list:
@@ -186,9 +261,28 @@ def render_chart(
         series_keys = list(seen.keys())
 
     internal_chart_type = normalize_plotly_chart_type(chart_type, series_keys, stacked)
+    y_numeric_samples: list[float] | None = None
 
-    if internal_chart_type not in ["grouped_bar", "stacked_bar", "multi_line", "multi_area", "heatmap"]:
-        if not x_key or not y_key:
+    if internal_chart_type in ("box", "violin"):
+        keys = list(data_list[0].keys())
+        if not y_key:
+            y_key = keys[-1] if len(keys) >= 2 else keys[0]
+        _validate_data_keys(data_list, internal_chart_type, x_key, y_key, None, None)
+        fig = _create_distribution_figure(
+            internal_chart_type,
+            data_list,
+            x_key,
+            y_key,
+            x_label or (x_key or ""),
+            y_label or y_key,
+            title,
+            subtitle,
+        )
+        y_numeric_samples = [
+            float(v) for row in data_list if (v := coerce_numeric_value(row[y_key])) is not None
+        ]
+    elif internal_chart_type not in ["grouped_bar", "stacked_bar", "multi_line", "multi_area", "heatmap"]:
+        if not y_key or (internal_chart_type != "waterfall" and not x_key):
             keys = list(data_list[0].keys())
             x_key = x_key or keys[0]
             y_key = y_key or (keys[1] if len(keys) > 1 else keys[0])
@@ -198,7 +292,16 @@ def render_chart(
         x_values = [row[x_key] for row in data_list]
         y_values = [row[y_key] for row in data_list]
 
-        if internal_chart_type in ["bar", "line", "area", "pie", "scatter"]:
+        numeric_types = [
+            "bar",
+            "horizontal_bar",
+            "line",
+            "area",
+            "pie",
+            "scatter",
+            "waterfall",
+        ]
+        if internal_chart_type in numeric_types:
             y_values = ensure_numeric_series(y_values, internal_chart_type, field_name=y_key)
 
         x_values = handle_duplicate_x_values(x_values)
@@ -206,6 +309,19 @@ def render_chart(
         resolved_x_label = x_label or x_key
         resolved_y_label = y_label or y_key
         series_data = None
+        y_numeric_samples = [float(v) for v in y_values]
+        fig = _create_single_series_figure(
+            internal_chart_type,
+            x_values,
+            y_values,
+            resolved_x_label,
+            resolved_y_label,
+            title,
+            "plotly_white",
+            subtitle=subtitle,
+            data_list=data_list,
+            measure_key=measure_key,
+        )
     else:
         if internal_chart_type == "heatmap":
             _validate_data_keys(data_list, internal_chart_type, x_key, y_key, None, z_key)
@@ -225,16 +341,25 @@ def render_chart(
             "series_keys": series_keys,
             "z_key": z_key,
         }
+        fig = _create_plotly_figure(
+            internal_chart_type,
+            x_values,
+            y_values,
+            resolved_x_label,
+            resolved_y_label,
+            title,
+            "plotly_white",
+            series_data,
+            subtitle=subtitle,
+        )
 
-    fig = _create_plotly_figure(
-        internal_chart_type,
-        x_values,
-        y_values,
-        resolved_x_label,
-        resolved_y_label,
-        title,
-        "plotly_white",
-        series_data,
+    apply_chart_enhancements(
+        fig,
+        subtitle=None,
+        reference_lines=reference_lines,
+        annotations=annotations,
+        y_axis_percent=y_axis_percent,
+        y_numeric_samples=y_numeric_samples,
     )
     return _plotly_figure_to_result(fig, title)
 
@@ -358,16 +483,80 @@ def _create_plotly_figure(
     title: str,
     theme: str,
     series_data: Dict[str, Any] | None = None,
+    subtitle: str | None = None,
 ) -> go.Figure:
     """Route to the correct figure builder based on chart type."""
     if chart_type in ["grouped_bar", "stacked_bar", "multi_line"]:
-        return _create_multi_series_figure(chart_type, x_label, y_label, title, theme, series_data)
+        return _create_multi_series_figure(chart_type, x_label, y_label, title, theme, series_data, subtitle=subtitle)
     elif chart_type == "multi_area":
-        return _create_multi_area_figure(x_label, y_label, title, theme, series_data)
+        return _create_multi_area_figure(x_label, y_label, title, theme, series_data, subtitle=subtitle)
     elif chart_type == "heatmap":
-        return _create_heatmap_figure(x_label, y_label, title, theme, series_data)
+        return _create_heatmap_figure(x_label, y_label, title, theme, series_data, subtitle=subtitle)
     else:
-        return _create_single_series_figure(chart_type, x_values, y_values, x_label, y_label, title, theme)
+        return _create_single_series_figure(
+            chart_type,
+            x_values or [],
+            y_values or [],
+            x_label,
+            y_label,
+            title,
+            theme,
+            subtitle=subtitle,
+        )
+
+
+def _create_distribution_figure(
+    chart_type: DistributionChartType,
+    data_list: List[Dict[str, Any]],
+    x_key: str | None,
+    y_key: str,
+    x_label: str,
+    y_label: str,
+    title: str,
+    subtitle: str | None,
+) -> go.Figure:
+    """Box or violin plot of ``y_key`` values — spread, quartiles, and outliers.
+
+    When ``x_key`` is set, one trace per category (compare distributions across groups).
+    When ``x_key`` is omitted, a single trace pools all rows (one overall distribution).
+    """
+    trace_type = go.Box if chart_type == "box" else go.Violin
+    outlier_kw = (
+        {"boxpoints": "outliers"} if chart_type == "box" else {"points": "outliers", "box_visible": True}
+    )
+    fig = go.Figure()
+    if x_key and x_key in data_list[0]:
+        categories: list[Any] = []
+        seen: set[str] = set()
+        for row in data_list:
+            cat = row[x_key]
+            key = str(cat)
+            if key not in seen:
+                seen.add(key)
+                categories.append(cat)
+        for cat in categories:
+            vals = ensure_numeric_series(
+                [row[y_key] for row in data_list if row[x_key] == cat],
+                chart_type,
+                field_name=y_key,
+            )
+            fig.add_trace(trace_type(y=vals, name=str(cat), **outlier_kw))
+    else:
+        vals = ensure_numeric_series([row[y_key] for row in data_list], chart_type, field_name=y_key)
+        fig.add_trace(trace_type(y=vals, name=y_label, **outlier_kw))
+
+    title_layout, top_margin = _build_title_layout(title, subtitle=subtitle)
+    fig.update_layout(
+        title=title_layout,
+        yaxis=_yaxis_layout(y_label),
+        template="plotly_white",
+        paper_bgcolor="white",
+        margin=dict(l=80, r=40, t=top_margin, b=80),
+        height=600,
+        width=960,
+        font=_CHART_FONT,
+    )
+    return fig
 
 
 def _create_single_series_figure(
@@ -378,13 +567,57 @@ def _create_single_series_figure(
     y_label: str,
     title: str,
     theme: str,
+    subtitle: str | None = None,
+    data_list: List[Dict[str, Any]] | None = None,
+    measure_key: str | None = None,
 ) -> go.Figure:
-    """Create single-series charts: bar, line, area, pie, scatter."""
+    """Create single-series charts: bar, line, area, pie, scatter, waterfall, horizontal_bar."""
     num_points = len(y_values)
     colors_gradient = _generate_colors(num_points, "gradient")
     colors_vibrant = _generate_colors(num_points, "vibrant")
 
-    if chart_type == "bar":
+    if chart_type == "horizontal_bar":
+        bar_colors = colors_gradient[0] if num_points == 1 else colors_gradient
+        fig = go.Figure(
+            data=[
+                go.Bar(
+                    x=y_values,
+                    y=x_values,
+                    orientation="h",
+                    marker=dict(color=bar_colors, line=dict(color="rgba(0,0,0,0.1)", width=1.5)),
+                    text=format_value_labels(y_values),
+                    textposition="outside",
+                    cliponaxis=False,
+                    hovertemplate=(f"<b>%{{y}}</b><br>{y_label}: %{{x:,.2f}}<br><extra></extra>"),
+                )
+            ]
+        )
+
+    elif chart_type == "waterfall":
+        measures: list[str] = []
+        if measure_key and data_list and measure_key in data_list[0]:
+            for row in data_list:
+                raw = str(row.get(measure_key, "relative")).lower()
+                measures.append(raw if raw in ("relative", "absolute", "total") else "relative")
+        else:
+            measures = ["relative"] * len(x_values)
+            if x_values and str(x_values[-1]).strip().lower() in ("total", "sum", "net"):
+                measures[-1] = "total"
+        fig = go.Figure(
+            go.Waterfall(
+                x=x_values,
+                y=y_values,
+                measure=measures,
+                text=format_value_labels(y_values),
+                textposition="outside",
+                connector={"line": {"color": "#667eea"}},
+                increasing={"marker": {"color": "#11998e"}},
+                decreasing={"marker": {"color": "#fa709a"}},
+                totals={"marker": {"color": "#667eea"}},
+            )
+        )
+
+    elif chart_type == "bar":
         bar_colors = colors_gradient[0] if num_points == 1 else colors_gradient
         fig = go.Figure(
             data=[
@@ -489,43 +722,60 @@ def _create_single_series_figure(
     else:
         raise ValueError(f"Unsupported chart type: {chart_type}")
 
-    title_layout, top_margin = _build_title_layout(title)
+    title_layout, top_margin = _build_title_layout(title, subtitle=subtitle)
+    y_samples = [float(v) for v in y_values if coerce_numeric_value(v) is not None]
+
+    if chart_type == "horizontal_bar":
+        y_tick = _x_tick_layout_kwargs(x_values)
+        tickangle = int(y_tick.get("tickangle", 0))
+        fig.update_layout(
+            title=title_layout,
+            xaxis=_yaxis_layout(x_label or y_label, y_samples),
+            yaxis=_xaxis(y_label, x_values, showgrid=False, **y_tick),
+            template=theme,
+            hovermode="closest",
+            showlegend=False,
+            plot_bgcolor="rgba(250, 250, 250, 0.5)",
+            paper_bgcolor="white",
+            margin=dict(l=90, r=90, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
+            height=600,
+            width=960,
+            font=_CHART_FONT,
+            hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+        )
+        return fig
+
+    x_tick = _x_tick_layout_kwargs(x_values) if chart_type in ["bar", "line", "area", "scatter", "waterfall"] else {"tickangle": 0}
+    tickangle = int(x_tick.get("tickangle", 0))
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(
             x_label,
             x_values,
             showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            linecolor="rgba(200, 200, 200, 0.5)",
+            gridcolor=_GRID_COLOR,
+            linecolor=_AXIS_LINE_COLOR,
             linewidth=1,
             mirror=True,
-            tickfont=dict(size=11),
-            tickangle=-45 if chart_type in ["bar", "line"] and len(x_values) > 6 else 0,
             automargin=True,
+            **x_tick,
         ),
-        yaxis=dict(
-            title=dict(text=f"<b>{y_label}</b>", font=dict(size=14)),
-            showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            linecolor="rgba(200, 200, 200, 0.5)",
-            linewidth=1,
-            mirror=True,
-            tickfont=dict(size=11),
-            zeroline=True,
-            zerolinecolor="rgba(200, 200, 200, 0.3)",
-            automargin=True,
-        ),
+        yaxis=_yaxis_layout(y_label, y_samples),
         template=theme,
         hovermode="closest",
         showlegend=False,
         plot_bgcolor="rgba(250, 250, 250, 0.5)",
         paper_bgcolor="white",
-        margin=dict(l=90, r=90, t=top_margin, b=120),
+        margin=dict(l=90, r=90, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
         height=600,
         width=960,
-        font=dict(family="Arial, sans-serif", size=12, color="#2c3e50"),
-        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor="#667eea"),
+        font=_CHART_FONT,
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=13,
+            font_family="Arial, sans-serif",
+            bordercolor=_CHART_ACCENT,
+        ),
     )
     return fig
 
@@ -537,6 +787,7 @@ def _create_multi_series_figure(
     title: str,
     theme: str,
     series_data: Dict[str, Any],
+    subtitle: str | None = None,
 ) -> go.Figure:
     """Create grouped bar, stacked bar, or multi-line chart."""
     data_list = series_data["data_list"]
@@ -594,26 +845,31 @@ def _create_multi_series_figure(
     elif chart_type == "grouped_bar":
         fig.update_layout(barmode="group")
 
-    title_layout, top_margin = _build_title_layout(title, has_legend=True)
+    title_layout, top_margin = _build_title_layout(title, subtitle=subtitle, has_legend=True)
+    x_tick = _x_tick_layout_kwargs(x_values)
+    tickangle = int(x_tick.get("tickangle", 0))
+    all_y: list[float] = []
+    for series_key in series_keys:
+        series_y = [row.get(series_key, 0) for row in data_list]
+        all_y.extend(ensure_numeric_series(series_y, chart_type, field_name=series_key))
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(
             x_label,
             x_values,
             showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            tickangle=-45 if len(x_values) > 6 else 0,
+            gridcolor=_GRID_COLOR,
+            automargin=True,
+            **x_tick,
         ),
-        yaxis=dict(
-            title=dict(text=f"<b>{y_label}</b>", font=dict(size=14)),
-            showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-        ),
+        yaxis=_yaxis_layout(y_label, all_y),
         template=theme,
         hovermode="closest",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=top_margin, b=100),
+        font=_CHART_FONT,
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+        margin=dict(l=80, r=40, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
         height=600,
         width=960,
     )
@@ -626,6 +882,7 @@ def _create_multi_area_figure(
     title: str,
     theme: str,
     series_data: Dict[str, Any],
+    subtitle: str | None = None,
 ) -> go.Figure:
     """Create multi-series area chart with semi-transparent overlapping fills."""
     data_list = series_data["data_list"]
@@ -661,28 +918,31 @@ def _create_multi_area_figure(
             )
         )
 
-    title_layout, top_margin = _build_title_layout(title, has_legend=True)
+    title_layout, top_margin = _build_title_layout(title, subtitle=subtitle, has_legend=True)
+    x_tick = _x_tick_layout_kwargs(x_values)
+    tickangle = int(x_tick.get("tickangle", 0))
+    all_y: list[float] = []
+    for series_key in series_keys:
+        series_y = [row.get(series_key, 0) for row in data_list]
+        all_y.extend(ensure_numeric_series(series_y, "multi_area", field_name=series_key))
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(
             x_label,
             x_values,
             showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            tickangle=-45 if len(x_values) > 6 else 0,
+            gridcolor=_GRID_COLOR,
             automargin=True,
+            **x_tick,
         ),
-        yaxis=dict(
-            title=dict(text=f"<b>{y_label}</b>", font=dict(size=14)),
-            showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            automargin=True,
-        ),
+        yaxis=_yaxis_layout(y_label, all_y),
         template=theme,
         hovermode="x unified",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=top_margin, b=100),
+        font=_CHART_FONT,
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+        margin=dict(l=80, r=40, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
         height=600,
         width=960,
     )
@@ -695,6 +955,7 @@ def _create_heatmap_figure(
     title: str,
     theme: str,
     series_data: Dict[str, Any],
+    subtitle: str | None = None,
 ) -> go.Figure:
     """Create heatmap from data."""
     data_list = series_data["data_list"]
@@ -725,7 +986,7 @@ def _create_heatmap_figure(
             colorbar=dict(title="Value", thickness=15, len=0.7),
         )
     )
-    title_layout, top_margin = _build_title_layout(title)
+    title_layout, top_margin = _build_title_layout(title, subtitle=subtitle)
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(x_label, x_values, side="bottom"),
@@ -738,7 +999,7 @@ def _create_heatmap_figure(
     return fig
 
 
-def _render_scatter_categorical(
+def _create_scatter_categorical_figure(
     data_list: List[Dict[str, Any]],
     x_key: str | None,
     y_key: str | None,
@@ -747,8 +1008,9 @@ def _render_scatter_categorical(
     y_label: str | None,
     title: str,
     theme: str,
-) -> ChartRenderResult:
-    """Render scatter chart with marker color per category (series_key column)."""
+    subtitle: str | None = None,
+) -> go.Figure:
+    """Scatter chart with marker color per category (series_key column)."""
     if not x_key or not y_key:
         keys = list(data_list[0].keys())
         x_key = x_key or keys[0]
@@ -788,31 +1050,34 @@ def _render_scatter_categorical(
         )
 
     all_x_vals = [row[x_key] for row in data_list]
-    title_layout, top_margin = _build_title_layout(title, has_legend=True)
+    all_y_vals: list[float] = []
+    for row in data_list:
+        numeric = coerce_numeric_value(row[y_key])
+        if numeric is not None:
+            all_y_vals.append(float(numeric))
+    title_layout, top_margin = _build_title_layout(title, subtitle=subtitle, has_legend=True)
+    x_tick = _x_tick_layout_kwargs(all_x_vals)
+    tickangle = int(x_tick.get("tickangle", 0))
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(
             resolved_x_label,
             all_x_vals,
             showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
+            gridcolor=_GRID_COLOR,
             automargin=True,
+            **x_tick,
         ),
-        yaxis=dict(
-            title=dict(text=f"<b>{resolved_y_label}</b>", font=dict(size=14)),
-            showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            automargin=True,
-        ),
+        yaxis=_yaxis_layout(resolved_y_label, all_y_vals),
         template=theme,
         hovermode="closest",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=top_margin, b=100),
+        margin=dict(l=80, r=40, t=top_margin, b=_layout_bottom_margin(all_x_vals, tickangle)),
         height=600,
         width=960,
-        font=dict(family="Arial, sans-serif", size=12, color="#2c3e50"),
-        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif"),
+        font=_CHART_FONT,
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
     )
 
-    return _plotly_figure_to_result(fig, title)
+    return fig
