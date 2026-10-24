@@ -68,7 +68,8 @@ class TestSkillTemplateResolution:
     def test_system_prompt_for_skill_comes_from_skill_file(self, manager_with_skills, mock_runtime):
         prompt = manager_with_skills.get_system_prompt(["data-analyst"], mock_runtime)
 
-        assert "You are a Data Analyst Agent." in prompt
+        assert "You operate as a **data analyst**" in prompt
+        assert "## Responsibilities" in prompt
 
     def test_unknown_skill_raises_error(self, manager_with_skills, mock_runtime):
         with pytest.raises(ValueError, match="Skill 'unknown' not found"):

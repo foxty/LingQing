@@ -34,6 +34,46 @@ def is_sql_empty_result(err: ToolResult) -> bool:
     return err.error is not None and err.error.code == "CHART_SQL_EMPTY_RESULT"
 
 
+def chart_render_kwargs(
+    *,
+    chart_type: str,
+    data: str,
+    title: str,
+    x_label: str | None = None,
+    y_label: str | None = None,
+    x_key: str | None = None,
+    y_key: str | None = None,
+    series_key: str | None = None,
+    series_keys: list[str] | None = None,
+    z_key: str | None = None,
+    stacked: bool = False,
+    subtitle: str | None = None,
+    reference_lines_json: str | None = None,
+    annotations_json: str | None = None,
+    y_axis_percent: bool = False,
+    measure_key: str | None = None,
+) -> dict:
+    """Keyword args for ``render_chart`` shared by chart agent tools."""
+    return {
+        "chart_type": chart_type,
+        "data": data,
+        "title": title,
+        "x_label": x_label,
+        "y_label": y_label,
+        "x_key": x_key,
+        "y_key": y_key,
+        "series_key": series_key,
+        "series_keys": series_keys,
+        "z_key": z_key,
+        "stacked": stacked,
+        "subtitle": subtitle,
+        "reference_lines_json": reference_lines_json,
+        "annotations_json": annotations_json,
+        "y_axis_percent": y_axis_percent,
+        "measure_key": measure_key,
+    }
+
+
 def chart_tool_success(markdown: str) -> ToolResult:
     return ToolResult.success(
         markdown,

@@ -104,6 +104,15 @@ def infer_axis_tickformat(values: List[float]) -> str:
     return ",.2f"
 
 
+def infer_percent_tickformat(values: List[float]) -> str:
+    """Tick format when axis represents rates (0–1) or percentages (0–100)."""
+    if not values:
+        return ".0%"
+    if max(abs(v) for v in values) <= 1.0:
+        return ".0%"
+    return ".1f"
+
+
 def handle_duplicate_x_values(x_values: List[Any]) -> List[Any]:
     """Handle duplicate x-axis values by appending indices to make them unique.
 

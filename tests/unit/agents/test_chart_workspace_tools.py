@@ -46,6 +46,44 @@ async def test_create_chart_from_structured_data_injects_runtime_config(monkeypa
 
 
 @pytest.mark.asyncio
+async def test_create_chart_from_structured_data_forwards_enhancement_kwargs(monkeypatch, runnable_config):
+    render_kwargs: dict = {}
+
+    def _fake_render_chart(**kwargs):
+        render_kwargs.update(kwargs)
+        return ChartRenderResult(svg_bytes=b"<svg/>", png_bytes=PNG, title=kwargs.get("title", "Chart"))
+
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.render_chart", _fake_render_chart)
+
+    async def _fake_register(**kwargs):
+        return "\n\n![Chart](http://127.0.0.1:8000/charts/5/image.svg)\n\n"
+
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.register_agent_chart", _fake_register)
+
+    await create_chart_from_structured_data.ainvoke(
+        {
+            "chart_type": "waterfall",
+            "data": '[{"step":"A","amount":1}]',
+            "title": "Bridge",
+            "x_key": "step",
+            "y_key": "amount",
+            "subtitle": "FY2026",
+            "reference_lines_json": '[{"y": 0.5}]',
+            "annotations_json": '[{"text": "note"}]',
+            "y_axis_percent": True,
+            "measure_key": "kind",
+        },
+        config=runnable_config,
+    )
+
+    assert render_kwargs["subtitle"] == "FY2026"
+    assert render_kwargs["reference_lines_json"] == '[{"y": 0.5}]'
+    assert render_kwargs["annotations_json"] == '[{"text": "note"}]'
+    assert render_kwargs["y_axis_percent"] is True
+    assert render_kwargs["measure_key"] == "kind"
+
+
+@pytest.mark.asyncio
 async def test_create_chart_from_structured_data_schema_hides_config():
     assert "config" not in create_chart_from_structured_data.args_schema.model_fields
 
@@ -55,11 +93,15 @@ def test_create_chart_from_structured_data_schema_chart_type_enum():
     chart_type_schema = schema["properties"]["chart_type"]
     assert set(chart_type_schema["enum"]) == {
         "bar",
+        "horizontal_bar",
         "line",
         "area",
         "pie",
         "scatter",
         "heatmap",
+        "waterfall",
+        "box",
+        "violin",
     }
 
 

@@ -6,7 +6,7 @@ description: |
   CAPABILITIES:
   - Discover and explore data assets (tables, columns, schemas)
   - Execute SELECT-only SQL queries on data sources
-  - Generate charts for analysis reports (bar, line, area, pie, scatter, heatmap)
+  - Generate charts for analysis reports (bar, horizontal bar, line, area, pie, scatter, heatmap, waterfall, box, violin, multi-panel grids)
   - Deliver structured analysis (insights, tables, optional chart images)
   - Search for metric definitions and analysis methodologies
 
@@ -30,6 +30,10 @@ tools:
     limit: 10
   - name: create_chart_from_structured_data
     limit: 10
+  - name: create_chart_grid_from_sql
+    limit: 4
+  - name: create_chart_grid_from_structured_data
+    limit: 4
 ---
 
 ## Responsibilities
@@ -82,9 +86,11 @@ What this skill produces: a **clear, evidence-based answer** to the business que
 - Pre-aggregate data; sort meaningfully; use business-friendly titles and axis labels.
 
 **Choosing a chart form**
-- Trend → line or area; compare categories → bar (sorted); composition → pie only for few slices, else bar.
-- Groups over time → grouped/stacked bar or multiple lines; two numeric measures → scatter.
-- Two dimensions with intensity → heatmap-style when the story is grid-like.
+- Trend → line or area; compare categories → bar (sorted), or horizontal bar when labels are long.
+- Bridge / walk → waterfall; distribution by group → box or violin.
+- Composition → pie only for few slices, else bar; groups over time → grouped/stacked bar or multiple lines.
+- Two numeric measures → scatter; two dimensions + intensity → heatmap-style.
+- Several related metrics → one multi-panel grid instead of many separate single-chart images.
 
 **Format**
 - Place each generated chart image adjacent to the narrative it supports.

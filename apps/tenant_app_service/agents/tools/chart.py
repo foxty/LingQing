@@ -15,6 +15,7 @@ from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.chart_support import (
     assert_data_source_allowed,
+    chart_render_kwargs,
     chart_tool_success,
     exception_detail,
     is_sql_empty_result,
@@ -39,12 +40,17 @@ async def create_chart_from_structured_data(
     series_keys: List[str] | None = None,
     z_key: str | None = None,
     stacked: bool = False,
+    subtitle: str | None = None,
+    reference_lines_json: str | None = None,
+    annotations_json: str | None = None,
+    y_axis_percent: bool = False,
+    measure_key: str | None = None,
     config: RunnableConfig = None,
 ) -> ToolResult:
     """Create an axis-style chart (SVG) using Plotly from structured data.
 
     Args:
-        chart_type: 'bar', 'line', 'pie', 'scatter', 'area', or 'heatmap'.
+        chart_type: 'bar', 'horizontal_bar', 'line', 'pie', 'scatter', 'area', 'heatmap', 'waterfall', 'box', or 'violin'.
             Use series_key or series_keys for multi-series bar, line, or area.
         data: JSON array of objects, e.g. '[{"month":"Jan","sales":100}, ...]'
         title: Chart title
@@ -56,6 +62,11 @@ async def create_chart_from_structured_data(
         series_keys: List of columns, each holding one series (e.g. ["region_a", "region_b"])
         z_key: Value column for heatmap intensity
         stacked: With chart_type='bar' and multiple series, stack bars instead of grouping
+        subtitle: Optional subtitle under the chart title
+        reference_lines_json: JSON array of {y, label?} horizontal reference lines
+        annotations_json: JSON array of {x, y, text} callout annotations
+        y_axis_percent: Format Y axis as percent when values are rates
+        measure_key: Waterfall only — column with relative|absolute|total measure types
         config: Runtime configuration (auto-injected by LangGraph)
 
     Returns:
@@ -163,17 +174,24 @@ async def create_chart_from_structured_data(
     try:
         runtime = extract_runtime_context(config)
         rendered = render_chart(
-            chart_type=chart_type,
-            data=data,
-            title=title,
-            x_label=x_label,
-            y_label=y_label,
-            x_key=x_key,
-            y_key=y_key,
-            series_key=series_key,
-            series_keys=series_keys,
-            z_key=z_key,
-            stacked=stacked,
+            **chart_render_kwargs(
+                chart_type=chart_type,
+                data=data,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                x_key=x_key,
+                y_key=y_key,
+                series_key=series_key,
+                series_keys=series_keys,
+                z_key=z_key,
+                stacked=stacked,
+                subtitle=subtitle,
+                reference_lines_json=reference_lines_json,
+                annotations_json=annotations_json,
+                y_axis_percent=y_axis_percent,
+                measure_key=measure_key,
+            )
         )
         markdown = await register_agent_chart(rendered=rendered, runtime=runtime)
         logger.info(f"Static chart created: {title}")
@@ -208,6 +226,11 @@ async def create_chart_from_sql(
     series_keys: List[str] | None = None,
     z_key: str | None = None,
     stacked: bool = False,
+    subtitle: str | None = None,
+    reference_lines_json: str | None = None,
+    annotations_json: str | None = None,
+    y_axis_percent: bool = False,
+    measure_key: str | None = None,
     config: RunnableConfig = None,
 ) -> ToolResult:
     """Create an axis-style chart from SQL query results.
@@ -215,7 +238,7 @@ async def create_chart_from_sql(
     Args:
         data_source_id: Data source ID
         sql_query: SQL SELECT query (≤100 rows recommended for readability)
-        chart_type: 'bar', 'line', 'pie', 'scatter', 'area', or 'heatmap'
+        chart_type: 'bar', 'horizontal_bar', 'line', 'pie', 'scatter', 'area', 'heatmap', 'waterfall', 'box', or 'violin'
         title: Chart title
         x_key: Result column for the X-axis (or slice labels for pie)
         y_key: Result column for values (single-series); row labels for heatmap y-axis
@@ -225,6 +248,11 @@ async def create_chart_from_sql(
         series_keys: Result columns where each column is one series (omit series_key)
         z_key: Result column for heatmap cell values
         stacked: With chart_type='bar' and multiple series, stack bars instead of grouping
+        subtitle: Optional subtitle under the chart title
+        reference_lines_json: JSON array of {y, label?} horizontal reference lines
+        annotations_json: JSON array of {x, y, text} callout annotations
+        y_axis_percent: Format Y axis as percent when values are rates
+        measure_key: Waterfall only — column with relative|absolute|total measure types
         config: Runtime configuration (auto-injected by LangGraph)
 
     Returns:
@@ -378,17 +406,24 @@ async def create_chart_from_sql(
 
     try:
         rendered = render_chart(
-            chart_type=chart_type,
-            data=data_json,
-            title=title,
-            x_label=x_label,
-            y_label=y_label,
-            x_key=x_key,
-            y_key=y_key,
-            series_key=series_key,
-            series_keys=series_keys,
-            z_key=z_key,
-            stacked=stacked,
+            **chart_render_kwargs(
+                chart_type=chart_type,
+                data=data_json,
+                title=title,
+                x_label=x_label,
+                y_label=y_label,
+                x_key=x_key,
+                y_key=y_key,
+                series_key=series_key,
+                series_keys=series_keys,
+                z_key=z_key,
+                stacked=stacked,
+                subtitle=subtitle,
+                reference_lines_json=reference_lines_json,
+                annotations_json=annotations_json,
+                y_axis_percent=y_axis_percent,
+                measure_key=measure_key,
+            )
         )
         markdown = await register_agent_chart(rendered=rendered, runtime=runtime)
         logger.info(f"Chart created from SQL: {title}")

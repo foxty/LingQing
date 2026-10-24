@@ -16,7 +16,7 @@ def normalize_plotly_chart_type(
 
     Accepts ``AgentChartInputType`` values plus legacy explicit names
     (``grouped_bar``, ``stacked_bar``, ``multi_line``, ``multi_area``).
-    Agent tools should only pass the six public input types.
+    Agent tools should only pass ``AgentChartInputType`` values (see ``types.AGENT_CHART_INPUT_TYPES``).
     """
     if chart_type not in PLOTLY_CHART_TYPES:
         agent_list = ", ".join(f"'{t}'" for t in sorted(AGENT_CHART_INPUT_TYPES))
