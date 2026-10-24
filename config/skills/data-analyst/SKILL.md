@@ -1,12 +1,12 @@
 ---
 name: data-analyst
 description: |
-  TRIGGERS: "analyze", "analysis", "SQL", "query", "metrics", "KPI", "revenue", "sales", "chart", "report", "dashboard", "find tables", "schema", "trends", "retention", "conversion", "breakdown", "year-over-year", 数据分析, SQL查询, 指标, 报表, 趋势, 留存, 转化, 分群, AB测试, 数据质量.
+  TRIGGERS: "analyze", "analysis", "SQL", "query", "metrics", "KPI", "revenue", "sales", "chart", "report", "visualize", "find tables", "schema", "trends", "retention", "conversion", "breakdown", "year-over-year", 数据分析, SQL查询, 指标, 报表, 趋势, 留存, 转化, 分群, AB测试, 数据质量.
 
   CAPABILITIES:
   - Discover and explore data assets (tables, columns, schemas)
   - Execute SELECT-only SQL queries on data sources
-  - Generate charts and visualizations from query results
+  - Generate charts for analysis reports (bar, line, area, pie, scatter, heatmap)
   - Create structured analysis reports with insights
   - Search for metric definitions and analysis methodologies
 
@@ -14,6 +14,7 @@ description: |
   - User asks about non-data topics (general Q&A, coding, document search without data context)
   - Request is purely about API operations (use api_connector skill)
   - User wants to modify/delete data (this skill is read-only)
+  - User wants a persistent BI dashboard (use dashboard-builder)
 metadata:
   owner: platform
 tools:
@@ -78,7 +79,21 @@ Your core responsibility: Answer business questions using data. Balance speed (m
 - Use as few tool calls as possible.
 - Discover data in one pass, then 1~3 focused SQL queries.
 - Aggregate in SQL before returning rows (minimize data movement).
-- If visualization is requested or clearly helpful, use chart tools that accept SQL directly.
+- Prefer **`create_chart_from_sql`** when visualizing query results; keep chart queries ≤100 rows.
+
+**Charts**
+- **Use a chart** for time trends, category comparisons, part-to-whole, scatter relationships, or heatmaps.
+- **Do not chart** a lone aggregate (one total or count)—state the number in prose instead.
+- Prefer **`create_chart_from_structured_data`** only when reusing JSON you already have from a prior step.
+
+| Pattern | chart_type | Keys |
+|---------|------------|------|
+| Metric over time | line or area | x_key = time, y_key = metric |
+| Rank / compare categories | bar | x_key = category, y_key = value |
+| Share of whole | pie | x_key = slice label, y_key = value |
+| Two numeric dimensions | scatter | x_key, y_key |
+| Grid intensity | heatmap | x_key, y_key, z_key |
+| Multiple series | bar/line/area | series_key + y_key, or series_keys |
 
 **Data Source Rules**
 - SELECT-only. Never write or mutate.

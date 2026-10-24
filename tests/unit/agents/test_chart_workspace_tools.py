@@ -26,7 +26,7 @@ async def test_create_chart_from_structured_data_injects_runtime_config(monkeypa
     async def _fake_register(**kwargs):
         return "\n\n![Monthly](http://127.0.0.1:8000/charts/2/image.svg)\n\n"
 
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart._register_agent_chart", _fake_register)
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.register_agent_chart", _fake_register)
 
     result = await create_chart_from_structured_data.ainvoke(
         {
@@ -82,8 +82,8 @@ async def test_create_chart_from_sql_uses_query_data(monkeypatch, runnable_confi
             captured["query_kwargs"] = kwargs
             return pd.DataFrame([{"month": "Jan", "total": 10}])
 
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.app_db_session", lambda: _FakeSessionContext())
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.DataSourceService", _FakeService)
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart_support.app_db_session", lambda: _FakeSessionContext())
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart_support.DataSourceService", _FakeService)
 
     render_kwargs: dict = {}
 
@@ -96,7 +96,7 @@ async def test_create_chart_from_sql_uses_query_data(monkeypatch, runnable_confi
     async def _fake_register(**kwargs):
         return "\n\n![Monthly](http://127.0.0.1:8000/charts/1/image.svg)\n\n"
 
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart._register_agent_chart", _fake_register)
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.register_agent_chart", _fake_register)
 
     result = await create_chart_from_sql.ainvoke(
         {

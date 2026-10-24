@@ -4,57 +4,26 @@ Rendering logic lives in apps.shared.chart.renderer.  These tools wire LangGraph
 inputs to render_chart() and ChartService artifact registration.
 """
 
-import json
 from typing import List
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from apps.shared.chart.renderer import render_chart
-from apps.shared.chart.service import ChartService
-from apps.shared.chart.types import AgentChartInputType, ChartRenderResult
-from apps.shared.data_source import DataSourceService
-from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
-from apps.shared.db.session import app_db_session
-from apps.shared.domain.actor import ActorContext
+from apps.shared.chart.types import AgentChartInputType
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.context import extract_runtime_context
-from apps.tenant_app_service.agents.domain import AgentRuntimeContext
+from apps.tenant_app_service.agents.tools.chart_support import (
+    assert_data_source_allowed,
+    chart_tool_success,
+    exception_detail,
+    is_sql_empty_result,
+    query_sql_as_json_records,
+    register_agent_chart,
+)
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 
 logger = get_logger(__name__)
-
-
-def _exception_detail(exc: BaseException) -> str:
-    """Human-readable exception text for tool errors (LLM-facing)."""
-    msg = str(exc).strip()
-    if msg:
-        return msg
-    if exc.__cause__ is not None:
-        cause_msg = str(exc.__cause__).strip()
-        if cause_msg:
-            return f"{type(exc).__name__}: {cause_msg}"
-    return type(exc).__name__
-
-
-def _chart_tool_success(markdown: str) -> ToolResult:
-    """Return chart markdown as tool content so the LLM and UI render the image."""
-    return ToolResult.success(
-        markdown,
-        metadata={"raw_result": {"markdown": markdown}},
-    )
-
-
-async def _register_agent_chart(*, rendered: ChartRenderResult, runtime: AgentRuntimeContext) -> str:
-    async with app_db_session() as session:
-        service = ChartService.create(tenant_id=runtime.user.tenant_id, db=session)
-        return await service.register_chart(
-            svg_bytes=rendered.svg_bytes,
-            png_bytes=rendered.png_bytes,
-            owner_id=runtime.user.user_id,
-            thread_id=runtime.thread_id,
-            title=rendered.title,
-        )
 
 
 @tool
@@ -72,7 +41,7 @@ async def create_chart_from_structured_data(
     stacked: bool = False,
     config: RunnableConfig = None,
 ) -> ToolResult:
-    """Create a chart (SVG) using Plotly from structured data.
+    """Create an axis-style chart (SVG) using Plotly from structured data.
 
     Args:
         chart_type: 'bar', 'line', 'pie', 'scatter', 'area', or 'heatmap'.
@@ -206,9 +175,9 @@ async def create_chart_from_structured_data(
             z_key=z_key,
             stacked=stacked,
         )
-        markdown = await _register_agent_chart(rendered=rendered, runtime=runtime)
+        markdown = await register_agent_chart(rendered=rendered, runtime=runtime)
         logger.info(f"Static chart created: {title}")
-        return _chart_tool_success(markdown)
+        return chart_tool_success(markdown)
 
     except ValueError as e:
         logger.warning("Structured chart tool failed (validation/context): %s", e)
@@ -217,7 +186,7 @@ async def create_chart_from_structured_data(
             message=str(e),
         )
     except Exception as e:
-        detail = _exception_detail(e)
+        detail = exception_detail(e)
         logger.error("Error creating static Plotly chart: %s", detail, exc_info=True)
         return ToolResult.error_result(
             code="CHART_CREATE_FROM_STRUCTURED_DATA_FAILED",
@@ -241,7 +210,7 @@ async def create_chart_from_sql(
     stacked: bool = False,
     config: RunnableConfig = None,
 ) -> ToolResult:
-    """Create chart from SQL query results.
+    """Create an axis-style chart from SQL query results.
 
     Args:
         data_source_id: Data source ID
@@ -388,71 +357,44 @@ async def create_chart_from_sql(
         )
     """
     runtime = extract_runtime_context(config)
-    tenant_id = runtime.user.tenant_id
-    user_id = runtime.user.user_id
-    user_role = runtime.user.role
-    profile = runtime.capability_profile
-    if (
-        profile
-        and profile.allowed_data_source_ids is not None
-        and data_source_id not in profile.allowed_data_source_ids
-    ):
-        return ToolResult.error_result("Data source is not assigned to this agent", code="PERMISSION_DENIED")
+    denied = assert_data_source_allowed(runtime=runtime, data_source_id=data_source_id)
+    if denied is not None:
+        return denied
 
     logger.info(f"Creating chart from SQL: {title}, query: {sql_query[:80]}...")
 
+    data_json, err = await query_sql_as_json_records(
+        runtime=runtime,
+        data_source_id=data_source_id,
+        sql_query=sql_query,
+    )
+    if err is not None:
+        if is_sql_empty_result(err):
+            return ToolResult.error_result(
+                code="CHART_SQL_EMPTY_RESULT",
+                message=f"Query returned no data for chart '{title}'",
+            )
+        return err
+
     try:
-        async with app_db_session() as session:
-            service = DataSourceService(
-                tenant_id=tenant_id,
-                data_source_repo=DataSourceRepository(session),
-                asset_repo=AssetMetadataRepository(session),
-            )
-
-            df = await service.query_data_for_actor(
-                data_source_id=data_source_id,
-                sql_query=sql_query,
-                actor=ActorContext(
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    user_role=user_role,
-                ),
-            )
-
-            if df.empty:
-                return ToolResult.error_result(
-                    code="CHART_SQL_EMPTY_RESULT",
-                    message=f"Query returned no data for chart '{title}'",
-                )
-
-            if len(df) > 500:
-                logger.warning(f"Query returned {len(df)} rows, truncating to 500 for chart")
-                df = df.head(500)
-
-            data_list = df.to_dict(orient="records")
-            data_json = json.dumps(data_list, ensure_ascii=False, default=str)
-
-            rendered = render_chart(
-                chart_type=chart_type,
-                data=data_json,
-                title=title,
-                x_label=x_label,
-                y_label=y_label,
-                x_key=x_key,
-                y_key=y_key,
-                series_key=series_key,
-                series_keys=series_keys,
-                z_key=z_key,
-                stacked=stacked,
-            )
-
-            markdown = await _register_agent_chart(rendered=rendered, runtime=runtime)
-
-            logger.info(f"Chart created from SQL: {title} ({len(df)} data points)")
-            return _chart_tool_success(markdown)
-
+        rendered = render_chart(
+            chart_type=chart_type,
+            data=data_json,
+            title=title,
+            x_label=x_label,
+            y_label=y_label,
+            x_key=x_key,
+            y_key=y_key,
+            series_key=series_key,
+            series_keys=series_keys,
+            z_key=z_key,
+            stacked=stacked,
+        )
+        markdown = await register_agent_chart(rendered=rendered, runtime=runtime)
+        logger.info(f"Chart created from SQL: {title}")
+        return chart_tool_success(markdown)
     except Exception as e:
-        detail = _exception_detail(e)
+        detail = exception_detail(e)
         error_msg = f"Error creating chart from SQL: {detail}"
         logger.error(error_msg, exc_info=True)
         return ToolResult.error_result(

@@ -31,8 +31,8 @@ async def test_create_chart_from_sql_empty_result(monkeypatch, runnable_config):
         async def query_data_for_actor(self, **kwargs):
             return pd.DataFrame()
 
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.app_db_session", lambda: _FakeSessionContext())
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.DataSourceService", _FakeService)
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart_support.app_db_session", lambda: _FakeSessionContext())
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart_support.DataSourceService", _FakeService)
 
     result = await create_chart_from_sql.ainvoke(
         {
@@ -91,11 +91,11 @@ async def test_create_chart_from_sql_truncates_to_500_rows(monkeypatch, runnable
         render_rows["count"] = len(json.loads(kwargs["data"]))
         return ChartRenderResult(svg_bytes=b"<svg/>", png_bytes=PNG, title=kwargs.get("title", "Chart"))
 
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.app_db_session", lambda: _FakeSessionContext())
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.DataSourceService", _FakeService)
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart_support.app_db_session", lambda: _FakeSessionContext())
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart_support.DataSourceService", _FakeService)
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.render_chart", _fake_render_chart)
     monkeypatch.setattr(
-        "apps.tenant_app_service.agents.tools.chart._register_agent_chart",
+        "apps.tenant_app_service.agents.tools.chart.register_agent_chart",
         AsyncMock(return_value="![T](/charts/1/image.svg)"),
     )
 
@@ -124,8 +124,8 @@ async def test_create_chart_from_sql_surfaces_query_error_detail(monkeypatch, ru
         async def query_data_for_actor(self, **kwargs):
             raise ConnectionError("Query execution failed: syntax error near 'FROM'")
 
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.app_db_session", lambda: _FakeSessionContext())
-    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart.DataSourceService", _FakeService)
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart_support.app_db_session", lambda: _FakeSessionContext())
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.chart_support.DataSourceService", _FakeService)
 
     result = await create_chart_from_sql.ainvoke(
         {
