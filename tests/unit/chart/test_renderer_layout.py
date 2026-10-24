@@ -5,6 +5,7 @@ import json
 import pytest
 
 from apps.shared.chart import renderer
+from apps.shared.chart.data_processor import infer_axis_tickformat
 from apps.shared.chart.renderer import _build_title_layout, render_chart
 from apps.shared.chart.types import ChartRenderResult
 
@@ -35,6 +36,24 @@ def test_build_title_layout_short_title_unchanged():
     layout, top_margin = _build_title_layout("Monthly Sales")
     assert layout["text"] == "<b>Monthly Sales</b>"
     assert top_margin == 100
+
+
+def test_infer_axis_tickformat_scales_with_magnitude():
+    assert infer_axis_tickformat([1.5, 2.3]) == ",.2f"
+    assert infer_axis_tickformat([1500.0, 3200.0]) == ",.1f"
+    assert infer_axis_tickformat([25_000.0, 80_000.0]) == ",.0f"
+    assert infer_axis_tickformat([2_500_000.0]) == "~s"
+
+
+def test_render_bar_yaxis_uses_magnitude_tickformat(capture_figure):
+    render_chart(
+        chart_type="bar",
+        data=json.dumps([{"region": "North", "sales": 1_250_000}, {"region": "South", "sales": 980_000}]),
+        title="Regional sales",
+        x_key="region",
+        y_key="sales",
+    )
+    assert capture_figure["fig"].layout.yaxis.tickformat == "~s"
 
 
 def test_render_bar_partial_dates_use_category_xaxis(capture_figure):

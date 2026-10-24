@@ -20,6 +20,7 @@ from apps.shared.chart.data_processor import (
     ensure_numeric_series,
     format_value_labels,
     handle_duplicate_x_values,
+    infer_axis_tickformat,
     numeric_value_column_names,
     pivot_long_to_wide,
     plotly_xaxis_type_kwargs,
@@ -68,6 +69,10 @@ def _series_key_not_found_message(
 # Kaleido PNG scale for the companion raster written beside each SVG.
 _CHART_PNG_EXPORT_SCALE = 2
 _TITLE_WRAP_CHARS = 52
+_CHART_FONT = dict(family="Arial, sans-serif", size=12, color="#2c3e50")
+_CHART_ACCENT = "#667eea"
+_GRID_COLOR = "rgba(200, 200, 200, 0.2)"
+_AXIS_LINE_COLOR = "rgba(200, 200, 200, 0.5)"
 
 
 def _build_title_layout(title: str, *, has_legend: bool = False) -> tuple[dict, int]:
@@ -117,6 +122,48 @@ def _xaxis(title_text: str, x_values: List[Any] | None, **extra: Any) -> dict:
     axis = {
         "title": dict(text=f"<b>{title_text}</b>", font=dict(size=14)),
         **plotly_xaxis_type_kwargs(x_values or []),
+        **extra,
+    }
+    return axis
+
+
+def _x_tick_layout_kwargs(x_values: List[Any]) -> dict[str, Any]:
+    """Category/date tick angle and font for readable report charts."""
+    if not x_values:
+        return {"tickangle": 0}
+    labels = [str(v) for v in x_values]
+    max_len = max(len(label) for label in labels)
+    count = len(labels)
+    if max_len > 14 or count > 6:
+        tickfont: dict[str, Any] = dict(size=11)
+        if max_len > 22:
+            tickfont["size"] = 10
+        return {"tickangle": -45, "tickfont": tickfont}
+    return {"tickangle": 0, "tickfont": dict(size=11)}
+
+
+def _layout_bottom_margin(x_values: List[Any], tickangle: int) -> int:
+    if tickangle != 0:
+        labels = [str(v) for v in x_values]
+        max_len = max((len(label) for label in labels), default=0)
+        return 120 + min(max_len * 2, 80)
+    return 100
+
+
+def _yaxis_layout(y_label: str, y_values: List[float] | None = None, **extra: Any) -> dict[str, Any]:
+    tickformat = infer_axis_tickformat(y_values or [])
+    axis: dict[str, Any] = {
+        "title": dict(text=f"<b>{y_label}</b>", font=dict(size=14)),
+        "showgrid": True,
+        "gridcolor": _GRID_COLOR,
+        "linecolor": _AXIS_LINE_COLOR,
+        "linewidth": 1,
+        "mirror": True,
+        "tickfont": dict(size=11),
+        "tickformat": tickformat,
+        "zeroline": True,
+        "zerolinecolor": "rgba(200, 200, 200, 0.3)",
+        "automargin": True,
         **extra,
     }
     return axis
@@ -490,42 +537,37 @@ def _create_single_series_figure(
         raise ValueError(f"Unsupported chart type: {chart_type}")
 
     title_layout, top_margin = _build_title_layout(title)
+    x_tick = _x_tick_layout_kwargs(x_values) if chart_type in ["bar", "line", "area", "scatter"] else {"tickangle": 0}
+    tickangle = int(x_tick.get("tickangle", 0))
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(
             x_label,
             x_values,
             showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            linecolor="rgba(200, 200, 200, 0.5)",
+            gridcolor=_GRID_COLOR,
+            linecolor=_AXIS_LINE_COLOR,
             linewidth=1,
             mirror=True,
-            tickfont=dict(size=11),
-            tickangle=-45 if chart_type in ["bar", "line"] and len(x_values) > 6 else 0,
             automargin=True,
+            **x_tick,
         ),
-        yaxis=dict(
-            title=dict(text=f"<b>{y_label}</b>", font=dict(size=14)),
-            showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            linecolor="rgba(200, 200, 200, 0.5)",
-            linewidth=1,
-            mirror=True,
-            tickfont=dict(size=11),
-            zeroline=True,
-            zerolinecolor="rgba(200, 200, 200, 0.3)",
-            automargin=True,
-        ),
+        yaxis=_yaxis_layout(y_label, [float(v) for v in y_values if coerce_numeric_value(v) is not None]),
         template=theme,
         hovermode="closest",
         showlegend=False,
         plot_bgcolor="rgba(250, 250, 250, 0.5)",
         paper_bgcolor="white",
-        margin=dict(l=90, r=90, t=top_margin, b=120),
+        margin=dict(l=90, r=90, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
         height=600,
         width=960,
-        font=dict(family="Arial, sans-serif", size=12, color="#2c3e50"),
-        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor="#667eea"),
+        font=_CHART_FONT,
+        hoverlabel=dict(
+            bgcolor="white",
+            font_size=13,
+            font_family="Arial, sans-serif",
+            bordercolor=_CHART_ACCENT,
+        ),
     )
     return fig
 
@@ -595,25 +637,30 @@ def _create_multi_series_figure(
         fig.update_layout(barmode="group")
 
     title_layout, top_margin = _build_title_layout(title, has_legend=True)
+    x_tick = _x_tick_layout_kwargs(x_values)
+    tickangle = int(x_tick.get("tickangle", 0))
+    all_y: list[float] = []
+    for series_key in series_keys:
+        series_y = [row.get(series_key, 0) for row in data_list]
+        all_y.extend(ensure_numeric_series(series_y, chart_type, field_name=series_key))
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(
             x_label,
             x_values,
             showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            tickangle=-45 if len(x_values) > 6 else 0,
+            gridcolor=_GRID_COLOR,
+            automargin=True,
+            **x_tick,
         ),
-        yaxis=dict(
-            title=dict(text=f"<b>{y_label}</b>", font=dict(size=14)),
-            showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-        ),
+        yaxis=_yaxis_layout(y_label, all_y),
         template=theme,
         hovermode="closest",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=top_margin, b=100),
+        font=_CHART_FONT,
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+        margin=dict(l=80, r=40, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
         height=600,
         width=960,
     )
@@ -662,27 +709,30 @@ def _create_multi_area_figure(
         )
 
     title_layout, top_margin = _build_title_layout(title, has_legend=True)
+    x_tick = _x_tick_layout_kwargs(x_values)
+    tickangle = int(x_tick.get("tickangle", 0))
+    all_y: list[float] = []
+    for series_key in series_keys:
+        series_y = [row.get(series_key, 0) for row in data_list]
+        all_y.extend(ensure_numeric_series(series_y, "multi_area", field_name=series_key))
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(
             x_label,
             x_values,
             showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            tickangle=-45 if len(x_values) > 6 else 0,
+            gridcolor=_GRID_COLOR,
             automargin=True,
+            **x_tick,
         ),
-        yaxis=dict(
-            title=dict(text=f"<b>{y_label}</b>", font=dict(size=14)),
-            showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            automargin=True,
-        ),
+        yaxis=_yaxis_layout(y_label, all_y),
         template=theme,
         hovermode="x unified",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=top_margin, b=100),
+        font=_CHART_FONT,
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+        margin=dict(l=80, r=40, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
         height=600,
         width=960,
     )
@@ -788,31 +838,34 @@ def _render_scatter_categorical(
         )
 
     all_x_vals = [row[x_key] for row in data_list]
+    all_y_vals: list[float] = []
+    for row in data_list:
+        numeric = coerce_numeric_value(row[y_key])
+        if numeric is not None:
+            all_y_vals.append(float(numeric))
     title_layout, top_margin = _build_title_layout(title, has_legend=True)
+    x_tick = _x_tick_layout_kwargs(all_x_vals)
+    tickangle = int(x_tick.get("tickangle", 0))
     fig.update_layout(
         title=title_layout,
         xaxis=_xaxis(
             resolved_x_label,
             all_x_vals,
             showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
+            gridcolor=_GRID_COLOR,
             automargin=True,
+            **x_tick,
         ),
-        yaxis=dict(
-            title=dict(text=f"<b>{resolved_y_label}</b>", font=dict(size=14)),
-            showgrid=True,
-            gridcolor="rgba(200, 200, 200, 0.2)",
-            automargin=True,
-        ),
+        yaxis=_yaxis_layout(resolved_y_label, all_y_vals),
         template=theme,
         hovermode="closest",
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
-        margin=dict(l=80, r=40, t=top_margin, b=100),
+        margin=dict(l=80, r=40, t=top_margin, b=_layout_bottom_margin(all_x_vals, tickangle)),
         height=600,
         width=960,
-        font=dict(family="Arial, sans-serif", size=12, color="#2c3e50"),
-        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif"),
+        font=_CHART_FONT,
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
     )
 
     return _plotly_figure_to_result(fig, title)
