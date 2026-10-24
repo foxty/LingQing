@@ -13,11 +13,11 @@ from apps.tenant_app_service.agent_ingress.slack.messages import (
     slack_chat_error_message,
     slack_user_message,
 )
-from apps.tenant_app_service.chat.schemas import ChatRequest
-from apps.tenant_app_service.chat.turn_sessions import (
+from apps.tenant_app_service.chat.application import (
     complete_chat_turn_committed,
     prepare_chat_turn_committed,
 )
+from apps.tenant_app_service.chat.schemas import ChatRequest
 
 logger = get_logger(__name__)
 

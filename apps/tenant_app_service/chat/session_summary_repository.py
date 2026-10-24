@@ -97,6 +97,15 @@ class SessionSummaryRepository:
         logger.debug(f"Found {len(summaries)} unsummarized sessions for thread {thread_id}")
         return summaries
 
+    async def list_session_ids_in_thread_summary(self, thread_id: str) -> list[str]:
+        """Session IDs already rolled into a thread summary (omit from main-line tail)."""
+        stmt = select(SessionSummary.session_id).where(
+            SessionSummary.thread_id == thread_id,
+            SessionSummary.included_in_thread_summary == True,  # noqa: E712
+        )
+        result = await self.db.execute(stmt)
+        return list(result.scalars().all())
+
     async def count_unsummarized_sessions(self, thread_id: str) -> int:
         """Count sessions not yet included in a thread summary.
 

@@ -8,11 +8,14 @@ from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort
 from apps.tenant_app_service.agent_ingress.slack.markdown_blocks import SlackMarkdownPolicy
 from apps.tenant_app_service.agent_ingress.slack.markdown_delivery import deliver_markdown_to_slack
 from apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher import ImageFetcher
-from apps.tenant_app_service.chat.message_repository import MessageRepository
+from apps.tenant_app_service.chat.feedback_message_lookup import (
+    resolve_latest_ai_message_id_for_session,
+    update_message_metadata_for_feedback,
+)
 
 
 async def resolve_feedback_message_id(
-    message_repo: MessageRepository,
+    db_session: AsyncSession,
     *,
     message_id: str | None,
     session_id: str | None,
@@ -23,8 +26,11 @@ async def resolve_feedback_message_id(
         return message_id
     if not session_id:
         return None
-    ai_message = await message_repo.get_latest_ai_message_for_session(thread_id, session_id)
-    return ai_message.message_id if ai_message else None
+    return await resolve_latest_ai_message_id_for_session(
+        db_session,
+        thread_id=thread_id,
+        session_id=session_id,
+    )
 
 
 async def post_slack_reply_with_feedback(
@@ -35,7 +41,7 @@ async def post_slack_reply_with_feedback(
     text: str,
     message_id: str | None,
     thread_ts: str | None,
-    message_repo: MessageRepository,
+    db_session: AsyncSession,
     update_ts: str | None = None,
     portal_origin: str | None = None,
     api_origin: str | None = None,
@@ -43,7 +49,6 @@ async def post_slack_reply_with_feedback(
     channel_type: str | None = None,
     policy: SlackMarkdownPolicy | None = None,
     image_fetcher: ImageFetcher | None = None,
-    db_session: AsyncSession | None = None,
     tenant_id: int | None = None,
     requester_user_id: int | None = None,
     requester_role: str | None = None,
@@ -71,15 +76,21 @@ async def post_slack_reply_with_feedback(
         agent_id=agent_id,
     )
 
-    if message_id and posted_ts:
-        ai_message = await message_repo.get_message_by_message_id(message_id)
-        if ai_message:
-            metadata = dict(ai_message.message_metadata or {})
-            metadata["ingress"] = {
-                "platform": "slack",
-                "channel_id": channel_id,
-                "message_ts": posted_ts,
-            }
-            await message_repo.update_message_metadata(ai_message, metadata)
+    if message_id and posted_ts and db_session is not None:
+        ingress_patch = {
+            "ingress": {"platform": "slack", "channel_id": channel_id, "message_ts": posted_ts},
+        }
+        existing = await update_message_metadata_for_feedback(
+            db_session,
+            message_id=message_id,
+            metadata_patch=ingress_patch,
+        )
+        if not existing:
+            from apps.shared.utils.logger import get_logger
+
+            get_logger(__name__).warning(
+                "Slack feedback metadata: message_id=%s not found in main or run stores",
+                message_id,
+            )
 
     return posted_ts

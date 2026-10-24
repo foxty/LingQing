@@ -1,13 +1,12 @@
-"""Unit tests for per-thread turn admission."""
+"""Unit tests for turn admission (advisory lock + busy gate)."""
 
-from datetime import UTC, datetime
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from apps.shared.core.exceptions import ThreadBusyError
-from apps.tenant_app_service.chat.domain import SESSION_STATUS_RUNNING
-from apps.tenant_app_service.chat.thread_turn import (
+from apps.tenant_app_service.chat.session_domain import SESSION_STATUS_RUNNING
+from apps.tenant_app_service.chat.turn_admission import (
     assert_thread_accepts_new_user_turn,
     guard_thread_turn_start,
     thread_advisory_lock_keys,
@@ -16,34 +15,35 @@ from apps.tenant_app_service.chat.thread_turn import (
 
 
 def test_thread_advisory_lock_keys_stable():
-    assert thread_advisory_lock_keys(2, "thread-abc") == thread_advisory_lock_keys(2, "thread-abc")
-    assert thread_advisory_lock_keys(2, "thread-abc") != thread_advisory_lock_keys(2, "thread-xyz")
+    a = thread_advisory_lock_keys(1, "thread-abc")
+    b = thread_advisory_lock_keys(1, "thread-abc")
+    assert a == b
+    assert thread_advisory_lock_keys(1, "other") != a
 
 
 @pytest.mark.asyncio
 async def test_try_acquire_thread_turn_xact_lock_raises_when_not_acquired():
     db = AsyncMock()
-    lock_result = MagicMock()
-    lock_result.scalar_one.return_value = False
-    db.execute = AsyncMock(return_value=lock_result)
+    result = MagicMock()
+    result.scalar_one.return_value = False
+    db.execute = AsyncMock(return_value=result)
 
     with pytest.raises(ThreadBusyError) as exc_info:
         await try_acquire_thread_turn_xact_lock(db, tenant_id=1, thread_id="t1")
 
-    assert exc_info.value.details.get("code") == "THREAD_BUSY"
+    assert exc_info.value.details.get("reason") == "advisory_lock_not_acquired"
 
 
 @pytest.mark.asyncio
-async def test_assert_thread_accepts_new_user_turn_raises_when_running():
+async def test_assert_thread_accepts_new_user_turn_raises_when_busy():
     db = AsyncMock()
     with patch(
-        "apps.tenant_app_service.chat.thread_turn.resolve_session_status",
+        "apps.tenant_app_service.chat.turn_admission.SessionStatusService.resolve",
         AsyncMock(
-            return_value=type(
-                "Status",
-                (),
-                {"status": SESSION_STATUS_RUNNING, "session_id": "sess-1"},
-            )()
+            return_value=MagicMock(
+                status=SESSION_STATUS_RUNNING,
+                session_id="sess-1",
+            )
         ),
     ):
         with pytest.raises(ThreadBusyError) as exc_info:
@@ -53,6 +53,7 @@ async def test_assert_thread_accepts_new_user_turn_raises_when_running():
                 thread_id="t1",
                 agent_id=-1,
             )
+
     assert exc_info.value.details.get("thread_status") == SESSION_STATUS_RUNNING
 
 
@@ -60,11 +61,11 @@ async def test_assert_thread_accepts_new_user_turn_raises_when_running():
 async def test_guard_thread_turn_start_skips_busy_check_for_hitl():
     db = AsyncMock()
     with patch(
-        "apps.tenant_app_service.chat.thread_turn.try_acquire_thread_turn_xact_lock",
+        "apps.tenant_app_service.chat.turn_admission.try_acquire_thread_turn_xact_lock",
         AsyncMock(),
     ) as lock_mock:
         with patch(
-            "apps.tenant_app_service.chat.thread_turn.assert_thread_accepts_new_user_turn",
+            "apps.tenant_app_service.chat.turn_admission.assert_thread_accepts_new_user_turn",
             AsyncMock(),
         ) as busy_mock:
             await guard_thread_turn_start(
@@ -74,5 +75,6 @@ async def test_guard_thread_turn_start_skips_busy_check_for_hitl():
                 agent_id=-1,
                 skip_busy_check=True,
             )
+
     lock_mock.assert_awaited_once()
     busy_mock.assert_not_awaited()

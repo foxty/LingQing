@@ -61,6 +61,14 @@ class ChatRequest(BaseModel):
         default=None,
         description="Selected thinking_effort_options value from the agent model profile snapshot",
     )
+    agent_ids: list[int] | None = Field(
+        default=None,
+        description="When set with agent-runs send API, agents to invoke for one human message",
+    )
+    run_id: str | None = Field(
+        default=None,
+        description="Existing agent run to execute (agent-runs mode stream continuation)",
+    )
 
 
 class ChatResponse(BaseModel):
@@ -165,3 +173,37 @@ class SessionStatusResponse(BaseModel):
 
 
 # ArtifactResponse is now owned by apps.shared.artifact.schemas.
+
+
+class SendThreadMessageRequest(BaseModel):
+    """Post a human message and optionally queue agent runs."""
+
+    content: str = Field(..., min_length=1)
+    agent_ids: list[int] | None = Field(
+        default=None,
+        description="Agents to run; empty or omitted for message-only",
+    )
+
+
+class AgentRunSummary(BaseModel):
+    run_id: str
+    agent_id: int
+    invoke_index: int
+    session_id: str
+    status: str
+
+
+class SendThreadMessageResponse(BaseModel):
+    message_id: str
+    thread_id: str
+    runs: list[AgentRunSummary]
+
+
+class ThreadTimelineResponse(BaseModel):
+    thread_id: str
+    messages: list[Message]
+
+
+class TriggerRunsResponse(BaseModel):
+    trigger_message_id: str
+    runs: list[AgentRunSummary]

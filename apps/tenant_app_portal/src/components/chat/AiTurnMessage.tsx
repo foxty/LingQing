@@ -349,6 +349,7 @@ export default function AiTurnMessage({
                           items={group.items.map((item) => item.toolItem)}
                           itemKeys={group.keys}
                           threadId={threadId || ''}
+                          sessionId={turn.sessionId}
                           isStreaming={isStreaming}
                         />
                       )

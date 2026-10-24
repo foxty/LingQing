@@ -1,4 +1,4 @@
-"""Wire chat turn_sessions to real commits on the Slack integration DB."""
+"""Wire chat application turn_flow to real commits on the Slack integration DB."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ def patch_committed_turn_sessions(monkeypatch: Any, session_factory: async_sessi
     """
 
     monkeypatch.setattr(
-        "apps.tenant_app_service.chat.turn_sessions.app_db_session",
+        "apps.tenant_app_service.chat.application.turn_flow.app_db_session",
         _committed_context_manager(session_factory),
     )
 

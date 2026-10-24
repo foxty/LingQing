@@ -22,15 +22,6 @@ MESSAGE_TYPE_AI: Final = "ai"
 MESSAGE_TYPE_TOOL: Final = "tool"
 MESSAGE_TYPE_SYSTEM: Final = "system"
 
-SESSION_STATUS_RUNNING: Final = "running"
-SESSION_STATUS_AWAITING_HITL: Final = "awaiting_hitl"
-SESSION_STATUS_HITL_APPROVED_PENDING_CONTINUE: Final = "hitl_approved_pending_continue"
-SESSION_STATUS_COMPLETED: Final = "completed"
-
-# Orphaned runs (e.g. server reload after human persist) stop polling after this window.
-SESSION_STALE_RUNNING_SECONDS: Final = 900
-
-
 @dataclass
 class MessageDomain(BaseDomainModel):
     """Message domain model for chat conversations."""

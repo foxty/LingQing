@@ -1,5 +1,6 @@
 """Chat router."""
 
+import asyncio
 from dataclasses import asdict
 from typing import Any, AsyncIterator
 
@@ -20,10 +21,15 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.observability.service import ObservabilityService
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.chat.adapters import chat_thread_to_domain
+from apps.tenant_app_service.chat.application import (
+    iter_prepared_chat_stream_committed,
+    prepare_chat_stream_committed,
+    run_non_stream_chat_turn,
+)
 from apps.tenant_app_service.chat.domain import ThreadDomain
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse
+from apps.tenant_app_service.chat.streaming import sse_stream_failure_lines
 from apps.tenant_app_service.chat.thread_service import ThreadService
-from apps.tenant_app_service.chat.turn_sessions import run_non_stream_chat_turn, stream_chat_turn_events
 
 router = APIRouter(prefix="/chat", tags=["chat"])
 
@@ -87,32 +93,13 @@ async def chat(
     )
 
 
-async def _stream_chat_events(
-    request: ChatRequest,
-    current_user: UserDTO,
-    access_token: str | None,
-) -> AsyncIterator[str]:
-    """Validate thread access, then stream via committed prepare + SSE iteration."""
-    async with app_db_session() as db:
-        await _validate_and_get_thread(request.thread_id, current_user, db)
-
-    async for item in stream_chat_turn_events(
-        current_user.tenant_id,
-        request,
-        current_user,
-        access_token=access_token,
-    ):
-        yield item
-
-
 @router.post("/stream", include_in_schema=False)
 async def chat_stream(
     request: ChatRequest,
     # Do not use Depends(get_db) or Depends(require_permission()) here.
     # FastAPI keeps a yielded get_db session open until the SSE stream ends.
     # require_permission_released() closes auth before this handler runs.
-    # Setup uses a short app_db_session inside _stream_chat_events; the agent
-    # run opens its own session. The request does not pin the pool during SSE.
+    # Prepare runs before StreamingResponse so ThreadBusyError maps to HTTP 409.
     current_user: UserDTO = Depends(require_permission_released(Permissions.CHAT_ACCESS)),
     credentials: HTTPAuthorizationCredentials = Depends(security),
 ):
@@ -121,8 +108,34 @@ async def chat_stream(
     if request.tenant_id != current_user.tenant_id:
         raise AuthorizationError(f"Access denied. You can only access tenant: {current_user.tenant_id}")
 
+    async with app_db_session() as db:
+        await _validate_and_get_thread(request.thread_id, current_user, db)
+
+    prepared = await prepare_chat_stream_committed(
+        current_user.tenant_id,
+        request,
+        current_user,
+        access_token=credentials.credentials,
+    )
+
+    async def event_generator() -> AsyncIterator[str]:
+        try:
+            async for item in iter_prepared_chat_stream_committed(
+                current_user.tenant_id,
+                request,
+                current_user,
+                prepared,
+                access_token=credentials.credentials,
+            ):
+                yield item
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            for line in sse_stream_failure_lines(exc, prepared.session_id):
+                yield line
+
     return StreamingResponse(
-        _stream_chat_events(request, current_user, credentials.credentials),
+        event_generator(),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",

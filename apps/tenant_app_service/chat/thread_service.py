@@ -1,4 +1,8 @@
-"""Thread metadata, history, and read-side chat APIs."""
+"""Thread metadata, history, and read-side chat APIs (single DB session).
+
+**Layer:** Session-scoped service — CRUD, history, tool detail, session status delegate.
+**Must not:** LangGraph invoke or multi-session turn orchestration (see ``application/``).
+"""
 
 from uuid import uuid4
 
@@ -6,13 +10,14 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.chat.adapters import (
     chat_message_to_domain,
-    domain_conversation_to_api,
     domain_message_to_api,
 )
+from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain
 from apps.tenant_app_service.chat.domain import ThreadDomain
-from apps.tenant_app_service.chat.schemas import Message, SessionStatusResponse
+from apps.tenant_app_service.chat.schemas import ConversationHistoryResponse, Message, SessionStatusResponse
 from apps.tenant_app_service.chat.service_base import MAX_THREADS_PER_USER, ChatServiceBase
-from apps.tenant_app_service.chat.session_status import resolve_session_status
+from apps.tenant_app_service.chat.session_status_service import SessionStatusService
+from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 
 
 class ThreadService(ChatServiceBase):
@@ -194,13 +199,31 @@ class ThreadService(ChatServiceBase):
         agent_id: int,
     ) -> SessionStatusResponse:
         """Return durable session status for frontend polling."""
-        return await resolve_session_status(
-            tenant_id=self.tenant_id,
-            db=self.db,
-            message_repo=self.message_repo,
+        return await SessionStatusService(self.tenant_id, self.db).resolve(
             thread_id=thread_id,
             agent_id=agent_id,
         )
+
+    async def get_main_timeline_messages(self, thread: ThreadDomain) -> list[Message]:
+        """Trigger-anchored main timeline as API messages (human + promoted AI)."""
+        from apps.tenant_app_service.chat.history_adapters import main_timeline_rows_to_api_messages
+
+        run_service = ThreadRunService(self.db, self.tenant_id)
+        timeline = await run_service.get_timeline(thread.id)
+        return main_timeline_rows_to_api_messages(
+            timeline,
+            thread_id=thread.id,
+            default_agent_id=thread.agent_id,
+        )
+
+    async def list_runs_for_trigger(
+        self,
+        thread_id: str,
+        trigger_message_id: str,
+    ) -> list[AgentRunDomain]:
+        """Agent runs spawned from one human message on the main timeline."""
+        run_service = ThreadRunService(self.db, self.tenant_id)
+        return await run_service.list_runs_for_trigger(thread_id, trigger_message_id)
 
     async def get_conversation_history(
         self,
@@ -238,52 +261,93 @@ class ThreadService(ChatServiceBase):
             include_tool_messages,
         )
 
-        # Get thread metadata from DB
-        thread = await self.thread_repo.get_by_id(thread_id)
-        db_messages, has_more, next_before_session_id = await self.message_repo.get_messages_by_session_window(
-            thread_id=thread_id,
-            agent_id=agent_id,
-            session_limit=session_limit,
-            before_session_id=before_session_id,
-            include_tool_messages=include_tool_messages if include_tool_messages is not None else True,
-            session_id=session_id,
+        from apps.tenant_app_service.chat.agent_run_domain import sort_timeline_trigger_anchored
+        from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
+        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+        from apps.tenant_app_service.chat.history_adapters import (
+            agent_run_row_to_api_message,
+            main_timeline_row_to_api_message,
         )
+        from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
 
-        if not db_messages:
-            self.logger.info(f"No messages found for thread: {thread_id}")
-            return domain_conversation_to_api(
-                thread,
-                current_user.username,
-                next_before_created_at=None,
-                next_before_id=None,
-                next_before_session_id=None,
+        thread = await self.thread_repo.get_by_id(thread_id)
+        include_tools = include_tool_messages if include_tool_messages is not None else True
+
+        main_repo = MainMessageRepository(self.db)
+        run_repo = AgentRunRepository(self.db)
+        run_msg_repo = AgentRunMessageRepository(self.db)
+
+        use_run_detail = include_tools or session_id is not None or before_session_id is not None
+
+        if not use_run_detail:
+            timeline = sort_timeline_trigger_anchored(await main_repo.list_for_thread(thread.id))
+            api_messages = [
+                main_timeline_row_to_api_message(row, thread_id=thread.id, default_agent_id=agent_id)
+                for row in timeline
+                if row.type in ("human", "ai")
+            ]
+            return ConversationHistoryResponse(
+                thread_id=thread.id,
+                tenant_id=thread.tenant_id,
+                agent_id=thread.agent_id,
+                user_id=thread.user_id,
+                username=current_user.username,
+                total_rounds=sum(1 for m in api_messages if m.role == "human"),
+                messages=api_messages,
+                message_count=len(api_messages),
                 has_more=False,
             )
 
-        next_before_created_at = None
-        next_before_id = None
-        if db_messages:
-            oldest = db_messages[0]
-            next_before_created_at = oldest.created_at.isoformat() if oldest.created_at else None
-            next_before_id = oldest.id
-
-        # Add DB messages directly to thread (no conversion needed)
-        for db_msg in db_messages:
-            added = thread.add_message_from_db(db_msg)
-            if not added:
-                self.logger.debug(f"Message filtered out, type: {db_msg.type}")
-
-        self.logger.info(
-            f"Retrieved {len(db_messages)} messages from database for thread: {thread_id} "
-            f"({len(thread.messages)} messages in thread after filtering)"
+        runs, has_more, next_before_session_id = await run_repo.list_runs_for_history_page(
+            thread_id=thread.id,
+            agent_id=agent_id,
+            session_limit=session_limit,
+            before_session_id=before_session_id,
+            session_id=session_id,
         )
 
-        # Convert domain to DTO before returning
-        return domain_conversation_to_api(
-            thread,
-            current_user.username,
-            next_before_created_at=next_before_created_at,
-            next_before_id=next_before_id,
+        api_messages: list[Message] = []
+        humans_emitted_for_trigger: set[str] = set()
+
+        for run in runs:
+            if run.trigger_message_id not in humans_emitted_for_trigger:
+                humans_emitted_for_trigger.add(run.trigger_message_id)
+                human = await main_repo.get_by_message_id(thread.id, run.trigger_message_id)
+                if human:
+                    api_messages.append(
+                        main_timeline_row_to_api_message(
+                            human, thread_id=thread.id, default_agent_id=agent_id
+                        )
+                    )
+
+            run_rows = await run_msg_repo.list_for_run(run.id)
+            if include_tools:
+                for row in run_rows:
+                    api_messages.append(
+                        agent_run_row_to_api_message(row, thread_id=thread.id, default_agent_id=agent_id)
+                    )
+            promoted = await main_repo.get_promoted_ai_for_run(run.id)
+            if promoted:
+                if not include_tools or promoted.message_id not in {r.message_id for r in run_rows if r.message_id}:
+                    api_messages.append(
+                        main_timeline_row_to_api_message(promoted, thread_id=thread.id, default_agent_id=agent_id)
+                    )
+            elif include_tools:
+                final_ai = next((r for r in reversed(run_rows) if r.type == "ai"), None)
+                if final_ai:
+                    api_messages.append(
+                        agent_run_row_to_api_message(final_ai, thread_id=thread.id, default_agent_id=agent_id)
+                    )
+
+        return ConversationHistoryResponse(
+            thread_id=thread.id,
+            tenant_id=thread.tenant_id,
+            agent_id=thread.agent_id,
+            user_id=thread.user_id,
+            username=current_user.username,
+            total_rounds=sum(1 for m in api_messages if m.role == "human"),
+            messages=api_messages,
+            message_count=len(api_messages),
             next_before_session_id=next_before_session_id,
             has_more=has_more,
         )
@@ -296,15 +360,44 @@ class ThreadService(ChatServiceBase):
         session_id: str | None = None,
     ) -> Message | None:
         """Get a single tool message detail by tool_call_id."""
-        db_msg = await self.message_repo.get_tool_message_by_call_id(
-            thread_id=thread_id,
-            tool_call_id=tool_call_id,
+        from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
+        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+
+        run_id: str | None = None
+        if session_id:
+            run = await AgentRunRepository(self.db).get_by_session_id(session_id)
+            run_id = run.id if run else None
+
+        run_msg_repo = AgentRunMessageRepository(self.db)
+        db_msg = await run_msg_repo.get_tool_message_by_call_id(
+            thread_id,
+            tool_call_id,
+            run_id=run_id,
+        )
+        if not db_msg and run_id is not None:
+            db_msg = await run_msg_repo.get_tool_message_by_call_id(
+                thread_id,
+                tool_call_id,
+                run_id=None,
+            )
+        if db_msg:
+            from apps.tenant_app_service.agents.message_persistence_adapters import (
+                agent_run_message_to_chat_message,
+            )
+
+            domain_msg = chat_message_to_domain(agent_run_message_to_chat_message(db_msg))
+            return domain_message_to_api(domain_msg)
+
+        from apps.tenant_app_service.chat.message_repository import MessageRepository
+
+        legacy = await MessageRepository(self.db).get_tool_message_by_call_id(
+            thread_id,
+            tool_call_id,
             session_id=session_id,
         )
-        if not db_msg:
+        if legacy is None:
             return None
-
-        domain_msg = chat_message_to_domain(db_msg)
+        domain_msg = chat_message_to_domain(legacy)
         return domain_message_to_api(domain_msg)
 
     async def agent_thinking_effort_control(self, agent_id: int, actor: ActorContext) -> dict[str, object]:

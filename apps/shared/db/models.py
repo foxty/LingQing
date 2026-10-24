@@ -507,6 +507,17 @@ class ChatThread(Base):
         cascade="all, delete-orphan",
         lazy="noload",
     )
+    main_messages: Mapped[list["ThreadMainMessage"]] = relationship(
+        "ThreadMainMessage",
+        back_populates="thread",
+        order_by="(ThreadMainMessage.created_at, ThreadMainMessage.id)",
+        cascade="all, delete-orphan",
+    )
+    agent_runs: Mapped[list["AgentRun"]] = relationship(
+        "AgentRun",
+        back_populates="thread",
+        cascade="all, delete-orphan",
+    )
 
 
 class ChatMessage(Base):
@@ -577,6 +588,130 @@ class ChatMessage(Base):
 
     # Relationships
     thread: Mapped["ChatThread"] = relationship("ChatThread", back_populates="messages")
+
+
+class ThreadMainMessage(Base):
+    """Human and promoted final AI rows for the scrollable thread transcript."""
+
+    __tablename__ = "thread_main_messages"
+    __table_args__ = (
+        Index("idx_thread_main_messages_thread_created_id", "thread_id", "created_at", "id"),
+        Index("idx_thread_main_messages_trigger", "thread_id", "trigger_message_id"),
+        UniqueConstraint("message_id", name="uq_thread_main_messages_message_id"),
+        UniqueConstraint("agent_run_id", name="uq_thread_main_messages_agent_run_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    thread_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("chat_threads.id", ondelete="CASCADE"), nullable=False
+    )
+    type: Mapped[str] = mapped_column(String(16), nullable=False, comment="human or ai")
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    agent_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # AI rows: link to human message_id and sibling order (denormalized from agent_runs).
+    trigger_message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    agent_run_id: Mapped[str | None] = mapped_column(String(36), nullable=True)
+    invoke_index: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    additional_kwargs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    message_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    thread: Mapped["ChatThread"] = relationship("ChatThread", back_populates="main_messages")
+
+
+class AgentRun(Base):
+    """One agent invocation triggered by a human message on the main timeline."""
+
+    __tablename__ = "agent_runs"
+    __table_args__ = (
+        Index("idx_agent_runs_thread_status", "thread_id", "status"),
+        Index("idx_agent_runs_trigger", "thread_id", "trigger_message_id"),
+        UniqueConstraint(
+            "trigger_message_id",
+            "invoke_index",
+            name="uq_agent_runs_trigger_invoke",
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
+    thread_id: Mapped[str] = mapped_column(
+        String(255), ForeignKey("chat_threads.id", ondelete="CASCADE"), nullable=False
+    )
+    agent_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    trigger_message_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    invoke_index: Mapped[int] = mapped_column(Integer, nullable=False, server_default="0")
+    status: Mapped[str] = mapped_column(String(32), nullable=False, server_default="queued")
+    session_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    thread: Mapped["ChatThread"] = relationship("ChatThread", back_populates="agent_runs")
+    run_messages: Mapped[list["AgentRunMessage"]] = relationship(
+        "AgentRunMessage",
+        back_populates="agent_run",
+        cascade="all, delete-orphan",
+    )
+
+
+class AgentRunMessage(Base):
+    """Interim AI, tool, and HITL messages for a single agent run."""
+
+    __tablename__ = "agent_run_messages"
+    __table_args__ = (
+        Index("idx_agent_run_messages_run_created_id", "run_id", "created_at", "id"),
+        Index("idx_agent_run_messages_session", "session_id"),
+        Index("idx_agent_run_messages_message_id", "message_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    message_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    run_id: Mapped[str] = mapped_column(String(36), ForeignKey("agent_runs.id", ondelete="CASCADE"), nullable=False)
+    thread_id: Mapped[str] = mapped_column(String(255), nullable=False)
+    type: Mapped[str] = mapped_column(String(50), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    is_summarized: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
+    tool_calls: Mapped[list[dict] | None] = mapped_column(JSON, nullable=True)
+    additional_kwargs: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    session_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    agent_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+    )
+    message_metadata: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+
+    agent_run: Mapped["AgentRun"] = relationship("AgentRun", back_populates="run_messages")
 
 
 class MessageFeedback(Base):

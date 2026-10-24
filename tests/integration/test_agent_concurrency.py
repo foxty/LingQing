@@ -30,6 +30,101 @@ from apps.tenant_app_service.agents.memory.conversation_memory_manager import Co
 pytestmark = pytest.mark.integration
 
 
+async def _ensure_runtime_entities(async_db_session, runtime_context) -> None:
+    """Tenant, user, and agent rows required for thread/run FK constraints."""
+    tenant_id = runtime_context.tenant.tenant_id
+    tenant = await async_db_session.get(Tenant, tenant_id)
+    if tenant is None:
+        tenant = Tenant(
+            id=tenant_id,
+            name=runtime_context.tenant.tenant_name,
+            slug=f"tenant-{tenant_id}",
+            status="active",
+        )
+        async_db_session.add(tenant)
+        await async_db_session.flush()
+
+    user = await async_db_session.get(User, runtime_context.user.user_id)
+    if user is None:
+        user = User(
+            id=runtime_context.user.user_id,
+            username=runtime_context.user.username,
+            email=f"{runtime_context.user.username}@example.com",
+            hashed_password="hashed",
+            role=runtime_context.user.role,
+            tenant_id=tenant_id,
+            status="active",
+        )
+        async_db_session.add(user)
+        await async_db_session.flush()
+
+    agent = await async_db_session.get(Agent, runtime_context.agent_id)
+    if agent is None:
+        agent = Agent(
+            id=runtime_context.agent_id,
+            tenant_id=tenant_id,
+            owner_id=runtime_context.user.user_id,
+            name=runtime_context.agent_name,
+            description="test agent",
+            system_prompt="test prompt",
+            config={},
+        )
+        async_db_session.add(agent)
+        await async_db_session.flush()
+
+
+async def _build_ainvoke_config(async_db_session, runtime_context, thread_id: str) -> dict:
+    """RunnableConfig with agent run + main human (matches production turn persistence)."""
+    from uuid import uuid4
+
+    from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+    from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+
+    await _ensure_runtime_entities(async_db_session, runtime_context)
+
+    trigger_message_id = str(uuid4())
+    session_id = str(uuid4())
+    tenant_id = runtime_context.tenant.tenant_id
+    existing_thread = await async_db_session.get(ChatThread, thread_id)
+    if existing_thread is None:
+        async_db_session.add(
+            ChatThread(
+                id=thread_id,
+                tenant_id=tenant_id,
+                user_id=runtime_context.user.user_id,
+                agent_id=runtime_context.agent_id,
+                title=f"Concurrency {thread_id}",
+                message_count=0,
+            )
+        )
+        await async_db_session.flush()
+    await MainMessageRepository(async_db_session).insert_human(
+        message_id=trigger_message_id,
+        thread_id=thread_id,
+        content="concurrency seed human",
+    )
+    run = await AgentRunRepository(async_db_session).create_run(
+        tenant_id=tenant_id,
+        thread_id=thread_id,
+        agent_id=runtime_context.agent_id,
+        trigger_message_id=trigger_message_id,
+        invoke_index=0,
+        session_id=session_id,
+    )
+    user_runtime = replace(runtime_context, thread_id=thread_id, session_id=session_id)
+    return {
+        "configurable": {
+            "thread_id": thread_id,
+            "db_session": async_db_session,
+            "runtime": user_runtime.model_dump(),
+            "run_id": run.id,
+            "trigger_message_id": trigger_message_id,
+            "invoke_index": 0,
+            "session_id": session_id,
+        }
+    }
+
+
 def _assert_distinct_instances(instances: list) -> None:
     """Verify instances are distinct without relying on id() (GC can reuse ids)."""
     for i in range(len(instances)):
@@ -145,7 +240,9 @@ class TestAgentConcurrency:
                 """Create manager in a separate thread."""
                 try:
                     runtime = replace(runtime_context, thread_id=thread_id)
-                    manager = agent._get_or_create_manager(runtime, sync_session)
+                    manager = agent._get_or_create_manager(
+                        runtime, sync_session, run_id=f"concurrency-run-{thread_id}"
+                    )
                     with lock:
                         managers.append(manager)
                         results.append((thread_id, manager))
@@ -204,7 +301,12 @@ class TestAgentConcurrency:
             """Create manager using asyncio.to_thread for true concurrency."""
             runtime = replace(runtime_context, thread_id=thread_id)
             # Run synchronous manager creation in thread pool
-            manager = await asyncio.to_thread(agent._get_or_create_manager, runtime, async_db_session.sync_session)
+            manager = await asyncio.to_thread(
+                agent._get_or_create_manager,
+                runtime,
+                async_db_session.sync_session,
+                run_id=f"concurrency-run-{thread_id}",
+            )
             return manager
 
         # TRUE concurrent execution
@@ -257,33 +359,47 @@ class TestAgentConcurrency:
             async_db_session.add(thread)
         await async_db_session.commit()
 
+        from uuid import uuid4
+
+        from apps.shared.db.models import AgentRunMessage
+        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+
         # Add messages to each thread sequentially
         # (SQLAlchemy async sessions don't support concurrent operations)
         for idx, thread_id in enumerate(thread_ids):
+            run = await AgentRunRepository(async_db_session).create_run(
+                tenant_id=runtime_context.tenant.tenant_id,
+                thread_id=thread_id,
+                agent_id=runtime_context.agent_id,
+                trigger_message_id=str(uuid4()),
+                invoke_index=0,
+                session_id=str(uuid4()),
+            )
             manager = ConversationMemoryManager(
                 async_db_session,
                 thread_id,
                 tenant_id=runtime_context.tenant.tenant_id,
                 agent_id=runtime_context.agent_id,
+                run_id=run.id,
             )
             messages = [
-                HumanMessage(id=f"msg-{thread_id}-1", content=f"Hello from user {idx}"),
+                AIMessage(id=f"msg-{thread_id}-1", content=f"Hello from user {idx}"),
                 AIMessage(id=f"msg-{thread_id}-2", content=f"Response to user {idx}"),
             ]
             config = {"configurable": {"thread_id": thread_id, "runtime": runtime_context.model_dump()}}
             await manager.add_messages(messages, config)
 
-        # Verify message isolation
+        # Verify message isolation (run-scoped store)
         for thread_id in thread_ids:
             result = await async_db_session.execute(
-                select(ChatMessage).where(ChatMessage.thread_id == thread_id).order_by(ChatMessage.created_at)
+                select(AgentRunMessage)
+                .where(AgentRunMessage.thread_id == thread_id)
+                .order_by(AgentRunMessage.created_at)
             )
             messages = result.scalars().all()
 
-            # Each thread should have exactly 2 messages
             assert len(messages) == messages_per_thread, f"Thread {thread_id} should have 2 messages"
 
-            # Verify messages belong to correct thread
             for msg in messages:
                 assert msg.thread_id == thread_id, f"Message {msg.id} should belong to thread {thread_id}"
 
@@ -315,7 +431,9 @@ class TestAgentConcurrency:
         managers = []
         for _ in range(5):
             runtime = replace(runtime_context, thread_id=same_thread_id)
-            manager = agent._get_or_create_manager(runtime, async_db_session)
+            manager = agent._get_or_create_manager(
+                runtime, async_db_session, run_id=f"concurrency-run-{same_thread_id}-{_}"
+            )
             managers.append(manager)
 
         # With no caching, each call should return a new instance
@@ -396,7 +514,9 @@ class TestAgentConcurrency:
         for i in range(num_requests):
             thread_id = f"stress-thread-{i}"
             runtime = replace(runtime_context, thread_id=thread_id)
-            manager = agent._get_or_create_manager(runtime, async_db_session)
+            manager = agent._get_or_create_manager(
+                runtime, async_db_session, run_id=f"concurrency-run-{thread_id}"
+            )
 
             # Verify manager is functional
             assert manager.thread_id == thread_id
@@ -444,10 +564,13 @@ class TestAgentConcurrency:
         # Create and compile the agent
         agent = AgentBase(stub_config)
 
-        # Mock the model binding to return a fake LLM response
-        mock_response = AIMessage(content="Test response", id="mock-ai-msg")
+        # Mock the model binding to return a fake LLM response (unique id per turn for main promotion)
+        from uuid import uuid4
+
         mock_model = AsyncMock()
-        mock_model.ainvoke = AsyncMock(return_value=mock_response)
+        mock_model.ainvoke = AsyncMock(
+            side_effect=lambda *args, **kwargs: AIMessage(content="Test response", id=str(uuid4()))
+        )
 
         with patch.object(
             agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
@@ -460,6 +583,10 @@ class TestAgentConcurrency:
                 f"Hello, I am user {i}. Please respond with 'User {i} acknowledged'." for i in range(num_users)
             ]
             thread_ids = [f"multi-user-thread-{i}" for i in range(num_users)]
+            invoke_configs = {
+                tid: await _build_ainvoke_config(async_db_session, runtime_context, tid)
+                for tid in thread_ids
+            }
 
             # Semaphore to limit concurrency and avoid SQLAlchemy session conflicts
             # This still tests concurrent task scheduling and agent framework logic
@@ -467,16 +594,7 @@ class TestAgentConcurrency:
 
             async def simulate_user_invocation(user_idx: int, thread_id: str, message: str):
                 """Simulate a single user invoking the agent."""
-                # Create a fresh runtime context for each user
-                user_runtime = replace(runtime_context, thread_id=thread_id)
-
-                config = {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "db_session": async_db_session,
-                        "runtime": user_runtime.model_dump(),
-                    }
-                }
+                config = invoke_configs[thread_id]
 
                 # Use semaphore to avoid SQLAlchemy session conflicts
                 async with semaphore:
@@ -554,14 +672,7 @@ class TestAgentConcurrency:
             mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
             thread_id = thread_ids[i]
-            user_runtime = replace(runtime_context, thread_id=thread_id)
-            config = {
-                "configurable": {
-                    "thread_id": thread_id,
-                    "db_session": async_db_session,
-                    "runtime": user_runtime.model_dump(),
-                }
-            }
+            config = await _build_ainvoke_config(async_db_session, runtime_context, thread_id)
 
             with patch.object(
             agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
@@ -628,14 +739,7 @@ class TestAgentConcurrency:
             mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
             thread_id = thread_ids[i]
-            user_runtime = replace(runtime_context, thread_id=thread_id)
-            config = {
-                "configurable": {
-                    "thread_id": thread_id,
-                    "db_session": async_db_session,
-                    "runtime": user_runtime.model_dump(),
-                }
-            }
+            config = await _build_ainvoke_config(async_db_session, runtime_context, thread_id)
 
             with patch.object(
             agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)
@@ -711,14 +815,7 @@ class TestAgentConcurrency:
                 mock_model.ainvoke = AsyncMock(return_value=mock_response)
 
             thread_id = thread_ids[i]
-            user_runtime = replace(runtime_context, thread_id=thread_id)
-            config = {
-                "configurable": {
-                    "thread_id": thread_id,
-                    "db_session": async_db_session,
-                    "runtime": user_runtime.model_dump(),
-                }
-            }
+            config = await _build_ainvoke_config(async_db_session, runtime_context, thread_id)
 
             with patch.object(
             agent._model_binding_manager, "get_or_create", new=AsyncMock(return_value=mock_model)

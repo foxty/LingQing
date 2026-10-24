@@ -14,11 +14,30 @@ import pytest_asyncio
 from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy import select
 
-from apps.shared.db.models import Agent, ChatMessage, ChatThread, Tenant, User
+from apps.shared.db.models import Agent, AgentRun, AgentRunMessage, ChatMessage, ChatThread, Tenant, User
 from apps.tenant_app_service.agents.agent_base import AgentBase
 from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
 
 pytestmark = pytest.mark.integration
+
+TEST_RUN_ID = "00000000-0000-4000-8000-000000000002"
+
+
+async def _seed_agent_run(session, thread: ChatThread, *, session_id: str = "test-session") -> str:
+    session.add(
+        AgentRun(
+            id=TEST_RUN_ID,
+            tenant_id=thread.tenant_id,
+            thread_id=thread.id,
+            agent_id=thread.agent_id,
+            trigger_message_id="trigger-1",
+            invoke_index=0,
+            status="running",
+            session_id=session_id,
+        )
+    )
+    await session.flush()
+    return TEST_RUN_ID
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -52,13 +71,15 @@ async def test_thread_with_history(async_db_session, runtime_context):
     thread = await async_db_session.get(ChatThread, test_thread_id)
     assert thread is not None
 
-    manager = ConversationMemoryManager(async_db_session, thread.id, tenant_id=test_tenant_id, agent_id=test_agent_id)
+    await _seed_agent_run(async_db_session, thread, session_id=runtime_context.session_id)
+    manager = ConversationMemoryManager(
+        async_db_session, thread.id, tenant_id=test_tenant_id, agent_id=test_agent_id, run_id=TEST_RUN_ID
+    )
 
-    lc_msg1 = HumanMessage(id="msg-1", content="Hello, what is 2+2?")
     lc_msg2 = AIMessage(id="msg-2", content="2+2 equals 4.")
     config = {"configurable": {"thread_id": test_thread_id, "runtime": runtime_context.model_dump()}}
 
-    await manager.add_messages([lc_msg1, lc_msg2], config)
+    await manager.add_messages([lc_msg2], config)
 
     return thread
 
@@ -91,44 +112,34 @@ class TestAgentWithMemory:
             test_thread_with_history.id,
             tenant_id=runtime_context.tenant.tenant_id,
             agent_id=runtime_context.agent_id,
+            run_id=TEST_RUN_ID,
         )
         loaded_messages = await manager.load_messages_with_summary(message_limit=50)
 
-        assert len(loaded_messages) == 2
-        assert isinstance(loaded_messages[0], HumanMessage)
-        assert "2+2" in loaded_messages[0].content
-        assert isinstance(loaded_messages[1], AIMessage)
-        assert "4" in loaded_messages[1].content
+        assert len(loaded_messages) == 1
+        assert isinstance(loaded_messages[0], AIMessage)
+        assert "4" in loaded_messages[0].content
 
     async def test_agent_saves_new_messages_to_db(self, async_db_session, test_thread_with_history, runnable_config):
         """Test that agent saves new messages to database after execution."""
-        initial_count = test_thread_with_history.message_count
-
-        manager = ConversationMemoryManager(async_db_session, test_thread_with_history.id, tenant_id=1, agent_id=1)
+        manager = ConversationMemoryManager(
+            async_db_session, test_thread_with_history.id, tenant_id=1, agent_id=1, run_id=TEST_RUN_ID
+        )
 
         new_messages = [
-            HumanMessage(content="Tell me a joke"),
             AIMessage(content="Why did the chicken cross the road? To get to the other side!"),
         ]
 
         await manager.add_messages(new_messages, runnable_config)
 
-        await async_db_session.refresh(test_thread_with_history)
-
-        assert test_thread_with_history.message_count == initial_count + 2
-
         result = await async_db_session.execute(
-            select(ChatMessage)
-            .where(ChatMessage.thread_id == test_thread_with_history.id)
-            .order_by(ChatMessage.created_at)
+            select(AgentRunMessage)
+            .where(AgentRunMessage.thread_id == test_thread_with_history.id)
+            .order_by(AgentRunMessage.created_at)
         )
-        all_messages = result.scalars().all()
-
-        assert len(all_messages) == 4
-        assert all_messages[2].type == "human"
-        assert "joke" in all_messages[2].content
-        assert all_messages[3].type == "ai"
-        assert "chicken" in all_messages[3].content
+        run_msgs = result.scalars().all()
+        assert len(run_msgs) == 2
+        assert "chicken" in run_msgs[-1].content
 
     async def test_agent_without_conversation_manager_works(
         self,
@@ -199,6 +210,7 @@ class TestAgentWithMemory:
                 "thread_id": test_thread_with_history.id,
                 "db_session": async_db_session,
                 "runtime": runtime_context.model_dump(),
+                "run_id": TEST_RUN_ID,
             }
         }
 
@@ -260,6 +272,7 @@ class TestAgentWithMemory:
                 "thread_id": test_thread_with_history.id,
                 "db_session": async_db_session,
                 "runtime": runtime_context.model_dump(),
+                "run_id": TEST_RUN_ID,
             }
         }
 
@@ -277,16 +290,11 @@ class TestAgentWithMemory:
         assert len(chunks) > 0
 
         await async_db_session.commit()
-        await async_db_session.refresh(test_thread_with_history)
-
-        assert test_thread_with_history.message_count == initial_count + 2
 
         result = await async_db_session.execute(
-            select(ChatMessage)
-            .where(ChatMessage.thread_id == test_thread_with_history.id)
-            .order_by(ChatMessage.created_at)
+            select(AgentRunMessage)
+            .where(AgentRunMessage.thread_id == test_thread_with_history.id)
+            .order_by(AgentRunMessage.created_at)
         )
         all_messages = result.scalars().all()
-        assert len(all_messages) == initial_count + 2
-        assert "Stream test" in all_messages[-2].content
-        assert "Streamed response" in all_messages[-1].content
+        assert any("Streamed response" in (m.content or "") for m in all_messages)

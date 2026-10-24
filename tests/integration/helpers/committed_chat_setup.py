@@ -45,14 +45,14 @@ def _issue_token(user_id: int, username: str, role: str, tenant_id: int, tenant_
 def _patch_app_db_session(session_local: async_sessionmaker[AsyncSession]) -> dict[str, Any]:
     from apps.shared.core import auth as auth_module
     from apps.shared.db import session as session_module
-    from apps.tenant_app_service.chat import turn_sessions as turn_sessions_module
+    from apps.tenant_app_service.chat.application import turn_flow as turn_flow_module
     from apps.tenant_app_service.routers import chat as chat_router_module
 
     originals = {
         "session_module": session_module.app_db_session,
         "auth": auth_module.app_db_session,
         "chat_router": chat_router_module.app_db_session,
-        "turn_sessions": turn_sessions_module.app_db_session,
+        "turn_flow": turn_flow_module.app_db_session,
     }
 
     @asynccontextmanager
@@ -68,20 +68,20 @@ def _patch_app_db_session(session_local: async_sessionmaker[AsyncSession]) -> di
     session_module.app_db_session = committed_app_db_session
     auth_module.app_db_session = committed_app_db_session
     chat_router_module.app_db_session = committed_app_db_session
-    turn_sessions_module.app_db_session = committed_app_db_session
+    turn_flow_module.app_db_session = committed_app_db_session
     return originals
 
 
 def _restore_app_db_session(originals: dict[str, Any]) -> None:
     from apps.shared.core import auth as auth_module
     from apps.shared.db import session as session_module
-    from apps.tenant_app_service.chat import turn_sessions as turn_sessions_module
+    from apps.tenant_app_service.chat.application import turn_flow as turn_flow_module
     from apps.tenant_app_service.routers import chat as chat_router_module
 
     session_module.app_db_session = originals["session_module"]
     auth_module.app_db_session = originals["auth"]
     chat_router_module.app_db_session = originals["chat_router"]
-    turn_sessions_module.app_db_session = originals["turn_sessions"]
+    turn_flow_module.app_db_session = originals["turn_flow"]
 
 
 @pytest_asyncio.fixture
@@ -178,33 +178,45 @@ async def seed_running_human_turn(
     tenant_id: int | None = None,
     user_id: int | None = None,
     content: str = "in-flight user message",
-) -> None:
-    from apps.shared.db.models import ChatMessage
+) -> str:
+    """Main-line human + RUNNING agent run (no AI) — matches durable session_status busy gate."""
+    from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
+    from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+    from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
 
-    if tenant_id is not None and user_id is not None:
-        existing = await session.get(ChatThread, thread_id)
-        if existing is None:
-            session.add(
-                ChatThread(
-                    id=thread_id,
-                    tenant_id=tenant_id,
-                    user_id=user_id,
-                    agent_id=agent_id,
-                    title="running turn seed",
-                    message_count=1,
-                )
+    thread = await session.get(ChatThread, thread_id)
+    if thread is None:
+        if tenant_id is None or user_id is None:
+            raise ValueError("tenant_id and user_id required when thread does not exist")
+        session.add(
+            ChatThread(
+                id=thread_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                agent_id=agent_id,
+                title="running turn seed",
+                message_count=1,
             )
-            await session.flush()
-
-    session.add(
-        ChatMessage(
-            message_id=f"{thread_id}-human-{uuid4().hex[:6]}",
-            thread_id=thread_id,
-            type="human",
-            content=content,
-            session_id=session_id,
-            agent_id=agent_id,
-            created_at=datetime.now(UTC),
         )
+        await session.flush()
+        resolved_tenant_id = tenant_id
+    else:
+        resolved_tenant_id = thread.tenant_id
+
+    trigger_message_id = f"{thread_id}-human-{uuid4().hex[:6]}"
+    await MainMessageRepository(session).insert_human(
+        message_id=trigger_message_id,
+        thread_id=thread_id,
+        content=content,
+    )
+    await AgentRunRepository(session).create_run(
+        tenant_id=resolved_tenant_id,
+        thread_id=thread_id,
+        agent_id=agent_id,
+        trigger_message_id=trigger_message_id,
+        invoke_index=0,
+        session_id=session_id,
+        status=AgentRunStatus.RUNNING,
     )
     await session.commit()
+    return trigger_message_id

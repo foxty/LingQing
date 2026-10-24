@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { useActiveSessionPoll } from '@/hooks/useActiveSessionPoll'
@@ -62,7 +62,7 @@ export function useWorkbenchChat({
   const { t } = useTranslation()
   const { user } = useAuth()
   const latestMessageTimestampBeforeSendRef = useRef(0)
-  const handleHitlApprovedContinueRef = useRef<(proposalId: string) => Promise<void>>(async () => {})
+  const hitlContinueProposalRef = useRef<string | null>(null)
   const handleStreamEventRef = useRef<(data: SSEMessage, activeThreadId: string) => Promise<void>>(
     async () => {}
   )
@@ -103,7 +103,6 @@ export function useWorkbenchChat({
     onHistoryRefresh: async () => {
       await refreshTail()
     },
-    onHitlApprovedContinue: (proposalId) => handleHitlApprovedContinueRef.current(proposalId),
   })
 
   const recoverFromStreamTransportLoss = useCallback(async () => {
@@ -308,11 +307,21 @@ export function useWorkbenchChat({
 
   const handleHitlApprovedContinue = useCallback(
     async (proposalId: string) => {
-      await handleSendMessage('continue hitl workflow', [], {
-        hidden: true,
-        hitlProposalId: proposalId,
-        hitlAction: 'approved',
-      })
+      if (hitlContinueProposalRef.current === proposalId) {
+        return
+      }
+      hitlContinueProposalRef.current = proposalId
+      try {
+        await handleSendMessage('continue hitl workflow', [], {
+          hidden: true,
+          hitlProposalId: proposalId,
+          hitlAction: 'approved',
+        })
+      } finally {
+        if (hitlContinueProposalRef.current === proposalId) {
+          hitlContinueProposalRef.current = null
+        }
+      }
     },
     [handleSendMessage]
   )
@@ -321,10 +330,6 @@ export function useWorkbenchChat({
     notifyStreamFinished()
     await refreshTail()
   }, [notifyStreamFinished, refreshTail])
-
-  useEffect(() => {
-    handleHitlApprovedContinueRef.current = handleHitlApprovedContinue
-  }, [handleHitlApprovedContinue])
 
   return {
     displayMessages,

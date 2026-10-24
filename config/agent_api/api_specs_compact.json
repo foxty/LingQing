@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-22T08:28:59.154780+00:00",
+  "generated_at": "2026-10-24T03:36:14.398191+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -2402,6 +2402,33 @@
             ],
             "title": "Thinking Effort",
             "description": "Selected thinking_effort_options value from the agent model profile snapshot"
+          },
+          "agent_ids": {
+            "anyOf": [
+              {
+                "items": {
+                  "type": "integer"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Ids",
+            "description": "When set with agent-runs send API, agents to invoke for one human message"
+          },
+          "run_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Run Id",
+            "description": "Existing agent run to execute (agent-runs mode stream continuation)"
           }
         },
         "type": "object",

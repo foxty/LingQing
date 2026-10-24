@@ -121,26 +121,32 @@ class AgentBase(ABC):
             "skill_history": raw_state.get("skill_history", []),
         }
 
+    @staticmethod
+    def _run_id_from_config(config: RunnableConfig) -> str:
+        run_id = config.get("configurable", {}).get("run_id")
+        if not run_id:
+            from apps.shared.core.exceptions import ValidationError
+
+            raise ValidationError("configurable.run_id is required for conversation persistence")
+        return str(run_id)
+
     def _get_or_create_manager(
-        self, runtime: "AgentRuntimeContext", db_session: AsyncSession
+        self,
+        runtime: "AgentRuntimeContext",
+        db_session: AsyncSession,
+        *,
+        run_id: str,
     ) -> ConversationMemoryManager:
-        """Create a new ConversationMemoryManager for each request.
+        """Create a new ConversationMemoryManager bound to one agent run.
 
         No caching is used to avoid concurrency issues in multi-tenant scenarios.
-        Each request gets a fresh manager instance scoped to its thread_id.
-
-        Args:
-            runtime: Runtime context with thread_id, tenant, user info
-            db_session: Database session for message operations
-
-        Returns:
-            ConversationMemoryManager instance
         """
         return ConversationMemoryManager(
             db_session=db_session,
             thread_id=runtime.thread_id,
             tenant_id=runtime.user.tenant_id,
             agent_id=self.agent_config.agent_id,
+            run_id=run_id,
         )
 
     async def _load_history(self, state: AgentState, config: RunnableConfig) -> dict:
@@ -164,7 +170,8 @@ class AgentBase(ABC):
 
         runtime = extract_runtime_context(config)
         db_session = config.get("configurable", {}).get("db_session")
-        manager = self._get_or_create_manager(runtime, db_session)
+        run_id = self._run_id_from_config(config)
+        manager = self._get_or_create_manager(runtime, db_session, run_id=run_id)
         context_messages = []
 
         # ============================================
@@ -545,6 +552,9 @@ class AgentBase(ABC):
     ) -> bool:
         """Handle HITL approval-request pause behavior for remaining tool calls.
 
+        Run lifecycle (``awaiting_hitl``) is updated in ``_pause_agent_run_for_hitl`` only
+        after ``_save_messages`` persists tool rows — not here (no DB yet, wrong order).
+
         Returns:
             True if HITL pending is detected and remaining tool calls are skipped.
         """
@@ -601,8 +611,8 @@ class AgentBase(ABC):
         """
         runtime = extract_runtime_context(config)
         db_session = config.get("configurable", {}).get("db_session")
-        # Get or create manager for this thread
-        manager = self._get_or_create_manager(runtime, db_session)
+        run_id = self._run_id_from_config(config)
+        manager = self._get_or_create_manager(runtime, db_session, run_id=run_id)
 
         # Get all messages from state
         messages_to_save = state.get("messages", [])
@@ -610,7 +620,68 @@ class AgentBase(ABC):
         if messages_to_save:
             await manager.add_messages(messages_to_save, config, deduplicate=True)
 
+        await self._finalize_agent_run_lifecycle(state, config)
+
         return {}
+
+    async def _pause_agent_run_for_hitl(self, config: RunnableConfig, run_id: str) -> None:
+        """Mark the agent run paused for HITL after run messages are persisted."""
+        db_session = config.get("configurable", {}).get("db_session")
+        if not db_session:
+            return
+        from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
+
+        runtime = extract_runtime_context(config)
+        await ThreadRunService(db_session, runtime.tenant.tenant_id).mark_run_awaiting_hitl(run_id)
+
+    async def _finalize_agent_run_lifecycle(self, state: AgentState, config: RunnableConfig) -> None:
+        """Update agent_run row after messages are on disk (promote final AI or HITL pause)."""
+        run_id = self._run_id_from_config(config)
+        if not run_id:
+            return
+        if state.get("hitl_blocked"):
+            await self._pause_agent_run_for_hitl(config, run_id)
+        else:
+            await self._maybe_promote_run_final_ai(state, config)
+
+    async def _maybe_promote_run_final_ai(self, state: AgentState, config: RunnableConfig) -> None:
+        """Promote terminal AI reply to main timeline when agent runs mode is active."""
+        from langchain_core.messages import AIMessage
+
+        from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
+
+        messages = state.get("messages", [])
+        if not messages:
+            return
+        last_message = messages[-1]
+        if not isinstance(last_message, AIMessage):
+            return
+        if getattr(last_message, "tool_calls", None):
+            return
+
+        configurable = config.get("configurable", {})
+        run_id = configurable.get("run_id")
+        trigger_message_id = configurable.get("trigger_message_id")
+        invoke_index = configurable.get("invoke_index", 0)
+        if not run_id or not trigger_message_id:
+            return
+
+        runtime = extract_runtime_context(config)
+        db_session = configurable.get("db_session")
+        if not db_session:
+            return
+
+        service = ThreadRunService(db_session, runtime.tenant.tenant_id)
+        await service.promote_final_ai(
+            run_id=run_id,
+            thread_id=runtime.thread_id,
+            agent_id=runtime.agent_id,
+            trigger_message_id=trigger_message_id,
+            invoke_index=invoke_index,
+            session_id=runtime.session_id,
+            final_message=last_message,
+        )
+        await service.mark_run_completed(run_id)
 
     def _should_continue(self, state: AgentState) -> Literal["tool_node", "save_messages"]:
         """Determine if the agent should continue to tool execution or end.

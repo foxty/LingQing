@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
@@ -8,8 +8,9 @@ from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from apps.shared.db.models import ChatMessage, ChatThread, Tenant, TenantMembership, User
+from apps.shared.db.models import ChatThread, Tenant, TenantMembership, User
 from apps.tenant_app_service.server import app
+from tests.integration.helpers.thread_run_seed import seed_session_run_with_run_messages
 
 TEST_SECRET_KEY = "test-secret-key"
 
@@ -100,82 +101,63 @@ async def thread_session_pagination_setup(async_db_session: AsyncSession):
         seed_session.add(thread)
         await seed_session.flush()
 
-        # Session 1 (oldest)
-        seed_session.add(
-            ChatMessage(
-                message_id=f"{thread_id}-s1-human",
-                thread_id=thread.id,
-                type="human",
-                content="session 1 human",
-                session_id="sess-1",
-                agent_id=thread.agent_id,
-            )
+        base = datetime.now(UTC) - timedelta(hours=2)
+        await seed_session_run_with_run_messages(
+            seed_session,
+            tenant_id=tenant.id,
+            thread=thread,
+            session_id="sess-1",
+            human_message_id=f"{thread_id}-s1-human",
+            human_content="session 1 human",
+            created_at=base,
+            promote_final_ai=True,
+            run_messages=[
+                {
+                    "message_id": f"{thread_id}-s1-ai",
+                    "type": "ai",
+                    "content": "session 1 ai",
+                },
+            ],
         )
-        seed_session.add(
-            ChatMessage(
-                message_id=f"{thread_id}-s1-ai",
-                thread_id=thread.id,
-                type="ai",
-                content="session 1 ai",
-                session_id="sess-1",
-                agent_id=thread.agent_id,
-            )
+        await seed_session_run_with_run_messages(
+            seed_session,
+            tenant_id=tenant.id,
+            thread=thread,
+            session_id="sess-2",
+            human_message_id=f"{thread_id}-s2-human",
+            human_content="session 2 human",
+            created_at=base + timedelta(minutes=10),
+            run_messages=[
+                {
+                    "message_id": f"{thread_id}-s2-ai",
+                    "type": "ai",
+                    "content": "session 2 ai",
+                    "tool_calls": [{"id": "call-s2", "name": "demo_tool", "args": {}}],
+                },
+                {
+                    "message_id": f"{thread_id}-s2-tool",
+                    "type": "tool",
+                    "content": "session 2 tool result",
+                    "additional_kwargs": {"tool_call_id": "call-s2"},
+                },
+            ],
         )
-
-        # Session 2
-        seed_session.add(
-            ChatMessage(
-                message_id=f"{thread_id}-s2-human",
-                thread_id=thread.id,
-                type="human",
-                content="session 2 human",
-                session_id="sess-2",
-                agent_id=thread.agent_id,
-            )
-        )
-        seed_session.add(
-            ChatMessage(
-                message_id=f"{thread_id}-s2-ai",
-                thread_id=thread.id,
-                type="ai",
-                content="session 2 ai",
-                session_id="sess-2",
-                agent_id=thread.agent_id,
-                tool_calls=[{"id": "call-s2", "name": "demo_tool", "args": {}}],
-            )
-        )
-        seed_session.add(
-            ChatMessage(
-                message_id=f"{thread_id}-s2-tool",
-                thread_id=thread.id,
-                type="tool",
-                content="session 2 tool result",
-                session_id="sess-2",
-                agent_id=thread.agent_id,
-                additional_kwargs={"tool_call_id": "call-s2"},
-            )
-        )
-
-        # Session 3 (newest)
-        seed_session.add(
-            ChatMessage(
-                message_id=f"{thread_id}-s3-human",
-                thread_id=thread.id,
-                type="human",
-                content="session 3 human",
-                session_id="sess-3",
-                agent_id=thread.agent_id,
-            )
-        )
-        seed_session.add(
-            ChatMessage(
-                message_id=f"{thread_id}-s3-ai",
-                thread_id=thread.id,
-                type="ai",
-                content="session 3 ai",
-                session_id="sess-3",
-                agent_id=thread.agent_id,
-            )
+        await seed_session_run_with_run_messages(
+            seed_session,
+            tenant_id=tenant.id,
+            thread=thread,
+            session_id="sess-3",
+            human_message_id=f"{thread_id}-s3-human",
+            human_content="session 3 human",
+            created_at=base + timedelta(minutes=20),
+            promote_final_ai=True,
+            run_messages=[
+                {
+                    "message_id": f"{thread_id}-s3-ai",
+                    "type": "ai",
+                    "content": "session 3 ai",
+                },
+            ],
         )
 
         await seed_session.commit()
@@ -212,7 +194,7 @@ async def test_threads_messages_session_window_pagination(thread_session_paginat
     assert first_page.status_code == 200, first_page.text
     first_data = first_page.json()
 
-    first_sessions = {message["session_id"] for message in first_data["messages"]}
+    first_sessions = {message["session_id"] for message in first_data["messages"] if message["session_id"]}
     assert first_sessions == {"sess-2", "sess-3"}
     assert first_data["has_more"] is True
     assert first_data["next_before_session_id"] == "sess-2"
@@ -229,8 +211,8 @@ async def test_threads_messages_session_window_pagination(thread_session_paginat
     assert second_page.status_code == 200, second_page.text
     second_data = second_page.json()
 
-    second_sessions = {message["session_id"] for message in second_data["messages"]}
+    second_sessions = {message["session_id"] for message in second_data["messages"] if message["session_id"]}
     assert second_sessions == {"sess-1"}
     assert second_data["has_more"] is False
-    assert second_data["next_before_session_id"] == "sess-1"
+    assert second_data["next_before_session_id"] is None
     assert len(second_data["messages"]) == 2

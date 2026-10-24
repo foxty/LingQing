@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import asyncio
+import json
+from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Callable
 
 from apps.shared.core.exceptions import DomainException
 
@@ -68,6 +71,15 @@ def user_stream_error_sse_payload(error: BaseException) -> dict[str, str]:
     }
 
 
+def sse_stream_failure_lines(error: BaseException, session_id: str) -> list[str]:
+    """SSE ``error`` + ``done`` lines when a stream body fails after prepare."""
+    done_data = {"type": "done", "session_id": session_id}
+    return [
+        f"data: {json.dumps(user_stream_error_sse_payload(error))}\n\n",
+        f"data: {json.dumps(done_data)}\n\n",
+    ]
+
+
 @dataclass
 class PreparedChatStream:
     """Setup result for a chat turn. Safe to use after the setup session closes."""
@@ -77,3 +89,44 @@ class PreparedChatStream:
     agent_name: str
     initial_messages: list[Any]
     thread_title: str | None
+    run_id: str | None = None
+    trigger_message_id: str | None = None
+    invoke_index: int = 0
+
+
+def prepared_stream_opening_sse(prepared: PreparedChatStream) -> list[str]:
+    """Initial SSE events after prepare (session id, optional thread title)."""
+    lines = [
+        f"data: {json.dumps({'type': 'session_started', 'session_id': prepared.session_id})}\n\n",
+    ]
+    if prepared.thread_title:
+        lines.append(
+            f"data: {json.dumps({'type': 'update_thread_title', 'title': prepared.thread_title})}\n\n",
+        )
+    return lines
+
+
+async def iter_sse_from_event_queue(
+    event_queue: asyncio.Queue[str | None],
+    *,
+    session_id: str,
+    on_client_disconnect: Callable[[str], None] | None = None,
+) -> AsyncIterator[str]:
+    """Drain agent SSE chunks from a queue with heartbeats; survives client disconnect."""
+    try:
+        while True:
+            try:
+                item = await asyncio.wait_for(
+                    event_queue.get(),
+                    timeout=SSE_HEARTBEAT_INTERVAL_SECONDS,
+                )
+            except TimeoutError:
+                yield SSE_HEARTBEAT_PAYLOAD
+                continue
+            if item is None:
+                break
+            yield item
+    except asyncio.CancelledError:
+        if on_client_disconnect is not None:
+            on_client_disconnect(session_id)
+        return
