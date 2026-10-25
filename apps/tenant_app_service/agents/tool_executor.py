@@ -274,7 +274,14 @@ class ToolExecutor:
                     id=str(uuid4()),
                     content=warning_msg,
                     tool_call_id=tool_call_id,
-                    additional_kwargs=additional_kwargs,
+                    additional_kwargs={
+                        **additional_kwargs,
+                        "tool_error": ToolError(
+                            code="TOOL_LIMIT_EXCEEDED",
+                            message=warning_msg,
+                            retryable=False,
+                        ).to_dict(),
+                    },
                 ),
                 tool_call_counts,
                 tool_cache,

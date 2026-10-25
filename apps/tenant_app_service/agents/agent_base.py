@@ -55,6 +55,7 @@ class AgentState(TypedDict):
     tool_cache: NotRequired[ToolCache]
     skill_state: NotRequired[SkillState]  # Skill runtime state
     hitl_blocked: NotRequired[bool]  # True when waiting for HITL approval/rejection
+    tool_limit_blocked: NotRequired[bool]  # True after a tool hit its limit; one text-only LLM turn then stop
 
 
 class AgentBase(ABC):
@@ -193,12 +194,16 @@ class AgentBase(ABC):
         # ============================================
         # Layer 2, 3 & 4: Thread Summaries + Session Summaries + Recent Messages
         # ============================================
-        history_message_limit = config.get("configurable", {}).get("history_message_limit", 1)
-        # load_messages_with_summary now loads all historical context in one call
+        from apps.tenant_app_service.chat.service_base import (
+            DEFAULT_MAIN_TIMELINE_TURN_LIMIT,
+            RUN_HISTORY_MESSAGE_LIMIT,
+        )
+
         historical_messages = await manager.load_messages_with_summary(
-            thread_summary_limit=1,  # Load 1 most recent thread summaries
-            session_summary_limit=2,  # Load 2 most recent session summaries
-            message_limit=history_message_limit,  # Load recent messages dynamically
+            thread_summary_limit=1,
+            session_summary_limit=2,
+            main_timeline_turn_limit=DEFAULT_MAIN_TIMELINE_TURN_LIMIT,
+            run_message_limit=RUN_HISTORY_MESSAGE_LIMIT,
         )
 
         if db_session:
@@ -229,10 +234,16 @@ class AgentBase(ABC):
         combined = context_messages + current_messages
 
         self.logger.info(
-            f"Loaded context for thread {runtime.thread_id}: "
-            f"parent_context={bool(parent_context)}, "
-            f"historical={len(historical_messages)}, "
-            f"current={len(current_messages)}"
+            "context_load_turn_merge thread_id=%s run_id=%s session_id=%s agent=%s "
+            "parent_context=%s historical=%s current_turn=%s combined=%s",
+            runtime.thread_id,
+            run_id,
+            runtime.session_id,
+            self.agent_config.agent_name,
+            bool(parent_context and parent_context.get("summary")),
+            len(historical_messages),
+            len(current_messages),
+            len(combined),
         )
 
         return {"messages": combined}
@@ -350,6 +361,17 @@ class AgentBase(ABC):
         removed_message_ids = set()
         try:  # catch the entire llm processing to ensure errors can be save into the message
             system_messages = self._prepare_system_messages(runtime, loop_count, loaded_skills)
+            tool_limit_finalize = state.get("tool_limit_blocked", False)
+            if tool_limit_finalize:
+                system_messages.append(
+                    SystemMessage(
+                        content=(
+                            "⚠️ A tool has reached its maximum call limit for this turn. "
+                            "Do not call any tools. Respond to the user with a final summary "
+                            "using only information already in the conversation."
+                        )
+                    )
+                )
             # Prepare messages for LLM: sanitize + compress via MessagePreparer
             messages, removed_message_ids, prompt_context_stats = await self.message_preparer.prepare_for_llm(
                 current_messages, system_messages, config
@@ -358,8 +380,8 @@ class AgentBase(ABC):
             model_profile_id = self.agent_config.model_profile_id()
             thinking_effort = config.get("configurable", {}).get("thinking_effort", "none")
 
-            # Resolve tools at runtime for tenant-scoped skills
-            tools = self.agent_config.get_tools(loaded_skills, runtime)
+            # Resolve tools at runtime for tenant-scoped skills (none on tool-limit finalize pass)
+            tools = [] if tool_limit_finalize else self.agent_config.get_tools(loaded_skills, runtime)
 
             db_session = config.get("configurable", {}).get("db_session")
             model_with_tools = await self._model_binding_manager.get_or_create(
@@ -410,6 +432,13 @@ class AgentBase(ABC):
         # Add timestamp & session_id to AI response for tracking
         if response:
             response.additional_kwargs.setdefault("timestamp", datetime.now(UTC).isoformat())
+            if state.get("tool_limit_blocked") and getattr(response, "tool_calls", None):
+                response = AIMessage(
+                    id=response.id,
+                    content=response.content
+                    or "I reached the tool call limit for this turn; here is what I can answer from earlier results.",
+                    additional_kwargs=dict(response.additional_kwargs),
+                )
 
         # Build state update - return complete message list
         # Remove sanitized messages and add new response
@@ -432,6 +461,7 @@ class AgentBase(ABC):
         tool_call_counts = state.get("tool_call_counts", {}).copy()
         tool_cache = state.get("tool_cache", {}).copy()
         hitl_blocked = False
+        tool_limit_blocked = False
         skill_state = self._get_skill_state(state, runtime)
         loaded_skills = skill_state.get("loaded_skills", [])
 
@@ -532,6 +562,11 @@ class AgentBase(ABC):
                 if self._handle_hitl_pause(tool_message=tool_message, tool_calls=tool_calls, idx=idx, results=results):
                     hitl_blocked = True
                     break
+                if self._handle_tool_limit_pause(
+                    tool_message=tool_message, tool_calls=tool_calls, idx=idx, results=results
+                ):
+                    tool_limit_blocked = True
+                    break
 
         state_update = {
             "messages": state.get("messages", []) + results,
@@ -539,6 +574,7 @@ class AgentBase(ABC):
             "tool_cache": tool_cache,
             "skill_state": skill_state,
             "hitl_blocked": hitl_blocked,
+            "tool_limit_blocked": tool_limit_blocked,
         }
         return state_update
 
@@ -582,6 +618,36 @@ class AgentBase(ABC):
 
         return True
 
+    def _handle_tool_limit_pause(
+        self,
+        *,
+        tool_message: ToolMessage,
+        tool_calls: list[dict],
+        idx: int,
+        results: list[ToolMessage],
+    ) -> bool:
+        """Stop the agent loop when a tool hits its configured call limit."""
+        tool_error = (tool_message.additional_kwargs or {}).get("tool_error")
+        if not isinstance(tool_error, dict) or tool_error.get("code") != "TOOL_LIMIT_EXCEEDED":
+            return False
+
+        tool_name = (tool_message.additional_kwargs or {}).get("tool_name", "tool")
+        self.logger.warning(
+            "Tool '%s' exceeded call limit; scheduling final text-only LLM summary",
+            tool_name,
+        )
+        additional_kwargs = {"timestamp": datetime.now(UTC).isoformat()}
+        for remaining_call in tool_calls[idx + 1 :]:
+            results.append(
+                ToolMessage(
+                    id=str(uuid4()),
+                    content="Skipped: tool call limit reached for this turn",
+                    tool_call_id=remaining_call["id"],
+                    additional_kwargs=additional_kwargs,
+                )
+            )
+        return True
+
     def _after_tool_node(self, state: AgentState) -> Literal["llm_call", "save_messages"]:
         """Route after tool execution.
 
@@ -591,6 +657,8 @@ class AgentBase(ABC):
         if state.get("hitl_blocked"):
             self.logger.info("HITL pending detected, ending current run and waiting for continuation")
             return "save_messages"
+        if state.get("tool_limit_blocked"):
+            self.logger.info("Tool call limit reached, running final text-only LLM turn")
         return "llm_call"
 
     async def _save_messages(self, state: AgentState, config: RunnableConfig) -> dict:
@@ -641,8 +709,16 @@ class AgentBase(ABC):
             return
         if state.get("hitl_blocked"):
             await self._pause_agent_run_for_hitl(config, run_id)
-        else:
-            await self._maybe_promote_run_final_ai(state, config)
+            return
+
+        await self._maybe_promote_run_final_ai(state, config)
+        db_session = config.get("configurable", {}).get("db_session")
+        if not db_session:
+            return
+        from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
+
+        runtime = extract_runtime_context(config)
+        await ThreadRunService(db_session, runtime.tenant.tenant_id).mark_run_completed(run_id)
 
     async def _maybe_promote_run_final_ai(self, state: AgentState, config: RunnableConfig) -> None:
         """Promote terminal AI reply to main timeline when agent runs mode is active."""
@@ -681,7 +757,6 @@ class AgentBase(ABC):
             session_id=runtime.session_id,
             final_message=last_message,
         )
-        await service.mark_run_completed(run_id)
 
     def _should_continue(self, state: AgentState) -> Literal["tool_node", "save_messages"]:
         """Determine if the agent should continue to tool execution or end.
@@ -696,6 +771,13 @@ class AgentBase(ABC):
         Returns:
             Next node to execute: "tool_node" or "save_messages"
         """
+        if state.get("tool_limit_blocked"):
+            self.logger.info(
+                "Agent %s ending after tool-limit finalize LLM turn",
+                self.agent_config.agent_name,
+            )
+            return "save_messages"
+
         last_message = state["messages"][-1]
         loop_count = state.get("loop_count", 0)
         tool_call_counts = state.get("tool_call_counts", {})

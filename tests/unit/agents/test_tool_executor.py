@@ -145,6 +145,7 @@ class TestExecuteSingleTool(TestToolExecutor):
         assert "limit" in tool_message.content.lower()
         assert "3" in tool_message.content
         assert "Skipping this call" in tool_message.content
+        assert tool_message.additional_kwargs["tool_error"]["code"] == "TOOL_LIMIT_EXCEEDED"
         mock_tool_config.tool.ainvoke.assert_not_called()
         # Counts should not change
         assert updated_counts == existing_counts

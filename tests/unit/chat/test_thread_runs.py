@@ -11,6 +11,7 @@ from apps.tenant_app_service.chat.agent_run_domain import (
     ThreadMainMessageDomain,
     drop_run_rows_duplicating_promoted_main,
     filter_main_timeline_for_context_load,
+    slice_main_timeline_turns,
     sort_timeline_trigger_anchored,
 )
 from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
@@ -94,6 +95,39 @@ def test_filter_main_timeline_drops_covered_ai_keeps_human():
         covered_session_ids=frozenset({"sess-old"}),
     )
     assert [m.message_id for m in filtered] == ["h1"]
+
+
+def test_slice_main_timeline_turns_keeps_last_k_full_turns():
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    t1 = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
+    t2 = datetime(2026, 1, 1, 0, 2, tzinfo=UTC)
+    t3 = datetime(2026, 1, 1, 0, 3, tzinfo=UTC)
+    rows = sort_timeline_trigger_anchored(
+        [
+            _human("h1", t0, row_id=1, content="offer"),
+            _ai("a1", "h1", row_id=2, created_at=t1),
+            _human("h2", t2, row_id=3, content="sure"),
+        ]
+    )
+    sliced = slice_main_timeline_turns(rows, agent_id=1, turn_limit=1)
+    assert [m.message_id for m in sliced] == ["h2"]
+
+    sliced_two = slice_main_timeline_turns(rows, agent_id=1, turn_limit=2)
+    assert [m.message_id for m in sliced_two] == ["h1", "a1", "h2"]
+
+
+def test_slice_main_timeline_turn_limit_one_includes_promoted_ai_with_human():
+    """turn_limit=1 must not drop the AI attached to the kept human turn."""
+    t0 = datetime(2026, 1, 1, tzinfo=UTC)
+    t1 = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
+    rows = sort_timeline_trigger_anchored(
+        [
+            _human("h1", t0, row_id=1, content="offer"),
+            _ai("a1", "h1", row_id=2, created_at=t1),
+        ]
+    )
+    sliced = slice_main_timeline_turns(rows, agent_id=1, turn_limit=1)
+    assert [m.message_id for m in sliced] == ["h1", "a1"]
 
 
 def test_drop_run_rows_duplicating_promoted_main():

@@ -155,7 +155,8 @@ async def _load(
     tail_msgs=None,
     thread_summary_limit: int = 1,
     session_summary_limit: int = 2,
-    message_limit: int | None = None,
+    main_timeline_turn_limit: int | None = None,
+    run_message_limit: int | None = None,
 ):
     """Wire mock return values and invoke load_messages_with_summary."""
     repo_mock.get_unsummarized_messages.return_value = list(unsummarized_msgs or [])
@@ -168,7 +169,8 @@ async def _load(
     return await mgr.load_messages_with_summary(
         thread_summary_limit=thread_summary_limit,
         session_summary_limit=session_summary_limit,
-        message_limit=message_limit,
+        main_timeline_turn_limit=main_timeline_turn_limit,
+        run_message_limit=run_message_limit,
     )
 
 
@@ -188,6 +190,20 @@ class TestAssemblyLogic:
         result = await _load(mgr, repo_mock)
 
         assert result == []
+
+    async def test_load_emits_context_load_manifest(self, caplog):
+        import logging
+
+        mgr, _, repo_mock = _make_manager()
+        with caplog.at_level(logging.INFO):
+            await _load(
+                mgr,
+                repo_mock,
+                unsummarized_msgs=[_db_msg(1, "m1", "human", "Hi")],
+                main_timeline_turn_limit=4,
+                run_message_limit=None,
+            )
+        assert any("context_load_manifest" in record.message for record in caplog.records)
 
     async def test_output_order_thread_summary_then_session_then_messages(self):
         """[ThreadSummary SystemMsg] → [SessionSummary SystemMsg] → [messages]."""
@@ -287,10 +303,10 @@ class TestAssemblyLogic:
         assert "S1" in session_sys[0].content
         assert "S2" in session_sys[0].content
 
-    async def test_message_limit_zero_passes_zero_to_repo(self):
-        """message_limit=0 means load zero unsummarized messages."""
+    async def test_run_message_limit_zero_passes_zero_to_repo(self):
+        """run_message_limit=0 means load zero unsummarized run messages."""
         mgr, _, repo_mock = _make_manager()
-        await _load(mgr, repo_mock, message_limit=0)
+        await _load(mgr, repo_mock, run_message_limit=0)
 
         repo_mock.get_unsummarized_messages.assert_called_once_with(
             run_id=RUN_ID,
@@ -298,10 +314,10 @@ class TestAssemblyLogic:
             limit=0,
         )
 
-    async def test_message_limit_none_passes_none_to_repo(self):
-        """message_limit=None means no cap (load all unsummarized messages)."""
+    async def test_run_message_limit_none_passes_none_to_repo(self):
+        """run_message_limit=None means no cap (load all unsummarized run messages)."""
         mgr, _, repo_mock = _make_manager()
-        await _load(mgr, repo_mock, message_limit=None)
+        await _load(mgr, repo_mock, run_message_limit=None)
 
         repo_mock.get_unsummarized_messages.assert_called_once_with(
             run_id=RUN_ID,
@@ -309,15 +325,35 @@ class TestAssemblyLogic:
             limit=None,
         )
 
-    async def test_message_limit_n_passes_n_to_repo(self):
-        """message_limit=5 → repo receives limit=5."""
+    async def test_run_message_limit_n_passes_n_to_repo(self):
+        """run_message_limit=5 → repo receives limit=5."""
         mgr, _, repo_mock = _make_manager()
-        await _load(mgr, repo_mock, message_limit=5)
+        await _load(mgr, repo_mock, run_message_limit=5)
 
         repo_mock.get_unsummarized_messages.assert_called_once_with(
             run_id=RUN_ID,
             agent_id=AGENT_ID,
             limit=5,
+        )
+
+    async def test_run_message_limit_none_loads_full_run(self):
+        mgr, _, repo_mock = _make_manager()
+        await _load(mgr, repo_mock, run_message_limit=None)
+
+        repo_mock.get_unsummarized_messages.assert_called_once_with(
+            run_id=RUN_ID,
+            agent_id=AGENT_ID,
+            limit=None,
+        )
+
+    async def test_run_message_limit_zero_skips_run_rows(self):
+        mgr, _, repo_mock = _make_manager()
+        await _load(mgr, repo_mock, main_timeline_turn_limit=3, run_message_limit=0)
+
+        repo_mock.get_unsummarized_messages.assert_called_once_with(
+            run_id=RUN_ID,
+            agent_id=AGENT_ID,
+            limit=0,
         )
 
     async def test_desc_messages_reversed_to_chronological_in_output(self):
@@ -442,9 +478,10 @@ class TestEnsureHitlContext:
         repo_mock.get_last_ai_message_with_tool_calls.return_value = None
 
         msgs = [_db_msg(1, "m1", "human", "Q"), _db_msg(2, "m2", "ai", "A")]
-        result = await mgr._ensure_hitl_context_run(msgs)
+        result, injected = await mgr._ensure_hitl_context_run(msgs)
 
         assert result is msgs
+        assert injected == 0
         repo_mock.get_messages_from_db_id.assert_not_called()
 
     async def test_anchor_already_in_loaded_messages_returns_unchanged(self):
@@ -455,9 +492,10 @@ class TestEnsureHitlContext:
         repo_mock.get_last_ai_message_with_tool_calls.return_value = anchor
 
         msgs = [anchor, _db_msg(20, "tool-1", "tool", "Result")]
-        result = await mgr._ensure_hitl_context_run(msgs)
+        result, injected = await mgr._ensure_hitl_context_run(msgs)
 
         assert result is msgs
+        assert injected == 0
         repo_mock.get_messages_from_db_id.assert_not_called()
 
     async def test_anchor_missing_injects_tail_in_correct_order(self):
@@ -470,7 +508,7 @@ class TestEnsureHitlContext:
         repo_mock.get_messages_from_db_id.return_value = [anchor, tool_msg]
 
         later_q = _db_msg(30, "h-1", "human", "Follow-up")
-        result = await mgr._ensure_hitl_context_run([later_q])
+        result, injected = await mgr._ensure_hitl_context_run([later_q])
 
         repo_mock.get_messages_from_db_id.assert_called_once_with(
             run_id=RUN_ID,
@@ -479,6 +517,7 @@ class TestEnsureHitlContext:
         )
         assert len(result) == 3
         assert [m.id for m in result] == [10, 20, 30]
+        assert injected == 2
 
     async def test_tail_deduplicates_overlap_with_loaded(self):
         """Tail items already in loaded_msgs are not duplicated."""
@@ -492,10 +531,11 @@ class TestEnsureHitlContext:
         repo_mock.get_messages_from_db_id.return_value = [anchor, tool_msg, later_q]
 
         # later_q is already in loaded; should appear only once
-        result = await mgr._ensure_hitl_context_run([later_q])
+        result, injected = await mgr._ensure_hitl_context_run([later_q])
 
         assert len(result) == 3
         assert [m.id for m in result] == [10, 20, 30]
+        assert injected == 2
 
     async def test_empty_tail_returns_original_list(self):
         """get_messages_from_db_id returns [] (unexpected) → original list returned."""
@@ -506,9 +546,10 @@ class TestEnsureHitlContext:
         repo_mock.get_messages_from_db_id.return_value = []
 
         later_q = _db_msg(30, "h-1", "human", "Q")
-        result = await mgr._ensure_hitl_context_run([later_q])
+        result, injected = await mgr._ensure_hitl_context_run([later_q])
 
         assert result == [later_q]
+        assert injected == 0
 
     async def test_resolved_chain_skips_injection(self):
         """Completed AI→Tool→AI chains are not re-injected for HITL continuity."""
@@ -520,9 +561,10 @@ class TestEnsureHitlContext:
         repo_mock.has_ai_message_after_db_id_in_session.return_value = True
 
         later_q = _db_msg(40, "h-1", "human", "Follow-up")
-        result = await mgr._ensure_hitl_context_run([later_q])
+        result, injected = await mgr._ensure_hitl_context_run([later_q])
 
         assert result == [later_q]
+        assert injected == 0
         repo_mock.get_messages_from_db_id.assert_not_called()
 
 

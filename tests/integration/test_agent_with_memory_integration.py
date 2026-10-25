@@ -114,7 +114,10 @@ class TestAgentWithMemory:
             agent_id=runtime_context.agent_id,
             run_id=TEST_RUN_ID,
         )
-        loaded_messages = await manager.load_messages_with_summary(message_limit=50)
+        loaded_messages = await manager.load_messages_with_summary(
+            main_timeline_turn_limit=50,
+            run_message_limit=50,
+        )
 
         assert len(loaded_messages) == 1
         assert isinstance(loaded_messages[0], AIMessage)
