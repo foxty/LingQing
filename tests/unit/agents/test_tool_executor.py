@@ -19,6 +19,7 @@ from langchain_core.runnables import RunnableConfig
 from apps.tenant_app_service.agents.agent_config import AgentConfig
 from apps.tenant_app_service.agents.tool_executor import ToolExecutor, _build_cache_key, _invalidate_cache
 from apps.tenant_app_service.agents.tools import ToolResult, ToolResultStatus
+from apps.tenant_app_service.agents.tools.tool_result import SKIP_CODE_KEY, TOOL_RESULT_STATUS_KEY, ToolSkipCode
 
 
 class TestToolExecutor:
@@ -145,7 +146,8 @@ class TestExecuteSingleTool(TestToolExecutor):
         assert "limit" in tool_message.content.lower()
         assert "3" in tool_message.content
         assert "Skipping this call" in tool_message.content
-        assert tool_message.additional_kwargs["tool_error"]["code"] == "TOOL_LIMIT_EXCEEDED"
+        assert tool_message.additional_kwargs[TOOL_RESULT_STATUS_KEY] == ToolResultStatus.SKIPPED
+        assert tool_message.additional_kwargs[SKIP_CODE_KEY] == ToolSkipCode.TOOL_LIMIT_EXCEEDED
         mock_tool_config.tool.ainvoke.assert_not_called()
         # Counts should not change
         assert updated_counts == existing_counts

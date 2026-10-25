@@ -18,6 +18,51 @@ class ToolResultStatus(StrEnum):
     SUCCESS = "success"
     PARTIAL = "partial"  # Partial success (e.g., data truncated)
     ERROR = "error"
+    SKIPPED = "skipped"  # Not executed (limit, HITL batch deferral, policy)
+
+
+# Persisted on tool message ``additional_kwargs`` for UI + history replay.
+TOOL_RESULT_STATUS_KEY = "tool_result_status"
+SKIP_CODE_KEY = "skip_code"
+TOOL_ERROR_KEY = "tool_error"
+
+
+class ToolErrorCode(StrEnum):
+    """Stable ``tool_error.code`` values stamped by the executor (not skip/deferral)."""
+
+    TOOL_NOT_AVAILABLE = "TOOL_NOT_AVAILABLE"
+    TOOL_EXECUTION_ERROR = "TOOL_EXECUTION_ERROR"
+    TOOL_EXECUTION_EXCEPTION = "TOOL_EXECUTION_EXCEPTION"
+
+
+class ToolSkipCode(StrEnum):
+    """Reason a tool call was not executed (persisted under ``skip_code``)."""
+
+    TOOL_LIMIT_EXCEEDED = "TOOL_LIMIT_EXCEEDED"
+    TOOL_LIMIT_SIBLING = "TOOL_LIMIT_SIBLING"
+    HITL_DEFERRED = "HITL_DEFERRED"
+    TOOL_SKIPPED = "TOOL_SKIPPED"
+
+
+def build_persisted_tool_skip_kwargs(skip_code: ToolSkipCode, **extra: Any) -> dict[str, Any]:
+    """Build ``additional_kwargs`` for a synthetic skipped tool message."""
+    return {
+        TOOL_RESULT_STATUS_KEY: ToolResultStatus.SKIPPED,
+        SKIP_CODE_KEY: skip_code,
+        **extra,
+    }
+
+
+def tool_kwargs_indicate_limit_exceeded(kwargs: dict[str, Any] | None) -> bool:
+    """True for limit-hit tool rows (current ``skipped`` shape or legacy ``tool_error``)."""
+    data = kwargs or {}
+    if (
+        data.get(TOOL_RESULT_STATUS_KEY) == ToolResultStatus.SKIPPED
+        and data.get(SKIP_CODE_KEY) == ToolSkipCode.TOOL_LIMIT_EXCEEDED
+    ):
+        return True
+    tool_error = data.get(TOOL_ERROR_KEY)
+    return isinstance(tool_error, dict) and tool_error.get("code") == ToolSkipCode.TOOL_LIMIT_EXCEEDED
 
 
 @dataclass
@@ -104,7 +149,7 @@ class ToolResult:
         cls,
         message: Any,
         *,
-        code: str = "TOOL_EXECUTION_ERROR",
+        code: str | ToolErrorCode = ToolErrorCode.TOOL_EXECUTION_ERROR,
         retryable: bool = False,
         hint: str | None = None,
         metadata: dict[str, Any] | None = None,
@@ -113,8 +158,24 @@ class ToolResult:
         return cls(
             content=message_text,
             status=ToolResultStatus.ERROR,
-            error=ToolError(code=code, message=message_text, retryable=retryable, hint=hint),
+            error=ToolError(code=str(code), message=message_text, retryable=retryable, hint=hint),
             metadata=metadata or {},
+        )
+
+    @classmethod
+    def skipped(
+        cls,
+        content: Any,
+        *,
+        code: ToolSkipCode | str = ToolSkipCode.TOOL_SKIPPED,
+        metadata: dict[str, Any] | None = None,
+    ) -> "ToolResult":
+        message_text = cls._coerce_content(content)
+        skip_code = code if isinstance(code, ToolSkipCode) else ToolSkipCode(code)
+        return cls(
+            content=message_text,
+            status=ToolResultStatus.SKIPPED,
+            metadata={**(metadata or {}), SKIP_CODE_KEY: skip_code},
         )
 
     def __str__(self) -> str:

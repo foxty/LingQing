@@ -285,11 +285,62 @@ def test_handle_hitl_pause_appends_skipped_messages(agent_stub_config_factory):
     assert len(results) == 2
     assert [msg.tool_call_id for msg in results] == ["call-2", "call-3"]
     assert all(msg.content == "Skipped: Waiting for HITL approval" for msg in results)
+    from apps.tenant_app_service.agents.tools.tool_result import (
+        SKIP_CODE_KEY,
+        TOOL_RESULT_STATUS_KEY,
+        ToolResultStatus,
+        ToolSkipCode,
+    )
+
+    for msg in results:
+        assert msg.additional_kwargs[TOOL_RESULT_STATUS_KEY] == ToolResultStatus.SKIPPED
+        assert msg.additional_kwargs[SKIP_CODE_KEY] == ToolSkipCode.HITL_DEFERRED
 
     for msg in results:
         timestamp = msg.additional_kwargs.get("timestamp")
         assert isinstance(timestamp, str)
         datetime.fromisoformat(timestamp)
+
+
+def test_handle_tool_limit_pause_appends_skipped_siblings(agent_stub_config_factory):
+    """When a tool hits its limit, remaining calls in the batch are marked skipped."""
+    agent = _build_agent(agent_stub_config_factory)
+
+    from apps.tenant_app_service.agents.tools.tool_result import (
+        SKIP_CODE_KEY,
+        TOOL_RESULT_STATUS_KEY,
+        ToolResultStatus,
+        ToolSkipCode,
+        build_persisted_tool_skip_kwargs,
+    )
+
+    tool_message = ToolMessage(
+        id="tm-limit",
+        content="Tool 'search' has been called 5 times (limit: 5). Skipping this call.",
+        tool_call_id="call-1",
+        additional_kwargs=build_persisted_tool_skip_kwargs(
+            ToolSkipCode.TOOL_LIMIT_EXCEEDED,
+            tool_name="search",
+        ),
+    )
+    tool_calls = [
+        {"id": "call-1", "name": "search"},
+        {"id": "call-2", "name": "search"},
+    ]
+    results: list[ToolMessage] = []
+
+    paused = agent._handle_tool_limit_pause(
+        tool_message=tool_message,
+        tool_calls=tool_calls,
+        idx=0,
+        results=results,
+    )
+
+    assert paused is True
+    assert len(results) == 1
+    assert results[0].tool_call_id == "call-2"
+    assert results[0].additional_kwargs[TOOL_RESULT_STATUS_KEY] == ToolResultStatus.SKIPPED
+    assert results[0].additional_kwargs[SKIP_CODE_KEY] == ToolSkipCode.TOOL_LIMIT_SIBLING
 
 
 def test_handle_hitl_pause_noop_when_not_approval_request(agent_stub_config_factory):

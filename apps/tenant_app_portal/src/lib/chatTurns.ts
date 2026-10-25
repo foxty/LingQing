@@ -5,6 +5,7 @@ import {
   resolveHitlToolStatus,
   type HitlStatusMap,
 } from '@/lib/hitlStatus'
+import { isToolResultFailed, isToolResultSkipped } from '@/lib/toolCallStatus'
 
 export type ToolCallProgressStatus = 'running' | 'completed' | 'hitl_pending'
 
@@ -292,7 +293,12 @@ function buildTurn(
       continue
     }
     if (!item.toolItem.status && item.toolItem.resultMessage) {
-      item.toolItem.status = 'completed'
+      if (
+        !isToolResultFailed(item.toolItem.resultMessage) &&
+        !isToolResultSkipped(item.toolItem.resultMessage)
+      ) {
+        item.toolItem.status = 'completed'
+      }
     }
   }
 

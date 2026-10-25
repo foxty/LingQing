@@ -1,9 +1,9 @@
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { CheckCircle2, ChevronDown, ChevronRight, XCircle } from 'lucide-react'
+import { CheckCircle2, ChevronDown, ChevronRight, CircleSlash, XCircle } from 'lucide-react'
 import { TurnToolCallItem, ToolCallProgressStatus } from '@/lib/chatTurns'
-import { ToolCallMetrics } from '@/types'
+import { getToolCallDisplayStatus, isToolCallMetrics } from '@/lib/toolCallStatus'
 import ToolCallWithResult from './ToolCallWithResult'
 
 i18n.addResourceBundle('en', 'translation', {
@@ -40,10 +40,6 @@ interface ToolCallTimelineProps {
   isStreaming?: boolean
 }
 
-function isToolCallMetrics(metrics: unknown): metrics is ToolCallMetrics {
-  return typeof metrics === 'object' && metrics !== null && 'tool_call_id' in metrics
-}
-
 function getItemDurationMs(item: TurnToolCallItem): number | null {
   const metrics = item.resultMessage?.metrics
   if (isToolCallMetrics(metrics) && metrics.duration_ms) {
@@ -54,11 +50,11 @@ function getItemDurationMs(item: TurnToolCallItem): number | null {
 
 function getEffectiveStatus(
   item: TurnToolCallItem
-): ToolCallProgressStatus | 'error' | 'completed' {
-  if (item.status) return item.status
-  const metrics = item.resultMessage?.metrics
-  if (isToolCallMetrics(metrics) && metrics.status === 'error') return 'error'
-  return 'completed'
+): ToolCallProgressStatus | 'error' | 'skipped' | 'completed' {
+  return getToolCallDisplayStatus({
+    status: item.status,
+    resultMessage: item.resultMessage,
+  })
 }
 
 interface TimelineRowProps {
@@ -80,6 +76,8 @@ function TimelineRow({ item, threadId, sessionId, isLast }: TimelineRowProps) {
       <span className="inline-block h-2 w-2 shrink-0 rounded-full bg-amber-600" />
     ) : status === 'error' ? (
       <XCircle className="h-3 w-3 shrink-0 text-red-600 dark:text-red-400" />
+    ) : status === 'skipped' ? (
+      <CircleSlash className="h-3 w-3 shrink-0 text-muted-foreground" />
     ) : (
       <CheckCircle2 className="h-3 w-3 shrink-0 text-green-600 dark:text-green-400" />
     )
@@ -146,7 +144,7 @@ export default function ToolCallTimeline({
 
   const completedCount = items.filter((item) => {
     const status = getEffectiveStatus(item)
-    return status === 'completed' || status === 'error'
+    return status === 'completed' || status === 'error' || status === 'skipped'
   }).length
   const hasRunning = items.some((item) => getEffectiveStatus(item) === 'running')
   const allComplete =

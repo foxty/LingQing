@@ -603,9 +603,15 @@ class AgentBase(ABC):
             hitl_payload.get("proposal_id"),
         )
 
-        additional_kwargs = {
-            "timestamp": datetime.now(UTC).isoformat(),
-        }
+        from apps.tenant_app_service.agents.tools.tool_result import (
+            ToolSkipCode,
+            build_persisted_tool_skip_kwargs,
+        )
+
+        additional_kwargs = build_persisted_tool_skip_kwargs(
+            ToolSkipCode.HITL_DEFERRED,
+            timestamp=datetime.now(UTC).isoformat(),
+        )
         for remaining_call in tool_calls[idx + 1 :]:
             results.append(
                 ToolMessage(
@@ -627,8 +633,13 @@ class AgentBase(ABC):
         results: list[ToolMessage],
     ) -> bool:
         """Stop the agent loop when a tool hits its configured call limit."""
-        tool_error = (tool_message.additional_kwargs or {}).get("tool_error")
-        if not isinstance(tool_error, dict) or tool_error.get("code") != "TOOL_LIMIT_EXCEEDED":
+        from apps.tenant_app_service.agents.tools.tool_result import (
+            ToolSkipCode,
+            build_persisted_tool_skip_kwargs,
+            tool_kwargs_indicate_limit_exceeded,
+        )
+
+        if not tool_kwargs_indicate_limit_exceeded(tool_message.additional_kwargs):
             return False
 
         tool_name = (tool_message.additional_kwargs or {}).get("tool_name", "tool")
@@ -636,7 +647,10 @@ class AgentBase(ABC):
             "Tool '%s' exceeded call limit; scheduling final text-only LLM summary",
             tool_name,
         )
-        additional_kwargs = {"timestamp": datetime.now(UTC).isoformat()}
+        additional_kwargs = build_persisted_tool_skip_kwargs(
+            ToolSkipCode.TOOL_LIMIT_SIBLING,
+            timestamp=datetime.now(UTC).isoformat(),
+        )
         for remaining_call in tool_calls[idx + 1 :]:
             results.append(
                 ToolMessage(
