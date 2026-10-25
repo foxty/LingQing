@@ -36,6 +36,7 @@ from langchain_core.messages import AIMessage
 
 from apps.config import EnvConfig
 from apps.shared.observability.domain import format_model_label
+from apps.shared.observability.token_breakdown import parse_usage_breakdown
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.domain import AgentRuntimeContext, PromptContextStats
 from apps.tenant_app_service.agents.metrics.agent_metrics_v3 import (
@@ -523,7 +524,12 @@ def _extract_token_usage(
         session_id=session_id,
         model_key=model_key,
     )
-    return provider, {"usage_diagnostics": diagnostics}
+    extra: dict[str, Any] = {"usage_diagnostics": diagnostics}
+    metadata_dict = usage_metadata if isinstance(usage_metadata, dict) else {}
+    usage_details = parse_usage_breakdown(raw_usage, metadata_dict)
+    if usage_details:
+        extra["usage_details"] = usage_details
+    return provider, extra
 
 
 def _extract_model_name(response: AIMessage, model_key: str | None = None) -> str:

@@ -99,6 +99,14 @@ class TokenUsageEventRecord(BaseModel):
     input_tokens: int
     output_tokens: int
     total_tokens: int
+    cache_read_input_tokens: int | None = Field(
+        default=None,
+        description="Prompt cache read tokens; subset of input_tokens, not additive",
+    )
+    reasoning_tokens: int | None = Field(
+        default=None,
+        description="Extended reasoning/thinking tokens; subset of output_tokens for most providers",
+    )
     duration_ms: float | None = None
     status: str
 

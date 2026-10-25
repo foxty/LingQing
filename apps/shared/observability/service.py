@@ -5,6 +5,7 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.observability.token_breakdown import token_event_breakdown_from_event
 from apps.shared.observability.domain import (
     AgentSessionMetrics,
     AgentThreadMetrics,
@@ -284,6 +285,7 @@ class ObservabilityService:
 
         rows = []
         for event in events:
+            breakdown = token_event_breakdown_from_event(event)
             rows.append(
                 {
                     "event_id": event.event_id,
@@ -301,6 +303,8 @@ class ObservabilityService:
                     "input_tokens": event.token_usage.input_tokens if event.token_usage else 0,
                     "output_tokens": event.token_usage.output_tokens if event.token_usage else 0,
                     "total_tokens": event.token_usage.total_tokens if event.token_usage else 0,
+                    "cache_read_input_tokens": breakdown["cache_read_input_tokens"],
+                    "reasoning_tokens": breakdown["reasoning_tokens"],
                     "duration_ms": event.duration_ms,
                     "status": event.status,
                 }

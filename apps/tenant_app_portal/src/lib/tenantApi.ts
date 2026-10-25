@@ -59,6 +59,10 @@ export interface TokenUsageEventRecord {
   input_tokens: number
   output_tokens: number
   total_tokens: number
+  /** Subset of input_tokens when the provider reports prompt cache reads. */
+  cache_read_input_tokens: number | null
+  /** Subset of output_tokens for most providers (extended reasoning). */
+  reasoning_tokens: number | null
   duration_ms: number | null
   status: string
 }

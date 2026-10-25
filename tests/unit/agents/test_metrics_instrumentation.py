@@ -53,6 +53,37 @@ async def test_llm_tracker_persists_prompt_context_stats(runtime_context, monkey
 
 
 @pytest.mark.asyncio
+async def test_llm_tracker_persists_usage_details_from_usage_metadata(runtime_context, monkeypatch):
+    from langchain_core.messages import AIMessage
+
+    from apps.tenant_app_service.agents.metrics import agent_metrics_instrumentation
+    from apps.tenant_app_service.agents.metrics.agent_metrics_instrumentation import llm_call_tracker
+    from apps.tenant_app_service.agents.metrics.agent_metrics_v3_storage import get_storage
+
+    memory_storage = get_storage("memory")
+    memory_storage._events.clear()
+    monkeypatch.setattr(agent_metrics_instrumentation, "get_metrics_storage", lambda: memory_storage)
+
+    async with llm_call_tracker("test_model", runtime_context) as tracker:
+        tracker.record_response(
+            AIMessage(
+                content="ok",
+                usage_metadata={
+                    "input_tokens": 200,
+                    "output_tokens": 30,
+                    "total_tokens": 230,
+                    "input_token_details": {"cache_read": 150},
+                    "output_token_details": {"reasoning_tokens": 11},
+                },
+            )
+        )
+
+    event = memory_storage._events[runtime_context.session_id][0]
+    assert event.extra_context["usage_details"]["cache_read_input_tokens"] == 150
+    assert event.extra_context["usage_details"]["reasoning_tokens"] == 11
+
+
+@pytest.mark.asyncio
 async def test_tool_context_stores_preview_in_extra_context(runtime_context, monkeypatch):
     """Test that track_tool_context stores tool input/output in extra_context."""
     # Force instrumentation to use memory storage
