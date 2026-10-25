@@ -8,6 +8,7 @@ i18n.addResourceBundle('en', 'translation', {
       processing: 'Processing...',
       awaitingApproval: 'Awaiting approval',
       failed: 'Failed',
+      skipped: 'Skipped',
       completed: 'Completed',
       showDetails: 'Show details',
       hideDetails: 'Hide details',
@@ -38,6 +39,7 @@ i18n.addResourceBundle('zh', 'translation', {
       processing: '处理中...',
       awaitingApproval: '等待审批',
       failed: '失败',
+      skipped: '已跳过',
       completed: '完成',
       showDetails: '显示详情',
       hideDetails: '隐藏详情',
@@ -62,13 +64,18 @@ i18n.addResourceBundle('zh', 'translation', {
   },
 }, true, true)
 import { useQuery } from '@tanstack/react-query'
-import { ChevronDown, ChevronUp, BarChart3, CheckCircle2, XCircle } from 'lucide-react'
+import { ChevronDown, ChevronUp, BarChart3, CheckCircle2, CircleSlash, XCircle } from 'lucide-react'
 import MarkdownDocument from '@/components/markdown/MarkdownDocument'
-import { toolResultMarkdownForDisplay } from '@/lib/toolResultContent'
+import {
+  TOOL_PANEL_MARKDOWN_CLASS,
+  TOOL_PANEL_MONO_CLASS,
+  formatToolResultPanelDisplay,
+} from '@/lib/toolResultContent'
 import { Message, ToolCallMetrics } from '@/types'
 import { getToolCallMetrics } from '@/lib/chatApi'
 import { useToolCallDetail } from '@/hooks/useChatHistory'
 import { ToolCallProgressStatus } from '@/lib/chatTurns'
+import { getToolCallDisplayStatus, isToolCallMetrics } from '@/lib/toolCallStatus'
 
 interface ToolCallWithResultProps {
   toolCall: {
@@ -86,10 +93,6 @@ interface ToolCallWithResultProps {
 
 const RESULT_PREVIEW_LENGTH_COMPACT = 160
 const RESULT_PREVIEW_LENGTH_DEFAULT = 280
-
-function isToolCallMetrics(metrics: any): metrics is ToolCallMetrics {
-  return metrics && 'tool_call_id' in metrics
-}
 
 export default function ToolCallWithResult({
   toolCall,
@@ -143,17 +146,25 @@ export default function ToolCallWithResult({
   const effectiveToolMetrics = toolMetrics || lazyToolMetrics || null
 
   const resultContent = effectiveResultMessage?.content || ''
-  const resultMarkdown = toolResultMarkdownForDisplay(resultContent)
+  const resultFormat = formatToolResultPanelDisplay(resultContent)
+  const resultBodyText =
+    resultFormat.kind === 'markdown'
+      ? resultFormat.markdown
+      : resultFormat.kind === 'json'
+        ? resultFormat.json
+        : resultFormat.text
   const previewLength = compact ? RESULT_PREVIEW_LENGTH_COMPACT : RESULT_PREVIEW_LENGTH_DEFAULT
-  const shouldCollapseResult = resultMarkdown.length > previewLength
-  const displayContent = effectiveResultMessage
+  const shouldCollapseResult = resultBodyText.length > previewLength
+  const displayBodyText = effectiveResultMessage
     ? shouldCollapseResult && !showFullResult
-      ? `${resultMarkdown.slice(0, previewLength).trimEnd()}...`
-      : resultMarkdown
+      ? `${resultBodyText.slice(0, previewLength).trimEnd()}...`
+      : resultBodyText
     : null
 
-  const effectiveStatus: ToolCallProgressStatus | 'error' | 'completed' =
-    status || (effectiveToolMetrics?.status === 'error' ? 'error' : 'completed')
+  const effectiveStatus = getToolCallDisplayStatus({
+    status,
+    resultMessage: effectiveResultMessage,
+  })
 
   const statusIcon =
     effectiveStatus === 'running' ? (
@@ -162,6 +173,8 @@ export default function ToolCallWithResult({
       <span className="inline-block h-2 w-2 rounded-full bg-amber-600" />
     ) : effectiveStatus === 'error' ? (
       <XCircle className="w-3 h-3 text-red-600 dark:text-red-400" />
+    ) : effectiveStatus === 'skipped' ? (
+      <CircleSlash className="w-3 h-3 text-muted-foreground" />
     ) : (
       <CheckCircle2 className="w-3 h-3 text-green-600 dark:text-green-400" />
     )
@@ -173,27 +186,42 @@ export default function ToolCallWithResult({
         ? t('components.toolCallWithResult.awaitingApproval')
         : effectiveStatus === 'error'
           ? t('components.toolCallWithResult.failed')
-          : t('components.toolCallWithResult.completed')
+          : effectiveStatus === 'skipped'
+            ? t('components.toolCallWithResult.skipped')
+            : t('components.toolCallWithResult.completed')
+
+  const sectionLabelClass = 'text-[11px] font-medium text-muted-foreground'
+  const sectionPadClass = 'px-2 py-1.5'
+
+  const renderResultBody = (body: string) => {
+    if (resultFormat.kind === 'markdown') {
+      return (
+        <MarkdownDocument content={body} density="compact" className={TOOL_PANEL_MARKDOWN_CLASS} />
+      )
+    }
+    return <pre className={TOOL_PANEL_MONO_CLASS}>{body}</pre>
+  }
 
   const detailsContent = showDetails ? (
-    <>
+    <div className="divide-y divide-border/70 text-xs">
       {hasArgs && (
-        <div className="px-3 py-2 border-b border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/50">
-          <div className="text-xs text-foreground font-medium mb-1">{t('components.toolCallWithResult.params')}</div>
-          <pre className="text-xs bg-muted/80 rounded p-2 overflow-x-auto">{argsString}</pre>
+        <div className={sectionPadClass}>
+          <div className={`${sectionLabelClass} mb-0.5`}>{t('components.toolCallWithResult.params')}</div>
+          <pre className={TOOL_PANEL_MONO_CLASS}>{argsString}</pre>
         </div>
       )}
 
-      {displayContent && (
-        <div className="px-3 py-2">
-          <div className="text-xs text-foreground font-medium mb-2">
+      {displayBodyText && (
+        <div className={sectionPadClass}>
+          <div className={`${sectionLabelClass} mb-0.5`}>
             {t('components.toolCallWithResult.execResult')}
           </div>
-          <MarkdownDocument content={displayContent} density="compact" />
+          {renderResultBody(displayBodyText)}
           {shouldCollapseResult && (
             <button
+              type="button"
               onClick={() => setShowFullResult((prev) => !prev)}
-              className="mt-1 text-xs text-foreground hover:underline"
+              className="mt-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline"
             >
               {showFullResult ? t('components.toolCallWithResult.hideFullResult') : t('components.toolCallWithResult.showFullResult')}
             </button>
@@ -201,8 +229,8 @@ export default function ToolCallWithResult({
         </div>
       )}
 
-      {showDetails && !displayContent && (
-        <div className="px-3 py-2 text-xs text-muted-foreground">
+      {showDetails && !displayBodyText && (
+        <div className={`${sectionPadClass} text-muted-foreground`}>
           {isProvisionalStreamToolCallId
             ? t('components.toolCallWithResult.executingWillShow')
             : loadingToolDetail
@@ -212,7 +240,7 @@ export default function ToolCallWithResult({
       )}
 
       {effectiveToolMetrics && (
-        <div className="px-3 py-2 border-t border-blue-200 dark:border-blue-800 bg-blue-50/50 dark:bg-blue-950/50">
+        <div className={sectionPadClass}>
           <button
             onClick={() => setShowToolMetrics(!showToolMetrics)}
             className="flex items-center gap-2 text-xs text-foreground hover:underline"
@@ -266,12 +294,12 @@ export default function ToolCallWithResult({
           )}
         </div>
       )}
-    </>
+    </div>
   ) : null
 
   if (variant === 'details-only') {
     return (
-      <div className="rounded-md border border-border bg-secondary/20 overflow-hidden text-left">
+      <div className="overflow-hidden rounded-sm border border-border/80 bg-muted/20 text-left">
         {detailsContent}
       </div>
     )
@@ -287,20 +315,20 @@ export default function ToolCallWithResult({
     >
       {/* Tool Call Header */}
       <div
-        className={`px-3 py-2 border-b ${
+        className={`border-b px-2 py-1.5 ${
           effectiveStatus === 'hitl_pending'
-            ? 'bg-amber-100 dark:bg-amber-900 border-amber-200 dark:border-amber-800'
-            : 'bg-secondary border-border'
+            ? 'border-amber-200 bg-amber-100 dark:border-amber-800 dark:bg-amber-900'
+            : 'border-border bg-secondary/80'
         }`}
       >
         <button
+          type="button"
           onClick={() => setShowDetails((prev) => !prev)}
-          className="w-full flex items-center justify-between text-left"
+          className="flex w-full items-center justify-between gap-2 text-left"
         >
-          <div className="flex items-center gap-2">
-            <span className="text-xs">🔧</span>
+          <div className="flex min-w-0 flex-1 items-center gap-1.5">
             <span
-              className={`text-xs font-medium ${
+              className={`truncate font-mono text-xs font-medium ${
                 effectiveStatus === 'hitl_pending'
                   ? 'text-amber-900 dark:text-amber-100'
                   : 'text-foreground'
@@ -309,17 +337,18 @@ export default function ToolCallWithResult({
               {toolCall.name}
             </span>
             {statusIcon}
-            <span className="text-[10px] text-muted-foreground">{statusText}</span>
+            <span className="shrink-0 text-[10px] text-muted-foreground">{statusText}</span>
             {effectiveToolMetrics && (
-              <span className="text-xs text-muted-foreground">
-                {effectiveToolMetrics.duration_ms.toFixed(2)}ms
+              <span className="shrink-0 text-[10px] tabular-nums text-muted-foreground">
+                {effectiveToolMetrics.duration_ms.toFixed(0)}ms
               </span>
             )}
           </div>
-          <div className="flex items-center gap-1 text-xs text-muted-foreground">
-            {showDetails ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
-            <span>{showDetails ? t('components.toolCallWithResult.hideDetails') : t('components.toolCallWithResult.showDetails')}</span>
-          </div>
+          {showDetails ? (
+            <ChevronUp className="h-3 w-3 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
+          )}
         </button>
       </div>
 

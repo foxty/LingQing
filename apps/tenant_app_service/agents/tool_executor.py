@@ -21,6 +21,13 @@ from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.domain import ToolCache, ToolCallCounts, ToolExecResult
 from apps.tenant_app_service.agents.metrics import tool_call_tracker
 from apps.tenant_app_service.agents.tools import ToolError, ToolResult, ToolResultStatus
+from apps.tenant_app_service.agents.tools.tool_result import (
+    SKIP_CODE_KEY,
+    TOOL_ERROR_KEY,
+    TOOL_RESULT_STATUS_KEY,
+    ToolErrorCode,
+    ToolSkipCode,
+)
 from apps.tenant_app_service.hitl.domain import (
     HITL_ACTION_REQUIRE_HITL,
     HITL_PAYLOAD_TYPE_APPROVAL_REQUEST,
@@ -45,6 +52,10 @@ def _invalidate_cache(tool_cache: dict, invalidate_tools: list[str]) -> dict:
     if not invalidate_tools:
         return tool_cache
     return {k: v for k, v in tool_cache.items() if not any(k.startswith(f"{t}::") for t in invalidate_tools)}
+
+
+def _tool_kwargs_with_status(base: dict, status: ToolResultStatus) -> dict:
+    return {**base, TOOL_RESULT_STATUS_KEY: status.value}
 
 
 class ToolExecutor:
@@ -229,14 +240,17 @@ class ToolExecutor:
                     id=str(uuid4()),
                     content=error_msg,
                     tool_call_id=tool_call_id,
-                    additional_kwargs={
-                        **additional_kwargs,
-                        "tool_error": ToolError(
-                            code="TOOL_NOT_AVAILABLE",
-                            message=reason,
-                            retryable=False,
-                        ).to_dict(),
-                    },
+                    additional_kwargs=_tool_kwargs_with_status(
+                        {
+                            **additional_kwargs,
+                            TOOL_ERROR_KEY: ToolError(
+                                code=ToolErrorCode.TOOL_NOT_AVAILABLE,
+                                message=reason,
+                                retryable=False,
+                            ).to_dict(),
+                        },
+                        ToolResultStatus.ERROR,
+                    ),
                 ),
                 updated_counts,
                 tool_cache,
@@ -274,14 +288,13 @@ class ToolExecutor:
                     id=str(uuid4()),
                     content=warning_msg,
                     tool_call_id=tool_call_id,
-                    additional_kwargs={
-                        **additional_kwargs,
-                        "tool_error": ToolError(
-                            code="TOOL_LIMIT_EXCEEDED",
-                            message=warning_msg,
-                            retryable=False,
-                        ).to_dict(),
-                    },
+                    additional_kwargs=_tool_kwargs_with_status(
+                        {
+                            **additional_kwargs,
+                            SKIP_CODE_KEY: ToolSkipCode.TOOL_LIMIT_EXCEEDED,
+                        },
+                        ToolResultStatus.SKIPPED,
+                    ),
                 ),
                 tool_call_counts,
                 tool_cache,
@@ -298,7 +311,10 @@ class ToolExecutor:
                     id=str(uuid4()),
                     content=cached_content,
                     tool_call_id=tool_call_id,
-                    additional_kwargs={**additional_kwargs, "cached": True},
+                    additional_kwargs=_tool_kwargs_with_status(
+                        {**additional_kwargs, "cached": True},
+                        ToolResultStatus.SUCCESS,
+                    ),
                 ),
                 updated_counts,
                 tool_cache,
@@ -316,7 +332,7 @@ class ToolExecutor:
                         normalized_result = self._normalize_observation_to_tool_result(observation)
                         if normalized_result.status == ToolResultStatus.ERROR:
                             tracker.record_error(RuntimeError(normalized_result.content))
-                        else:
+                        elif normalized_result.status != ToolResultStatus.SKIPPED:
                             tracker.record_result(normalized_result)
             else:
                 async with tool_call_tracker(tool_name, tool_call_id, tool_args, runtime) as tracker:
@@ -324,23 +340,25 @@ class ToolExecutor:
                     normalized_result = self._normalize_observation_to_tool_result(observation)
                     if normalized_result.status == ToolResultStatus.ERROR:
                         tracker.record_error(RuntimeError(normalized_result.content))
-                    else:
+                    elif normalized_result.status != ToolResultStatus.SKIPPED:
                         tracker.record_result(normalized_result)
 
             content = normalized_result.content
             additional_kwargs = {**additional_kwargs, **normalized_result.metadata}
-            if normalized_result.status == ToolResultStatus.ERROR:
+            if normalized_result.status == ToolResultStatus.SKIPPED:
+                additional_kwargs = _tool_kwargs_with_status(additional_kwargs, ToolResultStatus.SKIPPED)
+            elif normalized_result.status == ToolResultStatus.ERROR:
                 reason = normalized_result.content
-                error_code = "TOOL_EXECUTION_ERROR"
+                error_code = ToolErrorCode.TOOL_EXECUTION_ERROR
                 if normalized_result.error is not None:
-                    additional_kwargs["tool_error"] = normalized_result.error.to_dict()
+                    additional_kwargs[TOOL_ERROR_KEY] = normalized_result.error.to_dict()
                     reason = normalized_result.error.message
                     if normalized_result.error.hint:
                         reason = f"{reason} Hint: {normalized_result.error.hint}"
                     error_code = normalized_result.error.code or error_code
                 else:
-                    additional_kwargs["tool_error"] = ToolError(
-                        code="TOOL_EXECUTION_ERROR",
+                    additional_kwargs[TOOL_ERROR_KEY] = ToolError(
+                        code=ToolErrorCode.TOOL_EXECUTION_ERROR,
                         message=reason,
                         retryable=False,
                     ).to_dict()
@@ -352,8 +370,11 @@ class ToolExecutor:
                 )
                 await self._rollback_runtime_session(config, tool_name)
                 content = self._build_failure_message(tool_name, reason)
-            elif cache_key:
-                tool_cache[cache_key] = content
+                additional_kwargs = _tool_kwargs_with_status(additional_kwargs, ToolResultStatus.ERROR)
+            else:
+                additional_kwargs = _tool_kwargs_with_status(additional_kwargs, ToolResultStatus.SUCCESS)
+                if cache_key:
+                    tool_cache[cache_key] = content
 
             updated_counts = self._increment_tool_count(tool_call_counts, tool_name, current_count)
 
@@ -378,14 +399,17 @@ class ToolExecutor:
                     id=str(uuid4()),
                     content=error_msg,
                     tool_call_id=tool_call_id,
-                    additional_kwargs={
-                        **additional_kwargs,
-                        "tool_error": ToolError(
-                            code="TOOL_EXECUTION_EXCEPTION",
-                            message=reason,
-                            retryable=False,
-                        ).to_dict(),
-                    },
+                    additional_kwargs=_tool_kwargs_with_status(
+                        {
+                            **additional_kwargs,
+                            TOOL_ERROR_KEY: ToolError(
+                                code=ToolErrorCode.TOOL_EXECUTION_EXCEPTION,
+                                message=reason,
+                                retryable=False,
+                            ).to_dict(),
+                        },
+                        ToolResultStatus.ERROR,
+                    ),
                 ),
                 updated_counts,
                 tool_cache,
