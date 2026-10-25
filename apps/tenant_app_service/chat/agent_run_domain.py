@@ -99,6 +99,45 @@ def sort_timeline_trigger_anchored(rows: list[ThreadMainMessageDomain]) -> list[
     return ordered
 
 
+def slice_main_timeline_turns(
+    rows: list[ThreadMainMessageDomain],
+    *,
+    agent_id: int,
+    turn_limit: int | None,
+) -> list[ThreadMainMessageDomain]:
+    """Keep the last K trigger-anchored turns on the main timeline.
+
+    A turn is one human plus this agent's promoted AI rows for that trigger
+    (``sort_timeline_trigger_anchored`` order). Orphan AI rows form their own turn.
+    """
+    if turn_limit is None:
+        return list(rows)
+    if turn_limit <= 0:
+        return []
+
+    turns: list[list[ThreadMainMessageDomain]] = []
+    current: list[ThreadMainMessageDomain] = []
+
+    for row in rows:
+        if row.type == "human":
+            if current:
+                turns.append(current)
+            current = [row]
+        elif row.type == "ai" and row.agent_id == agent_id:
+            if current:
+                current.append(row)
+            else:
+                turns.append([row])
+        elif row.type == "ai":
+            continue
+
+    if current:
+        turns.append(current)
+
+    selected = turns[-turn_limit:]
+    return [row for turn in selected for row in turn]
+
+
 def filter_main_timeline_for_context_load(
     rows: list[ThreadMainMessageDomain],
     *,

@@ -3,8 +3,7 @@
 This module provides efficient message management with:
 - Run-scoped storage in agent_run_messages; human/promoted AI on thread_main_messages
 - LangChain message format conversion
-- Automatic conversation summarization
-- Token-based context management
+- Context assembly: thread/session summaries plus main timeline and run transcript
 """
 
 import json
@@ -26,7 +25,6 @@ from apps.tenant_app_service.agents.message_content import normalize_message_con
 from apps.tenant_app_service.agents.message_persistence_adapters import (
     agent_run_message_to_chat_message,
     agent_run_message_to_langchain,
-    agent_run_messages_to_chat_messages,
     thread_main_message_domain_to_langchain,
 )
 
@@ -92,15 +90,35 @@ def _ensure_json_serializable(value):
         return str(value)
 
 
-class ConversationMemoryManager:
-    """Manages conversation messages with optimized storage and retrieval.
+def _count_main_timeline_roles(messages: list[BaseMessage]) -> tuple[int, int]:
+    human = sum(1 for m in messages if isinstance(m, HumanMessage))
+    ai = sum(1 for m in messages if isinstance(m, AIMessage))
+    return human, ai
 
-    Features:
-    - Load/save messages with LangChain format conversion
-    - Automatic summarization when token limit exceeded
-    - Smart loading: latest summary + unsummarized messages
-    - Internal caching for performance optimization
-    """
+
+def _count_run_row_types(rows: list[AgentRunMessage]) -> dict[str, int]:
+    counts: dict[str, int] = {"human": 0, "ai": 0, "tool": 0}
+    for row in rows:
+        key = row.type if row.type in counts else "other"
+        counts[key] = counts.get(key, 0) + 1
+    return counts
+
+
+def _context_message_refs(messages: list[BaseMessage]) -> list[dict[str, str]]:
+    refs: list[dict[str, str]] = []
+    for msg in messages:
+        msg_id = msg.id or "?"
+        if isinstance(msg, SystemMessage):
+            summary_kind = (msg.additional_kwargs or {}).get("summary_type")
+            kind = f"system:{summary_kind}" if summary_kind else "system"
+            refs.append({"id": msg_id, "type": kind})
+        else:
+            refs.append({"id": msg_id, "type": getattr(msg, "type", msg.__class__.__name__)})
+    return refs
+
+
+class ConversationMemoryManager:
+    """Load and persist agent run messages; assemble LLM context from main + run stores."""
 
     def __init__(
         self,
@@ -115,7 +133,7 @@ class ConversationMemoryManager:
         Args:
             db_session: Database session for message operations
             thread_id: Thread ID for this conversation
-            tenant_id: Tenant ID for mini-agent service
+            tenant_id: Tenant ID for tenant-scoped repos
             agent_id: Agent ID for context isolation
             run_id: Agent run ID for run-scoped message persistence
         """
@@ -135,7 +153,6 @@ class ConversationMemoryManager:
         self.main_message_repo = MainMessageRepository(db_session)
         self.session_summary_repo = SessionSummaryRepository(db_session)
         self.thread_summary_repo = ThreadSummaryRepository(db_session)
-        self._mini_agent_service = None  # Lazy load when needed
 
         self.logger.info(
             f"Initialized ConversationMemoryManager for thread {thread_id} "
@@ -264,26 +281,6 @@ class ConversationMemoryManager:
 
         return messages_to_save
 
-    async def _load_recent_messages(self, limit: int = 50) -> list[ChatMessage]:
-        """Load recent messages from database.
-
-        Args:
-            limit: Maximum number of messages to load (default: 50)
-
-        Returns:
-            List of recent ChatMessage objects in chronological order
-        """
-        # Check thread exists
-        thread = await self.db.get(ChatThread, self.thread_id)
-        if not thread:
-            self.logger.warning(f"Thread {self.thread_id} not found")
-            return []
-
-        run_rows = await self.run_message_repo.list_for_run(self.run_id)
-        if limit and len(run_rows) > limit:
-            run_rows = run_rows[-limit:]
-        return agent_run_messages_to_chat_messages(run_rows)
-
     async def _is_tool_chain_resolved(self, anchor: ChatMessage) -> bool:
         """Check whether an anchor AI tool-call chain is fully complete."""
         from apps.tenant_app_service.chat.domain import extract_tool_call_ids, is_tool_chain_resolved
@@ -340,28 +337,87 @@ class ConversationMemoryManager:
             return True
         return is_tool_chain_resolved(tool_call_ids, resolved_tool_call_ids, has_final_ai)
 
-    async def _ensure_hitl_context_run(self, db_messages: list[AgentRunMessage]) -> list[AgentRunMessage]:
-        """HITL tail injection for this ``run_id`` only (not other parallel agent runs)."""
+    async def _ensure_hitl_context_run(
+        self, db_messages: list[AgentRunMessage]
+    ) -> tuple[list[AgentRunMessage], int]:
+        """HITL tail injection for this ``run_id`` only (not other parallel agent runs).
+
+        Returns:
+            Merged run rows and count of rows added beyond the input slice.
+        """
         last_ai_msg = await self.run_message_repo.get_last_ai_message_with_tool_calls(self.run_id, self.agent_id)
         if not last_ai_msg:
-            return db_messages
+            return db_messages, 0
         anchor = agent_run_message_to_chat_message(last_ai_msg)
         if await self._is_tool_chain_resolved(anchor):
-            return db_messages
+            return db_messages, 0
         loaded_ids = {msg.id for msg in db_messages}
         if last_ai_msg.id in loaded_ids:
-            return db_messages
+            return db_messages, 0
         tail_messages = await self.run_message_repo.get_messages_from_db_id(
             run_id=self.run_id,
             agent_id=self.agent_id,
             from_db_id=last_ai_msg.id,
         )
         if not tail_messages:
-            return db_messages
+            return db_messages, 0
         tail_id_set = {msg.id for msg in tail_messages}
         merged = tail_messages + [msg for msg in db_messages if msg.id not in tail_id_set]
         merged.sort(key=lambda m: (m.created_at, m.id))
-        return merged
+        return merged, max(0, len(merged) - len(db_messages))
+
+    def _log_context_load_manifest(
+        self,
+        *,
+        main_timeline_turn_limit: int | None,
+        run_message_limit: int | None,
+        thread_summary_limit: int,
+        session_summary_limit: int,
+        thread_summary_count: int,
+        session_summary_count: int,
+        main_messages: list[BaseMessage],
+        run_rows_pre_hitl: int,
+        run_rows_after_hitl: list[AgentRunMessage],
+        run_rows_appended: list[AgentRunMessage],
+        run_deduped_from_main: int,
+        hitl_injected_rows: int,
+        final_messages: list[BaseMessage],
+    ) -> None:
+        main_human, main_ai = _count_main_timeline_roles(main_messages)
+        run_appended_counts = _count_run_row_types(run_rows_appended)
+        self.logger.info(
+            "context_load_manifest thread_id=%s run_id=%s agent_id=%s "
+            "limits thread_summaries=%s session_summaries=%s main_turns=%s run_messages=%s "
+            "loaded thread_summary_count=%s session_summary_count=%s "
+            "main_human=%s main_ai=%s run_pre_hitl=%s run_after_hitl=%s "
+            "run_appended_human=%s run_appended_ai=%s run_appended_tool=%s "
+            "run_deduped_from_main=%s hitl_injected_rows=%s total_messages=%s",
+            self.thread_id,
+            self.run_id,
+            self.agent_id,
+            thread_summary_limit,
+            session_summary_limit,
+            main_timeline_turn_limit,
+            run_message_limit,
+            thread_summary_count,
+            session_summary_count,
+            main_human,
+            main_ai,
+            run_rows_pre_hitl,
+            len(run_rows_after_hitl),
+            run_appended_counts.get("human", 0),
+            run_appended_counts.get("ai", 0),
+            run_appended_counts.get("tool", 0),
+            run_deduped_from_main,
+            hitl_injected_rows,
+            len(final_messages),
+        )
+        self.logger.debug(
+            "context_load_message_refs thread_id=%s run_id=%s refs=%s",
+            self.thread_id,
+            self.run_id,
+            json.dumps(_context_message_refs(final_messages)),
+        )
 
     async def _load_thread_summary_messages(
         self,
@@ -432,11 +488,12 @@ class ConversationMemoryManager:
     async def _load_main_timeline_messages(
         self,
         *,
-        message_limit: int | None,
+        turn_limit: int | None,
         covered_session_ids: frozenset[str],
     ) -> list[BaseMessage]:
         from apps.tenant_app_service.chat.agent_run_domain import (
             filter_main_timeline_for_context_load,
+            slice_main_timeline_turns,
             sort_timeline_trigger_anchored,
         )
 
@@ -447,19 +504,18 @@ class ConversationMemoryManager:
             agent_id=self.agent_id,
             covered_session_ids=covered_session_ids,
         )
-        main_lc: list[BaseMessage] = []
-        for row in main_rows:
-            if row.type == "human" or (row.type == "ai" and row.agent_id == self.agent_id):
-                main_lc.append(thread_main_message_domain_to_langchain(row))
-        if message_limit is not None and message_limit >= 0:
-            main_lc = main_lc[-message_limit:] if message_limit else []
-        return main_lc
+        main_rows = slice_main_timeline_turns(main_rows, agent_id=self.agent_id, turn_limit=turn_limit)
+        return [
+            thread_main_message_domain_to_langchain(row)
+            for row in main_rows
+            if row.type == "human" or (row.type == "ai" and row.agent_id == self.agent_id)
+        ]
 
     async def _load_agent_run_messages(
         self,
         *,
-        message_limit: int | None,
-    ) -> list[AgentRunMessage]:
+        run_message_limit: int | None,
+    ) -> tuple[list[AgentRunMessage], int, int]:
         from apps.tenant_app_service.chat.agent_run_domain import drop_run_rows_duplicating_promoted_main
 
         promoted_main = await self.main_message_repo.get_promoted_ai_for_run(self.run_id)
@@ -468,18 +524,22 @@ class ConversationMemoryManager:
         raw_run_messages = await self.run_message_repo.get_unsummarized_messages(
             run_id=self.run_id,
             agent_id=self.agent_id,
-            limit=message_limit,
+            limit=run_message_limit,
         )
         raw_run_messages.reverse()
         raw_run_messages = drop_run_rows_duplicating_promoted_main(
             raw_run_messages,
             promoted_main_message_id=promoted_message_id,
         )
-        return await self._ensure_hitl_context_run(raw_run_messages)
+        pre_hitl_count = len(raw_run_messages)
+        merged, hitl_injected = await self._ensure_hitl_context_run(raw_run_messages)
+        return merged, hitl_injected, pre_hitl_count
 
     async def load_messages_with_summary(
         self,
-        message_limit: int | None = None,
+        *,
+        main_timeline_turn_limit: int | None = None,
+        run_message_limit: int | None = None,
         thread_summary_limit: int = 1,
         session_summary_limit: int = 2,
     ) -> list[BaseMessage]:
@@ -492,14 +552,16 @@ class ConversationMemoryManager:
            caps the number of sessions shown (most recent N).
         3. Load main timeline tail (human + this agent's promoted AI), omitting AI whose
            ``session_id`` is covered by loaded session summaries or thread rollup; then
-           load unsummarized ``agent_run_messages`` for this ``run_id`` (also capped at
-           ``message_limit``), dropping run AI that duplicates promoted main.
+           load unsummarized ``agent_run_messages`` for this ``run_id`` (capped at
+           ``run_message_limit``), dropping run AI that duplicates promoted main.
         4. HITL guarantee: ensure the last AIMessage with tool_calls and all
            subsequent messages are always present so HITL approval can continue.
 
         Args:
-            message_limit: Max unsummarized messages to load. ``None`` means no cap;
-                ``0`` means load zero unsummarized messages.
+            main_timeline_turn_limit: Last K human + promoted-AI **turns** on main
+                after summary filtering. ``None`` = no cap.
+            run_message_limit: Max unsummarized run rows for this ``run_id``.
+                ``None`` = all unsummarized; ``0`` = none.
             thread_summary_limit: Number of most-recent thread summaries to include.
             session_summary_limit: Max unsummarized session summaries to include.
 
@@ -528,22 +590,27 @@ class ConversationMemoryManager:
         )
         messages.extend(session_msgs)
 
-        messages.extend(
-            await self._load_main_timeline_messages(
-                message_limit=message_limit,
-                covered_session_ids=frozenset(covered_session_ids),
-            )
+        main_messages = await self._load_main_timeline_messages(
+            turn_limit=main_timeline_turn_limit,
+            covered_session_ids=frozenset(covered_session_ids),
         )
+        messages.extend(main_messages)
 
-        raw_run_messages = await self._load_agent_run_messages(message_limit=message_limit)
+        raw_run_messages, hitl_injected_rows, run_rows_pre_hitl = await self._load_agent_run_messages(
+            run_message_limit=run_message_limit
+        )
         main_ai_ids = {
             m.id
             for m in messages
             if isinstance(m, AIMessage) and m.id is not None
         }
+        run_deduped_from_main = 0
+        run_rows_appended: list[AgentRunMessage] = []
         for msg in raw_run_messages:
             if msg.type == "ai" and msg.message_id and msg.message_id in main_ai_ids:
+                run_deduped_from_main += 1
                 continue
+            run_rows_appended.append(msg)
             messages.append(agent_run_message_to_langchain(msg))
 
         thread_summary_count = (
@@ -552,11 +619,20 @@ class ConversationMemoryManager:
         session_summary_count = (
             session_msgs[0].additional_kwargs.get("session_summary_count", 0) if session_msgs else 0
         )
-        self.logger.info(
-            f"Loaded context for thread {self.thread_id}, agent_id: {self.agent_id}: "
-            f"{thread_summary_count} thread summaries, "
-            f"{session_summary_count} unsummarized session summaries, "
-            f"{len(raw_run_messages)} unsummarized run messages"
+        self._log_context_load_manifest(
+            main_timeline_turn_limit=main_timeline_turn_limit,
+            run_message_limit=run_message_limit,
+            thread_summary_limit=thread_summary_limit,
+            session_summary_limit=session_summary_limit,
+            thread_summary_count=thread_summary_count,
+            session_summary_count=session_summary_count,
+            main_messages=main_messages,
+            run_rows_pre_hitl=run_rows_pre_hitl,
+            run_rows_after_hitl=raw_run_messages,
+            run_rows_appended=run_rows_appended,
+            run_deduped_from_main=run_deduped_from_main,
+            hitl_injected_rows=hitl_injected_rows,
+            final_messages=messages,
         )
         return messages
 
@@ -568,11 +644,7 @@ class ConversationMemoryManager:
     ) -> None:
         """Add new messages and immediately save to database.
 
-        This method:
-        1. Preprocesses messages (filter, deduplicate)
-        2. Converts BaseMessage → ChatMessage
-        3. Saves to database
-        4. Updates internal cache
+        This method preprocesses messages (filter, deduplicate) and persists run rows.
 
         Args:
             raw_messages: List of new LangChain messages to add
@@ -627,38 +699,3 @@ class ConversationMemoryManager:
             )
         await self.run_message_repo.save_messages_batch(run_rows)
         self.logger.info(f"Added {len(run_rows)} run messages to run {self.run_id}")
-
-    async def get_last_message(self):
-        """Get the last message from database.
-
-        Returns:
-            Last ChatMessage or None if no messages
-        """
-        recent_messages = await self._load_recent_messages(limit=1)
-        return recent_messages[-1] if recent_messages else None
-
-    async def save_messages(
-        self,
-        thread_id: str,
-        raw_messages: list[BaseMessage],
-        config: RunnableConfig,
-        deduplicate: bool = True,
-    ) -> None:
-        """Save new messages to database (legacy method, delegates to add_messages).
-
-        Deprecated: Use add_messages() instead for new code.
-        This method is kept for backward compatibility.
-
-        Args:
-            thread_id: Thread ID to save messages to
-            messages: List of new LangChain messages to save
-            deduplicate: If True, skip messages with IDs that already exist
-        """
-        # Delegate to add_messages if thread_id matches
-        if thread_id != self.thread_id:
-            self.logger.warning(
-                f"save_messages called with thread_id={thread_id} but manager has thread_id={self.thread_id}"
-            )
-            return
-
-        await self.add_messages(raw_messages, config, deduplicate)

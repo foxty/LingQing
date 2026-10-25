@@ -153,3 +153,50 @@ class TestLlmCallErrorHandling:
         assert stats.final_count > 0
         mock_model.ainvoke.assert_awaited()
         assert mock_model.ainvoke.await_args.kwargs.get("stream") is False
+
+
+class TestToolLimitAndRunLifecycle:
+    def test_after_tool_node_routes_to_llm_for_finalize_when_tool_limit_blocked(self, agent):
+        state = {"hitl_blocked": False, "tool_limit_blocked": True}
+        assert agent._after_tool_node(state) == "llm_call"
+
+    def test_should_continue_save_after_tool_limit_finalize_llm(self, agent):
+        state = {
+            "tool_limit_blocked": True,
+            "messages": [AIMessage(id=str(uuid4()), content="summary", tool_calls=[{"name": "x", "args": {}, "id": "1"}])],
+            "loop_count": 1,
+            "tool_call_counts": {},
+        }
+        assert agent._should_continue(state) == "save_messages"
+
+    @pytest.mark.asyncio
+    async def test_finalize_marks_run_completed_without_promoted_ai(self, agent, runtime_context):
+        from langchain_core.messages import AIMessage
+
+        run_id = str(uuid4())
+        state = {
+            "messages": [
+                HumanMessage(id=str(uuid4()), content="hi"),
+                AIMessage(id=str(uuid4()), content="", tool_calls=[{"name": "t", "args": {}, "id": "c1"}]),
+            ],
+            "hitl_blocked": False,
+        }
+        config = RunnableConfig(
+            configurable={
+                "thread_id": runtime_context.thread_id,
+                "runtime": runtime_context.model_dump(),
+                "session_id": runtime_context.session_id,
+                "run_id": run_id,
+                "trigger_message_id": "human-1",
+                "db_session": AsyncMock(),
+            }
+        )
+        mock_service = AsyncMock()
+        with patch(
+            "apps.tenant_app_service.chat.thread_run_service.ThreadRunService",
+            return_value=mock_service,
+        ):
+            await agent._finalize_agent_run_lifecycle(state, config)
+
+        mock_service.promote_final_ai.assert_not_awaited()
+        mock_service.mark_run_completed.assert_awaited_once_with(run_id)

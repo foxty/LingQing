@@ -1,7 +1,7 @@
 """Message repository for chat module.
 
-Provides CRUD operations and summarization helpers for chat messages.
-Shared between ConversationMemoryManager (agent use) and chat services (raw message retrieval).
+Provides CRUD operations and summarization helpers for legacy ``chat_messages`` rows.
+New agent traffic uses main/run repositories; this remains for legacy reads (e.g. tool detail fallback).
 """
 
 from datetime import datetime

@@ -24,11 +24,7 @@ from apps.tenant_app_service.chat.adapters import db_artifact_to_domain
 from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
 from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse, Message
-from apps.tenant_app_service.chat.service_base import (
-    DEFAULT_HISTORY_MESSAGE_LIMIT,
-    HITL_CONTINUATION_HISTORY_LIMIT,
-    ChatServiceBase,
-)
+from apps.tenant_app_service.chat.service_base import ChatServiceBase
 from apps.tenant_app_service.chat.session_summary_manager import SessionSummaryManager
 from apps.tenant_app_service.chat.streaming import (
     PreparedChatStream,
@@ -265,10 +261,6 @@ class ChatTurnService(ChatServiceBase):
             capability_profile=capability_profile,
         )
 
-        history_message_limit = (
-            HITL_CONTINUATION_HISTORY_LIMIT if self._is_hitl_continuation(request) else DEFAULT_HISTORY_MESSAGE_LIMIT
-        )
-
         # Build LangChain configuration
         hitl_resume = (
             {
@@ -285,7 +277,6 @@ class ChatTurnService(ChatServiceBase):
                 "db_session": db_session or self.db,
                 "runtime": runtime_ctx.model_dump(),
                 "thinking_effort": request.thinking_effort,
-                "history_message_limit": history_message_limit,
                 # On HITL resume: signals agent_base._load_history to rewrite the stale
                 # PENDING ToolMessage, and tool_executor._handle_hitl_gate to use the
                 # known proposal_id directly (avoids arg-hash drift from LLM re-generation).

@@ -7,15 +7,16 @@ from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import AuthorizationError
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_pool import get_agent_pool
-from apps.tenant_app_service.chat.message_repository import MessageRepository
 from apps.tenant_app_service.chat.repository import ThreadRepository
 from apps.tenant_app_service.tenant.adapters import db_tenant_to_domain
 from apps.tenant_app_service.tenant.domain import TenantDomain
 from apps.tenant_app_service.tenant.repository import TenantRepository
 
 MAX_THREADS_PER_USER = 20
-DEFAULT_HISTORY_MESSAGE_LIMIT = 1
-HITL_CONTINUATION_HISTORY_LIMIT = 12
+# Last K human + promoted-AI turns on main timeline (after summaries).
+DEFAULT_MAIN_TIMELINE_TURN_LIMIT = 4
+# Run transcript: scoped by run_id (new run → empty; same run → all unsummarized rows).
+RUN_HISTORY_MESSAGE_LIMIT = None
 
 
 class ChatServiceBase(TenantAwareService):
@@ -27,7 +28,6 @@ class ChatServiceBase(TenantAwareService):
         self.logger = get_logger(self.__class__.__name__)
         self.agent_pool = get_agent_pool()
         self.thread_repo = ThreadRepository(db)
-        self.message_repo = MessageRepository(db)
         self.tenant_repo = TenantRepository(db)
         self.artifact_repo = ArtifactRepository(db)
 
