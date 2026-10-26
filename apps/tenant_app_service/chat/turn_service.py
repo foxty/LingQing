@@ -299,6 +299,8 @@ class ChatTurnService(ChatServiceBase):
         self,
         session_id: str,
         thread_id: str,
+        *,
+        run_id: str | None = None,
     ) -> None:
         """Handle session end asynchronously.
 
@@ -309,6 +311,8 @@ class ChatTurnService(ChatServiceBase):
         Args:
             session_id: Session ID
             thread_id: Thread ID
+            run_id: When set, skip summarization until the agent run is terminal
+                (e.g. defer while ``awaiting_hitl`` until approve/reject completes).
 
         Note:
             Creates its own database session to avoid conflicts with router-level
@@ -317,12 +321,23 @@ class ChatTurnService(ChatServiceBase):
         """
         try:
             from apps.shared.db.session import app_db_session
+            from apps.tenant_app_service.chat.agent_run_domain import run_status_allows_session_summary
 
             # Background tasks must use their own session: the router-level session
             # is closed as soon as the response is sent, which may happen before
             # this task finishes.  app_db_session() commits on clean exit and rolls
             # back on any exception.
             async with app_db_session() as db:
+                if run_id:
+                    run = await AgentRunRepository(db).get_run(self.tenant_id, run_id)
+                    if run and not run_status_allows_session_summary(run.status):
+                        self.logger.info(
+                            "Deferred session summary for session %s (run %s status=%s)",
+                            session_id,
+                            run_id,
+                            run.status,
+                        )
+                        return
                 # 1. Create session summary + mark messages as summarized, then commit.
                 # These two writes must be persisted regardless of whether a thread
                 # summary is triggered next.
@@ -463,12 +478,21 @@ class ChatTurnService(ChatServiceBase):
         """Whether this request is a HITL continuation request."""
         return bool(request.hitl_proposal_id and request.hitl_action)
 
-    def schedule_session_end(self, session_id: str, thread_id: str | None) -> None:
+    def schedule_session_end(
+        self,
+        session_id: str,
+        thread_id: str | None,
+        *,
+        run_id: str | None = None,
+    ) -> None:
         """Schedule async session summary work after a turn completes."""
+        if not thread_id:
+            return
         asyncio.create_task(
             self._handle_session_end_async(
                 session_id=session_id,
                 thread_id=thread_id,
+                run_id=run_id,
             )
         )
 
@@ -608,6 +632,9 @@ class ChatTurnService(ChatServiceBase):
             if run_id:
                 await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.FAILED)
             raise
+        finally:
+            if run_id:
+                await ThreadRunService(self.db, self.tenant_id).finalize_run_for_main(run_id)
 
         self.logger.info(
             "Background stream completed for agent %s session %s",
@@ -617,6 +644,7 @@ class ChatTurnService(ChatServiceBase):
         self.schedule_session_end(
             session_id=session_id,
             thread_id=request.thread_id or runtime_context.thread_id,
+            run_id=run_id,
         )
 
     async def run_agent_and_emit_prepared(
@@ -901,5 +929,11 @@ class ChatTurnService(ChatServiceBase):
                 await AgentRunRepository(self.db).set_status(prepared.run_id, status=AgentRunStatus.FAILED)
             raise InternalServiceError(f"Error invoking agent: {str(e)}") from e
         finally:
-            self.schedule_session_end(session_id=session_id, thread_id=request.thread_id)
+            if prepared.run_id:
+                await ThreadRunService(self.db, self.tenant_id).finalize_run_for_main(prepared.run_id)
+            self.schedule_session_end(
+                session_id=session_id,
+                thread_id=request.thread_id or runtime_ctx.thread_id,
+                run_id=prepared.run_id,
+            )
 

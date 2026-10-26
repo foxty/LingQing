@@ -170,17 +170,9 @@ class TestToolLimitAndRunLifecycle:
         assert agent._should_continue(state) == "save_messages"
 
     @pytest.mark.asyncio
-    async def test_finalize_marks_run_completed_without_promoted_ai(self, agent, runtime_context):
-        from langchain_core.messages import AIMessage
-
+    async def test_finalize_agent_run_lifecycle_no_op_without_hitl(self, agent, runtime_context):
         run_id = str(uuid4())
-        state = {
-            "messages": [
-                HumanMessage(id=str(uuid4()), content="hi"),
-                AIMessage(id=str(uuid4()), content="", tool_calls=[{"name": "t", "args": {}, "id": "c1"}]),
-            ],
-            "hitl_blocked": False,
-        }
+        state = {"messages": [], "hitl_blocked": False}
         config = RunnableConfig(
             configurable={
                 "thread_id": runtime_context.thread_id,
@@ -198,5 +190,4 @@ class TestToolLimitAndRunLifecycle:
         ):
             await agent._finalize_agent_run_lifecycle(state, config)
 
-        mock_service.promote_final_ai.assert_not_awaited()
-        mock_service.mark_run_completed.assert_awaited_once_with(run_id)
+        mock_service.mark_run_awaiting_hitl.assert_not_awaited()

@@ -315,12 +315,21 @@ class HitlApprovalService:
             return ai_content
 
         run_message_repo = AgentRunMessageRepository(self.db)
+        from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
+
+        run_finalize = ThreadRunService(self.db, self.tenant_id)
         for message in await run_message_repo.get_messages_by_session(approval.session_id):
             if message.type == "ai" and message.content == ai_content:
                 await run_repo.set_status(
                     run.id,
                     status=AgentRunStatus.COMPLETED,
                     completed_at=datetime.now(UTC),
+                )
+                await run_finalize.finalize_run_for_main(run.id)
+                self._schedule_session_summary_after_terminal_run(
+                    session_id=approval.session_id,
+                    thread_id=approval.thread_id,
+                    run_id=run.id,
                 )
                 return None
 
@@ -344,7 +353,28 @@ class HitlApprovalService:
             status=AgentRunStatus.COMPLETED,
             completed_at=datetime.now(UTC),
         )
+        await run_finalize.finalize_run_for_main(run.id)
+        self._schedule_session_summary_after_terminal_run(
+            session_id=approval.session_id,
+            thread_id=approval.thread_id,
+            run_id=run.id,
+        )
         return ai_content
+
+    def _schedule_session_summary_after_terminal_run(
+        self,
+        *,
+        session_id: str,
+        thread_id: str,
+        run_id: str,
+    ) -> None:
+        from apps.tenant_app_service.chat.turn_service import ChatTurnService
+
+        ChatTurnService(self.tenant_id, self.db).schedule_session_end(
+            session_id=session_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
 
     async def mark_executed(self, proposal_id: str, success: bool, error: str | None = None) -> None:
         approval = await self.get_approval(proposal_id)
