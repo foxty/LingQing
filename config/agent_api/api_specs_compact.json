@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-24T03:36:14.398191+00:00",
+  "generated_at": "2026-10-25T12:59:14.184633+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -8403,6 +8403,30 @@
           "total_tokens": {
             "type": "integer",
             "title": "Total Tokens"
+          },
+          "cache_read_input_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cache Read Input Tokens",
+            "description": "Prompt cache read tokens; subset of input_tokens, not additive"
+          },
+          "reasoning_tokens": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reasoning Tokens",
+            "description": "Extended reasoning/thinking tokens; subset of output_tokens for most providers"
           },
           "duration_ms": {
             "anyOf": [

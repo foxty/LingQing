@@ -218,6 +218,32 @@ def test_db_adapter_preserves_extra_context():
     assert restored.token_usage.input_tokens == 10
 
 
+def test_db_adapter_preserves_usage_details_in_extra_context():
+    now = datetime.now(UTC)
+    event = MetricsEvent(
+        event_type=EventType.LLM_CALL,
+        context=MetricsContext(session_id="s-usage-details"),
+        start_time=now,
+        end_time=now,
+        token_usage=TokenUsage(input_tokens=500, output_tokens=50, total_tokens=550),
+        extra_context={
+            "usage_details": {
+                "cache_read_input_tokens": 400,
+                "cache_creation_input_tokens": 25,
+                "reasoning_tokens": 12,
+            },
+            "usage_diagnostics": {"usage_source": "response_metadata.usage"},
+        },
+    )
+
+    restored = db_model_to_event(event_to_db_model(event))
+
+    assert restored.extra_context["usage_details"]["cache_read_input_tokens"] == 400
+    assert restored.extra_context["usage_details"]["cache_creation_input_tokens"] == 25
+    assert restored.extra_context["usage_details"]["reasoning_tokens"] == 12
+    assert restored.token_usage.input_tokens == 500
+
+
 @pytest.mark.asyncio
 async def test_token_events_use_stored_or_computed_model_label():
     now = datetime.now(UTC)
@@ -234,7 +260,10 @@ async def test_token_events_use_stored_or_computed_model_label():
             end_time=now,
             timestamp=now,
             token_usage=TokenUsage(input_tokens=21_778, output_tokens=2_255, total_tokens=24_033),
-            extra_context={"model_label": "system.ai.deepseek-v4-flash-0731 → /mosaicml/local_model"},
+            extra_context={
+                "model_label": "system.ai.deepseek-v4-flash-0731 → /mosaicml/local_model",
+                "usage_details": {"cache_read_input_tokens": 10_000, "reasoning_tokens": 200},
+            },
         )
     ]
     repo = SimpleNamespace(
@@ -252,6 +281,8 @@ async def test_token_events_use_stored_or_computed_model_label():
     assert rows[0]["model_label"] == "system.ai.deepseek-v4-flash-0731 → /mosaicml/local_model"
     assert rows[0]["input_tokens"] == 21_778
     assert rows[0]["total_tokens"] == 24_033
+    assert rows[0]["cache_read_input_tokens"] == 10_000
+    assert rows[0]["reasoning_tokens"] == 200
 
 
 @pytest.mark.asyncio
@@ -292,3 +323,67 @@ async def test_llm_tracker_persists_provider_usage_and_model_label(runtime_conte
     assert event.context.model_name == "/mosaicml/local_model"
     assert event.extra_context["model_label"] == "system.ai.deepseek-v4-flash-0731 → /mosaicml/local_model"
     assert event.extra_context["usage_diagnostics"]["usage_source"] == "response_metadata.usage"
+    assert "usage_details" not in event.extra_context
+
+
+@pytest.mark.asyncio
+async def test_llm_tracker_persists_usage_details_when_provider_reports_breakdown(
+    runtime_context, monkeypatch
+):
+    from apps.tenant_app_service.agents.metrics import agent_metrics_instrumentation
+    from apps.tenant_app_service.agents.metrics.agent_metrics_v3_storage import get_storage
+
+    memory_storage = get_storage("memory")
+    memory_storage._events.clear()
+    monkeypatch.setattr(agent_metrics_instrumentation, "get_metrics_storage", lambda: memory_storage)
+
+    async with llm_call_tracker("yaml-model", runtime_context) as tracker:
+        tracker.record_response(
+            AIMessage(
+                content="hi",
+                response_metadata={
+                    "usage": {
+                        "prompt_tokens": 1000,
+                        "completion_tokens": 80,
+                        "total_tokens": 1080,
+                        "prompt_tokens_details": {"cached_tokens": 900},
+                        "completion_tokens_details": {"reasoning_tokens": 26},
+                    }
+                },
+            )
+        )
+
+    event = memory_storage._events[runtime_context.session_id][0]
+    assert event.extra_context["usage_details"]["cache_read_input_tokens"] == 900
+    assert event.extra_context["usage_details"]["reasoning_tokens"] == 26
+    assert event.token_usage.input_tokens == 1000
+    assert event.token_usage.output_tokens == 80
+
+
+@pytest.mark.asyncio
+async def test_token_events_expose_breakdown_from_db_backed_extra_context():
+    now = datetime.now(UTC)
+    stored = MetricsEvent(
+        event_id="e-db-1",
+        event_type=EventType.LLM_CALL,
+        context=MetricsContext(session_id="s-db"),
+        start_time=now,
+        end_time=now,
+        timestamp=now,
+        token_usage=TokenUsage(input_tokens=100, output_tokens=20, total_tokens=120),
+        extra_context={"usage_details": {"cache_read_input_tokens": 55, "reasoning_tokens": 7}},
+    )
+    round_tripped = db_model_to_event(event_to_db_model(stored))
+    repo = SimpleNamespace(
+        count_events_by_filters=AsyncMock(return_value=1),
+        get_events_page_by_filters=AsyncMock(return_value=[round_tripped]),
+    )
+
+    _, rows = await ObservabilityService(repo).get_tenant_token_events(
+        tenant_id=1,
+        start_time=now,
+        end_time=now,
+    )
+
+    assert rows[0]["cache_read_input_tokens"] == 55
+    assert rows[0]["reasoning_tokens"] == 7

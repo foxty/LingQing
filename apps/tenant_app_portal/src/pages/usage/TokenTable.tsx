@@ -25,6 +25,10 @@ i18n.addResourceBundle('en', 'translation', {
       modelCol: 'Model',
       sessionCol: 'Session',
       noRecords: 'No records',
+      cacheReadCol: 'Cache read',
+      cacheReadHint: 'Included in Input',
+      thinkingCol: 'Thinking',
+      thinkingHint: 'Included in Output',
     }
   }
 }, true, true)
@@ -40,12 +44,23 @@ i18n.addResourceBundle('zh', 'translation', {
       modelCol: '模型',
       sessionCol: '会话',
       noRecords: '暂无记录',
+      cacheReadCol: '缓存读取',
+      cacheReadHint: '已计入输入',
+      thinkingCol: '思考',
+      thinkingHint: '已计入输出',
     }
   }
 }, true, true)
 
 function formatNumber(value: number): string {
   return new Intl.NumberFormat('zh-CN').format(value)
+}
+
+function formatOptionalCount(value: number | null | undefined): string {
+  if (value == null) {
+    return '—'
+  }
+  return formatNumber(value)
 }
 
 interface TokenTableProps {
@@ -90,7 +105,13 @@ export default function TokenTable({
                   <TableHead>{t('settings.usageTab.modelCol')}</TableHead>
                   <TableHead>{t('settings.usageTab.sessionCol')}</TableHead>
                   <TableHead className="text-right">Input</TableHead>
+                  <TableHead className="text-right" title={t('settings.usageTab.cacheReadHint')}>
+                    {t('settings.usageTab.cacheReadCol')}
+                  </TableHead>
                   <TableHead className="text-right">Output</TableHead>
+                  <TableHead className="text-right" title={t('settings.usageTab.thinkingHint')}>
+                    {t('settings.usageTab.thinkingCol')}
+                  </TableHead>
                   <TableHead className="text-right">Total</TableHead>
                 </TableRow>
               </TableHeader>
@@ -105,8 +126,14 @@ export default function TokenTable({
                         {row.session_id}
                       </TableCell>
                       <TableCell className="text-right">{formatNumber(row.input_tokens)}</TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatOptionalCount(row.cache_read_input_tokens)}
+                      </TableCell>
                       <TableCell className="text-right">
                         {formatNumber(row.output_tokens)}
+                      </TableCell>
+                      <TableCell className="text-right text-muted-foreground">
+                        {formatOptionalCount(row.reasoning_tokens)}
                       </TableCell>
                       <TableCell className="text-right font-medium">
                         {formatNumber(row.total_tokens)}
@@ -115,7 +142,7 @@ export default function TokenTable({
                   ))
                 ) : (
                   <TableRow>
-                    <TableCell colSpan={7} className="text-center text-muted-foreground">
+                    <TableCell colSpan={9} className="text-center text-muted-foreground">
                       {t('settings.usageTab.noRecords')}
                     </TableCell>
                   </TableRow>
