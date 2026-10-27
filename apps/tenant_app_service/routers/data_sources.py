@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
+from apps.shared.core.exceptions import AuthorizationError, ValidationError
 from apps.shared.data_source import (
     AssetMetadataRepository,
     DataSourceRepository,
@@ -682,6 +683,8 @@ async def query_data_source(
             "columns": df.columns.tolist(),
             "rows": df.to_dict(orient="records"),
         }
+    except (AuthorizationError, ValidationError):
+        raise
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     except Exception as e:

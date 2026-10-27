@@ -13,6 +13,7 @@ from sqlalchemy import delete
 from apps.shared.data_source.service import DataSourceService
 from apps.shared.db.models import AssetMetadata, DataSource, Tenant
 from apps.tenant_app_service.agents.tools import database as database_tool
+from apps.tenant_app_service.agents.tools.tool_result import ToolResultStatus
 from tests.integration.helpers.runtime_seed import ensure_runtime_tenant_user
 
 
@@ -216,3 +217,102 @@ async def test_run_sql_query_on_datasource_caps_row_limit(
     assert "error" not in payload
     assert payload["row_count"] == database_tool.MAX_QUERY_RESULT_ROWS
     assert len(payload["rows"]) == database_tool.MAX_QUERY_RESULT_ROWS
+
+
+@pytest.mark.asyncio
+async def test_run_sql_query_on_datasource_denies_unregistered_table(
+    async_db_session,
+    runtime_context,
+    runnable_config,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        database_tool,
+        "app_db_session",
+        lambda: _SessionContext(async_db_session),
+    )
+
+    await _seed_tenant(async_db_session, runtime_context)
+    data_source = await _seed_data_source(async_db_session, runtime_context)
+    await _seed_asset(async_db_session, data_source.id, runtime_context.user.user_id)
+
+    warehouse_called = False
+
+    class _FailIfCalledManager(_FakeDBManager):
+        async def query(self, sql: str, params: dict | None = None) -> pd.DataFrame:
+            nonlocal warehouse_called
+            warehouse_called = True
+            return await super().query(sql, params=params)
+
+    async def _fake_get_db_manager(self, data_source_id: int):
+        return _FailIfCalledManager(pd.DataFrame())
+
+    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+
+    result = await database_tool.run_sql_query_on_datasource.ainvoke(
+        {
+            "data_source_id": data_source.id,
+            "sql_query": "SELECT * FROM secret_table",
+        },
+        config=runnable_config,
+    )
+
+    assert result.status == ToolResultStatus.ERROR
+    assert "unregistered asset" in result.error.message.lower()
+    assert warehouse_called is False
+
+
+@pytest.mark.asyncio
+async def test_run_sql_query_on_datasource_denies_information_schema_catalog(
+    async_db_session,
+    runtime_context,
+    runnable_config,
+    monkeypatch,
+):
+    monkeypatch.setattr(
+        database_tool,
+        "app_db_session",
+        lambda: _SessionContext(async_db_session),
+    )
+
+    await _seed_tenant(async_db_session, runtime_context)
+    data_source = await _seed_data_source(async_db_session, runtime_context)
+    await _seed_asset(async_db_session, data_source.id, runtime_context.user.user_id)
+
+    tables_asset = AssetMetadata(
+        data_source_id=data_source.id,
+        owner_id=runtime_context.user.user_id,
+        asset_name="tables",
+        asset_type="table",
+        columns=[],
+        row_count=0,
+        source_info={},
+    )
+    async_db_session.add(tables_asset)
+    await async_db_session.commit()
+
+    warehouse_called = False
+
+    async def _fake_get_db_manager(self, data_source_id: int):
+        class _Manager(_FakeDBManager):
+            async def query(self, sql: str, params: dict | None = None) -> pd.DataFrame:
+                nonlocal warehouse_called
+                warehouse_called = True
+                return pd.DataFrame()
+
+        return _Manager(pd.DataFrame())
+
+    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+
+    sql = (
+        "SELECT table_schema, table_name FROM information_schema.tables "
+        "WHERE table_schema NOT IN ('pg_catalog', 'information_schema')"
+    )
+    result = await database_tool.run_sql_query_on_datasource.ainvoke(
+        {"data_source_id": data_source.id, "sql_query": sql},
+        config=runnable_config,
+    )
+
+    assert result.status == ToolResultStatus.ERROR
+    assert "information_schema.tables" in result.error.message.lower()
+    assert warehouse_called is False

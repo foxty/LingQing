@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import pandas as pd
 from sqlalchemy import select
 from sqlalchemy.sql.elements import ColumnElement
+from sqlglot.errors import ParseError
 
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
@@ -20,7 +21,7 @@ from apps.shared.authz.authz_query_builder import (
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.base_service import TenantAwareService
-from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError
+from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError, ValidationError
 from apps.shared.data_source.adapters import (
     db_data_source_to_domain,
     domain_data_source_to_api,
@@ -46,7 +47,7 @@ from apps.shared.infra.analytics_db import create_db_manager_from_config
 from apps.shared.infra.analytics_db.manager_factory import get_db_manager_for_datasource
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
-from apps.shared.utils.sql_utils import validate_read_only_sql
+from apps.shared.utils.sql_utils import extract_table_references, validate_read_only_sql
 
 from .repository import (
     AssetMetadataRepository,
@@ -55,6 +56,8 @@ from .repository import (
 from .temp_table_repository import TempTableRepository
 
 logger = get_logger(__name__)
+
+_SYSTEM_CATALOG_SCHEMAS = frozenset({"information_schema", "pg_catalog", "pg_toast"})
 
 
 @dataclass(frozen=True)
@@ -456,12 +459,13 @@ class DataSourceService(TenantAwareService):
         params: dict | None = None,
         max_rows: int | None = None,
     ) -> pd.DataFrame:
-        """Execute read-only query with data-source-level authorization."""
+        """Execute read-only query with data-source and registered-asset authorization."""
         validate_read_only_sql(sql_query)
         await self.require_read_access_for_actor(
             data_source_id=data_source_id,
             actor=actor,
         )
+        await self.require_registered_assets_in_sql(data_source_id=data_source_id, sql_query=sql_query)
 
         db_manager = await self.get_db_manager(data_source_id)
         async with db_manager:
@@ -472,6 +476,39 @@ class DataSourceService(TenantAwareService):
             return df.head(max_rows)
 
         return df
+
+    async def require_registered_assets_in_sql(self, *, data_source_id: int, sql_query: str) -> None:
+        """Fail closed when SQL references tables not registered as assets on the data source."""
+        try:
+            table_refs = extract_table_references(sql_query)
+        except ParseError as err:
+            raise ValidationError("Unable to parse SQL for table access validation.") from err
+
+        for table_ref in sorted(table_refs):
+            asset = await self._resolve_asset_for_table_ref(data_source_id, table_ref)
+            if asset is None:
+                raise AuthorizationError(f"Query references unregistered asset '{table_ref}'.")
+
+    @staticmethod
+    def _table_ref_lookup_candidates(table_ref: str) -> list[str]:
+        """Build asset_name lookup candidates; skip bare suffix for system catalog refs."""
+        candidates = [table_ref, table_ref.lower()]
+        parts = table_ref.split(".")
+        if len(parts) > 1 and parts[0].lower() not in _SYSTEM_CATALOG_SCHEMAS:
+            tail = parts[-1]
+            candidates.extend([tail, tail.lower()])
+        return candidates
+
+    async def _resolve_asset_for_table_ref(self, data_source_id: int, table_ref: str):
+        tried: set[str] = set()
+        for candidate in self._table_ref_lookup_candidates(table_ref):
+            if candidate in tried:
+                continue
+            tried.add(candidate)
+            asset = await self.asset_repo.get_by_data_source_and_name(data_source_id, candidate)
+            if asset:
+                return asset
+        return None
 
     async def drop_managed_table_for_actor(
         self,

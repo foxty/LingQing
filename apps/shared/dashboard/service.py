@@ -606,13 +606,18 @@ class DashboardService(TenantAwareService):
         )
         if not widget.data_source_id:
             raise ValidationError(f"Widget '{widget.id}' has no data source for query")
+        actor = ActorContext(
+            tenant_id=self.tenant_id,
+            user_id=user_id,
+            user_role=user_role,
+        )
         await data_source_service.require_read_access_for_actor(
             data_source_id=widget.data_source_id,
-            actor=ActorContext(
-                tenant_id=self.tenant_id,
-                user_id=user_id,
-                user_role=user_role,
-            ),
+            actor=actor,
+        )
+        await data_source_service.require_registered_assets_in_sql(
+            data_source_id=widget.data_source_id,
+            sql_query=compiled.sql,
         )
         db_manager = await data_source_service.get_db_manager(widget.data_source_id)
         return PreparedAnalyticsQuery(
