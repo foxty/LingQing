@@ -126,4 +126,4 @@ Push/PR triggers [`.github/workflows/ci.yml`](.github/workflows/ci.yml) (backend
 
 ---
 
-**Version** v2.0.0 · **License** [Apache-2.0](LICENSE)
+**License** [Apache-2.0](LICENSE)
