@@ -2,10 +2,11 @@ import { useCallback, useMemo, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { useActiveSessionPoll } from '@/hooks/useActiveSessionPoll'
+import { useNotification } from '@/hooks/useNotification'
 import { useChatHistory } from '@/hooks/useChatHistory'
 import { useChatStream } from '@/hooks/useChatStream'
 import { shouldNavigateAfterStreamStart } from '@/lib/chatStream'
-import { SESSION_STATUS } from '@/lib/chatApi'
+import { isActiveRunStatus } from '@/lib/chatApi'
 import { isStreamTransportError } from '@/lib/streamErrors'
 import type { ArtifactsAutoOpenPreference, ThinkingEffort } from '@/lib/userPreferencesTypes'
 import {
@@ -61,6 +62,7 @@ export function useWorkbenchChat({
 }: UseWorkbenchChatOptions) {
   const { t } = useTranslation()
   const { user } = useAuth()
+  const { showError } = useNotification()
   const latestMessageTimestampBeforeSendRef = useRef(0)
   const hitlContinueProposalRef = useRef<string | null>(null)
   const handleStreamEventRef = useRef<(data: SSEMessage, activeThreadId: string) => Promise<void>>(
@@ -84,6 +86,7 @@ export function useWorkbenchChat({
     streamingToolCalls,
     beginStream,
     runStream,
+    runHitlResumeStream,
     resetStreamState,
     failStream,
   } = useChatStream({
@@ -108,7 +111,7 @@ export function useWorkbenchChat({
   const recoverFromStreamTransportLoss = useCallback(async () => {
     resetStreamState()
     const status = await refreshStatus()
-    if (status?.status === SESSION_STATUS.RUNNING) {
+    if (isActiveRunStatus(status?.run_status ?? null)) {
       resumeSessionWatch()
       return
     }
@@ -183,6 +186,14 @@ export function useWorkbenchChat({
           await recoverFromStreamTransportLoss()
           return
         }
+        if (data.error_code === 'THREAD_BUSY') {
+          notifyStreamFinished()
+          resetStreamState()
+          showError(data.message?.trim() || t('workbench.threadBusy'))
+          await refreshStatus()
+          void refreshTail()
+          return
+        }
         notifyStreamFinished()
         failStream(data.message?.trim() || t('workbench.streamFailed'))
         void refreshTail()
@@ -206,8 +217,6 @@ export function useWorkbenchChat({
       selectedResources: AttachedArtifact[],
       options?: {
         hidden?: boolean
-        hitlProposalId?: string
-        hitlAction?: 'approved'
       }
     ) => {
       if ((!options?.hidden && !messageText.trim()) || showWorkingIndicator || !user) return
@@ -266,8 +275,6 @@ export function useWorkbenchChat({
               },
               thread_id: activeThreadId,
               selected_artifact_ids: selectedResources.map((r) => r.artifact_id),
-              hitl_proposal_id: options?.hitlProposalId || null,
-              hitl_action: options?.hitlAction || null,
               thinking_effort: thinkingEffort || null,
             },
           },
@@ -282,7 +289,7 @@ export function useWorkbenchChat({
           return
         }
         notifyStreamFinished()
-        resetStreamState()
+        failStream(message.trim() || t('workbench.streamFailed'))
       }
     },
     [
@@ -297,6 +304,7 @@ export function useWorkbenchChat({
       recoverFromStreamTransportLoss,
       resetStreamState,
       runStream,
+      runHitlResumeStream,
       showWorkingIndicator,
       thinkingEffort,
       t,
@@ -307,23 +315,49 @@ export function useWorkbenchChat({
 
   const handleHitlApprovedContinue = useCallback(
     async (proposalId: string) => {
-      if (hitlContinueProposalRef.current === proposalId) {
+      if (hitlContinueProposalRef.current === proposalId || !threadId || !user) {
         return
       }
       hitlContinueProposalRef.current = proposalId
+      const token = localStorage.getItem('token')
+      if (!token) {
+        failStream(t('workbench.authRequired'))
+        hitlContinueProposalRef.current = null
+        return
+      }
+      notifyStreamStarted()
+      const abortController = beginStream(undefined, threadId)
       try {
-        await handleSendMessage('continue hitl workflow', [], {
-          hidden: true,
-          hitlProposalId: proposalId,
-          hitlAction: 'approved',
-        })
+        await runHitlResumeStream(proposalId, threadId, token, abortController)
+      } catch (error) {
+        console.error('HITL resume stream failed:', error)
+        const message = error instanceof Error ? error.message : String(error)
+        if (isStreamTransportError(message)) {
+          await recoverFromStreamTransportLoss()
+          return
+        }
+        notifyStreamFinished()
+        resetStreamState()
       } finally {
+        notifyStreamFinished()
+        await refreshTail()
         if (hitlContinueProposalRef.current === proposalId) {
           hitlContinueProposalRef.current = null
         }
       }
     },
-    [handleSendMessage]
+    [
+      beginStream,
+      failStream,
+      notifyStreamFinished,
+      recoverFromStreamTransportLoss,
+      refreshTail,
+      resetStreamState,
+      runHitlResumeStream,
+      t,
+      threadId,
+      user,
+    ]
   )
 
   const handleHitlRejected = useCallback(async () => {

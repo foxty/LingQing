@@ -54,7 +54,6 @@ class AgentState(TypedDict):
     tool_call_counts: ToolCallCounts
     tool_cache: NotRequired[ToolCache]
     skill_state: NotRequired[SkillState]  # Skill runtime state
-    hitl_blocked: NotRequired[bool]  # True when waiting for HITL approval/rejection
     tool_limit_blocked: NotRequired[bool]  # True after a tool hit its limit; one text-only LLM turn then stop
 
 
@@ -169,6 +168,10 @@ class AgentBase(ABC):
         """
         from langchain_core.messages import SystemMessage
 
+        if config.get("configurable", {}).get("skip_load_history"):
+            self.logger.info("Skipping load_history (checkpoint resume)")
+            return {}
+
         runtime = extract_runtime_context(config)
         db_session = config.get("configurable", {}).get("db_session")
         run_id = self._run_id_from_config(config)
@@ -215,16 +218,6 @@ class AgentBase(ABC):
                 db=db_session,
             )
 
-        # HITL resume: rewrite the approved/rejected ToolMessage for this turn only.
-        hitl_resume = config.get("configurable", {}).get("hitl_resume")
-        if hitl_resume:
-            historical_messages = self._transform_hitl_history(historical_messages, hitl_resume)
-            self.logger.info(
-                "HITL resume history transformation applied for proposal_id=%s, action=%s",
-                hitl_resume.get("proposal_id"),
-                hitl_resume.get("action"),
-            )
-
         context_messages.extend(historical_messages)
 
         # ============================================
@@ -247,42 +240,6 @@ class AgentBase(ABC):
         )
 
         return {"messages": combined}
-
-    def _transform_hitl_history(
-        self,
-        messages: List[BaseMessage],
-        hitl_resume: dict,
-    ) -> List[BaseMessage]:
-        """Replace the stale gate ToolMessage with an approve-resume signal for the LLM."""
-        from apps.tenant_app_service.hitl.domain import HITL_STATUS_APPROVED
-        from apps.tenant_app_service.hitl.history import build_hydrated_hitl_tool_message
-
-        proposal_id = hitl_resume.get("proposal_id")
-        action = hitl_resume.get("action")
-
-        if not proposal_id or action != HITL_STATUS_APPROVED:
-            return messages
-
-        result: List[BaseMessage] = []
-        for msg in messages:
-            if isinstance(msg, ToolMessage) and is_hitl_approval_request(msg, proposal_id):
-                tool_name = (msg.additional_kwargs or {}).get("tool_name") or "tool"
-                result.append(
-                    build_hydrated_hitl_tool_message(
-                        msg,
-                        status=HITL_STATUS_APPROVED,
-                        proposal_id=proposal_id,
-                        tool_name=tool_name,
-                    )
-                )
-                self.logger.info(
-                    "Replaced HITL gate ToolMessage with approve-resume signal for proposal_id=%s",
-                    proposal_id,
-                )
-            else:
-                result.append(msg)
-
-        return result
 
     def _prepare_system_messages(
         self,
@@ -460,7 +417,6 @@ class AgentBase(ABC):
         tenant_info = f"{runtime.user.tenant_name} (ID: {runtime.user.tenant_id})"
         tool_call_counts = state.get("tool_call_counts", {}).copy()
         tool_cache = state.get("tool_cache", {}).copy()
-        hitl_blocked = False
         tool_limit_blocked = False
         skill_state = self._get_skill_state(state, runtime)
         loaded_skills = skill_state.get("loaded_skills", [])
@@ -560,20 +516,38 @@ class AgentBase(ABC):
                 results.append(tool_message)
 
                 if self._handle_hitl_pause(tool_message=tool_message, tool_calls=tool_calls, idx=idx, results=results):
-                    hitl_blocked = True
+                    pause_state: AgentState = {
+                        **state,
+                        "messages": state.get("messages", []) + results,
+                        "tool_call_counts": tool_call_counts,
+                        "tool_cache": tool_cache,
+                        "skill_state": skill_state,
+                    }
+                    await self._persist_run_messages(pause_state, config, mark_awaiting_hitl=True)
+                    from langgraph.types import interrupt
+
+                    proposal_id = (tool_message.additional_kwargs or {}).get("hitl", {}).get("proposal_id")
+                    self.logger.info("HITL checkpoint interrupt for proposal_id=%s", proposal_id)
+                    interrupt(
+                        {
+                            "interaction_type": "tool_approval",
+                            "proposal_id": proposal_id,
+                        }
+                    )
                     break
                 if self._handle_tool_limit_pause(
                     tool_message=tool_message, tool_calls=tool_calls, idx=idx, results=results
                 ):
                     tool_limit_blocked = True
+                    self.logger.info("Tool call limit reached, running final text-only LLM turn")
                     break
 
+        merged_messages = state.get("messages", []) + results
         state_update = {
-            "messages": state.get("messages", []) + results,
+            "messages": merged_messages,
             "tool_call_counts": tool_call_counts,
             "tool_cache": tool_cache,
             "skill_state": skill_state,
-            "hitl_blocked": hitl_blocked,
             "tool_limit_blocked": tool_limit_blocked,
         }
         return state_update
@@ -588,8 +562,8 @@ class AgentBase(ABC):
     ) -> bool:
         """Handle HITL approval-request pause behavior for remaining tool calls.
 
-        Run lifecycle (``awaiting_hitl``) is updated in ``_pause_agent_run_for_hitl`` only
-        after ``_save_messages`` persists tool rows — not here (no DB yet, wrong order).
+        Run lifecycle (``awaiting_hitl``) is set in ``_persist_run_messages`` immediately
+        before ``interrupt()`` — not via graph routing to ``save_messages``.
 
         Returns:
             True if HITL pending is detected and remaining tool calls are skipped.
@@ -623,6 +597,24 @@ class AgentBase(ABC):
             )
 
         return True
+
+    async def _persist_run_messages(
+        self,
+        state: AgentState,
+        config: RunnableConfig,
+        *,
+        mark_awaiting_hitl: bool = False,
+    ) -> None:
+        """Persist run-scoped messages (shared by save_messages and HITL interrupt)."""
+        runtime = extract_runtime_context(config)
+        db_session = config.get("configurable", {}).get("db_session")
+        run_id = self._run_id_from_config(config)
+        manager = self._get_or_create_manager(runtime, db_session, run_id=run_id)
+        messages_to_save = state.get("messages", [])
+        if messages_to_save:
+            await manager.add_messages(messages_to_save, config, deduplicate=True)
+        if mark_awaiting_hitl:
+            await self._pause_agent_run_for_hitl(config, run_id)
 
     def _handle_tool_limit_pause(
         self,
@@ -662,19 +654,6 @@ class AgentBase(ABC):
             )
         return True
 
-    def _after_tool_node(self, state: AgentState) -> Literal["llm_call", "save_messages"]:
-        """Route after tool execution.
-
-        If HITL is pending, persist messages and stop current run so frontend can
-        trigger approve continuation.
-        """
-        if state.get("hitl_blocked"):
-            self.logger.info("HITL pending detected, ending current run and waiting for continuation")
-            return "save_messages"
-        if state.get("tool_limit_blocked"):
-            self.logger.info("Tool call limit reached, running final text-only LLM turn")
-        return "llm_call"
-
     async def _save_messages(self, state: AgentState, config: RunnableConfig) -> dict:
         """Save all unsaved messages to database (executed after loop completes).
 
@@ -691,18 +670,7 @@ class AgentBase(ABC):
         Returns:
             Empty dict (no state update needed)
         """
-        runtime = extract_runtime_context(config)
-        db_session = config.get("configurable", {}).get("db_session")
-        run_id = self._run_id_from_config(config)
-        manager = self._get_or_create_manager(runtime, db_session, run_id=run_id)
-
-        # Get all messages from state
-        messages_to_save = state.get("messages", [])
-
-        if messages_to_save:
-            await manager.add_messages(messages_to_save, config, deduplicate=True)
-
-        await self._finalize_agent_run_lifecycle(state, config)
+        await self._persist_run_messages(state, config)
 
         return {}
 
@@ -715,14 +683,6 @@ class AgentBase(ABC):
 
         runtime = extract_runtime_context(config)
         await ThreadRunService(db_session, runtime.tenant.tenant_id).mark_run_awaiting_hitl(run_id)
-
-    async def _finalize_agent_run_lifecycle(self, state: AgentState, config: RunnableConfig) -> None:
-        """Mark HITL pause on the agent run after run messages are persisted."""
-        run_id = self._run_id_from_config(config)
-        if not run_id:
-            return
-        if state.get("hitl_blocked"):
-            await self._pause_agent_run_for_hitl(config, run_id)
 
     def _should_continue(self, state: AgentState) -> Literal["tool_node", "save_messages"]:
         """Determine if the agent should continue to tool execution or end.
@@ -795,7 +755,7 @@ class AgentBase(ABC):
         graph.add_edge(START, "load_history")
         graph.add_edge("load_history", "llm_call")
         graph.add_conditional_edges("llm_call", self._should_continue, ["tool_node", "save_messages"])
-        graph.add_conditional_edges("tool_node", self._after_tool_node, ["llm_call", "save_messages"])
+        graph.add_edge("tool_node", "llm_call")
         graph.add_edge("save_messages", END)
 
         return graph
@@ -808,5 +768,12 @@ class AgentBase(ABC):
         Returns:
             Compiled agent ready for invocation
         """
+        from apps.tenant_app_service.agents.graph_checkpointer import get_langgraph_checkpointer
+
         graph = self.build_graph()
-        return graph.compile(name=self.agent_config.agent_name)
+        checkpointer = get_langgraph_checkpointer()
+        if checkpointer is None:
+            from langgraph.checkpoint.memory import MemorySaver
+
+            checkpointer = MemorySaver()
+        return graph.compile(checkpointer=checkpointer, name=self.agent_config.agent_name)

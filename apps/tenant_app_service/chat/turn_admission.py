@@ -7,26 +7,13 @@
 from __future__ import annotations
 
 import zlib
-from typing import Final
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.exceptions import ThreadBusyError
-from apps.tenant_app_service.chat.session_domain import (
-    SESSION_STATUS_AWAITING_HITL,
-    SESSION_STATUS_HITL_APPROVED_PENDING_CONTINUE,
-    SESSION_STATUS_RUNNING,
-)
-from apps.tenant_app_service.chat.session_status_service import SessionStatusService
-
-_THREAD_BUSY_STATUSES: Final[frozenset[str]] = frozenset(
-    {
-        SESSION_STATUS_RUNNING,
-        SESSION_STATUS_AWAITING_HITL,
-        SESSION_STATUS_HITL_APPROVED_PENDING_CONTINUE,
-    }
-)
+from apps.tenant_app_service.chat.agent_run_domain import ACTIVE_AGENT_RUN_STATUSES
+from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 
 
 def thread_advisory_lock_keys(tenant_id: int, thread_id: str) -> tuple[int, int]:
@@ -62,17 +49,22 @@ async def assert_thread_accepts_new_user_turn(
     thread_id: str,
     agent_id: int,
 ) -> None:
-    """Raise when the thread already has an active turn (running or HITL-blocked)."""
-    status = await SessionStatusService(tenant_id, db).resolve(thread_id=thread_id, agent_id=agent_id)
-    if status.status not in _THREAD_BUSY_STATUSES:
+    """Raise when the thread already has an active agent run."""
+    snapshot = await ThreadRunService(db, tenant_id).get_active_run(
+        thread_id=thread_id,
+        agent_id=agent_id,
+        repair=True,
+    )
+    if not snapshot.run_status or snapshot.run_status not in ACTIVE_AGENT_RUN_STATUSES:
         return
     raise ThreadBusyError(
         "An agent run is already in progress for this thread. Wait for it to finish, then try again.",
         details={
             "code": "THREAD_BUSY",
-            "reason": "thread_status_busy",
-            "thread_status": status.status,
-            "session_id": status.session_id,
+            "reason": "active_agent_run",
+            "run_id": snapshot.run_id,
+            "run_status": snapshot.run_status,
+            "session_id": snapshot.session_id,
         },
     )
 

@@ -28,6 +28,7 @@ os.environ["TENANT_APP_DB_PASSWORD"] = "test_password"
 os.environ["TENANT_APP_DB_NAME"] = "test_db"
 os.environ["TENANT_APP_DB_HOST"] = "localhost"
 os.environ["SECRET_KEY"] = "test-secret-key"
+os.environ["LANGGRAPH_CHECKPOINTER_MEMORY"] = "true"
 # Isolate from developer .env.local (may set CHROMA_MODE=http without CHROMA_URL).
 os.environ["CHROMA_MODE"] = "embedded"
 os.environ.pop("CHROMA_URL", None)

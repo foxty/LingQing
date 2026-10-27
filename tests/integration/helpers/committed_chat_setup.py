@@ -179,7 +179,7 @@ async def seed_running_human_turn(
     user_id: int | None = None,
     content: str = "in-flight user message",
 ) -> str:
-    """Main-line human + RUNNING agent run (no AI) — matches durable session_status busy gate."""
+    """Main-line human + RUNNING agent run (no AI) — matches durable active-run busy gate."""
     from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
     from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
     from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository

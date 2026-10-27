@@ -9,6 +9,7 @@ dependencies = [
     "kaleido>=1.2.0",
     "langgraph>=1.0.0",
     "plotly>=5.18.0",
+    "langgraph-checkpoint-postgres>=3.2.0",
 ]
 
 [tool.uv.sources]

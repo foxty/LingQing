@@ -31,6 +31,8 @@ i18n.addResourceBundle('en', 'translation', {
     streamDisconnected:
       'Connection lost while the agent was working. Waiting for the response…',
     streamFailed: 'The agent could not finish this turn. Please try again.',
+    threadBusy:
+      'The previous turn is still finishing on the server. Wait a moment, then send again.',
     authRequired: 'Your session expired. Sign in again and retry.',
     openArtifacts: 'Open artifacts',
     artifactReady: 'New artifact ready',
@@ -45,6 +47,7 @@ i18n.addResourceBundle('zh', 'translation', {
     createThreadFailed: '创建对话失败，请重试。',
     streamDisconnected: '连接中断，智能体仍在后台处理，正在等待回复…',
     streamFailed: '智能体未能完成本轮对话，请重试。',
+    threadBusy: '上一轮仍在服务器上收尾，请稍候再发送。',
     authRequired: '登录已过期，请重新登录后再试。',
     openArtifacts: '打开产物',
     artifactReady: '新产物已就绪',

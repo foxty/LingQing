@@ -80,6 +80,8 @@ platform:
       limit: 5
     cancel_scheduled_task:
       limit: 5
+      hitl:
+        mode: always
 system_agents:
   agent_one:
     agent_id: -1

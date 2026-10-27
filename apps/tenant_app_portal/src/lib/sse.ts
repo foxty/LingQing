@@ -79,6 +79,18 @@ export type SSEMessage =
   | SSEErrorMessage
   | SSEDoneMessage
 
+export class HttpStreamError extends Error {
+  readonly httpStatus: number
+  readonly code?: string
+
+  constructor(message: string, httpStatus: number, code?: string) {
+    super(message)
+    this.name = 'HttpStreamError'
+    this.httpStatus = httpStatus
+    this.code = code
+  }
+}
+
 export interface SSEStreamOptions {
   url: string
   body: any
@@ -118,8 +130,7 @@ export async function handleSSEStream(options: SSEStreamOptions): Promise<void> 
     })
 
     if (!response.ok) {
-      const errorMessage = await getErrorMessage(response)
-      throw new Error(errorMessage)
+      throw await parseHttpStreamError(response)
     }
 
     const reader = response.body?.getReader()
@@ -168,15 +179,19 @@ export async function handleSSEStream(options: SSEStreamOptions): Promise<void> 
   }
 }
 
-/**
- * Extract error message from HTTP response
- */
-async function getErrorMessage(response: Response): Promise<string> {
+/** Parse non-OK stream response (e.g. 409 THREAD_BUSY before SSE body). */
+export async function parseHttpStreamError(response: Response): Promise<HttpStreamError> {
   try {
-    const errorData = await response.json()
-    return errorData.message || errorData.detail || getStatusErrorMessage(response.status)
+    const errorData = (await response.json()) as {
+      message?: string
+      detail?: string
+      code?: string
+    }
+    const message =
+      errorData.message || errorData.detail || getStatusErrorMessage(response.status)
+    return new HttpStreamError(message, response.status, errorData.code)
   } catch {
-    return getStatusErrorMessage(response.status)
+    return new HttpStreamError(getStatusErrorMessage(response.status), response.status)
   }
 }
 

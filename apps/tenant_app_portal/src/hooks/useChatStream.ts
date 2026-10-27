@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { handleSSEStream, type SSEMessage } from '@/lib/sse'
+import { handleSSEStream, HttpStreamError, type SSEMessage } from '@/lib/sse'
 import { applyToolEnd, applyToolStart, shouldResetStreamOnThreadChange } from '@/lib/chatStream'
 import type { StreamingToolCallState } from '@/lib/chatTurns'
 import type { Message } from '@/types'
@@ -123,10 +123,60 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
         },
         onError: (error: Error) => {
           console.error('Streaming error:', error)
+          const code = error instanceof HttpStreamError ? error.code : undefined
           void onEventRef.current?.(
-            { type: 'error', message: error.message },
+            { type: 'error', message: error.message, error_code: code },
             activeThreadId
           )
+        },
+      })
+    },
+    []
+  )
+
+  const runHitlResumeStream = useCallback(
+    async (proposalId: string, activeThreadId: string, token: string, abortController: AbortController) => {
+      let accumulatedContent = ''
+
+      await handleSSEStream({
+        url: `/hitl/approvals/${encodeURIComponent(proposalId)}/resume-stream`,
+        signal: abortController.signal,
+        token,
+        onMessage: (data: SSEMessage) => {
+          switch (data.type) {
+            case 'token': {
+              if (data.content) {
+                accumulatedContent += data.content
+                setStreamingContent(accumulatedContent)
+              }
+              break
+            }
+            case 'tool_start': {
+              setStreamingToolCalls((prev) => {
+                const next = applyToolStart(
+                  prev,
+                  `stream-tool-${streamingToolCallSeqRef.current++}`,
+                  data.tool_name || 'tool'
+                )
+                streamingToolCallsRef.current = next
+                return next
+              })
+              break
+            }
+            case 'tool_end': {
+              setStreamingToolCalls((prev) => {
+                const next = applyToolEnd(prev, data.tool_name || 'tool')
+                streamingToolCallsRef.current = next
+                return next
+              })
+              break
+            }
+            case 'done':
+              break
+            default:
+              break
+          }
+          void onEventRef.current?.(data, activeThreadId)
         },
       })
     },
@@ -155,6 +205,7 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
     streamingToolCalls,
     beginStream,
     runStream,
+    runHitlResumeStream,
     resetStreamState,
     failStream,
   }

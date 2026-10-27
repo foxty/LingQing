@@ -1,8 +1,8 @@
 """Write-side orchestration for main timeline + agent runs (single DB session).
 
 **Layer:** Session-scoped service — persist human rows, create/update ``agent_runs``,
-assemble timeline reads. No LangGraph / SSE.
-**Callers:** ``ChatTurnService`` prepare and promotion paths.
+promotion, active-run poll/repair, invoke-outcome lifecycle. No LangGraph streaming.
+**Callers:** ``ChatTurnService``, ``turn_admission``, ``ThreadService`` (read delegate).
 **Contrast:** ``ThreadService`` = thread CRUD + history reads; ``ChatTurnService`` = agent invoke.
 """
 
@@ -16,16 +16,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import ChatThread
 from apps.shared.utils.logger import get_logger
+from apps.tenant_app_service.agents.langgraph_invoke import AgentInvokeOutcome
 from apps.tenant_app_service.chat.agent_run_domain import (
+    ACTIVE_AGENT_RUN_STATUSES,
     AgentRunDomain,
     AgentRunStatus,
     ThreadMainMessageDomain,
     find_promotable_final_ai_row,
+    is_stale_active_run,
     sort_timeline_trigger_anchored,
 )
 from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
 from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+from apps.tenant_app_service.chat.schemas import ActiveRunResponse, PendingHitlInfo
+from apps.tenant_app_service.hitl.repository import HitlApprovalRepository
 
 logger = get_logger(__name__)
 
@@ -185,3 +190,120 @@ class ThreadRunService:
         if not domain:
             return None
         return HumanMessage(id=domain.message_id, content=domain.content)
+
+    async def get_active_run(
+        self,
+        *,
+        thread_id: str,
+        agent_id: int,
+        repair: bool = True,
+    ) -> ActiveRunResponse:
+        """Blocking run snapshot for poll/admission; ``session_id`` is observability only."""
+        runs = await self.run_repo.list_active_for_thread_agent(thread_id, agent_id)
+        run = runs[0] if runs else None
+        if run is None:
+            latest = await self.run_repo.get_latest_for_thread_agent(thread_id, agent_id)
+            if latest and latest.status in ACTIVE_AGENT_RUN_STATUSES:
+                run = latest
+
+        if run and repair:
+            run = await self.repair_run_if_needed(run)
+            if run.status not in ACTIVE_AGENT_RUN_STATUSES:
+                run = None
+
+        pending_hitl = None
+        pending_row = await HitlApprovalRepository(self.db).get_latest_pending_by_thread(
+            self.tenant_id, thread_id
+        )
+        if pending_row:
+            pending_hitl = PendingHitlInfo(
+                proposal_id=pending_row.proposal_id,
+                tool_name=pending_row.tool_name,
+                session_id=pending_row.session_id,
+            )
+
+        if run is None:
+            return ActiveRunResponse(
+                run_id=None,
+                session_id=None,
+                run_status=None,
+                pending_hitl=pending_hitl,
+            )
+
+        return ActiveRunResponse(
+            run_id=run.id,
+            session_id=run.session_id,
+            run_status=run.status,
+            pending_hitl=pending_hitl,
+        )
+
+    async def on_invoke_outcome(self, run_id: str | None, outcome: AgentInvokeOutcome) -> None:
+        if not run_id:
+            return
+        if outcome == AgentInvokeOutcome.INTERRUPTED_FOR_HITL:
+            logger.info("Agent run paused at HITL checkpoint run_id=%s", run_id)
+            return
+        if outcome == AgentInvokeOutcome.FAILED:
+            await self.run_repo.set_status(run_id, status=AgentRunStatus.FAILED)
+            return
+        if outcome == AgentInvokeOutcome.COMPLETED:
+            await self.finalize_run_for_main(run_id)
+
+    async def on_resume_started(self, run_id: str) -> bool:
+        """Claim ``awaiting_hitl`` before checkpoint resume stream."""
+        return await self.run_repo.transition_status(
+            run_id,
+            expected=AgentRunStatus.AWAITING_HITL,
+            new=AgentRunStatus.RUNNING,
+        )
+
+    async def repair_run_if_needed(self, run: AgentRunDomain) -> AgentRunDomain:
+        """Close stuck ``running`` runs that already produced a terminal reply."""
+        if run.status != AgentRunStatus.RUNNING:
+            return run
+
+        now = datetime.now(UTC)
+        run_rows = await self.run_message_repo.list_for_run(run.id)
+        if find_promotable_final_ai_row(run_rows):
+            await self.finalize_run_for_main(run.id)
+            refreshed = await self.run_repo.get_run(self.tenant_id, run.id)
+            return refreshed or run
+
+        promoted = await self.main_repo.get_promoted_ai_for_run(run.id)
+        if promoted is not None:
+            await self.run_repo.set_status(
+                run.id,
+                status=AgentRunStatus.COMPLETED,
+                completed_at=now,
+            )
+            refreshed = await self.run_repo.get_run(self.tenant_id, run.id)
+            return refreshed or run
+
+        if is_stale_active_run(run.created_at, now=now):
+            await self.run_repo.set_status(
+                run.id,
+                status=AgentRunStatus.COMPLETED,
+                completed_at=now,
+            )
+            refreshed = await self.run_repo.get_run(self.tenant_id, run.id)
+            return refreshed or run
+
+        return run
+
+    async def reconcile_before_new_turn(self, thread_id: str, agent_id: int) -> None:
+        """Repair orphan ACTIVE runs so a new user message is not blocked."""
+        hitl_repo = HitlApprovalRepository(self.db)
+        pending = await hitl_repo.get_latest_pending_by_thread(self.tenant_id, thread_id)
+        pending_session_id = pending.session_id if pending else None
+        now = datetime.now(UTC)
+
+        for run in await self.run_repo.list_active_for_thread_agent(thread_id, agent_id):
+            if pending_session_id and run.session_id == pending_session_id:
+                continue
+            run = await self.repair_run_if_needed(run)
+            if run.status == AgentRunStatus.AWAITING_HITL or is_stale_active_run(run.created_at, now=now):
+                await self.run_repo.set_status(
+                    run.id,
+                    status=AgentRunStatus.COMPLETED,
+                    completed_at=now,
+                )

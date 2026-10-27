@@ -1,10 +1,15 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { getSessionStatus, SESSION_STATUS, type SessionStatus } from '@/lib/chatApi'
+import {
+  AGENT_RUN_STATUS,
+  getActiveRun,
+  isActiveRunStatus,
+  type ActiveRunResponse,
+} from '@/lib/chatApi'
 
 const INITIAL_POLL_MS = 2000
 const MAX_POLL_MS = 8000
 
-/** Durable session status while a turn may outlive the SSE connection (not HITL card state). */
+/** Poll active agent run while a turn may outlive the SSE connection. */
 interface UseActiveSessionPollOptions {
   threadId: string | undefined
   enabled?: boolean
@@ -16,13 +21,12 @@ export function useActiveSessionPoll({
   enabled = true,
   onHistoryRefresh,
 }: UseActiveSessionPollOptions) {
-  const [sessionStatus, setSessionStatus] = useState<SessionStatus>(SESSION_STATUS.COMPLETED)
-  const [activeSessionId, setActiveSessionId] = useState<string | null>(null)
+  const [activeRun, setActiveRun] = useState<ActiveRunResponse | null>(null)
   const [isAgentWorking, setIsAgentWorking] = useState(false)
   const pollTimeoutRef = useRef<number | null>(null)
   const pollDelayRef = useRef(INITIAL_POLL_MS)
   const pollLoopRef = useRef<(() => void) | null>(null)
-  const lastStatusRef = useRef<SessionStatus | null>(null)
+  const lastActiveRef = useRef<boolean | null>(null)
   const onHistoryRefreshRef = useRef(onHistoryRefresh)
 
   onHistoryRefreshRef.current = onHistoryRefresh
@@ -36,54 +40,35 @@ export function useActiveSessionPoll({
 
   const refreshStatus = useCallback(async () => {
     if (!threadId || !enabled) {
-      setSessionStatus(SESSION_STATUS.COMPLETED)
-      setActiveSessionId(null)
+      setActiveRun(null)
       setIsAgentWorking(false)
-      lastStatusRef.current = SESSION_STATUS.COMPLETED
+      lastActiveRef.current = false
       return null
     }
 
     try {
-      const status = await getSessionStatus(threadId)
-      const previousStatus = lastStatusRef.current
-      lastStatusRef.current = status.status
-      setSessionStatus(status.status)
-      setActiveSessionId(status.session_id ?? null)
+      const snapshot = await getActiveRun(threadId)
+      const wasActive = lastActiveRef.current
+      const isActive = isActiveRunStatus(snapshot.run_status ?? null)
+      lastActiveRef.current = isActive
 
-      const statusChanged = previousStatus !== status.status
+      setActiveRun(snapshot)
+      setIsAgentWorking(isActive)
 
-      if (status.status === SESSION_STATUS.RUNNING) {
-        setIsAgentWorking(true)
-        if (statusChanged) {
-          await onHistoryRefreshRef.current?.()
-        }
-        return status
+      if (isActive && snapshot.run_status === AGENT_RUN_STATUS.RUNNING && wasActive !== isActive) {
+        await onHistoryRefreshRef.current?.()
       }
 
-      if (
-        status.status === SESSION_STATUS.AWAITING_HITL ||
-        status.status === SESSION_STATUS.HITL_APPROVED_PENDING_CONTINUE
-      ) {
-        setIsAgentWorking(false)
-        if (statusChanged) {
-          await onHistoryRefreshRef.current?.()
-        }
-        return status
+      if (!isActive && wasActive === true) {
+        await onHistoryRefreshRef.current?.()
       }
 
-      if (status.status === SESSION_STATUS.COMPLETED) {
-        setIsAgentWorking(false)
-        if (statusChanged && previousStatus === SESSION_STATUS.RUNNING) {
-          await onHistoryRefreshRef.current?.()
-        }
-      }
-
-      return status
+      return snapshot
     } catch (error) {
-      console.error('Failed to refresh session status:', error)
-      setSessionStatus(SESSION_STATUS.COMPLETED)
-      setActiveSessionId(null)
+      console.error('Failed to refresh active run:', error)
+      setActiveRun(null)
       setIsAgentWorking(false)
+      lastActiveRef.current = false
       return null
     }
   }, [enabled, threadId])
@@ -91,11 +76,10 @@ export function useActiveSessionPoll({
   useEffect(() => {
     clearPollTimeout()
     pollDelayRef.current = INITIAL_POLL_MS
-    lastStatusRef.current = null
+    lastActiveRef.current = null
 
     if (!threadId || !enabled) {
-      setSessionStatus(SESSION_STATUS.COMPLETED)
-      setActiveSessionId(null)
+      setActiveRun(null)
       setIsAgentWorking(false)
       return
     }
@@ -110,10 +94,10 @@ export function useActiveSessionPoll({
 
     const poll = async () => {
       if (cancelled) return
-      const status = await refreshStatus()
-      if (cancelled || !status) return
+      const snapshot = await refreshStatus()
+      if (cancelled || !snapshot) return
 
-      if (status.status === SESSION_STATUS.RUNNING) {
+      if (isActiveRunStatus(snapshot.run_status ?? null)) {
         pollDelayRef.current = Math.min(pollDelayRef.current + 1000, MAX_POLL_MS)
         schedulePoll(pollDelayRef.current)
       }
@@ -138,19 +122,17 @@ export function useActiveSessionPoll({
 
   const notifyStreamStarted = useCallback(() => {
     setIsAgentWorking(true)
-    setSessionStatus(SESSION_STATUS.RUNNING)
-    lastStatusRef.current = SESSION_STATUS.RUNNING
+    lastActiveRef.current = true
   }, [])
 
   const notifyStreamFinished = useCallback(() => {
     setIsAgentWorking(false)
-    setSessionStatus(SESSION_STATUS.COMPLETED)
-    lastStatusRef.current = SESSION_STATUS.COMPLETED
+    lastActiveRef.current = false
   }, [])
 
   return {
-    sessionStatus,
-    activeSessionId,
+    activeRun,
+    activeSessionId: activeRun?.session_id ?? null,
     isAgentWorking,
     refreshStatus,
     notifyStreamStarted,

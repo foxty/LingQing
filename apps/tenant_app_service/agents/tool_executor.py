@@ -127,15 +127,16 @@ class ToolExecutor:
         tool_args: dict,
         additional_kwargs: dict,
     ) -> tuple[ToolMessage | None, str | None]:
-        # On resume, use the known proposal_id from configurable directly.
-        # This avoids arg-hash drift if the LLM regenerates tool args with minor differences.
-        hitl_resume = config.get("configurable", {}).get("hitl_resume") or {}
-        proposal_id = hitl_resume.get("proposal_id") or approval_service.build_proposal_id(
-            thread_id=runtime.thread_id,
-            session_id=runtime.session_id,
-            tool_name=tool_name,
-            tool_args=tool_args,
-        )
+        configured_proposal_id = config.get("configurable", {}).get("hitl_proposal_id")
+        if configured_proposal_id:
+            proposal_id = str(configured_proposal_id)
+        else:
+            proposal_id = approval_service.build_proposal_id(
+                thread_id=runtime.thread_id,
+                session_id=runtime.session_id,
+                tool_name=tool_name,
+                tool_args=tool_args,
+            )
         approval = await approval_service.get_or_create_pending(
             tenant_id=runtime.user.tenant_id,
             thread_id=runtime.thread_id,

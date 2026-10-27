@@ -156,10 +156,6 @@ class TestLlmCallErrorHandling:
 
 
 class TestToolLimitAndRunLifecycle:
-    def test_after_tool_node_routes_to_llm_for_finalize_when_tool_limit_blocked(self, agent):
-        state = {"hitl_blocked": False, "tool_limit_blocked": True}
-        assert agent._after_tool_node(state) == "llm_call"
-
     def test_should_continue_save_after_tool_limit_finalize_llm(self, agent):
         state = {
             "tool_limit_blocked": True,
@@ -170,9 +166,9 @@ class TestToolLimitAndRunLifecycle:
         assert agent._should_continue(state) == "save_messages"
 
     @pytest.mark.asyncio
-    async def test_finalize_agent_run_lifecycle_no_op_without_hitl(self, agent, runtime_context):
+    async def test_persist_run_messages_marks_awaiting_hitl_once(self, agent, runtime_context):
         run_id = str(uuid4())
-        state = {"messages": [], "hitl_blocked": False}
+        state = {"messages": []}
         config = RunnableConfig(
             configurable={
                 "thread_id": runtime_context.thread_id,
@@ -184,10 +180,15 @@ class TestToolLimitAndRunLifecycle:
             }
         )
         mock_service = AsyncMock()
-        with patch(
-            "apps.tenant_app_service.chat.thread_run_service.ThreadRunService",
-            return_value=mock_service,
+        with (
+            patch.object(agent, "_get_or_create_manager") as manager_factory,
+            patch(
+                "apps.tenant_app_service.chat.thread_run_service.ThreadRunService",
+                return_value=mock_service,
+            ),
         ):
-            await agent._finalize_agent_run_lifecycle(state, config)
+            manager = AsyncMock()
+            manager_factory.return_value = manager
+            await agent._persist_run_messages(state, config, mark_awaiting_hitl=True)
 
-        mock_service.mark_run_awaiting_hitl.assert_not_awaited()
+        mock_service.mark_run_awaiting_hitl.assert_awaited_once_with(run_id)

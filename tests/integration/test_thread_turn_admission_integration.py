@@ -66,8 +66,9 @@ async def test_guard_rejects_thread_with_running_human_turn(committed_chat_setup
                 skip_busy_check=False,
             )
 
-    assert exc_info.value.details.get("reason") == "thread_status_busy"
-    assert exc_info.value.details.get("thread_status") == "running"
+    assert exc_info.value.details.get("reason") == "active_agent_run"
+    assert exc_info.value.details.get("run_status") == "running"
+    assert exc_info.value.details.get("session_id") == session_id
 
 
 @pytest.mark.asyncio
@@ -200,7 +201,6 @@ async def test_prepare_chat_turn_rejects_while_run_in_progress(committed_chat_se
     )
     service.create_thread_title_if_1st_message = AsyncMock(return_value=None)
     service._build_initial_agent_messages = lambda lc_messages, request: lc_messages
-    service._is_hitl_continuation = lambda request: False
 
     request = ChatRequest(
         tenant_id=tenant_id,
