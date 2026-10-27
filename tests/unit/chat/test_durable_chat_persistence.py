@@ -143,28 +143,6 @@ async def test_cancel_superseded_hitl_on_normal_send(chat_service, chat_request)
 
 
 @pytest.mark.asyncio
-async def test_cancel_superseded_hitl_skipped_for_continuation(chat_service, chat_request):
-    chat_request.hitl_proposal_id = "hitl_abc"
-    chat_request.hitl_action = "approved"
-    with patch("apps.tenant_app_service.hitl.service.HitlApprovalService") as svc_cls:
-        await chat_service._cancel_superseded_hitl_if_needed(chat_request)
-        svc_cls.assert_not_called()
-
-
-def test_build_initial_agent_messages_includes_human_for_hitl_continuation(chat_service, chat_request):
-    chat_request.hitl_proposal_id = "hitl_abc"
-    chat_request.hitl_action = "approved"
-    lc_messages = [
-        SystemMessage(content="context"),
-        HumanMessage(id="human-1", content="continue hitl workflow"),
-    ]
-
-    initial = chat_service._build_initial_agent_messages(lc_messages, chat_request)
-
-    assert len(initial) == 2
-
-
-@pytest.mark.asyncio
 async def test_chat_stream_persists_before_session_started(chat_service, chat_request, current_user):
     call_order: list[str] = []
     background_started = asyncio.Event()
@@ -213,49 +191,6 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
 
     assert call_order[:2] == ["send_human", "background"]
     assert events[0]["type"] == "session_started"
-
-
-@pytest.mark.asyncio
-async def test_chat_stream_skips_persist_for_hitl_continuation(chat_service, chat_request, current_user):
-    chat_request.hitl_proposal_id = "hitl_abc"
-    chat_request.hitl_action = "approved"
-    send_mock = AsyncMock()
-
-    async def fake_run_agent_and_emit(**kwargs):
-        await kwargs["event_queue"].put(None)
-
-    with (
-        patch.object(chat_service, "_get_system_agent_graph", AsyncMock(return_value=MagicMock(get_name=lambda: "A"))),
-        patch.object(
-            chat_service,
-            "_inject_message_attachments",
-            AsyncMock(side_effect=lambda msgs, *a, **k: msgs),
-        ),
-        patch.object(
-            chat_service,
-            "get_tenant_domain",
-            AsyncMock(return_value=MagicMock(config=MagicMock(to_dict=lambda: {}))),
-        ),
-        patch.object(
-            chat_service,
-            "_build_runtime_config",
-            return_value={"configurable": {"thread_id": chat_request.thread_id}},
-        ),
-        patch(
-            "apps.tenant_app_service.chat.turn_service.ThreadRunService.send_human_and_create_runs",
-            send_mock,
-        ),
-        patch(
-            "apps.tenant_app_service.hitl.repository.HitlApprovalRepository.get_by_proposal_id",
-            AsyncMock(return_value=None),
-        ),
-        patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
-        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
-    ):
-        async for _ in _committed_stream(chat_service, chat_request, current_user):
-            pass
-
-    send_mock.assert_not_called()
 
 
 @pytest.mark.asyncio

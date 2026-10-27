@@ -220,6 +220,9 @@ class ChatTurnService(ChatServiceBase):
         run_id: str | None = None,
         trigger_message_id: str | None = None,
         invoke_index: int = 0,
+        *,
+        skip_load_history: bool = False,
+        hitl_proposal_id: str | None = None,
     ) -> dict:
         """Build configuration for agent invocation.
 
@@ -261,29 +264,19 @@ class ChatTurnService(ChatServiceBase):
             capability_profile=capability_profile,
         )
 
-        # Build LangChain configuration
-        hitl_resume = (
-            {
-                "proposal_id": request.hitl_proposal_id,
-                "action": request.hitl_action,
-            }
-            if self._is_hitl_continuation(request)
-            else None
-        )
+        checkpoint_thread_id = run_id or thread_id
 
         config = {
             "configurable": {
-                "thread_id": thread_id,
+                "thread_id": checkpoint_thread_id,
                 "db_session": db_session or self.db,
                 "runtime": runtime_ctx.model_dump(),
                 "thinking_effort": request.thinking_effort,
-                # On HITL resume: signals agent_base._load_history to rewrite the stale
-                # PENDING ToolMessage, and tool_executor._handle_hitl_gate to use the
-                # known proposal_id directly (avoids arg-hash drift from LLM re-generation).
-                **(({"hitl_resume": hitl_resume}) if hitl_resume else {}),
                 **({"run_id": run_id} if run_id else {}),
                 **({"trigger_message_id": trigger_message_id} if trigger_message_id else {}),
                 "invoke_index": invoke_index,
+                **({"skip_load_history": True} if skip_load_history else {}),
+                **({"hitl_proposal_id": hitl_proposal_id} if hitl_proposal_id else {}),
             },
             "recursion_limit": 999,  # Safety net, should be higher than MAX_ITERATIONS
         }
@@ -474,10 +467,6 @@ class ChatTurnService(ChatServiceBase):
                 msg.additional_kwargs = kwargs
                 return
 
-    def _is_hitl_continuation(self, request: ChatRequest) -> bool:
-        """Whether this request is a HITL continuation request."""
-        return bool(request.hitl_proposal_id and request.hitl_action)
-
     def schedule_session_end(
         self,
         session_id: str,
@@ -498,7 +487,7 @@ class ChatTurnService(ChatServiceBase):
 
     async def _cancel_superseded_hitl_if_needed(self, request: ChatRequest) -> None:
         """Cancel stale pending HITL when the user starts an unrelated chat turn."""
-        if self._is_hitl_continuation(request) or not request.thread_id:
+        if not request.thread_id:
             return
 
         from apps.tenant_app_service.hitl.service import HitlApprovalService
@@ -513,37 +502,44 @@ class ChatTurnService(ChatServiceBase):
             )
 
     async def _reconcile_active_runs_before_new_turn(self, thread_id: str, agent_id: int) -> None:
-        """Close orphan agent runs so a new user message is not blocked after terminal HITL."""
-        from datetime import UTC, datetime
+        """Close orphan agent runs so a new user message is not blocked."""
+        from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 
-        from apps.tenant_app_service.chat.session_domain import is_stale_running_session
-        from apps.tenant_app_service.hitl.repository import HitlApprovalRepository
+        await ThreadRunService(self.db, self.tenant_id).reconcile_before_new_turn(
+            thread_id,
+            agent_id,
+        )
 
-        run_repo = AgentRunRepository(self.db)
-        hitl_repo = HitlApprovalRepository(self.db)
-        pending = await hitl_repo.get_latest_pending_by_thread(self.tenant_id, thread_id)
-        pending_session_id = pending.session_id if pending else None
-        now = datetime.now(UTC)
+    async def _finish_graph_stream(
+        self,
+        agent_graph,
+        config: dict,
+        run_id: str | None,
+        *,
+        failed: bool = False,
+    ) -> None:
+        from apps.tenant_app_service.agents.langgraph_invoke import (
+            AgentInvokeOutcome,
+            classify_invoke_outcome,
+        )
+        from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 
-        for run in await run_repo.list_active_for_thread_agent(thread_id, agent_id):
-            if pending_session_id and run.session_id == pending_session_id:
-                continue
-            if run.status == AgentRunStatus.AWAITING_HITL or is_stale_running_session(run.created_at, now=now):
-                await run_repo.set_status(
-                    run.id,
-                    status=AgentRunStatus.COMPLETED,
-                    completed_at=now,
-                )
+        if not run_id:
+            return
+        thread_runs = ThreadRunService(self.db, self.tenant_id)
+        if failed:
+            await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.FAILED)
+            return
+        outcome = await classify_invoke_outcome(agent_graph, config)
+        await thread_runs.on_invoke_outcome(run_id, outcome)
 
     def _build_initial_agent_messages(self, lc_messages: list, request: ChatRequest) -> list:
         """Build agent initial state messages.
 
         Normal sends persist the human message before invocation, so only ephemeral
-        system context is passed in state. HITL continuations include the hidden human
-        resume signal.
+        system context is passed in state.
         """
-        if self._is_hitl_continuation(request):
-            return lc_messages
+        del request
         return [message for message in lc_messages if isinstance(message, SystemMessage)]
 
     @staticmethod
@@ -614,6 +610,7 @@ class ChatTurnService(ChatServiceBase):
         if run_id:
             await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.RUNNING)
 
+        stream_failed = False
         try:
             async with session_tracker(runtime_context):
                 async for event in agent_graph.astream_events(
@@ -629,18 +626,83 @@ class ChatTurnService(ChatServiceBase):
                     if sse_payload:
                         yield sse_payload
         except Exception:
-            if run_id:
-                await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.FAILED)
+            stream_failed = True
             raise
         finally:
             if run_id:
-                await ThreadRunService(self.db, self.tenant_id).finalize_run_for_main(run_id)
+                await self._finish_graph_stream(agent_graph, config, run_id, failed=stream_failed)
 
         self.logger.info(
             "Background stream completed for agent %s session %s",
             agent_id,
             session_id,
         )
+        self.schedule_session_end(
+            session_id=session_id,
+            thread_id=request.thread_id or runtime_context.thread_id,
+            run_id=run_id,
+        )
+
+    async def run_hitl_checkpoint_resume_stream(
+        self,
+        *,
+        request: ChatRequest,
+        current_user: UserDTO,
+        session_id: str,
+        agent_id: int,
+        agent_name: str,
+        run_id: str,
+        trigger_message_id: str | None,
+        invoke_index: int,
+        proposal_id: str,
+        access_token: str | None = None,
+    ) -> AsyncIterator[str]:
+        """Resume a paused HITL run from LangGraph checkpoint (after approve)."""
+        from langgraph.types import Command
+
+        tenant = await self.get_tenant_domain()
+        agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
+        config = self._build_runtime_config(
+            tenant=tenant,
+            current_user=current_user,
+            request=request,
+            agent_id=agent_id,
+            agent_name=agent_name,
+            session_id=session_id,
+            access_token=access_token,
+            db_session=self.db,
+            capability_profile=capability_profile,
+            run_id=run_id,
+            trigger_message_id=trigger_message_id,
+            invoke_index=invoke_index,
+            skip_load_history=True,
+            hitl_proposal_id=proposal_id,
+        )
+        runtime_context = extract_runtime_context(config)
+
+        stream_failed = False
+        try:
+            async with session_tracker(runtime_context):
+                async for event in agent_graph.astream_events(
+                    Command(
+                        resume={
+                            "interaction_type": "tool_approval",
+                            "action": "approved",
+                            "proposal_id": proposal_id,
+                        }
+                    ),
+                    config=config,
+                    version="v2",
+                ):
+                    sse_payload = self._stream_event_to_sse(event)
+                    if sse_payload:
+                        yield sse_payload
+        except Exception:
+            stream_failed = True
+            raise
+        finally:
+            await self._finish_graph_stream(agent_graph, config, run_id, failed=stream_failed)
+
         self.schedule_session_end(
             session_id=session_id,
             thread_id=request.thread_id or runtime_context.thread_id,
@@ -716,22 +778,6 @@ class ChatTurnService(ChatServiceBase):
         invoke_index = 0
         session_id = str(uuid4())
 
-        if self._is_hitl_continuation(request) and request.hitl_proposal_id:
-            from apps.tenant_app_service.hitl.repository import HitlApprovalRepository
-
-            approval = await HitlApprovalRepository(self.db).get_by_proposal_id(
-                self.tenant_id, request.hitl_proposal_id
-            )
-            if approval and approval.session_id:
-                session_id = approval.session_id
-                existing_run = await AgentRunRepository(self.db).get_by_session_id(session_id)
-                if existing_run:
-                    run_id = existing_run.id
-                    trigger_message_id = existing_run.trigger_message_id
-                    invoke_index = existing_run.invoke_index
-                    agent_id = existing_run.agent_id
-                    await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.RUNNING)
-
         agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
         lc_messages = self._convert_to_langchain_messages([request.message])
         lc_messages = await self._inject_message_attachments(
@@ -754,7 +800,7 @@ class ChatTurnService(ChatServiceBase):
         )
 
         effective_thread_id = request.thread_id or config["configurable"]["thread_id"]
-        if request.thread_id and not self._is_hitl_continuation(request):
+        if request.thread_id:
             await self._reconcile_active_runs_before_new_turn(effective_thread_id, agent_id)
         if request.thread_id:
             await guard_thread_turn_start(
@@ -762,10 +808,10 @@ class ChatTurnService(ChatServiceBase):
                 tenant_id=self.tenant_id,
                 thread_id=effective_thread_id,
                 agent_id=agent_id,
-                skip_busy_check=self._is_hitl_continuation(request),
+                skip_busy_check=False,
             )
 
-        if request.run_id and not self._is_hitl_continuation(request):
+        if request.run_id:
             run_repo = AgentRunRepository(self.db)
             existing_run = await run_repo.get_run(self.tenant_id, request.run_id)
             if not existing_run:
@@ -778,7 +824,7 @@ class ChatTurnService(ChatServiceBase):
             session_id = existing_run.session_id
             agent_id = existing_run.agent_id
             await run_repo.set_status(run_id, status=AgentRunStatus.RUNNING)
-        elif effective_thread_id and not self._is_hitl_continuation(request):
+        elif effective_thread_id:
             run_service = ThreadRunService(self.db, self.tenant_id)
             agent_ids = request.agent_ids if request.agent_ids is not None else [agent_id]
             _, runs = await run_service.send_human_and_create_runs(

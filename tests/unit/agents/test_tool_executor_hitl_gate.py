@@ -92,16 +92,15 @@ async def test_handle_hitl_gate_builds_session_scoped_proposal_id(executor, runt
 
 
 @pytest.mark.asyncio
-async def test_handle_hitl_gate_uses_hitl_resume_proposal_id(executor, runtime):
+async def test_handle_hitl_gate_uses_configurable_proposal_id_on_resume(executor, runtime):
     approval = MagicMock(spec=HitlApproval)
     approval.status = HITL_STATUS_APPROVED
 
     approval_service = MagicMock()
     approval_service.get_or_create_pending = AsyncMock(return_value=approval)
+    approval_service.build_proposal_id = MagicMock()
 
-    config = RunnableConfig(
-        configurable={"hitl_resume": {"proposal_id": "hitl_explicit", "action": "approved"}}
-    )
+    config = RunnableConfig(configurable={"hitl_proposal_id": "hitl_from_checkpoint"})
 
     message, proposal_id = await executor._handle_hitl_gate(
         runtime=runtime,
@@ -110,13 +109,40 @@ async def test_handle_hitl_gate_uses_hitl_resume_proposal_id(executor, runtime):
         risk_level="medium",
         tool_name="hitl_test_echo",
         tool_call_id="tc_1",
-        tool_args={"text": "different args from resume"},
+        tool_args={"text": "args may differ on resume"},
         additional_kwargs={},
     )
 
     approval_service.build_proposal_id.assert_not_called()
     approval_service.get_or_create_pending.assert_awaited_once()
-    assert approval_service.get_or_create_pending.await_args.kwargs["proposal_id"] == "hitl_explicit"
+    assert approval_service.get_or_create_pending.await_args.kwargs["proposal_id"] == "hitl_from_checkpoint"
+    assert message is None
+    assert proposal_id == "hitl_from_checkpoint"
+
+
+@pytest.mark.asyncio
+async def test_handle_hitl_gate_approved_returns_none_to_execute_tool(executor, runtime):
+    approval = MagicMock(spec=HitlApproval)
+    approval.status = HITL_STATUS_APPROVED
+
+    approval_service = MagicMock()
+    approval_service.get_or_create_pending = AsyncMock(return_value=approval)
+    approval_service.build_proposal_id = MagicMock(return_value="hitl_explicit")
+
+    config = RunnableConfig(configurable={})
+
+    message, proposal_id = await executor._handle_hitl_gate(
+        runtime=runtime,
+        config=config,
+        approval_service=approval_service,
+        risk_level="medium",
+        tool_name="hitl_test_echo",
+        tool_call_id="tc_1",
+        tool_args={"text": "resume executes with same args hash"},
+        additional_kwargs={},
+    )
+
+    approval_service.build_proposal_id.assert_called_once()
     assert message is None
     assert proposal_id == "hitl_explicit"
 

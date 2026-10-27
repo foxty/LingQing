@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from apps.shared.core.exceptions import ThreadBusyError
-from apps.tenant_app_service.chat.session_domain import SESSION_STATUS_RUNNING
+from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
 from apps.tenant_app_service.chat.turn_admission import (
     assert_thread_accepts_new_user_turn,
     guard_thread_turn_start,
@@ -38,10 +38,11 @@ async def test_try_acquire_thread_turn_xact_lock_raises_when_not_acquired():
 async def test_assert_thread_accepts_new_user_turn_raises_when_busy():
     db = AsyncMock()
     with patch(
-        "apps.tenant_app_service.chat.turn_admission.SessionStatusService.resolve",
+        "apps.tenant_app_service.chat.turn_admission.ThreadRunService.get_active_run",
         AsyncMock(
             return_value=MagicMock(
-                status=SESSION_STATUS_RUNNING,
+                run_id="run-1",
+                run_status=AgentRunStatus.RUNNING,
                 session_id="sess-1",
             )
         ),
@@ -54,7 +55,7 @@ async def test_assert_thread_accepts_new_user_turn_raises_when_busy():
                 agent_id=-1,
             )
 
-    assert exc_info.value.details.get("thread_status") == SESSION_STATUS_RUNNING
+    assert exc_info.value.details.get("run_status") == AgentRunStatus.RUNNING
 
 
 @pytest.mark.asyncio

@@ -14,9 +14,8 @@ from apps.tenant_app_service.chat.adapters import (
 )
 from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain
 from apps.tenant_app_service.chat.domain import ThreadDomain
-from apps.tenant_app_service.chat.schemas import ConversationHistoryResponse, Message, SessionStatusResponse
+from apps.tenant_app_service.chat.schemas import ActiveRunResponse, ConversationHistoryResponse, Message
 from apps.tenant_app_service.chat.service_base import MAX_THREADS_PER_USER, ChatServiceBase
-from apps.tenant_app_service.chat.session_status_service import SessionStatusService
 from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 
 
@@ -192,16 +191,17 @@ class ThreadService(ChatServiceBase):
             title += "..."
         return title
 
-    async def get_session_status(
+    async def get_active_run(
         self,
         *,
         thread_id: str,
         agent_id: int,
-    ) -> SessionStatusResponse:
-        """Return durable session status for frontend polling."""
-        return await SessionStatusService(self.tenant_id, self.db).resolve(
+    ) -> ActiveRunResponse:
+        """Return active agent run snapshot for frontend polling."""
+        return await ThreadRunService(self.db, self.tenant_id).get_active_run(
             thread_id=thread_id,
             agent_id=agent_id,
+            repair=True,
         )
 
     async def get_main_timeline_messages(self, thread: ThreadDomain) -> list[Message]:

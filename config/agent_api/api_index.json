@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-16T02:15:56.152157+00:00",
+  "generated_at": "2026-10-26T14:57:02.049472+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -735,6 +735,11 @@
     {
       "operation_key": "POST_/hitl/approvals/{proposal_id}/reject",
       "summary": "Reject Approval",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/hitl/approvals/{proposal_id}/resume-stream",
+      "summary": "Resume Approval Stream",
       "risk_level": "write"
     },
     {

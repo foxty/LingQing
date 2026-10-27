@@ -4,8 +4,9 @@ from __future__ import annotations
 
 from collections.abc import Iterator
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import UTC, datetime, timedelta
 from enum import StrEnum
+from typing import Final
 
 
 class AgentRunStatus(StrEnum):
@@ -37,6 +38,25 @@ TERMINAL_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
 def run_status_allows_session_summary(status: str) -> bool:
     """Whether session-level summarization may run (run will not continue on same session)."""
     return status in TERMINAL_AGENT_RUN_STATUSES
+
+
+# Orphaned runs (e.g. server reload after human persist) may be repaired after this window.
+RUN_STALE_ACTIVE_SECONDS: Final = 900
+
+
+def is_stale_active_run(
+    started_at: datetime | None,
+    *,
+    stale_after_seconds: int = RUN_STALE_ACTIVE_SECONDS,
+    now: datetime | None = None,
+) -> bool:
+    """True when an ACTIVE run row should be treated as abandoned for repair."""
+    if started_at is None:
+        return False
+    current = now or datetime.now(UTC)
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=UTC)
+    return current - started_at > timedelta(seconds=stale_after_seconds)
 
 
 @dataclass(frozen=True)

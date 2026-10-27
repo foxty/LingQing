@@ -20,12 +20,12 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.schemas.user import UserDTO
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.chat.schemas import (
+    ActiveRunResponse,
     AgentRunSummary,
     ConversationHistoryResponse,
     Message,
     SendThreadMessageRequest,
     SendThreadMessageResponse,
-    SessionStatusResponse,
     ThreadCreate,
     ThreadResponse,
     ThreadTimelineResponse,
@@ -461,13 +461,13 @@ async def get_tool_call_detail(
     return message
 
 
-@router.get("/{thread_id}/session-status", response_model=SessionStatusResponse)
-async def get_thread_session_status(
+@router.get("/{thread_id}/active-run", response_model=ActiveRunResponse)
+async def get_thread_active_run(
     thread_id: str,
     current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
     db: AsyncSession = Depends(get_db),
 ):
-    """Get durable session status for polling in-progress agent turns."""
+    """Get active agent run for polling in-progress turns (``session_id`` is observability only)."""
     chat_service = ThreadService(current_user.tenant_id, db)
 
     thread = await chat_service.get_thread(thread_id)
@@ -475,7 +475,7 @@ async def get_thread_session_status(
         raise ResourceNotFoundError(f"Thread {thread_id} not found")
     _assert_user_owns_thread(thread, current_user)
 
-    return await chat_service.get_session_status(thread_id=thread_id, agent_id=thread.agent_id)
+    return await chat_service.get_active_run(thread_id=thread_id, agent_id=thread.agent_id)
 
 
 # ============================================================================

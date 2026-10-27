@@ -3,10 +3,10 @@
 Layer map (inward dependencies only):
 
 - ``application/`` — **Application** orchestration (multi-session entry: HTTP stream, headless).
-- ``turn_service``, ``thread_service``, ``thread_run_service``, ``session_status_service`` —
+- ``turn_service``, ``thread_service``, ``thread_run_service`` —
   **Application Services** (one ``AsyncSession`` per call).
 - ``turn_admission`` — Postgres advisory lock + busy gate (prepare transaction).
-- ``session_domain``, ``domain``, ``agent_run_domain`` — Pure domain types and rules (no I/O).
+- ``domain``, ``agent_run_domain`` — Pure domain types and rules (no I/O).
 - ``*_repository`` — Persistence adapters.
 - ``streaming`` — SSE transport only.
 - ``schemas`` — HTTP/DTO contracts.

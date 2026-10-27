@@ -146,6 +146,11 @@ class EnvConfig:
     TENANT_APP_DB_SSL_MODE: str = os.getenv(
         "TENANT_APP_DB_SSL_MODE", os.getenv("APP_DB_SSL_MODE", "prefer")
     )  # prefer, require, disable
+    LANGGRAPH_CHECKPOINTER_MEMORY: bool = os.getenv("LANGGRAPH_CHECKPOINTER_MEMORY", "").lower() in (
+        "1",
+        "true",
+        "yes",
+    )
 
     # Tenant manager control-plane database (optional, fallback to TENANT_APP_DB_* when empty)
     TENANT_MANAGER_DB_HOST: str = os.getenv("TENANT_MANAGER_DB_HOST", "")

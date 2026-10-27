@@ -72,6 +72,12 @@ settings = get_settings()
 async def lifespan(app: FastAPI):
     """Manage app lifespan: startup and shutdown."""
     # Startup
+    from apps.tenant_app_service.agents.graph_checkpointer import (
+        init_langgraph_checkpointer,
+        shutdown_langgraph_checkpointer,
+    )
+
+    await init_langgraph_checkpointer()
     get_agent_pool()
     logger.info("Agent pool initialized")
     logger.info("LingQing Backend Server started successfully")
@@ -79,6 +85,7 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    await shutdown_langgraph_checkpointer()
     logger.info("LingQing Backend Server shutdown")
 
 

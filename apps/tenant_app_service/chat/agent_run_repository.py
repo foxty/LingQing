@@ -140,13 +140,29 @@ class AgentRunRepository:
         self,
         run_id: str,
         *,
-        status: str,
+        status: AgentRunStatus,
         completed_at: datetime | None = None,
     ) -> None:
-        values: dict = {"status": status, "updated_at": datetime.now(UTC)}
+        values: dict = {"status": status.value, "updated_at": datetime.now(UTC)}
         if completed_at is not None:
             values["completed_at"] = completed_at
         await self.db.execute(update(AgentRun).where(AgentRun.id == run_id).values(**values))
+
+    async def transition_status(
+        self,
+        run_id: str,
+        *,
+        expected: AgentRunStatus,
+        new: AgentRunStatus,
+    ) -> bool:
+        """Atomically move run status; returns True when the row matched ``expected``."""
+        result = await self.db.execute(
+            update(AgentRun)
+            .where(AgentRun.id == run_id, AgentRun.status == expected.value)
+            .values(status=new.value, updated_at=datetime.now(UTC))
+            .returning(AgentRun.id)
+        )
+        return result.first() is not None
 
     async def count_active_for_thread(self, thread_id: str, agent_id: int | None = None) -> int:
         query = select(AgentRun).where(

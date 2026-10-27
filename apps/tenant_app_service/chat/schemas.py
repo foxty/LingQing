@@ -52,11 +52,6 @@ class ChatRequest(BaseModel):
         None,
         description="Artifact record ids from @mention (dashboard, report, app, etc.)",
     )
-    hitl_proposal_id: str | None = Field(None, description="Resolved HITL proposal id for continuation")
-    hitl_action: Literal["approved"] | None = Field(
-        None,
-        description="HITL approve continuation only; reject is handled via HITL API",
-    )
     thinking_effort: str | None = Field(
         default=None,
         description="Selected thinking_effort_options value from the agent model profile snapshot",
@@ -138,38 +133,34 @@ class ThreadResponse(BaseModel):
     updated_at: datetime = Field(..., description="Last update timestamp")
 
 
-SessionStatus = Literal[
+AgentRunStatusLiteral = Literal[
+    "queued",
     "running",
     "awaiting_hitl",
-    "hitl_approved_pending_continue",
     "completed",
+    "failed",
+    "cancelled",
 ]
 
 
 class PendingHitlInfo(BaseModel):
-    """Pending HITL approval metadata for session-status."""
+    """Pending HITL approval metadata (when run is paused)."""
 
     proposal_id: str
     tool_name: str
     session_id: str | None = None
 
 
-class ApprovedHitlInfo(BaseModel):
-    """Approved HITL awaiting agent continuation."""
+class ActiveRunResponse(BaseModel):
+    """Active agent run snapshot for polling and admission (idle when ``run_id`` is null)."""
 
-    proposal_id: str
-    tool_name: str
-    session_id: str | None = None
-
-
-class SessionStatusResponse(BaseModel):
-    """Active session status for durable chat polling."""
-
-    session_id: str | None = None
-    status: SessionStatus
-    has_ai_response: bool = False
+    run_id: str | None = None
+    session_id: str | None = Field(
+        None,
+        description="Observability/metrics correlation id for this run",
+    )
+    run_status: AgentRunStatusLiteral | None = None
     pending_hitl: PendingHitlInfo | None = None
-    approved_hitl: ApprovedHitlInfo | None = None
 
 
 # ArtifactResponse is now owned by apps.shared.artifact.schemas.

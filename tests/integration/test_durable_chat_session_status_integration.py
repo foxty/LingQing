@@ -1,4 +1,4 @@
-"""Integration tests for durable chat session status and message queries."""
+"""Integration tests for durable chat active-run polling and message queries."""
 
 from __future__ import annotations
 
@@ -193,7 +193,7 @@ async def test_message_repository_session_query_helpers(durable_chat_setup: dict
 
 
 @pytest.mark.asyncio
-async def test_durable_turn_session_status_stale_orphaned_run_returns_completed(durable_chat_setup: dict):
+async def test_durable_turn_active_run_stale_orphaned_run_repaired_idle(durable_chat_setup: dict):
     thread_id = durable_chat_setup["thread_id"]
     tenant_id = durable_chat_setup["tenant_id"]
     agent_id = durable_chat_setup["agent_id"]
@@ -211,13 +211,13 @@ async def test_durable_turn_session_status_stale_orphaned_run_returns_completed(
         await db.commit()
 
         service = ThreadService(tenant_id, db)
-        status = await service.get_session_status(thread_id=thread_id, agent_id=agent_id)
-        assert status.status == "completed"
-        assert status.has_ai_response is False
+        snapshot = await service.get_active_run(thread_id=thread_id, agent_id=agent_id)
+        assert snapshot.run_id is None
+        assert snapshot.run_status is None
 
 
 @pytest.mark.asyncio
-async def test_durable_turn_session_status_running_then_completed(durable_chat_setup: dict):
+async def test_durable_turn_active_run_running_then_idle(durable_chat_setup: dict):
     thread_id = durable_chat_setup["thread_id"]
     tenant_id = durable_chat_setup["tenant_id"]
     agent_id = durable_chat_setup["agent_id"]
@@ -235,17 +235,17 @@ async def test_durable_turn_session_status_running_then_completed(durable_chat_s
         await db.commit()
 
         service = ThreadService(tenant_id, db)
-        running = await service.get_session_status(thread_id=thread_id, agent_id=agent_id)
-        assert running.status == "running"
+        running = await service.get_active_run(thread_id=thread_id, agent_id=agent_id)
+        assert running.run_status == "running"
         assert running.session_id == session_id
-        assert running.has_ai_response is False
+        assert running.run_id is not None
 
     running_http = client.get(
-        f"/threads/{thread_id}/session-status",
+        f"/threads/{thread_id}/active-run",
         headers=durable_chat_setup["owner_headers"],
     )
     assert running_http.status_code == 200, running_http.text
-    assert running_http.json()["status"] == "running"
+    assert running_http.json()["run_status"] == "running"
 
     async with durable_chat_setup["session_local"]() as db:
         from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
@@ -266,16 +266,16 @@ async def test_durable_turn_session_status_running_then_completed(durable_chat_s
         await db.commit()
 
         service = ThreadService(tenant_id, db)
-        completed = await service.get_session_status(thread_id=thread_id, agent_id=agent_id)
-        assert completed.status == "completed"
-        assert completed.has_ai_response is True
+        completed = await service.get_active_run(thread_id=thread_id, agent_id=agent_id)
+        assert completed.run_id is None
+        assert completed.run_status is None
 
     completed_http = client.get(
-        f"/threads/{thread_id}/session-status",
+        f"/threads/{thread_id}/active-run",
         headers=durable_chat_setup["owner_headers"],
     )
     assert completed_http.status_code == 200, completed_http.text
-    assert completed_http.json()["status"] == "completed"
+    assert completed_http.json()["run_id"] is None
 
     history = client.get(
         f"/threads/{thread_id}/messages",
@@ -287,30 +287,32 @@ async def test_durable_turn_session_status_running_then_completed(durable_chat_s
     assert roles == {"human", "ai"}
 
 
-def test_session_status_not_found(durable_chat_setup: dict):
+def test_active_run_not_found(durable_chat_setup: dict):
     client = TestClient(app)
     missing_id = f"missing-{uuid4().hex[:8]}"
     response = client.get(
-        f"/threads/{missing_id}/session-status",
+        f"/threads/{missing_id}/active-run",
         headers=durable_chat_setup["owner_headers"],
     )
     assert response.status_code == 404
 
 
-def test_session_status_forbidden_for_non_owner(durable_chat_setup: dict):
+def test_active_run_forbidden_for_non_owner(durable_chat_setup: dict):
     client = TestClient(app)
     response = client.get(
-        f"/threads/{durable_chat_setup['thread_id']}/session-status",
+        f"/threads/{durable_chat_setup['thread_id']}/active-run",
         headers=durable_chat_setup["other_headers"],
     )
     assert response.status_code == 403
 
 
-def test_session_status_completed_for_empty_thread(durable_chat_setup: dict):
+def test_active_run_idle_for_empty_thread(durable_chat_setup: dict):
     client = TestClient(app)
     response = client.get(
-        f"/threads/{durable_chat_setup['thread_id']}/session-status",
+        f"/threads/{durable_chat_setup['thread_id']}/active-run",
         headers=durable_chat_setup["owner_headers"],
     )
     assert response.status_code == 200, response.text
-    assert response.json()["status"] == "completed"
+    body = response.json()
+    assert body["run_id"] is None
+    assert body["run_status"] is None

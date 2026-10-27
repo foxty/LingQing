@@ -29,7 +29,6 @@ def chat_service():
     service._build_runtime_config = MagicMock(return_value={"configurable": {"thread_id": "1_10_-1_abc"}})
     service.create_thread_title_if_1st_message = AsyncMock(return_value=None)
     service._build_initial_agent_messages = lambda lc_messages, request: lc_messages
-    service._is_hitl_continuation = lambda request: False
     service._reconcile_active_runs_before_new_turn = AsyncMock()
     return service
 

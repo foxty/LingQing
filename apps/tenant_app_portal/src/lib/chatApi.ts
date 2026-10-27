@@ -62,14 +62,23 @@ export interface SessionToolCallsResponse {
   tool_calls: ToolCallMetrics[]
 }
 
-export const SESSION_STATUS = {
+/** Mirrors backend ``AgentRunStatus``. */
+export const AGENT_RUN_STATUS = {
+  QUEUED: 'queued',
   RUNNING: 'running',
   AWAITING_HITL: 'awaiting_hitl',
-  HITL_APPROVED_PENDING_CONTINUE: 'hitl_approved_pending_continue',
   COMPLETED: 'completed',
+  FAILED: 'failed',
+  CANCELLED: 'cancelled',
 } as const
 
-export type SessionStatus = (typeof SESSION_STATUS)[keyof typeof SESSION_STATUS]
+export type AgentRunStatus = (typeof AGENT_RUN_STATUS)[keyof typeof AGENT_RUN_STATUS]
+
+export const ACTIVE_AGENT_RUN_STATUSES: readonly AgentRunStatus[] = [
+  AGENT_RUN_STATUS.QUEUED,
+  AGENT_RUN_STATUS.RUNNING,
+  AGENT_RUN_STATUS.AWAITING_HITL,
+]
 
 export interface PendingHitlInfo {
   proposal_id: string
@@ -77,25 +86,21 @@ export interface PendingHitlInfo {
   session_id?: string | null
 }
 
-export interface ApprovedHitlInfo {
-  proposal_id: string
-  tool_name: string
+export interface ActiveRunResponse {
+  run_id?: string | null
   session_id?: string | null
-}
-
-export interface SessionStatusResponse {
-  session_id?: string | null
-  status: SessionStatus
-  has_ai_response: boolean
+  run_status?: AgentRunStatus | null
   pending_hitl?: PendingHitlInfo | null
-  approved_hitl?: ApprovedHitlInfo | null
 }
 
-/**
- * Get durable session status for polling in-progress agent turns.
- */
-export async function getSessionStatus(threadId: string): Promise<SessionStatusResponse> {
-  const response = await api.get<SessionStatusResponse>(`/threads/${threadId}/session-status`)
+export function isActiveRunStatus(status: AgentRunStatus | null | undefined): boolean {
+  if (!status) return false
+  return (ACTIVE_AGENT_RUN_STATUSES as readonly string[]).includes(status)
+}
+
+/** Poll in-progress agent work (idle when ``run_id`` is null). */
+export async function getActiveRun(threadId: string): Promise<ActiveRunResponse> {
+  const response = await api.get<ActiveRunResponse>(`/threads/${threadId}/active-run`)
   return response.data
 }
 

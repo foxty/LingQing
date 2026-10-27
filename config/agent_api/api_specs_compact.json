@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-25T12:59:14.184633+00:00",
+  "generated_at": "2026-10-27T11:16:26.997338+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -2365,31 +2365,6 @@
             ],
             "title": "Selected Artifact Ids",
             "description": "Artifact record ids from @mention (dashboard, report, app, etc.)"
-          },
-          "hitl_proposal_id": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hitl Proposal Id",
-            "description": "Resolved HITL proposal id for continuation"
-          },
-          "hitl_action": {
-            "anyOf": [
-              {
-                "type": "string",
-                "const": "approved"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Hitl Action",
-            "description": "HITL approve continuation only; reject is handled via HITL API"
           },
           "thinking_effort": {
             "anyOf": [
@@ -8965,6 +8940,7 @@
     "POST_/documents/{document_id}/reparse": "queue_document_reparse_documents__document_id__reparse_post",
     "POST_/hitl/approvals/{proposal_id}/approve": "approve_approval_hitl_approvals__proposal_id__approve_post",
     "POST_/hitl/approvals/{proposal_id}/reject": "reject_approval_hitl_approvals__proposal_id__reject_post",
+    "POST_/hitl/approvals/{proposal_id}/resume-stream": "resume_approval_stream_hitl_approvals__proposal_id__resume_stream_post",
     "POST_/llm-config/registry/profiles": "create_registry_profile_llm_config_registry_profiles_post",
     "POST_/llm-config/registry/profiles/{profile_id}/test": "test_registry_profile_connection_llm_config_registry_profiles__profile_id__test_post",
     "POST_/llm-config/registry/providers": "create_registry_provider_llm_config_registry_providers_post",
@@ -14464,6 +14440,36 @@
       "constraints": {
         "side_effect": true,
         "idempotent": true
+      }
+    },
+    "resume_approval_stream_hitl_approvals__proposal_id__resume_stream_post": {
+      "operation_key": "POST_/hitl/approvals/{proposal_id}/resume-stream",
+      "method": "POST",
+      "path": "/hitl/approvals/{proposal_id}/resume-stream",
+      "summary": "Resume Approval Stream",
+      "description": "Resume an approved HITL run from checkpoint (SSE).\n\nAuth runs in a short session; streaming does not pin ``Depends(get_db)``.",
+      "request": {
+        "path_params": [
+          {
+            "name": "proposal_id",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "title": "Proposal Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
       }
     },
     "resume_scheduled_task_scheduled_tasks__task_id__resume_patch": {
