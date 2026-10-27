@@ -140,6 +140,7 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
 
       await handleSSEStream({
         url: `/hitl/approvals/${encodeURIComponent(proposalId)}/resume-stream`,
+        body: {},
         signal: abortController.signal,
         token,
         onMessage: (data: SSEMessage) => {
@@ -165,7 +166,11 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
             }
             case 'tool_end': {
               setStreamingToolCalls((prev) => {
-                const next = applyToolEnd(prev, data.tool_name || 'tool')
+                const next = applyToolEnd(
+                  prev,
+                  data.tool_name || 'tool',
+                  `stream-tool-${streamingToolCallSeqRef.current++}`
+                )
                 streamingToolCallsRef.current = next
                 return next
               })
