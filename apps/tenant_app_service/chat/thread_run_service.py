@@ -20,8 +20,10 @@ from apps.tenant_app_service.chat.agent_run_domain import (
     AgentRunDomain,
     AgentRunStatus,
     ThreadMainMessageDomain,
+    find_promotable_final_ai_row,
     sort_timeline_trigger_anchored,
 )
+from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
 from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
 
@@ -34,6 +36,7 @@ class ThreadRunService:
         self.tenant_id = tenant_id
         self.main_repo = MainMessageRepository(db)
         self.run_repo = AgentRunRepository(db)
+        self.run_message_repo = AgentRunMessageRepository(db)
 
     async def send_human_and_create_runs(
         self,
@@ -125,6 +128,46 @@ class ThreadRunService:
         if thread:
             thread.message_count = (thread.message_count or 0) + 1
         return row
+
+    async def finalize_run_for_main(self, run_id: str) -> None:
+        """Promote terminal run AI to main timeline and close the run when appropriate.
+
+        Called after turn execution (or terminal HITL resolution), not from LangGraph nodes.
+        Skips promotion while the run is paused for HITL or already failed/cancelled.
+        """
+        run = await self.run_repo.get_run(self.tenant_id, run_id)
+        if not run:
+            return
+
+        if run.status in (
+            AgentRunStatus.AWAITING_HITL,
+            AgentRunStatus.FAILED,
+            AgentRunStatus.CANCELLED,
+        ):
+            return
+
+        if not await self.main_repo.get_promoted_ai_for_run(run_id):
+            run_rows = await self.run_message_repo.list_for_run(run_id)
+            final_row = find_promotable_final_ai_row(run_rows)
+            if final_row is not None:
+                from apps.tenant_app_service.agents.message_persistence_adapters import (
+                    agent_run_message_to_langchain,
+                )
+
+                lc_message = agent_run_message_to_langchain(final_row)
+                if isinstance(lc_message, AIMessage):
+                    await self.promote_final_ai(
+                        run_id=run_id,
+                        thread_id=run.thread_id,
+                        agent_id=run.agent_id,
+                        trigger_message_id=run.trigger_message_id,
+                        invoke_index=run.invoke_index,
+                        session_id=run.session_id,
+                        final_message=lc_message,
+                    )
+
+        if run.status == AgentRunStatus.RUNNING:
+            await self.mark_run_completed(run_id)
 
     async def get_timeline(self, thread_id: str) -> list[ThreadMainMessageDomain]:
         rows = await self.main_repo.list_for_thread(thread_id)

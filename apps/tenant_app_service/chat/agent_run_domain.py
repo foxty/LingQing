@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Iterator
 from dataclasses import dataclass
 from datetime import datetime
 from enum import StrEnum
@@ -23,6 +24,19 @@ ACTIVE_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
         AgentRunStatus.AWAITING_HITL,
     }
 )
+
+TERMINAL_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
+    {
+        AgentRunStatus.COMPLETED,
+        AgentRunStatus.FAILED,
+        AgentRunStatus.CANCELLED,
+    }
+)
+
+
+def run_status_allows_session_summary(status: str) -> bool:
+    """Whether session-level summarization may run (run will not continue on same session)."""
+    return status in TERMINAL_AGENT_RUN_STATUSES
 
 
 @dataclass(frozen=True)
@@ -99,43 +113,145 @@ def sort_timeline_trigger_anchored(rows: list[ThreadMainMessageDomain]) -> list[
     return ordered
 
 
+def scope_main_timeline_rows_for_agent(
+    rows: list[ThreadMainMessageDomain],
+    agent_id: int,
+) -> list[ThreadMainMessageDomain]:
+    """Keep humans and this agent's promoted AI rows (drop peer agents on main)."""
+    return [
+        row
+        for row in rows
+        if row.type == "human" or (row.type == "ai" and row.agent_id == agent_id)
+    ]
+
+
+def _this_agent_ais_until_next_human(
+    rows: list[ThreadMainMessageDomain],
+    start_index: int,
+    agent_id: int,
+) -> tuple[list[ThreadMainMessageDomain], int]:
+    """Collect this agent's AI rows after ``rows[start_index - 1]`` human until next human."""
+    i = start_index
+    n = len(rows)
+    agent_ais: list[ThreadMainMessageDomain] = []
+    while i < n and rows[i].type != "human":
+        if rows[i].type == "ai" and rows[i].agent_id == agent_id:
+            agent_ais.append(rows[i])
+        i += 1
+    return agent_ais, i
+
+
+def _agent_ai_session_covered(
+    row: ThreadMainMessageDomain,
+    covered_session_ids: frozenset[str],
+) -> bool:
+    return bool(row.session_id and row.session_id in covered_session_ids)
+
+
+def iter_agent_scoped_turns(
+    rows: list[ThreadMainMessageDomain],
+    agent_id: int,
+) -> Iterator[list[ThreadMainMessageDomain]]:
+    """Yield trigger-anchored turns for one agent on the main timeline.
+
+    Each turn is ``[human]``, ``[human, ...ai]``, or ``[...ai]`` (orphan AI block).
+    Expects ``sort_timeline_trigger_anchored`` order; peer agents' AI may appear
+    between humans and are skipped when collecting this agent's segment.
+    """
+    i = 0
+    n = len(rows)
+    while i < n:
+        row = rows[i]
+        if row.type == "human":
+            human = row
+            agent_ais, i = _this_agent_ais_until_next_human(rows, i + 1, agent_id)
+            if agent_ais:
+                yield [human, *agent_ais]
+            else:
+                yield [human]
+            continue
+
+        if row.type == "ai" and row.agent_id == agent_id:
+            orphan_ais: list[ThreadMainMessageDomain] = []
+            while i < n and rows[i].type == "ai" and rows[i].agent_id == agent_id:
+                orphan_ais.append(rows[i])
+                i += 1
+            if orphan_ais:
+                yield orphan_ais
+            continue
+
+        i += 1
+
+
+def select_main_timeline_pairs_for_context(
+    rows: list[ThreadMainMessageDomain],
+    *,
+    agent_id: int,
+    covered_session_ids: frozenset[str],
+    turn_limit: int | None,
+) -> list[ThreadMainMessageDomain]:
+    """Select human+AI pair turns for LLM main-line context.
+
+    Expects ``sort_timeline_trigger_anchored`` order. Keeps only turns that start
+    with a human and include at least one promoted AI for ``agent_id``, omitting:
+
+    - human-only rows (no promoted reply for this agent)
+    - AI-only blocks (not anchored to a human in timeline order)
+    - turns whose session is already in ``covered_session_ids`` (summary XOR pair)
+
+    Then keeps the last ``turn_limit`` pair turns (``None`` = all qualifying pairs).
+    The active user message is loaded outside this helper.
+    """
+    rows = scope_main_timeline_rows_for_agent(rows, agent_id)
+    pair_turns: list[list[ThreadMainMessageDomain]] = []
+    for turn in iter_agent_scoped_turns(rows, agent_id):
+        if turn[0].type != "human":
+            continue
+        agent_ais = [row for row in turn if row.type == "ai"]
+        if not agent_ais:
+            continue
+        if covered_session_ids and any(
+            _agent_ai_session_covered(ai, covered_session_ids) for ai in agent_ais
+        ):
+            continue
+        pair_turns.append(turn)
+
+    if turn_limit is not None:
+        if turn_limit <= 0:
+            return []
+        pair_turns = pair_turns[-turn_limit:]
+
+    return [row for turn in pair_turns for row in turn]
+
+
 def slice_main_timeline_turns(
     rows: list[ThreadMainMessageDomain],
     *,
     agent_id: int,
     turn_limit: int | None,
 ) -> list[ThreadMainMessageDomain]:
-    """Keep the last K trigger-anchored turns on the main timeline.
+    """Keep the last K **paired** main-line turns for this agent (see ``select_main_timeline_pairs_for_context``)."""
+    return select_main_timeline_pairs_for_context(
+        rows,
+        agent_id=agent_id,
+        covered_session_ids=frozenset(),
+        turn_limit=turn_limit,
+    )
 
-    A turn is one human plus this agent's promoted AI rows for that trigger
-    (``sort_timeline_trigger_anchored`` order). Orphan AI rows form their own turn.
-    """
-    if turn_limit is None:
+
+def exclude_trigger_human_from_main_rows(
+    rows: list[ThreadMainMessageDomain],
+    *,
+    trigger_message_id: str | None,
+) -> list[ThreadMainMessageDomain]:
+    """Remove the active run's human from history; it is appended after main load."""
+    if not trigger_message_id:
         return list(rows)
-    if turn_limit <= 0:
-        return []
-
-    turns: list[list[ThreadMainMessageDomain]] = []
-    current: list[ThreadMainMessageDomain] = []
-
-    for row in rows:
-        if row.type == "human":
-            if current:
-                turns.append(current)
-            current = [row]
-        elif row.type == "ai" and row.agent_id == agent_id:
-            if current:
-                current.append(row)
-            else:
-                turns.append([row])
-        elif row.type == "ai":
-            continue
-
-    if current:
-        turns.append(current)
-
-    selected = turns[-turn_limit:]
-    return [row for turn in selected for row in turn]
+    return [
+        row
+        for row in rows
+        if not (row.type == "human" and row.message_id == trigger_message_id)
+    ]
 
 
 def filter_main_timeline_for_context_load(
@@ -144,24 +260,24 @@ def filter_main_timeline_for_context_load(
     agent_id: int,
     covered_session_ids: frozenset[str],
 ) -> list[ThreadMainMessageDomain]:
-    """Drop main-line AI already represented in thread/session summaries.
+    """All qualifying pair turns before turn cap (wrapper around ``select_main_timeline_pairs_for_context``)."""
+    return select_main_timeline_pairs_for_context(
+        rows,
+        agent_id=agent_id,
+        covered_session_ids=covered_session_ids,
+        turn_limit=None,
+    )
 
-    Humans are kept so parallel agent runs on the same trigger still see the user turn.
-    Promoted AI rows with a summarized ``session_id`` are omitted to avoid duplicating
-    compressed history in the literal tail.
-    """
-    if not covered_session_ids:
-        return list(rows)
-    kept: list[ThreadMainMessageDomain] = []
-    for row in rows:
-        if row.type == "human":
-            kept.append(row)
+
+def find_promotable_final_ai_row(run_rows: list) -> object | None:
+    """Last run-scoped AI row with no tool calls (user-visible terminal reply)."""
+    for row in reversed(run_rows):
+        if getattr(row, "type", None) != "ai":
             continue
-        if row.type == "ai" and row.agent_id == agent_id:
-            if row.session_id and row.session_id in covered_session_ids:
-                continue
-            kept.append(row)
-    return kept
+        if getattr(row, "tool_calls", None):
+            continue
+        return row
+    return None
 
 
 def drop_run_rows_duplicating_promoted_main(

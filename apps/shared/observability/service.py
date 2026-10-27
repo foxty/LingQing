@@ -5,7 +5,6 @@ from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.observability.token_breakdown import token_event_breakdown_from_event
 from apps.shared.observability.domain import (
     AgentSessionMetrics,
     AgentThreadMetrics,
@@ -16,6 +15,7 @@ from apps.shared.observability.domain import (
 )
 from apps.shared.observability.dtos import TenantUsageStatsDTO
 from apps.shared.observability.repository import MetricsRepository
+from apps.shared.observability.token_breakdown import token_event_breakdown_from_event
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)

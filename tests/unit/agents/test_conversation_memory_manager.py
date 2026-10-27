@@ -23,7 +23,12 @@ from langchain_core.runnables import RunnableConfig
 
 from apps.shared.db.models import ChatMessage
 from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
-from apps.tenant_app_service.chat.agent_run_domain import ThreadMainMessageDomain
+from apps.tenant_app_service.chat.agent_run_domain import (
+    ThreadMainMessageDomain,
+    filter_main_timeline_for_context_load,
+    sort_timeline_trigger_anchored,
+)
+from tests.unit.chat.main_timeline_pair_assertions import assert_main_timeline_summary_pairs_consistent
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -36,7 +41,9 @@ _TSR_PATH = "apps.tenant_app_service.chat.thread_summary_repository.ThreadSummar
 _SSR_PATH = "apps.tenant_app_service.chat.session_summary_repository.SessionSummaryRepository"
 _RUN_MR_PATH = "apps.tenant_app_service.chat.agent_run_message_repository.AgentRunMessageRepository"
 _MAIN_MR_PATH = "apps.tenant_app_service.chat.main_message_repository.MainMessageRepository"
+_AGENT_RUN_REPO_PATH = "apps.tenant_app_service.chat.agent_run_repository.AgentRunRepository"
 RUN_ID = "run-unit-1"
+TRIGGER_MSG_ID = "trigger-human-1"
 _HITL_BLOCKING_PATH = "apps.tenant_app_service.hitl.history.is_hitl_proposal_blocking"
 
 # ─── Builders ─────────────────────────────────────────────────────────────────
@@ -84,6 +91,7 @@ def _main_domain(
     session_id: str | None = None,
     agent_id: int = AGENT_ID,
     row_id: int = 1,
+    trigger_message_id: str | None = None,
 ) -> ThreadMainMessageDomain:
     return ThreadMainMessageDomain(
         id=row_id,
@@ -94,7 +102,27 @@ def _main_domain(
         timestamp=_T0,
         agent_id=agent_id,
         session_id=session_id,
+        trigger_message_id=trigger_message_id,
         created_at=_T0,
+    )
+
+
+def _assert_loaded_main_pairs_consistent(
+    main_rows: list[ThreadMainMessageDomain],
+    *,
+    covered_session_ids: frozenset[str],
+) -> None:
+    ordered = sort_timeline_trigger_anchored(main_rows)
+    filtered = filter_main_timeline_for_context_load(
+        ordered,
+        agent_id=AGENT_ID,
+        covered_session_ids=covered_session_ids,
+    )
+    assert_main_timeline_summary_pairs_consistent(
+        ordered,
+        filtered,
+        agent_id=AGENT_ID,
+        covered_session_ids=covered_session_ids,
     )
 
 
@@ -105,7 +133,7 @@ def _session_summary(text: str, session_id: str = "session-summary-1") -> MagicM
     return ss
 
 
-def _make_manager() -> tuple:
+def _make_manager(*, trigger_message_id: str | None = None) -> tuple:
     """Return (manager, db_mock, run_repo_mock, main_repo_mock) with run stores patched."""
     db_mock = AsyncMock()
     thread_mock = MagicMock()
@@ -117,6 +145,7 @@ def _make_manager() -> tuple:
         patch(_MAIN_MR_PATH) as MockMainMR,
         patch(_TSR_PATH) as MockTSR,
         patch(_SSR_PATH) as MockSSR,
+        patch(_AGENT_RUN_REPO_PATH) as MockAgentRunRepo,
     ):
         run_repo_mock = AsyncMock()
         run_repo_mock.get_tool_message_by_call_id.return_value = None
@@ -133,6 +162,14 @@ def _make_manager() -> tuple:
         session_summary_repo_mock.get_unsummarized_sessions.return_value = []
         session_summary_repo_mock.list_session_ids_in_thread_summary.return_value = []
         MockSSR.return_value = session_summary_repo_mock
+        agent_run_repo_mock = AsyncMock()
+        if trigger_message_id is not None:
+            run_domain = MagicMock()
+            run_domain.trigger_message_id = trigger_message_id
+            agent_run_repo_mock.get_run = AsyncMock(return_value=run_domain)
+        else:
+            agent_run_repo_mock.get_run = AsyncMock(return_value=None)
+        MockAgentRunRepo.return_value = agent_run_repo_mock
         mgr = ConversationMemoryManager(
             db_mock,
             THREAD_ID,
@@ -395,14 +432,47 @@ class TestAssemblyLogic:
         loaded = await _load(mgr, repo_mock, thread_summary_limit=0, session_summary_limit=0)
         assert loaded == []
 
+    async def test_legacy_main_ai_without_trigger_drops_human_when_session_summarized(self):
+        """End-to-end load must not leave orphan human when legacy AI lacks trigger_message_id."""
+        mgr, _, repo_mock = _make_manager(trigger_message_id="h-current")
+        sid = "session-covered-legacy"
+        main_rows = [
+            _main_domain("h-old", "human", "Old question", row_id=1),
+            _main_domain(
+                "a-old",
+                "ai",
+                "Old answer",
+                session_id=sid,
+                row_id=2,
+                trigger_message_id=None,
+            ),
+        ]
+        _assert_loaded_main_pairs_consistent(main_rows, covered_session_ids=frozenset({sid}))
+        mgr.main_message_repo.list_for_thread.return_value = main_rows
+        mgr.main_message_repo.get_by_message_id.return_value = _main_domain(
+            "h-current", "human", "Current line", row_id=3
+        )
+        repo_mock.get_unsummarized_messages.return_value = []
+
+        loaded = await _load(
+            mgr,
+            repo_mock,
+            session_summaries=[_session_summary("Recap", session_id=sid)],
+            thread_summary_limit=0,
+        )
+
+        conv = [m for m in loaded if not isinstance(m, SystemMessage)]
+        assert [m.content for m in conv] == ["Current line"]
+
     async def test_main_promoted_ai_omitted_when_session_has_summary(self):
-        """Session summary + main promoted AI for same session → no duplicate AI in tail."""
-        mgr, _, repo_mock = _make_manager()
+        """Covered session drops history pair; current trigger human appended once."""
+        mgr, _, repo_mock = _make_manager(trigger_message_id="h1")
         sid = "session-covered-1"
         mgr.main_message_repo.list_for_thread.return_value = [
             _main_domain("h1", "human", "Question"),
-            _main_domain("a1", "ai", "Answer", session_id=sid, row_id=2),
+            _main_domain("a1", "ai", "Answer", session_id=sid, row_id=2, trigger_message_id="h1"),
         ]
+        mgr.main_message_repo.get_by_message_id.return_value = _main_domain("h1", "human", "Question")
 
         loaded = await _load(
             mgr,
@@ -416,12 +486,13 @@ class TestAssemblyLogic:
         assert conv[0].content == "Question"
 
     async def test_main_ai_omitted_when_session_in_thread_summary_rollup(self):
-        mgr, _, repo_mock = _make_manager()
+        mgr, _, repo_mock = _make_manager(trigger_message_id="h1")
         sid = "session-in-thread-summary"
         mgr.main_message_repo.list_for_thread.return_value = [
             _main_domain("h1", "human", "Old question"),
             _main_domain("a1", "ai", "Old answer", session_id=sid, row_id=2),
         ]
+        mgr.main_message_repo.get_by_message_id.return_value = _main_domain("h1", "human", "Old question")
 
         mgr.thread_summary_repo.get_recent_summaries.return_value = [_thread_summary(1, "Long thread recap")]
         mgr.session_summary_repo.get_unsummarized_sessions.return_value = []
@@ -436,6 +507,47 @@ class TestAssemblyLogic:
         conv = [m for m in loaded if not isinstance(m, SystemMessage)]
         assert len(conv) == 1
         assert conv[0].content == "Old question"
+
+    async def test_active_run_sees_prior_turns_not_current_human_on_main(self):
+        """Concurrent-style thread: run on h2 loads h1 turn on main, h2 only via append."""
+        mgr, _, repo_mock = _make_manager(trigger_message_id="h2")
+        mgr.main_message_repo.list_for_thread.return_value = [
+            _main_domain("h1", "human", "First ask", row_id=1),
+            _main_domain(
+                "a1",
+                "ai",
+                "First reply",
+                session_id="sess-1",
+                row_id=2,
+                trigger_message_id="h1",
+            ),
+            _main_domain("h2", "human", "Second ask", row_id=3),
+        ]
+        mgr.main_message_repo.get_by_message_id.return_value = _main_domain(
+            "h2", "human", "Second ask", row_id=3
+        )
+        repo_mock.get_unsummarized_messages.return_value = []
+
+        loaded = await _load(mgr, repo_mock, thread_summary_limit=0, session_summary_limit=0)
+
+        conv = [m for m in loaded if not isinstance(m, SystemMessage)]
+        assert [m.content for m in conv] == ["First ask", "First reply", "Second ask"]
+
+    async def test_trigger_human_appended_after_main_before_run_messages(self):
+        mgr, _, repo_mock = _make_manager(trigger_message_id="h-current")
+        mgr.main_message_repo.list_for_thread.return_value = [
+            _main_domain("h-old", "human", "Past"),
+            _main_domain("a-old", "ai", "Past reply", session_id="sess-open", row_id=2),
+        ]
+        mgr.main_message_repo.get_by_message_id.return_value = _main_domain(
+            "h-current", "human", "Current user line"
+        )
+        msg_run = _db_msg(1, "m-run", "ai", "Working")
+
+        loaded = await _load(mgr, repo_mock, unsummarized_msgs=[msg_run])
+
+        conv = [m for m in loaded if not isinstance(m, SystemMessage)]
+        assert [m.content for m in conv] == ["Past", "Past reply", "Current user line", "Working"]
 
     async def test_run_ai_omitted_when_duplicates_promoted_main(self):
         """Promoted main AI should not appear again from agent_run_messages."""
