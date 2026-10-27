@@ -74,6 +74,14 @@ def test_extract_table_references_cross_database_dialects(sql: str, expected_ref
     assert extract_table_references(sql) == expected_refs
 
 
+def test_extract_table_references_information_schema_tables():
+    sql = (
+        "SELECT table_schema, table_name FROM information_schema.tables "
+        "WHERE table_schema NOT IN ('pg_catalog', 'information_schema')"
+    )
+    assert extract_table_references(sql) == {"information_schema.tables"}
+
+
 def test_split_sql_script_statements_multiple_ddl():
     sql = """
     CREATE TABLE tasks (id INT);

@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock
 import pandas as pd
 import pytest
 
-from apps.shared.core.exceptions import ValidationError
+from apps.shared.core.exceptions import AuthorizationError, ValidationError
 from apps.shared.dashboard.domain import (
     DashboardConfig,
     DashboardDomain,
@@ -407,6 +407,9 @@ async def test_prepare_widget_analytics_query_does_not_execute():
         async def require_read_access_for_actor(self, *, data_source_id, actor):
             return None
 
+        async def require_registered_assets_in_sql(self, *, data_source_id, sql_query):
+            return None
+
         async def get_db_manager(self, data_source_id):
             assert data_source_id == 3
             return _FakeManager()
@@ -422,6 +425,39 @@ async def test_prepare_widget_analytics_query_does_not_execute():
     assert executed is False
     assert "region = :region" in prepared.sql.lower()
     assert prepared.params["region"] == "APAC"
+
+
+@pytest.mark.asyncio
+async def test_prepare_widget_analytics_query_enforces_registered_asset_whitelist():
+    service = DashboardService.create(tenant_id=1, db_session=None)
+    widget = DashboardWidget(
+        id="w1",
+        type="table",
+        position=WidgetPosition(x=0, y=0, w=4, h=3),
+        query="SELECT * FROM secret_table",
+        data_source_id=3,
+    )
+
+    class _FakeDataSourceService:
+        async def get_data_source_for_actor(self, *, data_source_id, actor):
+            return None
+
+        async def require_read_access_for_actor(self, *, data_source_id, actor):
+            return None
+
+        async def require_registered_assets_in_sql(self, *, data_source_id, sql_query):
+            raise AuthorizationError("Query references unregistered asset 'secret_table'.")
+
+        async def get_db_manager(self, data_source_id):
+            raise AssertionError("should not reach warehouse when whitelist fails")
+
+    with pytest.raises(AuthorizationError, match="unregistered asset"):
+        await service.prepare_widget_analytics_query(
+            widget,
+            data_source_service=_FakeDataSourceService(),
+            user_id=123,
+            user_role="admin",
+        )
 
 
 @pytest.mark.asyncio
@@ -453,6 +489,9 @@ async def test_prepare_widget_analytics_query_uses_overridden_filter_value():
             return None
 
         async def require_read_access_for_actor(self, *, data_source_id, actor):
+            return None
+
+        async def require_registered_assets_in_sql(self, *, data_source_id, sql_query):
             return None
 
         async def get_db_manager(self, data_source_id):
@@ -500,6 +539,9 @@ async def test_prepared_analytics_query_executes_after_prepare():
             return None
 
         async def require_read_access_for_actor(self, *, data_source_id, actor):
+            return None
+
+        async def require_registered_assets_in_sql(self, *, data_source_id, sql_query):
             return None
 
         async def get_db_manager(self, data_source_id):
