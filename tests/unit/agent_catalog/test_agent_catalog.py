@@ -34,8 +34,6 @@ from apps.tenant_app_service.skills.domain import SkillType
 
 def test_derive_tool_names_from_skills_and_context():
     from apps.tenant_app_service.agent_catalog.domain import (
-        PLATFORM_CAPABILITY_REPORTS,
-        PLATFORM_CAPABILITY_SCHEDULING,
         PLATFORM_CAPABILITY_WORKSPACE,
         derive_tool_names,
     )
@@ -61,24 +59,14 @@ def test_derive_tool_names_from_skills_and_context():
     assert "search_documents" in derived
     assert "retrieve_resource_context" in derived
 
-    scheduled = derive_tool_names(
-        skills=[],
+    task_scheduler = derive_tool_names(
+        skills=["task-scheduler"],
         knowledge_base_ids=[],
         data_source_ids=[],
         api_connector_ids=[],
-        platform_capabilities=[PLATFORM_CAPABILITY_SCHEDULING],
     )
-    assert "schedule_task" in scheduled
-    assert "list_scheduled_tasks" in scheduled
-
-    reports = derive_tool_names(
-        skills=[],
-        knowledge_base_ids=[],
-        data_source_ids=[],
-        api_connector_ids=[],
-        platform_capabilities=[PLATFORM_CAPABILITY_REPORTS],
-    )
-    assert reports == ["create_report", "get_report", "update_report"]
+    assert task_scheduler[:3] == ["load_skill", "unload_skill", "read_skill_file"]
+    assert "schedule_task" not in task_scheduler
 
     workspace = derive_tool_names(
         skills=[],
@@ -96,12 +84,12 @@ def test_capability_profile_parses_platform_capabilities():
             "platform_capabilities": ["scheduling", "reports", "scheduling", "invalid"],
         }
     )
-    assert profile.platform_capabilities == ["scheduling", "reports"]
+    assert profile.platform_capabilities == []
 
     workspace_profile = AgentCapabilityProfile.from_config(
         {"platform_capabilities": ["workspace", "scheduling"]}
     )
-    assert workspace_profile.platform_capabilities == ["workspace", "scheduling"]
+    assert workspace_profile.platform_capabilities == ["workspace"]
 
 
 def test_capability_config_rejects_invalid_platform_capabilities():
@@ -113,17 +101,32 @@ def test_capability_config_rejects_invalid_platform_capabilities():
 
 def test_sorted_platform_capabilities():
     from apps.tenant_app_service.agent_catalog.domain import (
-        PLATFORM_CAPABILITY_REPORTS,
-        PLATFORM_CAPABILITY_SCHEDULING,
         PLATFORM_CAPABILITY_WORKSPACE,
         sorted_platform_capabilities,
     )
 
-    assert sorted_platform_capabilities() == [
-        PLATFORM_CAPABILITY_REPORTS,
-        PLATFORM_CAPABILITY_SCHEDULING,
-        PLATFORM_CAPABILITY_WORKSPACE,
-    ]
+    assert sorted_platform_capabilities() == [PLATFORM_CAPABILITY_WORKSPACE]
+
+
+def test_allowed_runtime_tool_names_includes_assigned_skill_tools(monkeypatch):
+    from unittest.mock import MagicMock
+
+    from apps.tenant_app_service.agent_catalog.services import AgentCatalogService
+
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agent_catalog.services.get_config_loader",
+        lambda: MagicMock(get_platform_tool_names=lambda: frozenset({"schedule_task", "load_skill"})),
+    )
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agent_catalog.services.TOOL_REGISTRY",
+        {"load_skill": object(), "unload_skill": object(), "read_skill_file": object(), "schedule_task": object()},
+    )
+    service = AgentCatalogService(tenant_id=1, db_session=MagicMock())
+    profile = AgentCapabilityProfile(skills=["task-scheduler"])
+    skills = [AssignableSkill(name="task-scheduler", tools=("schedule_task",))]
+    assert "schedule_task" not in service.derived_tool_names(profile, assignable_skills=skills)
+    allowed = service.allowed_runtime_tool_names(profile, assignable_skills=skills)
+    assert "schedule_task" in allowed
 
 
 def test_allowed_runtime_tool_names_includes_skill_tools(monkeypatch):

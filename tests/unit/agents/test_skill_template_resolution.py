@@ -57,6 +57,8 @@ class TestSkillTemplateResolution:
 
         assert "data-analyst" in skills
         assert "dashboard-builder" in skills
+        assert "task-scheduler" in skills
+        assert "report-writer" in skills
 
     def test_skill_meta_comes_from_skill_descriptions(self, config_manager, mock_runtime):
         skills_meta = config_manager.get_resolved_skills_meta(mock_runtime)
@@ -79,4 +81,12 @@ class TestSkillTemplateResolution:
         tools = config_manager.get_tools([], mock_runtime)
         tool_names = {tool.name for tool in tools}
 
-        assert {"hitl_test_echo", "load_skill"}.issubset(tool_names)
+        assert "load_skill" in tool_names
+        assert "create_report" not in tool_names
+        assert "schedule_task" not in tool_names
+
+    def test_loaded_scheduler_skill_exposes_scheduler_tools(self, config_manager, mock_runtime):
+        tools = config_manager.get_tools(["task-scheduler"], mock_runtime)
+        tool_names = {tool.name for tool in tools}
+        assert "schedule_task" in tool_names
+        assert "list_scheduled_tasks" in tool_names

@@ -39,8 +39,6 @@ import type { LLMModelProfile } from '@/lib/llmConfigApi'
 
 /** UI copy keys for platform capability ids returned by the catalog API. */
 const PLATFORM_CAPABILITY_COPY: Record<string, { labelKey: string; hintKey: string }> = {
-  scheduling: { labelKey: 'agents.platformScheduling', hintKey: 'agents.platformSchedulingHint' },
-  reports: { labelKey: 'agents.platformReports', hintKey: 'agents.platformReportsHint' },
   workspace: { labelKey: 'agents.platformWorkspace', hintKey: 'agents.platformWorkspaceHint' },
 }
 
