@@ -17,25 +17,31 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.runtime_capability import build_agent_capability_profile
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
-from apps.tenant_app_service.skills.resolution import get_default_skill_resolver
+from apps.tenant_app_service.agent_catalog.adapters import resolve_assignable_skills
+from apps.tenant_app_service.skills.resolution import get_default_skill_resolver, reset_default_skill_resolver
 
 from tests.conftest import project_root
 
 pytestmark = pytest.mark.integration
 
 
-def _ensure_builtin_skills_on_disk() -> None:
-    skills_dst = Path(os.environ["DATA_ROOT_PATH"]) / "skills"
-    marker = skills_dst / "task-scheduler" / "SKILL.md"
-    if not marker.is_file():
-        skills_dst.mkdir(parents=True, exist_ok=True)
-        shutil.copytree(project_root / "config" / "skills", skills_dst, dirs_exist_ok=True)
+@pytest.fixture(autouse=True)
+def _sync_repo_builtin_skills_to_data_root():
+    """Resolver reads ``EnvConfig.DATA_ROOT_PATH/skills``, not repo ``config/skills``."""
+    from apps.config import EnvConfig
+
+    data_root = Path(EnvConfig.DATA_ROOT_PATH or os.environ["DATA_ROOT_PATH"])
+    skills_dst = data_root / "skills"
+    skills_dst.mkdir(parents=True, exist_ok=True)
+    shutil.copytree(project_root / "config" / "skills", skills_dst, dirs_exist_ok=True)
+    reset_default_skill_resolver()
+    get_default_skill_resolver().clear_cache()
+    yield
     get_default_skill_resolver().clear_cache()
 
 
 @pytest.mark.asyncio
 async def test_task_scheduler_skill_agent_excludes_workspace_tools(async_db_session: AsyncSession):
-    _ensure_builtin_skills_on_disk()
     suffix = uuid4().hex[:8]
     tenant = Tenant(name=f"cap-{suffix}", slug=f"cap-{suffix}", status="active")
     async_db_session.add(tenant)
@@ -77,6 +83,11 @@ async def test_task_scheduler_skill_agent_excludes_workspace_tools(async_db_sess
     await async_db_session.commit()
 
     actor = ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role)
+    assignable = resolve_assignable_skills(tenant_id=tenant.id, user_id=user.id)
+    scheduler = next((skill for skill in assignable if skill.name == "task-scheduler"), None)
+    assert scheduler is not None, "task-scheduler builtin skill must be on DATA_ROOT/skills for this test"
+    assert "list_scheduled_tasks" in scheduler.tools
+
     profile = await build_agent_capability_profile(
         async_db_session,
         tenant_id=tenant.id,
