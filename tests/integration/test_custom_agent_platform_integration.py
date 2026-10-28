@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
+import os
+import shutil
 from datetime import UTC, datetime
+from pathlib import Path
 from uuid import uuid4
 
 import pytest
@@ -14,12 +17,25 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.runtime_capability import build_agent_capability_profile
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
+from apps.tenant_app_service.skills.resolution import get_default_skill_resolver
+
+from tests.conftest import project_root
 
 pytestmark = pytest.mark.integration
 
 
+def _ensure_builtin_skills_on_disk() -> None:
+    skills_dst = Path(os.environ["DATA_ROOT_PATH"]) / "skills"
+    marker = skills_dst / "task-scheduler" / "SKILL.md"
+    if not marker.is_file():
+        skills_dst.mkdir(parents=True, exist_ok=True)
+        shutil.copytree(project_root / "config" / "skills", skills_dst, dirs_exist_ok=True)
+    get_default_skill_resolver().clear_cache()
+
+
 @pytest.mark.asyncio
-async def test_scheduling_only_custom_agent_excludes_workspace_tools(async_db_session: AsyncSession):
+async def test_task_scheduler_skill_agent_excludes_workspace_tools(async_db_session: AsyncSession):
+    _ensure_builtin_skills_on_disk()
     suffix = uuid4().hex[:8]
     tenant = Tenant(name=f"cap-{suffix}", slug=f"cap-{suffix}", status="active")
     async_db_session.add(tenant)
@@ -44,9 +60,9 @@ async def test_scheduling_only_custom_agent_excludes_workspace_tools(async_db_se
         description="scheduling only",
         system_prompt="Run schedules.",
         config={
-            "platform_capabilities": ["scheduling"],
+            "platform_capabilities": [],
             "default_tools": [],
-            "skills": [],
+            "skills": ["task-scheduler"],
             "knowledge_base_ids": [],
             "data_source_ids": [],
             "api_connector_ids": [],
@@ -66,12 +82,12 @@ async def test_scheduling_only_custom_agent_excludes_workspace_tools(async_db_se
         tenant_id=tenant.id,
         actor=actor,
         agent_id=agent.id,
-        assignable_skills=[],
     )
     assert profile is not None
     allowed = set(profile.allowed_tool_names or [])
     assert "run_bash_script" not in allowed
     assert "create_report" not in allowed
+    assert "task-scheduler" in set(profile.allowed_skill_names or [])
     assert "list_scheduled_tasks" in allowed
     assert "schedule_task" in allowed
 

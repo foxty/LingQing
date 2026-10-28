@@ -65,21 +65,21 @@ platform:
     retrieve_resource_context:
       limit: 5
     create_report:
-      limit: 10
+      limit: 5
     get_report:
-      limit: 8
+      limit: 5
     update_report:
-      limit: 10
+      limit: 5
     list_scheduled_tasks:
-      limit: 10
+      limit: 5
     get_scheduled_task:
-      limit: 10
+      limit: 5
     schedule_task:
-      limit: 5
+      limit: 3
     update_scheduled_task:
-      limit: 5
+      limit: 3
     cancel_scheduled_task:
-      limit: 5
+      limit: 3
       hitl:
         mode: always
 system_agents:
@@ -90,20 +90,12 @@ system_agents:
       You are a professional AI assistant on the LingQing enterprise platform.
       Help enterprise users with daily work, from quick Q&A to multi-step tasks.
     default_tools:
-      - hitl_test_echo
       - run_bash_script
       - load_skill
+      - unload_skill
       - read_skill_file
       - search_documents
       - retrieve_resource_context
-      - create_report
-      - get_report
-      - update_report
-      - list_scheduled_tasks
-      - get_scheduled_task
-      - schedule_task
-      - update_scheduled_task
-      - cancel_scheduled_task
     tags:
       - general
       - assistant

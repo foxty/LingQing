@@ -79,4 +79,6 @@ class TestSkillTemplateResolution:
         tools = manager_with_skills.get_tools([], mock_runtime)
         tool_names = {tool.name for tool in tools}
 
-        assert {"hitl_test_echo", "load_skill"}.issubset(tool_names)
+        assert "load_skill" in tool_names
+        assert "create_report" not in tool_names
+        assert "schedule_task" not in tool_names
