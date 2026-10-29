@@ -29,6 +29,7 @@ class _FakeResolver:
         user_id: int | None = None,
         force_reload: bool = False,
         type_filter: SkillType | None = None,
+        include_disabled: bool = False,
     ) -> dict[str, SkillConfig]:
         self.resolve_calls.append(
             {
@@ -36,6 +37,7 @@ class _FakeResolver:
                 "user_id": user_id,
                 "force_reload": force_reload,
                 "type_filter": type_filter,
+                "include_disabled": include_disabled,
             }
         )
         if type_filter is None:
@@ -87,8 +89,11 @@ def test_list_skills_delegates_to_resolver(tmp_path) -> None:
         SkillType.TENANT,
         SkillType.PERSONAL,
     }
-    # Every call asked for the same tenant/user.
-    assert all(c["tenant_id"] == 1 and c["user_id"] == 1 for c in resolver.resolve_calls)
+    # Every call asked for the same tenant/user and includes disabled for UI listing.
+    assert all(
+        c["tenant_id"] == 1 and c["user_id"] == 1 and c["include_disabled"] is True
+        for c in resolver.resolve_calls
+    )
     # Aggregation surface: 2 unique skills returned.
     assert {s.name for s in result} == {"alpha", "beta"}
 

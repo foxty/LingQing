@@ -648,6 +648,13 @@ class SkillRepository:
 
         return tools
 
+    def is_skill_enabled(self, skill: SkillConfig) -> bool:
+        """Return whether the skill is enabled for agent runtime (config.json)."""
+        if skill.locator is None or not skill.locator.host_skill_dir:
+            return True
+        config = self._config_store.read_config(skill.locator.host_skill_dir, skill.name)
+        return config.enabled if config else True
+
     def toggle_enabled(self, skill_dir: str, skill_name: str, enabled: bool) -> bool:
         return self._config_store.toggle_enabled(skill_dir, skill_name, enabled)
 
