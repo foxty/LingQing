@@ -24,6 +24,14 @@ async def resolve_latest_ai_message_id_for_session(
     return run_ai.message_id if run_ai and run_ai.message_id else None
 
 
+async def feedback_message_id_exists(db: AsyncSession, message_id: str) -> bool:
+    main_repo = MainMessageRepository(db)
+    if await main_repo.get_by_message_id_only(message_id):
+        return True
+    run_repo = AgentRunMessageRepository(db)
+    return await run_repo.get_message_by_message_id(message_id) is not None
+
+
 async def update_message_metadata_for_feedback(
     db: AsyncSession,
     *,

@@ -388,17 +388,7 @@ class ThreadService(ChatServiceBase):
             domain_msg = chat_message_to_domain(agent_run_message_to_chat_message(db_msg))
             return domain_message_to_api(domain_msg)
 
-        from apps.tenant_app_service.chat.message_repository import MessageRepository
-
-        legacy = await MessageRepository(self.db).get_tool_message_by_call_id(
-            thread_id,
-            tool_call_id,
-            session_id=session_id,
-        )
-        if legacy is None:
-            return None
-        domain_msg = chat_message_to_domain(legacy)
-        return domain_message_to_api(domain_msg)
+        return None
 
     async def agent_thinking_effort_control(self, agent_id: int, actor: ActorContext) -> dict[str, object]:
         """Workbench thinking control from the agent model profile DB snapshot."""

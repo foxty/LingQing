@@ -13,7 +13,7 @@ graph TD
     B --> C["Chat Service\n(ChatService)"]
     B --> D["Agent Pool\n(AgentPool)"]
     B --> E["Thread Management\n(ThreadRepository)"]
-    B --> F["Message Repository\n(MessageRepository)"]
+    B --> F["Timeline Stores\n(Main + AgentRun repos)"]
 
     C --> G["Agent Execution\n(AgentBase)"]
     D --> G
@@ -142,7 +142,7 @@ graph TD
 - **Chat Service** (`ChatService`): Orchestrates chat operations
 - **Agent Pool** (`AgentPool`): Manages agent instances
 - **Thread Management** (`ThreadRepository`): Handles conversation threads
-- **Message Repository** (`MessageRepository`): Persists conversation messages
+- **Timeline stores** (`MainMessageRepository`, `AgentRunMessageRepository`): Main transcript and per-run message persistence (legacy `chat_messages` is backfill-only)
 
 ### 4. Agent Execution Engine
 

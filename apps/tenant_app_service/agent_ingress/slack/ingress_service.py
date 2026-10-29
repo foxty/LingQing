@@ -115,6 +115,10 @@ class SlackIngressService:
             return
         thread_id, agent_id = resolved
 
+        # prepare/complete chat turns open their own committed sessions; persist the
+        # Slack→chat thread mapping first so FK inserts can see chat_threads.
+        await self.db.commit()
+
         message_text = strip_bot_mention(event.text, event.bot_user_id) if event.source == "app_mention" else event.text
         if not message_text.strip():
             await self._post_ephemeral(bot_token, event, slack_user_message(SlackMessageKey.EMPTY_MENTION_MESSAGE))

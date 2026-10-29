@@ -570,16 +570,11 @@ async def test_prepare_skips_legacy_human_persist_for_normal_send():
 
 
 @pytest.mark.asyncio
-async def test_get_tool_call_detail_falls_back_to_legacy_chat_messages():
-    from apps.shared.db.models import ChatMessage
+async def test_get_tool_call_detail_returns_none_when_run_store_misses():
     from apps.tenant_app_service.chat.thread_service import ThreadService
 
     db = AsyncMock()
     service = ThreadService(tenant_id=1, db=db)
-    legacy_tool = MagicMock(spec=ChatMessage)
-    legacy_tool.thread_id = "thread-1"
-    legacy_tool.type = "tool"
-    legacy_tool.additional_kwargs = {"tool_call_id": "call_abc"}
 
     with patch(
         "apps.tenant_app_service.chat.agent_run_repository.AgentRunRepository.get_by_session_id",
@@ -591,29 +586,13 @@ async def test_get_tool_call_detail_falls_back_to_legacy_chat_messages():
             new_callable=AsyncMock,
             return_value=None,
         ):
-            with patch(
-                "apps.tenant_app_service.chat.message_repository.MessageRepository.get_tool_message_by_call_id",
-                new_callable=AsyncMock,
-                return_value=legacy_tool,
-            ) as legacy_get:
-                with patch(
-                    "apps.tenant_app_service.chat.thread_service.chat_message_to_domain",
-                    return_value=MagicMock(),
-                ) as to_domain:
-                    with patch(
-                        "apps.tenant_app_service.chat.thread_service.domain_message_to_api",
-                        return_value=MagicMock(role="tool"),
-                    ):
-                        result = await service.get_tool_call_detail(
-                            thread_id="thread-1",
-                            tool_call_id="call_abc",
-                            session_id="sess-1",
-                        )
+            result = await service.get_tool_call_detail(
+                thread_id="thread-1",
+                tool_call_id="call_abc",
+                session_id="sess-1",
+            )
 
-    assert result is not None
-    assert result.role == "tool"
-    legacy_get.assert_awaited_once_with("thread-1", "call_abc", session_id="sess-1")
-    to_domain.assert_called_once_with(legacy_tool)
+    assert result is None
 
 
 @pytest.mark.asyncio

@@ -9,6 +9,7 @@ from apps.tenant_app_service.agent_ingress.slack.markdown_blocks import SlackMar
 from apps.tenant_app_service.agent_ingress.slack.markdown_delivery import deliver_markdown_to_slack
 from apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher import ImageFetcher
 from apps.tenant_app_service.chat.feedback_message_lookup import (
+    feedback_message_id_exists,
     resolve_latest_ai_message_id_for_session,
     update_message_metadata_for_feedback,
 )
@@ -22,15 +23,16 @@ async def resolve_feedback_message_id(
     thread_id: str,
 ) -> str | None:
     """Resolve AI message_id from chat response or latest session message."""
-    if message_id:
+    if message_id and await feedback_message_id_exists(db_session, message_id):
         return message_id
     if not session_id:
-        return None
-    return await resolve_latest_ai_message_id_for_session(
+        return message_id
+    resolved = await resolve_latest_ai_message_id_for_session(
         db_session,
         thread_id=thread_id,
         session_id=session_id,
     )
+    return resolved or message_id
 
 
 async def post_slack_reply_with_feedback(
