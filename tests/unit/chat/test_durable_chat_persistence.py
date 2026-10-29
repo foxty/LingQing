@@ -61,6 +61,7 @@ from apps.tenant_app_service.chat.streaming import (
     STREAM_ERROR_KIND_RATE_LIMIT,
     STREAM_ERROR_KIND_TIMEOUT,
     format_user_stream_error,
+    is_transient_postgres_connection_error,
     stream_error_kind,
     user_stream_error_sse_payload,
 )
@@ -348,6 +349,15 @@ async def test_chat_stream_emits_heartbeat_while_agent_is_idle(chat_service, cha
 )
 def test_format_user_stream_error_maps_known_failures(error, expected_message):
     assert format_user_stream_error(error) == expected_message
+
+
+def test_is_transient_postgres_connection_error_admin_shutdown():
+    class _PgOpError(Exception):
+        __module__ = "psycopg.errors"
+
+    err = _PgOpError("terminating connection due to administrator command")
+    assert is_transient_postgres_connection_error(err)
+    assert "Database connection lost" in format_user_stream_error(err)
 
 
 @pytest.mark.parametrize(

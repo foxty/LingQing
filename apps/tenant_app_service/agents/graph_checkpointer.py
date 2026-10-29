@@ -11,7 +11,7 @@ from apps.shared.utils.logger import get_logger
 logger = get_logger(__name__)
 
 _checkpointer: Any | None = None
-_checkpointer_owner: Any | None = None
+_checkpointer_pool: Any | None = None
 
 
 def get_langgraph_checkpointer() -> Any | None:
@@ -21,7 +21,7 @@ def get_langgraph_checkpointer() -> Any | None:
 
 async def init_langgraph_checkpointer() -> Any:
     """Create and store the LangGraph checkpointer (call from app lifespan)."""
-    global _checkpointer, _checkpointer_owner
+    global _checkpointer, _checkpointer_pool
     if _checkpointer is not None:
         return _checkpointer
 
@@ -33,6 +33,8 @@ async def init_langgraph_checkpointer() -> Any:
         return _checkpointer
 
     from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+    from psycopg.rows import dict_row
+    from psycopg_pool import AsyncConnectionPool
 
     conn_string = build_postgres_psycopg_url(
         user=EnvConfig.TENANT_APP_DB_USER,
@@ -42,18 +44,26 @@ async def init_langgraph_checkpointer() -> Any:
         db_name=EnvConfig.TENANT_APP_DB_NAME,
         ssl_mode=EnvConfig.TENANT_APP_DB_SSL_MODE or None,
     )
-    owner = AsyncPostgresSaver.from_conn_string(conn_string)
-    _checkpointer = await owner.__aenter__()
-    _checkpointer_owner = owner
+    pool = AsyncConnectionPool(
+        conninfo=conn_string,
+        min_size=1,
+        max_size=10,
+        kwargs={"autocommit": True, "prepare_threshold": 0, "row_factory": dict_row},
+        check=AsyncConnectionPool.check_connection,
+        reconnect_timeout=120.0,
+    )
+    await pool.open()
+    _checkpointer_pool = pool
+    _checkpointer = AsyncPostgresSaver(pool)
     await _checkpointer.setup()
-    logger.info("LangGraph checkpointer: AsyncPostgresSaver initialized")
+    logger.info("LangGraph checkpointer: AsyncPostgresSaver (pool) initialized")
     return _checkpointer
 
 
 async def shutdown_langgraph_checkpointer() -> None:
     """Release checkpointer resources on app shutdown."""
-    global _checkpointer, _checkpointer_owner
-    if _checkpointer_owner is not None:
-        await _checkpointer_owner.__aexit__(None, None, None)
+    global _checkpointer, _checkpointer_pool
     _checkpointer = None
-    _checkpointer_owner = None
+    if _checkpointer_pool is not None:
+        await _checkpointer_pool.close()
+    _checkpointer_pool = None
