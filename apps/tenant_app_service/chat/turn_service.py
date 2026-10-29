@@ -29,6 +29,7 @@ from apps.tenant_app_service.chat.session_summary_manager import SessionSummaryM
 from apps.tenant_app_service.chat.streaming import (
     PreparedChatStream,
     format_user_stream_error,
+    is_transient_postgres_connection_error,
     user_stream_error_sse_payload,
 )
 from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
@@ -574,6 +575,40 @@ class ChatTurnService(ChatServiceBase):
 
     _format_user_stream_error = staticmethod(format_user_stream_error)
 
+    async def _iter_graph_sse_events(
+        self,
+        agent_graph,
+        graph_input,
+        *,
+        config,
+        runtime_context,
+        max_pg_retries: int = 3,
+    ) -> AsyncIterator[str]:
+        """Yield SSE lines from LangGraph; retry only before first event (checkpoint read)."""
+        for attempt in range(max_pg_retries):
+            yielded = False
+            try:
+                async with session_tracker(runtime_context):
+                    async for event in agent_graph.astream_events(
+                        graph_input,
+                        config=config,
+                        version="v2",
+                    ):
+                        yielded = True
+                        sse_payload = self._stream_event_to_sse(event)
+                        if sse_payload:
+                            yield sse_payload
+                return
+            except Exception as exc:
+                if (
+                    not yielded
+                    and attempt + 1 < max_pg_retries
+                    and is_transient_postgres_connection_error(exc)
+                ):
+                    await asyncio.sleep(0.25 * (attempt + 1))
+                    continue
+                raise
+
     async def run_stream_turn(
         self,
         *,
@@ -612,19 +647,17 @@ class ChatTurnService(ChatServiceBase):
 
         stream_failed = False
         try:
-            async with session_tracker(runtime_context):
-                async for event in agent_graph.astream_events(
-                    {
-                        "messages": initial_messages,
-                        "loop_count": 0,
-                        "tool_call_counts": {},
-                    },
-                    config=config,
-                    version="v2",
-                ):
-                    sse_payload = self._stream_event_to_sse(event)
-                    if sse_payload:
-                        yield sse_payload
+            async for sse_payload in self._iter_graph_sse_events(
+                agent_graph,
+                {
+                    "messages": initial_messages,
+                    "loop_count": 0,
+                    "tool_call_counts": {},
+                },
+                config=config,
+                runtime_context=runtime_context,
+            ):
+                yield sse_payload
         except Exception:
             stream_failed = True
             raise
@@ -682,21 +715,19 @@ class ChatTurnService(ChatServiceBase):
 
         stream_failed = False
         try:
-            async with session_tracker(runtime_context):
-                async for event in agent_graph.astream_events(
-                    Command(
-                        resume={
-                            "interaction_type": "tool_approval",
-                            "action": "approved",
-                            "proposal_id": proposal_id,
-                        }
-                    ),
-                    config=config,
-                    version="v2",
-                ):
-                    sse_payload = self._stream_event_to_sse(event)
-                    if sse_payload:
-                        yield sse_payload
+            async for sse_payload in self._iter_graph_sse_events(
+                agent_graph,
+                Command(
+                    resume={
+                        "interaction_type": "tool_approval",
+                        "action": "approved",
+                        "proposal_id": proposal_id,
+                    }
+                ),
+                config=config,
+                runtime_context=runtime_context,
+            ):
+                yield sse_payload
         except Exception:
             stream_failed = True
             raise

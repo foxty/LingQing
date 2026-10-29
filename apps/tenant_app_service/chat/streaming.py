@@ -23,6 +23,24 @@ STREAM_ERROR_KIND_INTERNAL = "internal"
 
 STREAM_ERROR_GENERIC_MESSAGE = "Something went wrong while processing your request. Please try again."
 
+_TRANSIENT_PG_MARKERS = (
+    "connection is closed",
+    "terminating connection",
+    "administrator command",
+    "connection reset",
+    "server closed the connection",
+    "could not connect",
+    "connection refused",
+)
+
+
+def is_transient_postgres_connection_error(error: BaseException) -> bool:
+    """True when Postgres was restarted or the TCP session dropped mid-use."""
+    if not type(error).__module__.startswith("psycopg"):
+        return False
+    lowered = str(error).lower()
+    return any(marker in lowered for marker in _TRANSIENT_PG_MARKERS)
+
 
 def format_user_stream_error(error: BaseException) -> str:
     """Map an exception to a short, user-safe stream error message."""
@@ -37,6 +55,8 @@ def format_user_stream_error(error: BaseException) -> str:
         return "Configuration error: Invalid API credentials."
     if "timeout" in lowered:
         return "Request timed out. Please try again."
+    if is_transient_postgres_connection_error(error):
+        return "Database connection lost. Retry the message; restart the backend if it keeps failing."
     if "connection" in lowered:
         return "Connection error. Please check your network and try again."
     if error_message.strip():
@@ -56,7 +76,7 @@ def stream_error_kind(error: BaseException) -> str:
         return STREAM_ERROR_KIND_AUTH
     if "timeout" in lowered:
         return STREAM_ERROR_KIND_TIMEOUT
-    if "connection" in lowered:
+    if is_transient_postgres_connection_error(error) or "connection" in lowered:
         return STREAM_ERROR_KIND_CONNECTION
     return STREAM_ERROR_KIND_INTERNAL
 
