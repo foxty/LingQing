@@ -26,6 +26,18 @@ def truncate_preview(text: str | None, *, max_len: int = 200) -> str | None:
     return stripped[: max_len - 3] + "..."
 
 
+@dataclass(frozen=True)
+class FeedbackTargetMessage:
+    """AI message row used to anchor feedback (main timeline or run store)."""
+
+    id: int
+    message_id: str
+    thread_id: str
+    session_id: str | None
+    agent_id: int | None
+    content: str | None = None
+
+
 @dataclass
 class MessageFeedbackDomain:
     """Domain representation of user feedback on an AI message."""

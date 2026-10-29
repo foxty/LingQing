@@ -7,8 +7,19 @@ from datetime import datetime
 from sqlalchemy import and_, case, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.db.models import ChatMessage, ChatThread, MessageFeedback, User
-from apps.tenant_app_service.message_feedback.domain import MessageFeedbackDomain, truncate_preview
+from apps.shared.db.models import (
+    AgentRun,
+    AgentRunMessage,
+    ChatThread,
+    MessageFeedback,
+    ThreadMainMessage,
+    User,
+)
+from apps.tenant_app_service.message_feedback.domain import (
+    FeedbackTargetMessage,
+    MessageFeedbackDomain,
+    truncate_preview,
+)
 
 
 def feedback_row_to_domain(row: MessageFeedback) -> MessageFeedbackDomain:
@@ -218,7 +229,7 @@ class MessageFeedbackRepository:
         page = rows[:limit]
         return page, has_more
 
-    async def get_ai_message(self, tenant_id: int, message_id: str) -> ChatMessage | None:
+    async def get_ai_message(self, tenant_id: int, message_id: str) -> FeedbackTargetMessage | None:
         by_id = await self.get_ai_messages_by_ids(tenant_id, [message_id])
         return by_id.get(message_id)
 
@@ -226,24 +237,55 @@ class MessageFeedbackRepository:
         self,
         tenant_id: int,
         message_ids: list[str],
-    ) -> dict[str, ChatMessage]:
+    ) -> dict[str, FeedbackTargetMessage]:
         if not message_ids:
             return {}
         unique_ids = list(dict.fromkeys(message_ids))
-        result = await self.db.execute(
-            select(ChatMessage)
-            .join(ChatThread, ChatMessage.thread_id == ChatThread.id)
+        found: dict[str, FeedbackTargetMessage] = {}
+
+        main_result = await self.db.execute(
+            select(ThreadMainMessage)
+            .join(ChatThread, ThreadMainMessage.thread_id == ChatThread.id)
             .where(
-                ChatMessage.message_id.in_(unique_ids),
-                ChatMessage.type == "ai",
                 ChatThread.tenant_id == tenant_id,
+                ThreadMainMessage.type == "ai",
+                ThreadMainMessage.message_id.in_(unique_ids),
             )
         )
-        return {
-            message.message_id: message
-            for message in result.scalars().all()
-            if message.message_id is not None
-        }
+        for row in main_result.scalars():
+            if row.message_id:
+                found[row.message_id] = FeedbackTargetMessage(
+                    id=row.id,
+                    message_id=row.message_id,
+                    thread_id=row.thread_id,
+                    session_id=row.session_id,
+                    agent_id=row.agent_id,
+                    content=row.content,
+                )
+
+        missing = [mid for mid in unique_ids if mid not in found]
+        if missing:
+            run_result = await self.db.execute(
+                select(AgentRunMessage)
+                .join(AgentRun, AgentRunMessage.run_id == AgentRun.id)
+                .where(
+                    AgentRun.tenant_id == tenant_id,
+                    AgentRunMessage.type == "ai",
+                    AgentRunMessage.message_id.in_(missing),
+                )
+            )
+            for row in run_result.scalars():
+                if row.message_id and row.message_id not in found:
+                    found[row.message_id] = FeedbackTargetMessage(
+                        id=row.id,
+                        message_id=row.message_id,
+                        thread_id=row.thread_id,
+                        session_id=row.session_id,
+                        agent_id=row.agent_id,
+                        content=row.content,
+                    )
+
+        return found
 
     async def get_human_previews_for_sessions(
         self,
@@ -259,16 +301,16 @@ class MessageFeedbackRepository:
         session_ids = {session_id for _, session_id in pairs}
         result = await self.db.execute(
             select(
-                ChatMessage.thread_id,
-                ChatMessage.session_id,
-                ChatMessage.content,
+                ThreadMainMessage.thread_id,
+                ThreadMainMessage.session_id,
+                ThreadMainMessage.content,
             )
             .where(
-                ChatMessage.thread_id.in_(thread_ids),
-                ChatMessage.session_id.in_(session_ids),
-                ChatMessage.type == "human",
+                ThreadMainMessage.thread_id.in_(thread_ids),
+                ThreadMainMessage.session_id.in_(session_ids),
+                ThreadMainMessage.type == "human",
             )
-            .order_by(ChatMessage.created_at.asc())
+            .order_by(ThreadMainMessage.created_at.asc())
         )
         previews: dict[tuple[str, str], str | None] = {}
         for thread_id, session_id, content in result.all():
@@ -289,13 +331,13 @@ class MessageFeedbackRepository:
         if not session_id:
             return None
         result = await self.db.execute(
-            select(ChatMessage.content)
+            select(ThreadMainMessage.content)
             .where(
-                ChatMessage.thread_id == thread_id,
-                ChatMessage.session_id == session_id,
-                ChatMessage.type == "human",
+                ThreadMainMessage.thread_id == thread_id,
+                ThreadMainMessage.session_id == session_id,
+                ThreadMainMessage.type == "human",
             )
-            .order_by(ChatMessage.created_at.asc())
+            .order_by(ThreadMainMessage.created_at.asc())
             .limit(1)
         )
         content = result.scalar_one_or_none()

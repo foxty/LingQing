@@ -14,8 +14,10 @@ from apps.tenant_app_service.message_feedback.domain import (
     FEEDBACK_RATING_NEGATIVE,
     FEEDBACK_RATING_POSITIVE,
     FEEDBACK_SOURCE_PORTAL,
+    FEEDBACK_SOURCE_SLACK,
     FeedbackRating,
     FeedbackSource,
+    FeedbackTargetMessage,
     MessageFeedbackDomain,
     truncate_preview,
 )
@@ -50,11 +52,17 @@ class MessageFeedbackService:
         self.repository = MessageFeedbackRepository(db)
         self.thread_service = ThreadService(tenant_id, db)
 
-    async def _ensure_thread_access(self, thread_id: str, user_id: int) -> None:
+    async def _ensure_thread_access(
+        self,
+        thread_id: str,
+        user_id: int,
+        *,
+        source: FeedbackSource = FEEDBACK_SOURCE_PORTAL,
+    ) -> None:
         thread = await self.thread_service.get_thread(thread_id)
         if not thread:
             raise ResourceNotFoundError(f"Thread {thread_id} not found")
-        if thread.user_id != user_id:
+        if source != FEEDBACK_SOURCE_SLACK and thread.user_id != user_id:
             raise AuthorizationError("Access denied")
 
     async def _resolve_ai_message(self, thread_id: str, message_id: str):
@@ -73,7 +81,7 @@ class MessageFeedbackService:
 
     async def _upsert_for_ai_message(
         self,
-        ai_message,
+        ai_message: FeedbackTargetMessage,
         *,
         user_id: int,
         rating: FeedbackRating,
@@ -81,7 +89,7 @@ class MessageFeedbackService:
         source: FeedbackSource = FEEDBACK_SOURCE_PORTAL,
         external_ref: dict | None = None,
     ) -> FeedbackResponse:
-        await self._ensure_thread_access(ai_message.thread_id, user_id)
+        await self._ensure_thread_access(ai_message.thread_id, user_id, source=source)
         agent_id = await self._resolve_agent_id(ai_message.thread_id, ai_message.agent_id)
         now = datetime.now(UTC)
         domain = await self.repository.upsert(

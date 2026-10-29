@@ -1,9 +1,16 @@
 #!/usr/bin/env python3
-"""One-shot ops: copy chat_messages sessions into thread_main_messages + agent_runs.
+"""Mandatory upgrade step: copy chat_messages sessions into main timeline + agent runs.
 
-Not imported by the runtime app. Run after migration 079:
+The runtime app reads/writes thread_main_messages and agent_run_messages only;
+chat_messages is source data for this script (and may remain until a later drop).
+
+Run after migration 079:
 
     uv run --env-file .env.local scripts/backfill_agent_runs_from_chat_messages.py
+
+Then verify:
+
+    uv run --env-file .env.local scripts/verify_chat_messages_backfill.py
 
 Idempotent per session_id (skips when agent_runs.session_id already exists).
 """

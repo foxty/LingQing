@@ -12,10 +12,9 @@ from jose import jwt
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from apps.shared.db.models import ChatMessage, ChatThread, Tenant, TenantMembership, User
+from apps.shared.db.models import ChatThread, Tenant, TenantMembership, User
 from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
 from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-from apps.tenant_app_service.chat.message_repository import MessageRepository
 from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.server import app
 from tests.integration.helpers.committed_chat_setup import seed_running_human_turn
@@ -134,62 +133,6 @@ async def durable_chat_setup(async_db_session: AsyncSession):
 
     app.dependency_overrides.clear()
     await test_engine.dispose()
-
-
-@pytest.mark.asyncio
-async def test_message_repository_session_query_helpers(durable_chat_setup: dict):
-    thread_id = durable_chat_setup["thread_id"]
-    agent_id = durable_chat_setup["agent_id"]
-    session_id = f"sess-{uuid4().hex[:8]}"
-    baseline = datetime.now(UTC)
-
-    async with durable_chat_setup["session_local"]() as db:
-        repo = MessageRepository(db)
-        assert await repo.get_latest_human_message(thread_id, agent_id) is None
-        assert await repo.has_ai_message_for_session(thread_id, agent_id, session_id) is False
-
-        db.add(
-            ChatMessage(
-                message_id=f"{thread_id}-human",
-                thread_id=thread_id,
-                type="human",
-                content="hello",
-                session_id=session_id,
-                agent_id=agent_id,
-                created_at=baseline,
-            )
-        )
-        await db.flush()
-
-        latest = await repo.get_latest_human_message(thread_id, agent_id)
-        assert latest is not None
-        assert latest.session_id == session_id
-        assert await repo.has_ai_message_for_session(thread_id, agent_id, session_id) is False
-
-        db.add(
-            ChatMessage(
-                message_id=f"{thread_id}-ai",
-                thread_id=thread_id,
-                type="ai",
-                content="hi back",
-                session_id=session_id,
-                agent_id=agent_id,
-                created_at=baseline + timedelta(seconds=1),
-            )
-        )
-        await db.flush()
-
-        assert await repo.has_ai_message_for_session(thread_id, agent_id, session_id) is True
-        assert await repo.has_messages_after_timestamp(thread_id, agent_id, baseline) is True
-        assert (
-            await repo.has_messages_after_timestamp(
-                thread_id,
-                agent_id,
-                baseline,
-                exclude_session_id=session_id,
-            )
-            is False
-        )
 
 
 @pytest.mark.asyncio

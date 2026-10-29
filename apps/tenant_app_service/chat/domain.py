@@ -11,7 +11,6 @@ from typing import TYPE_CHECKING, Any, Final, Literal
 
 from langchain_core.messages import SystemMessage
 
-from apps.shared.db.models import ChatMessage
 from apps.shared.domain.base_domain_model import BaseDomainModel
 
 if TYPE_CHECKING:
@@ -64,29 +63,6 @@ class ThreadDomain(BaseDomainModel):
 
     # Conversation state (loaded on demand from checkpointer)
     messages: list[MessageDomain] = field(default_factory=list)
-
-    def add_message_from_db(self, db_msg: ChatMessage) -> bool:
-        """Add a message from database to conversation.
-
-        Applies business rules for message filtering:
-        - Only accepts human, ai, tool message types
-
-        Args:
-            db_msg: Database ChatMessage object
-
-        Returns:
-            True if message was added, False if filtered out
-        """
-        # Import here to avoid circular imports
-        from apps.tenant_app_service.chat.adapters import chat_message_to_domain
-
-        if db_msg.type not in ("human", "ai", "tool"):
-            return False
-
-        message_domain = chat_message_to_domain(db_msg)
-
-        self.messages.append(message_domain)
-        return True
 
     def get_rounds(self) -> int:
         """Get conversation rounds (pairs of human-ai messages)."""

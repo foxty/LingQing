@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from sqlalchemy import select
 
-from apps.shared.db.models import ChatMessage, ChatThread, MessageFeedback
+from apps.shared.db.models import ChatThread, MessageFeedback, ThreadMainMessage
 from apps.shared.external_identity.repository import ExternalIdentityRepository
 from apps.tenant_app_service.agent_ingress.slack.feedback_blocks import ACTION_FEEDBACK_POSITIVE
 from apps.tenant_app_service.agent_ingress.slack.source_repository import SlackIdentitySourceRepository
@@ -36,7 +36,7 @@ async def _seed_feedback_context(slack_test_setup, *, message_id: str, slack_use
         await session.flush()
 
         session.add(
-            ChatMessage(
+            ThreadMainMessage(
                 message_id=f"{thread_id}-human",
                 thread_id=thread_id,
                 type="human",
@@ -46,7 +46,7 @@ async def _seed_feedback_context(slack_test_setup, *, message_id: str, slack_use
             )
         )
         session.add(
-            ChatMessage(
+            ThreadMainMessage(
                 message_id=message_id,
                 thread_id=thread_id,
                 type="ai",

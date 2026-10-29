@@ -144,6 +144,76 @@ async def test_get_or_create_thread_realigns_when_chat_thread_agent_differs():
 
 
 @pytest.mark.asyncio
+async def test_handle_message_commits_thread_before_chat_turn():
+    endpoint = MagicMock()
+    endpoint.id = 1
+    endpoint.tenant_id = 2
+    endpoint.enabled = True
+    endpoint.agent_id = 1
+
+    db = MagicMock()
+    db.commit = AsyncMock()
+
+    service = SlackIngressService(db=db)
+    service.repo = MagicMock()
+    service.repo.decrypt_bot_token = MagicMock(return_value="xoxb-test")
+    service.client = MagicMock()
+    service.client.chat_post_message = AsyncMock(return_value={"ts": "1.0"})
+    service.client.chat_post_ephemeral = AsyncMock()
+    service.identity_service = MagicMock()
+    bind_result = MagicMock()
+    bind_result.action = "allow"
+    bind_result.user_id = 4
+    bind_result.reason = None
+    service.identity_service.resolve_slack_user = AsyncMock(return_value=bind_result)
+    service.token_issuer = MagicMock()
+    service.token_issuer.issue = MagicMock(return_value="token")
+
+    event = _message_event(channel_type="channel", source="app_mention", text="<@UBOT> hi")
+
+    with (
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.is_eligible_slack_identity",
+            return_value=True,
+        ),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.user_has_chat_access",
+            new=AsyncMock(return_value=True),
+        ),
+        patch.object(service, "_get_endpoint", new=AsyncMock(return_value=endpoint)),
+        patch.object(
+            service,
+            "_resolve_thread_id",
+            new=AsyncMock(return_value=("2_4_1_new", 1)),
+        ),
+        patch.object(service, "_build_user_dto", new=AsyncMock(return_value=(MagicMock(id=4, role="admin"), "T"))),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.run_slack_chat_turn",
+            new=AsyncMock(
+                return_value=MagicMock(
+                    message_id="m1",
+                    session_id="s1",
+                    thinking_ts=None,
+                    reply_text="ok",
+                )
+            ),
+        ) as run_turn,
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.post_slack_reply_with_feedback",
+            new=AsyncMock(),
+        ),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.ingress_service.resolve_feedback_message_id",
+            new=AsyncMock(return_value="m1"),
+        ),
+    ):
+        await service.handle_message(event, endpoint_id=1)
+
+    db.commit.assert_awaited_once()
+    run_turn.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_get_or_create_thread_rebinds_when_chat_thread_deleted():
     stale_link = MagicMock()
     stale_link.chat_thread_id = "2_4_1_deleted"
