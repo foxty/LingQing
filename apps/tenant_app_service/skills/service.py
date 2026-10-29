@@ -68,14 +68,16 @@ class SkillService:
         )
         results: list[SkillInfo] = []
         for scope in scopes:
-            merged = self._resolver.resolve(tenant_id=tenant_id, user_id=user_id, type_filter=scope)
+            merged = self._resolver.resolve(
+                tenant_id=tenant_id, user_id=user_id, type_filter=scope, include_disabled=True
+            )
             for name, skill in merged.items():
                 results.append(self._to_info(skill))
         return results
 
     def get_skill(self, tenant_id: int, user_id: int, name: str) -> SkillInfo | None:
         """Return the highest-precedence skill with the given name."""
-        merged = self._resolver.resolve(tenant_id=tenant_id, user_id=user_id)
+        merged = self._resolver.resolve(tenant_id=tenant_id, user_id=user_id, include_disabled=True)
         skill = merged.get(name)
         return self._to_info(skill) if skill is not None else None
 

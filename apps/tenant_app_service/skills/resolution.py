@@ -54,6 +54,7 @@ class SkillResolver:
         user_id: int | None = None,
         force_reload: bool = False,
         type_filter: SkillType | None = None,
+        include_disabled: bool = False,
     ) -> dict[str, SkillConfig]:
         """Load skills from all applicable scopes.
 
@@ -62,6 +63,9 @@ class SkillResolver:
             user_id: User scope (within tenant); required for personal skills.
             force_reload: Bypass snapshot cache and re-read from disk.
             type_filter: If given, return only skills whose scope matches.
+            include_disabled: If ``False`` (default), omit skills toggled off in
+                ``config.json``. Management APIs pass ``True`` so the UI can
+                list and re-enable disabled skills.
 
         Returns:
             Mapping ``skill_name -> SkillConfig``. Each skill is tagged with
@@ -83,7 +87,12 @@ class SkillResolver:
 
         # Filter by scope if requested
         if type_filter is not None:
-            return {name: skill for name, skill in all_skills.items() if skill.scope == type_filter}
+            all_skills = {name: skill for name, skill in all_skills.items() if skill.scope == type_filter}
+
+        if not include_disabled:
+            all_skills = {
+                name: skill for name, skill in all_skills.items() if self._repo.is_skill_enabled(skill)
+            }
 
         return all_skills
 

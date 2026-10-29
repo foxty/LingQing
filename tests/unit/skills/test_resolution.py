@@ -330,3 +330,27 @@ class TestTypeFilter:
 
             assert r1 is not r2
             assert r1 == r2
+
+
+class TestSkillEnabledFilter:
+    def test_disabled_tenant_skill_excluded_from_default_resolve(self, empty_tool_registry):
+        import json
+
+        with tempfile.TemporaryDirectory() as data_root:
+            (Path(data_root) / "skills").mkdir(parents=True)
+            skill_dir = Path(data_root) / "tenants" / "tenant_1" / "skills" / "agent-browser"
+            skill_dir.mkdir(parents=True)
+            (skill_dir / "SKILL.md").write_text(
+                "---\nname: agent-browser\ndescription: Browser automation.\n---\n\nBody\n"
+            )
+            (skill_dir / "agent-browser.config.json").write_text(
+                json.dumps({"name": "agent-browser", "type": "tenant", "description": "", "enabled": False})
+            )
+
+            resolver = SkillResolver(data_root=data_root, tool_registry=empty_tool_registry)
+            runtime_skills = resolver.resolve(tenant_id=1, user_id=1)
+            all_skills = resolver.resolve(tenant_id=1, user_id=1, include_disabled=True)
+
+            assert "agent-browser" not in runtime_skills
+            assert "agent-browser" in all_skills
+            assert resolver.locate("agent-browser", tenant_id=1, user_id=1) is None
