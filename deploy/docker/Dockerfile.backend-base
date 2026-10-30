@@ -7,12 +7,16 @@ FROM python:3.11-slim
 
 # Install system dependencies (including dev tools for building packages).
 # Chromium + libs: required by Plotly/Kaleido (fig.to_image) for server-side chart SVG export.
+# Noto fonts: Kaleido/Chromium uses fontconfig; slim images lack CJK/Thai glyphs without these.
 RUN apt-get update && apt-get install -y \
     gcc \
     g++ \
     curl \
     git \
     postgresql-client \
+    fontconfig \
+    fonts-noto-cjk \
+    fonts-noto-core \
     chromium \
     libnss3 \
     libatk-bridge2.0-0 \
@@ -26,6 +30,7 @@ RUN apt-get update && apt-get install -y \
     libpango-1.0-0 \
     libcairo2 \
     libasound2 \
+    && fc-cache -f \
     && rm -rf /var/lib/apt/lists/*
 
 # Install uv for faster package management
