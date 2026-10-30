@@ -1,0 +1,8 @@
+FROM ubuntu/squid:6.6-24.04_edge
+
+COPY egress-proxy/squid.conf /etc/squid/squid.conf
+COPY egress-proxy/domains.default.txt /etc/squid/domains.default.txt
+COPY egress-proxy/entrypoint.sh /etc/squid/entrypoint.sh
+RUN chmod +x /etc/squid/entrypoint.sh
+
+ENTRYPOINT ["/bin/bash", "/etc/squid/entrypoint.sh"]

@@ -71,9 +71,14 @@ MEMORY_LIMIT = _read_env("SANDBOX_RUNNER_MEMORY_LIMIT", required=True)
 PIDS_LIMIT = _read_env("SANDBOX_RUNNER_PIDS_LIMIT", required=True)
 NETWORK_MODE = _read_env("SANDBOX_RUNNER_NETWORK_MODE", required=True)
 WORKSPACE_DATA_ROOT = _read_env("DATA_ROOT_PATH", required=True)
+EGRESS_PROXY_URL = _read_env("EGRESS_PROXY_URL", default="").strip()
 # Optional env vars forwarded into sandbox runner containers.
+_RUNNER_EGRESS_ENV: list[tuple[str, str]] = (
+    [("HTTP_PROXY", EGRESS_PROXY_URL), ("HTTPS_PROXY", EGRESS_PROXY_URL)] if EGRESS_PROXY_URL else []
+)
 RUNNER_PASSTHROUGH_ENV: list[tuple[str, str]] = [
     ("SSL_NO_VERIFY", _read_env("SANDBOX_RUNNER_SSL_NO_VERIFY", default="")),
+    *_RUNNER_EGRESS_ENV,
 ]
 SANDBOX_CONTROLLER_API_TOKEN = _read_env("SANDBOX_CONTROLLER_API_TOKEN", default="").strip()
 
@@ -214,6 +219,7 @@ _skill_package_installer = SkillPackageInstaller(
     memory_limit=MEMORY_LIMIT,
     pids_limit=PIDS_LIMIT,
     docker_bind_src=_docker_bind_src,
+    runner_passthrough_env=RUNNER_PASSTHROUGH_ENV,
 )
 
 

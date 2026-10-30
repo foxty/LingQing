@@ -59,7 +59,7 @@ jobs:
       - name: Push alias tag (no rebuild)
         if: inputs.alias_tag != ''
         run: |
-          for image in backend-app frontend sandbox-controller sandbox-runner; do
+          for image in backend-app frontend sandbox-controller sandbox-runner egress-proxy; do
             docker buildx imagetools create \
               -t "${REGISTRY_URL}/${image}:${{ inputs.alias_tag }}" \
               "${REGISTRY_URL}/${image}:${{ inputs.version }}"
@@ -74,7 +74,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Image | Tag |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
-          for image in backend-app frontend sandbox-controller sandbox-runner; do
+          for image in backend-app frontend sandbox-controller sandbox-runner egress-proxy; do
             echo "| \`${REGISTRY_URL}/${image}\` | \`${VERSION}\` |" >> "$GITHUB_STEP_SUMMARY"
           done
           if [[ -n "$ALIAS_TAG" ]]; then

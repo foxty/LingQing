@@ -46,6 +46,7 @@ def sandbox_server_module(monkeypatch: pytest.MonkeyPatch, tmp_path: Path):
         "DATA_ROOT_PATH": str(data_root),
         "DATA_ROOT_HOST_PATH": str(data_root),
         "SANDBOX_RUNNER_SSL_NO_VERIFY": "",
+        "EGRESS_PROXY_URL": "",
     }
     for key, value in env.items():
         monkeypatch.setenv(key, value)

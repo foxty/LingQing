@@ -1,0 +1,7 @@
+.pypi.org
+.pythonhosted.org
+.npmjs.org
+.yarnpkg.com
+.github.com
+.githubusercontent.com
+.google.com
