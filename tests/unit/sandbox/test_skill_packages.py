@@ -21,7 +21,7 @@ async def test_ensure_skill_packages_installs_and_writes_stamp(tmp_path: Path) -
 
     calls: list[list[str]] = []
 
-    async def _fake_install_runner(cmd: list[str]) -> tuple[int, str]:
+    async def _fake_install_runner(cmd: list[str], *, container_name: str = "") -> tuple[int, str]:
         calls.append(cmd)
         return 0, "ok"
 
@@ -53,7 +53,7 @@ async def test_ensure_skill_packages_skips_when_hash_unchanged(tmp_path: Path) -
 
     calls: list[list[str]] = []
 
-    async def _fake_install_runner(cmd: list[str]) -> tuple[int, str]:
+    async def _fake_install_runner(cmd: list[str], *, container_name: str = "") -> tuple[int, str]:
         calls.append(cmd)
         return 0, "ok"
 
@@ -82,7 +82,7 @@ async def test_ensure_skill_packages_reinstalls_and_cleans_on_hash_change(tmp_pa
 
     calls: list[list[str]] = []
 
-    async def _fake_install_runner(cmd: list[str]) -> tuple[int, str]:
+    async def _fake_install_runner(cmd: list[str], *, container_name: str = "") -> tuple[int, str]:
         calls.append(cmd)
         return 0, "ok"
 
@@ -133,7 +133,7 @@ async def test_ensure_skill_packages_continues_on_install_failure(tmp_path: Path
 
     calls: list[list[str]] = []
 
-    async def _selective_fail_runner(cmd: list[str]) -> tuple[int, str]:
+    async def _selective_fail_runner(cmd: list[str], *, container_name: str = "") -> tuple[int, str]:
         # Fail the first skill, succeed on the second
         if "failing-skill" in str(cmd):
             return 1, "boom\nstack"
@@ -175,7 +175,7 @@ async def test_concurrent_installs_for_same_skill_use_lock(tmp_path: Path) -> No
     install_started = asyncio.Event()
     install_can_finish = asyncio.Event()
 
-    async def _slow_install_runner(cmd: list[str]) -> tuple[int, str]:
+    async def _slow_install_runner(cmd: list[str], *, container_name: str = "") -> tuple[int, str]:
         nonlocal call_count
         call_count += 1
         install_started.set()
@@ -229,7 +229,7 @@ async def test_temp_dir_cleanup_on_failure(tmp_path: Path) -> None:
     requirements_path = skills_root / "failing-skill" / "requirements.txt"
     _write_requirements(requirements_path, "invalid-package==999.999.999\n")
 
-    async def _fail_runner(cmd: list[str]) -> tuple[int, str]:
+    async def _fail_runner(cmd: list[str], *, container_name: str = "") -> tuple[int, str]:
         return 1, "ERROR: Could not find version"
 
     installer = SkillPackageInstaller(

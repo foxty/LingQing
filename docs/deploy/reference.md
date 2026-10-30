@@ -20,10 +20,27 @@ Internet
      - tenant-app-service      (APP_MODULE=tenant_app_service)
      - tenant-manager-service  (APP_MODULE=tenant_manager_service)
      - scheduler-service       (APP_MODULE=scheduler_service)
-     - sandbox-controller + chroma (+ optional docling-serve)
+     - sandbox-controller + egress-proxy (Squid allowlist) + chroma (+ optional docling-serve)
 
   -> External PostgreSQL
+
+  -> egress-clients network (sandbox runners only)
+     - ephemeral sandbox-runner containers (docker run from sandbox-controller)
+     - tenant-app-service (2nd NIC — SDK API reachable without backend-net DB/Chroma)
+     - egress-proxy (Squid) — all runner HTTP(S) via HTTP_PROXY; public domains from allowlist file
 ```
+
+### Sandbox egress (VM / Compose — minimal)
+
+Single-VM deploy uses one **egress-proxy** (Squid) for all sandbox runners:
+
+1. **Proxy env** — Runners get `HTTP_PROXY` / `HTTPS_PROXY` (compose sets `EGRESS_PROXY_URL` on sandbox-controller). SDK traffic to `tenant-app-service:8000` uses Squid **internal ACL** (not the public domain file).
+2. **Network** — Runners use `lingqing_egress-clients`; `tenant-app-service` is dual-homed for in-cluster API only.
+3. **Allowlist** — Platform defaults ship in the **`egress-proxy` image** (`deploy/docker/egress-proxy/domains.default.txt`; one Squid `dstdomain` per line, no comments). Operator supplement: `${DATA_ROOT_HOST_PATH}/egress/domains.custom.txt` (created empty on first start). After custom edits: `deploy/scripts/egress-proxy-reload.sh`. Upgrade the image tag to pick up default-domain changes.
+4. **Logs** — `${DATA_ROOT_HOST_PATH}/egress/logs/access.log` and `cache.log`. Entrypoint tails both to stderr for `docker logs` (`[squid-access]` / `[squid-cache]`).
+5. **Future** — Per-tenant egress and stronger isolation are expected on **Kubernetes/EKS** (NetworkPolicy, per-namespace egress, or dedicated proxy sidecars), not in this Compose stack.
+
+Clients that ignore `HTTP_PROXY` may still reach the WAN unless the host restricts routing from `egress-clients` (optional iptables; not in Compose).
 
 ### Design decisions
 

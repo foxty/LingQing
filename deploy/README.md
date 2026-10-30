@@ -11,7 +11,7 @@ deploy/
 │   ├── .env.template              # full env reference (all tiers)
 │   ├── .env.production.template   # minimal remote VM env (bootstrap checklist + defaults; shipped as .env.template in bundle)
 │   └── .env.e2e                   # E2E container config (create from template; not committed)
-├── docker/                # Dockerfiles, entrypoint, inner nginx
+├── docker/                # Dockerfiles, entrypoint, inner nginx, egress-proxy (Squid)
 ├── compose/
 │   ├── local/
 │   │   ├── infra.yml      # tier: dev (Postgres + Chroma)
@@ -71,7 +71,9 @@ cp deploy/env/.env.template .env.prod
 
 ## Local tiers in detail
 
-**dev** — `infra.yml` starts Postgres, Chroma, optional Docling, and builds the sandbox runner image. App code runs on the host via `npm run dev:ta`.
+**dev** — `infra.yml` starts Postgres, Chroma, optional Docling, **egress-proxy** (always on), and builds the sandbox runner image. App code runs on the host via `npm run dev:ta`. For sandbox egress on the local controller: `EGRESS_PROXY_URL=http://egress-proxy:3128`, `SANDBOX_RUNNER_NETWORK_MODE=lingqing_egress-clients`, and `SANDBOX_RUNNER_API_BASE_URL=http://host.docker.internal:8000` in `.env.local`.
+
+Egress: `${REGISTRY_URL}/egress-proxy:${VERSION}` (Squid config baked in image). Host only `${DATA_ROOT_HOST_PATH}/egress/` for `domains.custom.txt` + `logs/`. Reload after custom allowlist edits: `./deploy/scripts/egress-proxy-reload.sh`.
 
 **e2e** — `full-stack.yml` is a self-contained Docker stack (separate Postgres container/volumes from dev).
 

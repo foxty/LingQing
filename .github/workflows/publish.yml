@@ -94,6 +94,7 @@ jobs:
             | `${{ env.REGISTRY_URL }}/frontend` | `${{ github.ref_name }}` |
             | `${{ env.REGISTRY_URL }}/sandbox-controller` | `${{ github.ref_name }}` |
             | `${{ env.REGISTRY_URL }}/sandbox-runner` | `${{ github.ref_name }}` |
+            | `${{ env.REGISTRY_URL }}/egress-proxy` | `${{ github.ref_name }}` |
 
             ## Daily staging builds
 
@@ -106,7 +107,7 @@ jobs:
           echo "" >> "$GITHUB_STEP_SUMMARY"
           echo "| Image | Tag |" >> "$GITHUB_STEP_SUMMARY"
           echo "| --- | --- |" >> "$GITHUB_STEP_SUMMARY"
-          for image in backend-app frontend sandbox-controller sandbox-runner; do
+          for image in backend-app frontend sandbox-controller sandbox-runner egress-proxy; do
             echo "| \`${REGISTRY_URL}/${image}\` | \`${VERSION}\` |" >> "$GITHUB_STEP_SUMMARY"
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"

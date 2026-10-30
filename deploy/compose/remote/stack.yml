@@ -25,6 +25,29 @@
 name: lingqing
 
 services:
+  # Outbound allowlist proxy — sandbox runners only (always on).
+  egress-proxy:
+    image: ${REGISTRY_URL}/egress-proxy:${VERSION}
+    volumes:
+      - ${DATA_ROOT_HOST_PATH:?DATA_ROOT_HOST_PATH is required}/egress:/var/lib/lingqing-egress
+    mem_limit: 256m
+    cpus: 0.5
+    restart: on-failure:3
+    healthcheck:
+      test: ["CMD-SHELL", "squid -k check || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "10"
+    networks:
+      - backend-net
+      - egress-clients
+
   # Bundled PostgreSQL (demo / internal VM only — not for production HA).
   postgres:
     profiles: [bundled-postgres]
@@ -57,6 +80,11 @@ services:
       - .env
     environment:
       - SANDBOX_RUNNER_IMAGE=${REGISTRY_URL}/sandbox-runner:${VERSION}
+      - EGRESS_PROXY_URL=http://egress-proxy:3128
+      - SANDBOX_RUNNER_NETWORK_MODE=lingqing_egress-clients
+    depends_on:
+      egress-proxy:
+        condition: service_healthy
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - ${DATA_ROOT_HOST_PATH:?DATA_ROOT_HOST_PATH is required}:/app/data
@@ -197,6 +225,7 @@ services:
         max-file: "10"
     networks:
       - backend-net
+      - egress-clients
 
   # ==================== Tenant Manager Service ====================
   tenant-manager-service:
@@ -264,4 +293,8 @@ volumes:
 
 networks:
   backend-net:
+    name: lingqing_backend-net
+    driver: bridge
+  egress-clients:
+    name: lingqing_egress-clients
     driver: bridge

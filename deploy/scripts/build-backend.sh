@@ -152,6 +152,8 @@ SANDBOX_RUNNER_IMAGE="${REGISTRY_URL}/sandbox-runner:${APP_VERSION}"
 SANDBOX_RUNNER_IMAGE_LATEST="${REGISTRY_URL}/sandbox-runner:latest"
 SANDBOX_CONTROLLER_IMAGE="${REGISTRY_URL}/sandbox-controller:${APP_VERSION}"
 SANDBOX_CONTROLLER_IMAGE_LATEST="${REGISTRY_URL}/sandbox-controller:latest"
+EGRESS_PROXY_IMAGE="${REGISTRY_URL}/egress-proxy:${APP_VERSION}"
+EGRESS_PROXY_IMAGE_LATEST="${REGISTRY_URL}/egress-proxy:latest"
 
 echo ""
 echo -e "${YELLOW}========================================${NC}"
@@ -361,6 +363,42 @@ else
 fi
 
 echo ""
+echo -e "${BLUE}Building egress-proxy image...${NC}"
+
+if docker build \
+    -f "${DOCKER_DIR}/Dockerfile.egress-proxy" \
+    -t "$EGRESS_PROXY_IMAGE" \
+    -t "$EGRESS_PROXY_IMAGE_LATEST" \
+    "$DOCKER_DIR"; then
+    echo -e "${GREEN}✓ Egress-proxy image built successfully${NC}"
+
+    if [[ "$SKIP_PUSH" != true ]]; then
+        if [[ "$CI_MODE" == true ]]; then
+            echo -e "${BLUE}Pushing egress-proxy images...${NC}"
+            docker push "$EGRESS_PROXY_IMAGE"
+            if [[ "$TAG_ONLY" != true ]]; then
+                docker push "$EGRESS_PROXY_IMAGE_LATEST"
+            fi
+            echo -e "${GREEN}✓ Egress-proxy images pushed${NC}"
+        else
+            read -p "Push egress-proxy image to registry? (y/n) " -n 1 -r
+            echo ""
+            if [[ $REPLY =~ ^[Yy]$ ]]; then
+                echo -e "${BLUE}Pushing egress-proxy images...${NC}"
+                docker push "$EGRESS_PROXY_IMAGE"
+                if [[ "$TAG_ONLY" != true ]]; then
+                    docker push "$EGRESS_PROXY_IMAGE_LATEST"
+                fi
+                echo -e "${GREEN}✓ Egress-proxy images pushed${NC}"
+            fi
+        fi
+    fi
+else
+    echo -e "${RED}✗ Egress-proxy image build failed${NC}"
+    exit 1
+fi
+
+echo ""
 echo -e "${GREEN}========================================${NC}"
 echo -e "${GREEN}Build Complete! 🎉${NC}"
 echo -e "${GREEN}========================================${NC}"
@@ -369,4 +407,5 @@ echo "App:    $APP_IMAGE"
 echo "Latest: $APP_IMAGE_LATEST"
 echo "Runner: $SANDBOX_RUNNER_IMAGE"
 echo "Ctrl:   $SANDBOX_CONTROLLER_IMAGE"
+echo "Egress: $EGRESS_PROXY_IMAGE"
 echo ""

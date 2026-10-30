@@ -3,6 +3,31 @@
 # Usage: ./deploy/scripts/local-stack.sh infra-up
 
 services:
+  egress-proxy:
+    image: lingqing-dev-egress-proxy:local
+    container_name: lingqing-egress-proxy
+    build:
+      context: ../../docker
+      dockerfile: Dockerfile.egress-proxy
+    volumes:
+      - ${DATA_ROOT_HOST_PATH:?DATA_ROOT_HOST_PATH is required}/egress:/var/lib/lingqing-egress
+    mem_limit: 256m
+    cpus: 0.5
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "squid -k check || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - egress-clients
+
   postgres:
     image: postgres:16-alpine
     container_name: lingqing-postgres
@@ -82,3 +107,8 @@ volumes:
     driver: local
   chroma_data:
     driver: local
+
+networks:
+  egress-clients:
+    name: lingqing_egress-clients
+    driver: bridge

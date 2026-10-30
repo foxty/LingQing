@@ -29,7 +29,8 @@ class SkillPackageInstaller:
         memory_limit: str,
         pids_limit: str,
         docker_bind_src: Callable[[str], str],
-        install_runner: Callable[[list[str]], Awaitable[tuple[int, str]]] | None = None,
+        install_runner: Callable[..., Awaitable[tuple[int, str]]] | None = None,
+        runner_passthrough_env: list[tuple[str, str]] | None = None,
     ) -> None:
         self._runner_image = runner_image
         self._network_mode = network_mode
@@ -38,6 +39,7 @@ class SkillPackageInstaller:
         self._pids_limit = pids_limit
         self._docker_bind_src = docker_bind_src
         self._install_runner = install_runner or self._run_install_command
+        self._runner_passthrough_env = runner_passthrough_env or []
         self._skill_install_locks: dict[str, asyncio.Lock] = defaultdict(asyncio.Lock)
 
     async def ensure_skill_packages(self, host_skills_root_path: str, host_skill_packages_root_path: str) -> None:
@@ -164,17 +166,24 @@ class SkillPackageInstaller:
             "PIP_CACHE_DIR=/tmp/pip-cache",
             "-e",
             "PIP_DISABLE_PIP_VERSION_CHECK=1",
-            "--user",
-            "1000:1000",
-            self._runner_image,
-            "/bin/bash",
-            "-lc",
-            install_cmd,
         ]
+        for env_name, env_value in self._runner_passthrough_env:
+            if env_value:
+                cmd.extend(["-e", f"{env_name}={env_value}"])
+        cmd.extend(
+            [
+                "--user",
+                "1000:1000",
+                self._runner_image,
+                "/bin/bash",
+                "-lc",
+                install_cmd,
+            ]
+        )
         return await self._install_runner(cmd)
 
     @staticmethod
-    async def _run_install_command(cmd: list[str]) -> tuple[int, str]:
+    async def _run_install_command(cmd: list[str], *, container_name: str = "") -> tuple[int, str]:
         process = await asyncio.create_subprocess_exec(
             *cmd,
             stdout=asyncio.subprocess.PIPE,
