@@ -70,7 +70,12 @@ def _series_key_not_found_message(
 # Kaleido PNG scale for the companion raster written beside each SVG.
 _CHART_PNG_EXPORT_SCALE = 2
 _TITLE_WRAP_CHARS = 52
-_CHART_FONT = dict(family="Arial, sans-serif", size=12, color="#2c3e50")
+# Must match fonts installed in deploy/docker/Dockerfile.backend-base (Kaleido/fontconfig).
+_CHART_FONT_FAMILY = (
+    '"Noto Sans CJK SC", "Noto Sans CJK JP", "Noto Sans CJK KR", '
+    '"Noto Sans Thai", "Noto Sans", Arial, sans-serif'
+)
+_CHART_FONT = dict(family=_CHART_FONT_FAMILY, size=12, color="#2c3e50")
 _CHART_ACCENT = "#667eea"
 _GRID_COLOR = "rgba(200, 200, 200, 0.2)"
 _AXIS_LINE_COLOR = "rgba(200, 200, 200, 0.5)"
@@ -113,7 +118,7 @@ def _build_title_layout(title: str, *, subtitle: str | None = None, has_legend: 
     return (
         {
             "text": f"<b>{text}</b>",
-            "font": dict(size=font_size, color="#2c3e50", family="Arial, sans-serif"),
+            "font": dict(size=font_size, color="#2c3e50", family=_CHART_FONT_FAMILY),
             "x": 0.5,
             "xanchor": "center",
             "yanchor": "top",
@@ -741,7 +746,7 @@ def _create_single_series_figure(
             height=600,
             width=960,
             font=_CHART_FONT,
-            hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+            hoverlabel=dict(bgcolor="white", font_size=13, font_family=_CHART_FONT_FAMILY, bordercolor=_CHART_ACCENT),
         )
         return fig
 
@@ -773,7 +778,7 @@ def _create_single_series_figure(
         hoverlabel=dict(
             bgcolor="white",
             font_size=13,
-            font_family="Arial, sans-serif",
+            font_family=_CHART_FONT_FAMILY,
             bordercolor=_CHART_ACCENT,
         ),
     )
@@ -868,7 +873,7 @@ def _create_multi_series_figure(
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=_CHART_FONT,
-        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family=_CHART_FONT_FAMILY, bordercolor=_CHART_ACCENT),
         margin=dict(l=80, r=40, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
         height=600,
         width=960,
@@ -941,7 +946,7 @@ def _create_multi_area_figure(
         showlegend=True,
         legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1),
         font=_CHART_FONT,
-        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family=_CHART_FONT_FAMILY, bordercolor=_CHART_ACCENT),
         margin=dict(l=80, r=40, t=top_margin, b=_layout_bottom_margin(x_values, tickangle)),
         height=600,
         width=960,
@@ -1077,7 +1082,7 @@ def _create_scatter_categorical_figure(
         height=600,
         width=960,
         font=_CHART_FONT,
-        hoverlabel=dict(bgcolor="white", font_size=13, font_family="Arial, sans-serif", bordercolor=_CHART_ACCENT),
+        hoverlabel=dict(bgcolor="white", font_size=13, font_family=_CHART_FONT_FAMILY, bordercolor=_CHART_ACCENT),
     )
 
     return fig

@@ -8,6 +8,22 @@ from apps.shared.chart.renderer import render_chart
 class TestRenderChartSVGGeneration:
     """Test that render_chart returns valid SVG and PNG bytes via kaleido."""
 
+    def test_render_bar_chart_cjk_labels_in_svg(self):
+        title = "亚太地区销售额"
+        data = '[{"region":"中国","sales":1250},{"region":"한국","sales":980}]'
+        result = render_chart(
+            chart_type="bar",
+            data=data,
+            title=title,
+            x_key="region",
+            y_key="sales",
+            x_label="地区",
+            y_label="销售额 (USD)",
+        )
+        svg_content = result.svg_bytes.decode("utf-8")
+        assert title in svg_content
+        assert "中国" in svg_content
+
     def test_render_bar_chart_returns_bytes(self):
         data = '[{"month":"Jan","sales":100},{"month":"Feb","sales":120},{"month":"Mar","sales":80}]'
         result = render_chart(
