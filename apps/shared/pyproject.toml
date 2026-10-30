@@ -24,7 +24,6 @@ dependencies = [
     "openpyxl>=3.1.0",
     "xlrd>=2.0.0",
     "psycopg2-binary>=2.9.9",
-    "pymysql>=1.1.0",
     "python-jose[cryptography]>=3.3.0",
     "pyyaml>=6.0",
     "sqlglot>=25.0.0",
@@ -33,9 +32,6 @@ dependencies = [
     "ftfy>=6.0.0",
     "jieba>=0.42.1",
     "nltk>=3.10.3",
-    # Database connectors (for analytics_db managers)
-    "databricks-sql-connector>=3.0.0",
-    "databricks-sqlalchemy>=0.4.0",
 ]
 
 [build-system]
