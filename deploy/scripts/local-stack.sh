@@ -135,7 +135,7 @@ resolve_infra_services() {
     local env_file="${1:-$ENV_FILE_DEV}"
     INFRA_SERVICES=(postgres chroma egress-proxy)
     local parser enabled
-    parser="$(read_env_or_default DOCUMENT_PARSER default "$env_file")"
+    parser="$(read_env_or_default DOCUMENT_PARSER docling "$env_file")"
     enabled="$(read_env_or_default DOCLING_ENABLED false "$env_file")"
     if [[ "$parser" == "docling" || "$enabled" == "true" ]]; then
         INFRA_SERVICES+=(docling-serve)

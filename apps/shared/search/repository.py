@@ -501,7 +501,7 @@ class ResourceIndexRepository(BaseRepository[ResourceIndex]):
         raw_content: dict | None,
         content_updated_at: datetime,
         parent_id: int | None = None,
-        source_parser: str = "default",
+        source_parser: str = "docling",
     ) -> ResourceIndex:
         """Create or update a resource index record.
 

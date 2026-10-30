@@ -4,7 +4,6 @@ import pytest
 
 from apps.config import EnvConfig
 from apps.shared.document.parsers.docling import DoclingDocumentParser
-from apps.shared.document.parsers.default import DefaultDocumentParser
 from apps.shared.document.parsers.mineru import MinerUDocumentParser
 from apps.shared.document.parsers.registry import DocumentParserRegistry, get_parser_registry
 
@@ -14,11 +13,11 @@ class _FakeStorage:
         return b""
 
 
-def test_registry_resolves_default_parser():
+def test_registry_resolves_legacy_default_alias_to_docling():
     registry = DocumentParserRegistry(_FakeStorage())
     parser = registry.get("default")
-    assert isinstance(parser, DefaultDocumentParser)
-    assert parser.name == "default"
+    assert isinstance(parser, DoclingDocumentParser)
+    assert parser.name == "docling"
 
 
 def test_registry_resolves_docling_parser():
@@ -36,6 +35,14 @@ def test_registry_resolves_mineru_parser():
 
 
 def test_registry_uses_document_parser_env(monkeypatch):
+    monkeypatch.setattr(EnvConfig, "DOCUMENT_PARSER", "mineru")
+    registry = DocumentParserRegistry(_FakeStorage())
+    assert registry.configured_parser_name() == "mineru"
+    assert registry.get().name == "mineru"
+
+
+def test_registry_default_env_is_docling(monkeypatch):
+    monkeypatch.delenv("DOCUMENT_PARSER", raising=False)
     monkeypatch.setattr(EnvConfig, "DOCUMENT_PARSER", "docling")
     registry = DocumentParserRegistry(_FakeStorage())
     assert registry.configured_parser_name() == "docling"
@@ -51,4 +58,4 @@ def test_registry_unknown_parser_raises():
 def test_get_parser_registry_factory():
     storage = _FakeStorage()
     registry = get_parser_registry(storage)
-    assert registry.get("default").name == "default"
+    assert registry.get("default").name == "docling"

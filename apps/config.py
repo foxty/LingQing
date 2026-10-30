@@ -121,7 +121,7 @@ class EnvConfig:
     DATA_ROOT_PATH: str = os.getenv("DATA_ROOT_PATH")
 
     # ============ Document Processing Configuration ============
-    DOCUMENT_PARSER: str = os.getenv("DOCUMENT_PARSER", "default")
+    DOCUMENT_PARSER: str = os.getenv("DOCUMENT_PARSER", "docling")
     MINERU_SERVICE_URL: str = os.getenv("MINERU_SERVICE_URL", "")
     MINERU_POLL_INTERVAL_SECONDS: int = int(os.getenv("MINERU_POLL_INTERVAL_SECONDS", "5"))
     MINERU_TASK_TIMEOUT_SECONDS: int = int(os.getenv("MINERU_TASK_TIMEOUT_SECONDS", "900"))

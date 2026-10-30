@@ -333,7 +333,7 @@ class ResourceIndexService:
             parse_result = parser.from_raw(
                 item.raw_content,
                 item.resource_type,
-                source_parser=item.source_parser or "default",
+                source_parser=item.source_parser or "docling",
                 blocks_document=blocks_document,
             )
 

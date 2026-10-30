@@ -66,7 +66,7 @@ class ResourceParser:
         self,
         raw_content: dict,
         resource_type: SearchableResourceType,
-        source_parser: str = "default",
+        source_parser: str = "docling",
         blocks_document: dict | None = None,
     ) -> ParseResult:
         if blocks_document is not None:
@@ -86,7 +86,7 @@ class ResourceParser:
         self,
         raw_content: dict,
         resource_type: SearchableResourceType,
-        source_parser: str = "default",
+        source_parser: str = "docling",
         blocks_document: dict | None = None,
     ) -> list[Document]:
         if resource_type == RESOURCE_TYPE_DOCUMENT:
@@ -103,7 +103,7 @@ class ResourceParser:
             return []
         return [Document(page_content=normalize_for_embedding(text), metadata={})]
 
-    def _chunk_document(self, raw_content: dict, source_parser: str = "default") -> list[Document]:
+    def _chunk_document(self, raw_content: dict, source_parser: str = "docling") -> list[Document]:
         filename = ""
         meta = raw_content.get("meta", {})
         if meta and isinstance(meta, dict):

@@ -48,7 +48,7 @@ class ResourceIndexCreateDTO(BaseModel):
     raw_content: dict | None = None
     content_updated_at: datetime | None = None
     parent_id: int | None = None
-    source_parser: str = "default"
+    source_parser: str = "docling"
 
 
 class ResourceIndexUpdateDTO(BaseModel):
@@ -106,7 +106,7 @@ class ResourceIndexPendingItem(BaseModel):
     vector_retry_count: int
     owner_id: int | None = None
     parent_id: int | None = None
-    source_parser: str = "default"
+    source_parser: str = "docling"
 
 
 # ==================== Search DTOs ====================

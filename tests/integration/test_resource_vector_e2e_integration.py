@@ -108,9 +108,42 @@ async def vector_sync_e2e_env(async_db_session: AsyncSession, tmp_path: Path, mo
 
     monkeypatch.setattr("apps.config.EnvConfig.DATA_ROOT_PATH", str(tmp_path))
     monkeypatch.setattr("apps.config.EnvConfig.FILE_STORAGE_TYPE", "local")
-    monkeypatch.setattr("apps.config.EnvConfig.DOCUMENT_PARSER", "default")
-    monkeypatch.setattr("apps.config.EnvConfig.DOCLING_SERVICE_URL", "")
+    monkeypatch.setattr("apps.config.EnvConfig.DOCUMENT_PARSER", "docling")
+    monkeypatch.setattr("apps.config.EnvConfig.DOCLING_SERVICE_URL", "http://docling.test")
     monkeypatch.setattr("apps.config.EnvConfig.MINERU_SERVICE_URL", "")
+
+    from apps.shared.document.domain import DocumentDomain
+    from apps.shared.document.manifest import build_blocks_document
+    from apps.shared.document.parsers.docling import DoclingDocumentParser
+    from apps.shared.document.parsers.markdown_blocks import markdown_to_blocks
+    from apps.shared.infra.storage.paths import resolve_storage_ref
+
+    class _DoclingSyncForIntegration(DoclingDocumentParser):
+        @property
+        def is_async(self) -> bool:
+            return False
+
+        async def parse(self, document: DocumentDomain) -> dict:
+            ref = resolve_storage_ref(document.tenant_id, document.file_url)
+            raw = await self._file_storage.get(ref)
+            text = raw.decode("utf-8", errors="replace")
+            blocks = markdown_to_blocks(text)
+            return build_blocks_document(parser="docling", blocks=blocks)
+
+    def _patch_registry_init(original_init):
+        def _init(self, file_storage):
+            original_init(self, file_storage)
+            self._parsers["docling"] = _DoclingSyncForIntegration(file_storage)
+
+        return _init
+
+    from apps.shared.document.parsers import registry as parser_registry_mod
+
+    monkeypatch.setattr(
+        parser_registry_mod.DocumentParserRegistry,
+        "__init__",
+        _patch_registry_init(parser_registry_mod.DocumentParserRegistry.__init__),
+    )
     chroma_url = f"http://{host}:{port}"
     monkeypatch.setattr("apps.config.EnvConfig.CHROMA_MODE", "http")
     monkeypatch.setattr("apps.config.EnvConfig.CHROMA_URL", chroma_url)
