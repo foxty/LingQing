@@ -125,7 +125,7 @@ async def vector_sync_e2e_env(async_db_session: AsyncSession, tmp_path: Path, mo
 
         async def parse(self, document: DocumentDomain) -> dict:
             ref = resolve_storage_ref(document.tenant_id, document.file_url)
-            raw = await self._file_storage.get(ref)
+            raw = await self._file_storage.read(ref)
             text = raw.decode("utf-8", errors="replace")
             blocks = markdown_to_blocks(text)
             return build_blocks_document(parser="docling", blocks=blocks)
