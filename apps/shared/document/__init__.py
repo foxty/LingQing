@@ -1,9 +1,5 @@
 """Document module (collections + documents)."""
 
-from apps.shared.document.domain import DocumentCollectionDomain, DocumentDomain
-from apps.shared.document.repository import DBDocumentRepository, DocumentCollectionRepository
-from apps.shared.document.schemas import DocumentCollectionResponse, DocumentInfo
-
 __all__ = [
     "DBDocumentRepository",
     "DocumentAccessScope",
@@ -18,6 +14,22 @@ __all__ = [
 
 
 def __getattr__(name: str):
+    if name in {"DocumentDomain", "DocumentCollectionDomain"}:
+        from apps.shared.document.domain import DocumentCollectionDomain, DocumentDomain
+
+        return DocumentCollectionDomain if name == "DocumentCollectionDomain" else DocumentDomain
+    if name == "DBDocumentRepository":
+        from apps.shared.document.repository import DBDocumentRepository
+
+        return DBDocumentRepository
+    if name == "DocumentCollectionRepository":
+        from apps.shared.document.repository import DocumentCollectionRepository
+
+        return DocumentCollectionRepository
+    if name in {"DocumentCollectionResponse", "DocumentInfo"}:
+        from apps.shared.document.schemas import DocumentCollectionResponse, DocumentInfo
+
+        return DocumentCollectionResponse if name == "DocumentCollectionResponse" else DocumentInfo
     if name == "DocumentService":
         from apps.shared.document.service import DocumentService
 

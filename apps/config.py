@@ -11,6 +11,8 @@ from functools import lru_cache
 from typing import Literal
 from urllib.parse import urlparse
 
+from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
+
 
 def _env_bool(name: str, default: bool = False) -> bool:
     raw = os.getenv(name, "").strip().lower()
@@ -121,7 +123,7 @@ class EnvConfig:
     DATA_ROOT_PATH: str = os.getenv("DATA_ROOT_PATH")
 
     # ============ Document Processing Configuration ============
-    DOCUMENT_PARSER: str = os.getenv("DOCUMENT_PARSER", "default")
+    DOCUMENT_PARSER: str = os.getenv("DOCUMENT_PARSER", DEFAULT_DOCUMENT_PARSER)
     MINERU_SERVICE_URL: str = os.getenv("MINERU_SERVICE_URL", "")
     MINERU_POLL_INTERVAL_SECONDS: int = int(os.getenv("MINERU_POLL_INTERVAL_SECONDS", "5"))
     MINERU_TASK_TIMEOUT_SECONDS: int = int(os.getenv("MINERU_TASK_TIMEOUT_SECONDS", "900"))

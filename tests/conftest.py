@@ -35,8 +35,10 @@ os.environ.pop("CHROMA_URL", None)
 
 
 def _isolate_parser_env() -> None:
-    os.environ["DOCUMENT_PARSER"] = "default"
-    os.environ.pop("DOCLING_SERVICE_URL", None)
+    from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
+
+    os.environ["DOCUMENT_PARSER"] = DEFAULT_DOCUMENT_PARSER
+    os.environ.setdefault("DOCLING_SERVICE_URL", "http://docling.test")
     os.environ.pop("DOCLING_API_KEY", None)
     os.environ.pop("DOCLING_DO_OCR", None)
     os.environ.pop("MINERU_SERVICE_URL", None)

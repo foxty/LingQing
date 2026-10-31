@@ -17,6 +17,8 @@ from sqlalchemy import (
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
 
+from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
+
 
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
@@ -2507,13 +2509,13 @@ class ResourceIndex(Base):
         comment="Parent resource id (collection_id for documents, data_source_id for assets, connector_id for api_operations)",
     )
 
-    # Source parser that generated raw_content (e.g., "default", "docling", "mineru")
+    # Source parser that generated raw_content (docling, mineru; legacy "default" normalized at read)
     source_parser: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default="default",
-        server_default="default",
-        comment="Parser used to generate raw_content: default, docling, mineru, etc.",
+        default=DEFAULT_DOCUMENT_PARSER,
+        server_default=DEFAULT_DOCUMENT_PARSER,
+        comment="Parser used to generate raw_content: docling, mineru, etc.",
     )
 
     # Raw structured content from parser (source of truth)

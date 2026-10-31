@@ -9,6 +9,7 @@ from typing import Any, NotRequired, TypedDict
 
 from pydantic import BaseModel, Field
 
+from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
 from apps.shared.domain.types import (
     SEARCH_TARGET_API_CONNECTOR,
     SEARCH_TARGET_ASSET,
@@ -48,7 +49,7 @@ class ResourceIndexCreateDTO(BaseModel):
     raw_content: dict | None = None
     content_updated_at: datetime | None = None
     parent_id: int | None = None
-    source_parser: str = "default"
+    source_parser: str = DEFAULT_DOCUMENT_PARSER
 
 
 class ResourceIndexUpdateDTO(BaseModel):
@@ -106,7 +107,7 @@ class ResourceIndexPendingItem(BaseModel):
     vector_retry_count: int
     owner_id: int | None = None
     parent_id: int | None = None
-    source_parser: str = "default"
+    source_parser: str = DEFAULT_DOCUMENT_PARSER
 
 
 # ==================== Search DTOs ====================

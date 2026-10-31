@@ -42,6 +42,29 @@ class ParseJobStatus(StrEnum):
         return status in {cls.PENDING, cls.PROCESSING}
 
 
+class DocumentParserKey(StrEnum):
+    """Registered document parsing engines (env, DB source_parser, blocks manifest)."""
+
+    DOCLING = "docling"
+    MINERU = "mineru"
+
+
+# Pre–Docling-only rows and env; normalize to docling at runtime (see migration 080).
+LEGACY_SOURCE_PARSER_DEFAULT = "default"
+
+DEFAULT_DOCUMENT_PARSER = DocumentParserKey.DOCLING.value
+
+PARSER_NAME_ALIASES: dict[str, str] = {
+    LEGACY_SOURCE_PARSER_DEFAULT: DocumentParserKey.DOCLING.value,
+}
+
+
+def normalize_document_parser_name(name: str | None, *, configured: str | None = None) -> str:
+    """Resolve parser id from explicit name, env default, or platform default."""
+    resolved = (name or configured or DEFAULT_DOCUMENT_PARSER).strip().lower()
+    return PARSER_NAME_ALIASES.get(resolved, resolved)
+
+
 BlockType = Literal["text", "heading", "table", "image", "mixed"]
 IntakeSource = Literal["upload", "drive_sync"]
 

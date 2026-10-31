@@ -13,7 +13,7 @@ from apps.shared.document.domain import DocumentDomain
 from apps.shared.document.manifest import build_blocks_document
 from apps.shared.document.parsers.base import ParseSubmission
 from apps.shared.document.parsers.markdown_blocks import markdown_to_blocks
-from apps.shared.document.types import ParseJobStatus
+from apps.shared.document.types import DocumentParserKey, ParseJobStatus
 from apps.shared.infra.storage import FileStorage
 from apps.shared.infra.storage.paths import resolve_storage_ref
 from apps.shared.utils.logger import get_logger
@@ -27,7 +27,7 @@ _PENDING_STATUSES = {"pending", "processing", "queued", "running"}
 class MinerUDocumentParser:
     """Async adapter for MinerU FastAPI service."""
 
-    name = "mineru"
+    name = DocumentParserKey.MINERU
 
     def __init__(self, file_storage: FileStorage):
         self._file_storage = file_storage

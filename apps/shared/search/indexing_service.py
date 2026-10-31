@@ -20,6 +20,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.data_source.repository import AssetMetadataRepository
 from apps.shared.db.models import Document as DocumentModel
 from apps.shared.document.manifest import get_storage_uri, is_manifest_pointer, read_blocks_json
+from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
 from apps.shared.domain.types import (
     SearchableResourceType,
 )
@@ -333,7 +334,7 @@ class ResourceIndexService:
             parse_result = parser.from_raw(
                 item.raw_content,
                 item.resource_type,
-                source_parser=item.source_parser or "default",
+                source_parser=item.source_parser or DEFAULT_DOCUMENT_PARSER,
                 blocks_document=blocks_document,
             )
 
