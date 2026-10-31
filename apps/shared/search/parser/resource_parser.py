@@ -14,6 +14,7 @@ from apps.shared.document.chunking import (
     segment_blocks,
 )
 from apps.shared.document.manifest import extract_text_from_blocks
+from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
 from apps.shared.domain.types import (
     RESOURCE_TYPE_API_CONNECTOR,
     RESOURCE_TYPE_ASSET,
@@ -66,7 +67,7 @@ class ResourceParser:
         self,
         raw_content: dict,
         resource_type: SearchableResourceType,
-        source_parser: str = "docling",
+        source_parser: str = DEFAULT_DOCUMENT_PARSER,
         blocks_document: dict | None = None,
     ) -> ParseResult:
         if blocks_document is not None:
@@ -86,7 +87,7 @@ class ResourceParser:
         self,
         raw_content: dict,
         resource_type: SearchableResourceType,
-        source_parser: str = "docling",
+        source_parser: str = DEFAULT_DOCUMENT_PARSER,
         blocks_document: dict | None = None,
     ) -> list[Document]:
         if resource_type == RESOURCE_TYPE_DOCUMENT:
@@ -103,7 +104,7 @@ class ResourceParser:
             return []
         return [Document(page_content=normalize_for_embedding(text), metadata={})]
 
-    def _chunk_document(self, raw_content: dict, source_parser: str = "docling") -> list[Document]:
+    def _chunk_document(self, raw_content: dict, source_parser: str = DEFAULT_DOCUMENT_PARSER) -> list[Document]:
         filename = ""
         meta = raw_content.get("meta", {})
         if meta and isinstance(meta, dict):

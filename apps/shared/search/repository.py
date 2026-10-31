@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.base_repository import BaseRepository
 from apps.shared.db.models import Document, ResourceIndex
+from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_ASSET, RESOURCE_TYPE_DOCUMENT
 from apps.shared.search.domain import VectorStatus
 from apps.shared.search.parser import unified_tokenize
@@ -501,7 +502,7 @@ class ResourceIndexRepository(BaseRepository[ResourceIndex]):
         raw_content: dict | None,
         content_updated_at: datetime,
         parent_id: int | None = None,
-        source_parser: str = "docling",
+        source_parser: str = DEFAULT_DOCUMENT_PARSER,
     ) -> ResourceIndex:
         """Create or update a resource index record.
 

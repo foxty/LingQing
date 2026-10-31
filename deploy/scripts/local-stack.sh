@@ -132,14 +132,8 @@ status_code() {
 }
 
 resolve_infra_services() {
-    local env_file="${1:-$ENV_FILE_DEV}"
-    INFRA_SERVICES=(postgres chroma egress-proxy)
-    local parser enabled
-    parser="$(read_env_or_default DOCUMENT_PARSER docling "$env_file")"
-    enabled="$(read_env_or_default DOCLING_ENABLED false "$env_file")"
-    if [[ "$parser" == "docling" || "$enabled" == "true" ]]; then
-        INFRA_SERVICES+=(docling-serve)
-    fi
+    # Docling sidecar is required for the default parser; dev/E2E infra always starts it.
+    INFRA_SERVICES=(postgres chroma egress-proxy docling-serve)
 }
 
 infra_up() {
@@ -157,11 +151,9 @@ infra_up() {
     echo "Dev infra started. Local connection info:"
     echo "  PostgreSQL: host=localhost port=${pg_port}"
     echo "  Chroma:     host=localhost port=8002"
-    if [[ " ${INFRA_SERVICES[*]} " == *" docling-serve "* ]]; then
-        local docling_port
-        docling_port="$(read_env_or_default DOCLING_HOST_PORT 5001 "$ENV_FILE_DEV")"
-        echo "  Docling:    http://127.0.0.1:${docling_port}/ui"
-    fi
+    local docling_port
+    docling_port="$(read_env_or_default DOCLING_HOST_PORT 5001 "$ENV_FILE_DEV")"
+    echo "  Docling:    http://127.0.0.1:${docling_port}/ui"
     echo "  Sandbox:    run 'npm run dev:ta' to start sandbox-controller locally (port 8090)"
 }
 
