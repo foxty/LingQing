@@ -326,7 +326,7 @@ class HitlApprovalService:
                     completed_at=datetime.now(UTC),
                 )
                 await run_finalize.finalize_run_for_main(run.id)
-                self._schedule_session_summary_after_terminal_run(
+                self._schedule_thread_rollup_after_terminal_run(
                     session_id=approval.session_id,
                     thread_id=approval.thread_id,
                     run_id=run.id,
@@ -354,14 +354,14 @@ class HitlApprovalService:
             completed_at=datetime.now(UTC),
         )
         await run_finalize.finalize_run_for_main(run.id)
-        self._schedule_session_summary_after_terminal_run(
+        self._schedule_thread_rollup_after_terminal_run(
             session_id=approval.session_id,
             thread_id=approval.thread_id,
             run_id=run.id,
         )
         return ai_content
 
-    def _schedule_session_summary_after_terminal_run(
+    def _schedule_thread_rollup_after_terminal_run(
         self,
         *,
         session_id: str,

@@ -72,17 +72,6 @@ class AgentRunMessageRepository:
         result = await self.db.execute(query)
         return list(result.scalars().all())
 
-    async def mark_messages_as_summarized(self, message_ids: list[str], session_summary_id: int) -> None:
-        if not message_ids:
-            return
-        from sqlalchemy import update
-
-        await self.db.execute(
-            update(AgentRunMessage)
-            .where(AgentRunMessage.message_id.in_(message_ids))
-            .values(is_summarized=True)
-        )
-
     async def get_latest_ai_message_for_session(self, thread_id: str, session_id: str) -> AgentRunMessage | None:
         result = await self.db.execute(
             select(AgentRunMessage)

@@ -37,6 +37,7 @@ from apps.tenant_app_service.agents.domain import (
     ToolCache,
     ToolCallCounts,
 )
+from apps.tenant_app_service.agents.memory.agent_run_summary_service import compact_prepared_messages
 from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
 from apps.tenant_app_service.agents.message_content import ensure_visible_ai_content
 from apps.tenant_app_service.agents.message_preparer import MessagePreparer
@@ -152,12 +153,10 @@ class AgentBase(ABC):
     async def _load_history(self, state: AgentState, config: RunnableConfig) -> dict:
         """Load conversation history from database (first node in graph).
 
-        Multi-layer context loading:
+        Context loading:
         1. Parent context (if sub-agent)
-        2. Thread summaries
-        3. Session summaries
-        4. Recent messages
-        5. Current messages
+        2. Latest thread summary, recent main pairs, and this run's messages
+        3. Current turn messages
 
         Args:
             state: Current agent state with new user message
@@ -194,17 +193,12 @@ class AgentBase(ABC):
             )
             self.logger.debug(f"Loaded parent context for agent {self.agent_config.agent_name}")
 
-        # ============================================
-        # Layer 2, 3 & 4: Thread Summaries + Session Summaries + Recent Messages
-        # ============================================
         from apps.tenant_app_service.chat.service_base import (
             DEFAULT_MAIN_TIMELINE_TURN_LIMIT,
             RUN_HISTORY_MESSAGE_LIMIT,
         )
 
         historical_messages = await manager.load_messages_with_summary(
-            thread_summary_limit=1,
-            session_summary_limit=2,
             main_timeline_turn_limit=DEFAULT_MAIN_TIMELINE_TURN_LIMIT,
             run_message_limit=RUN_HISTORY_MESSAGE_LIMIT,
         )
@@ -341,6 +335,17 @@ class AgentBase(ABC):
             tools = [] if tool_limit_finalize else self.agent_config.get_tools(loaded_skills, runtime)
 
             db_session = config.get("configurable", {}).get("db_session")
+            configurable = config.get("configurable") or {}
+            run_id = configurable.get("run_id")
+            if db_session and run_id and runtime.thread_id:
+                messages = await compact_prepared_messages(
+                    messages,
+                    db=db_session,
+                    tenant_id=runtime.tenant.tenant_id,
+                    thread_id=runtime.thread_id,
+                    run_id=str(run_id),
+                    tools=tools,
+                )
             model_with_tools = await self._model_binding_manager.get_or_create(
                 model_profile_id=model_profile_id,
                 loaded_skills=loaded_skills,

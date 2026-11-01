@@ -35,8 +35,8 @@ TERMINAL_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
 )
 
 
-def run_status_allows_session_summary(status: str) -> bool:
-    """Whether session-level summarization may run (run will not continue on same session)."""
+def run_status_allows_thread_rollup(status: str) -> bool:
+    """Whether a finished run may roll into the cumulative thread summary."""
     return status in TERMINAL_AGENT_RUN_STATUSES
 
 
@@ -138,11 +138,7 @@ def scope_main_timeline_rows_for_agent(
     agent_id: int,
 ) -> list[ThreadMainMessageDomain]:
     """Keep humans and this agent's promoted AI rows (drop peer agents on main)."""
-    return [
-        row
-        for row in rows
-        if row.type == "human" or (row.type == "ai" and row.agent_id == agent_id)
-    ]
+    return [row for row in rows if row.type == "human" or (row.type == "ai" and row.agent_id == agent_id)]
 
 
 def _this_agent_ais_until_next_human(
@@ -159,13 +155,6 @@ def _this_agent_ais_until_next_human(
             agent_ais.append(rows[i])
         i += 1
     return agent_ais, i
-
-
-def _agent_ai_session_covered(
-    row: ThreadMainMessageDomain,
-    covered_session_ids: frozenset[str],
-) -> bool:
-    return bool(row.session_id and row.session_id in covered_session_ids)
 
 
 def iter_agent_scoped_turns(
@@ -207,41 +196,127 @@ def select_main_timeline_pairs_for_context(
     rows: list[ThreadMainMessageDomain],
     *,
     agent_id: int,
-    covered_session_ids: frozenset[str],
     turn_limit: int | None,
 ) -> list[ThreadMainMessageDomain]:
-    """Select human+AI pair turns for LLM main-line context.
+    """Last ``turn_limit`` main pairs for this agent. ``None`` keeps every pair."""
+    return select_main_pairs_with_watermark(
+        rows,
+        agent_id=agent_id,
+        through_trigger_message_id=None,
+        reserve_tail=turn_limit,
+    )
 
-    Expects ``sort_timeline_trigger_anchored`` order. Keeps only turns that start
-    with a human and include at least one promoted AI for ``agent_id``, omitting:
 
-    - human-only rows (no promoted reply for this agent)
-    - AI-only blocks (not anchored to a human in timeline order)
-    - turns whose session is already in ``covered_session_ids`` (summary XOR pair)
+def iter_thread_pair_turns(
+    rows: list[ThreadMainMessageDomain],
+) -> Iterator[list[ThreadMainMessageDomain]]:
+    """Yield ``[human, ...ai]`` turns for every agent on a sorted main timeline."""
+    i = 0
+    n = len(rows)
+    while i < n:
+        row = rows[i]
+        if row.type != "human":
+            i += 1
+            continue
+        human = row
+        i += 1
+        ais: list[ThreadMainMessageDomain] = []
+        while i < n and rows[i].type != "human":
+            if rows[i].type == "ai":
+                ais.append(rows[i])
+            i += 1
+        if ais:
+            yield [human, *ais]
 
-    Then keeps the last ``turn_limit`` pair turns (``None`` = all qualifying pairs).
-    The active user message is loaded outside this helper.
+
+def _pair_index_for_trigger(
+    pair_turns: list[list[ThreadMainMessageDomain]],
+    through_trigger_message_id: str | None,
+) -> int | None:
+    if not through_trigger_message_id:
+        return None
+    for index, turn in enumerate(pair_turns):
+        if turn and turn[0].type == "human" and turn[0].message_id == through_trigger_message_id:
+            return index
+    return None
+
+
+def context_pair_turns(
+    pair_turns: list[list[ThreadMainMessageDomain]],
+    *,
+    through_trigger_message_id: str | None,
+    reserve_tail: int | None,
+) -> list[list[ThreadMainMessageDomain]]:
+    """Keep the verbatim tail, plus pairs the watermark has not absorbed yet.
+
+    Pairs at or before ``through_trigger_message_id`` stay out unless they are inside
+    the reserved tail. No watermark keeps only that tail. ``reserve_tail is None``
+    means no tail cap: every pair, or every pair after the watermark.
     """
+    if reserve_tail is not None and reserve_tail <= 0:
+        return []
+    watermark_idx = _pair_index_for_trigger(pair_turns, through_trigger_message_id)
+    if reserve_tail is None:
+        if watermark_idx is None:
+            return list(pair_turns)
+        return [turn for index, turn in enumerate(pair_turns) if index > watermark_idx]
+    total = len(pair_turns)
+    tail_start = max(0, total - reserve_tail)
+    kept: list[list[ThreadMainMessageDomain]] = []
+    for index, turn in enumerate(pair_turns):
+        in_tail = index >= tail_start
+        if watermark_idx is None:
+            if in_tail:
+                kept.append(turn)
+            continue
+        if in_tail or index > watermark_idx:
+            kept.append(turn)
+    return kept
+
+
+def aged_out_uncovered_turns(
+    rows: list[ThreadMainMessageDomain],
+    *,
+    reserve_tail: int,
+    through_trigger_message_id: str | None,
+) -> list[list[ThreadMainMessageDomain]]:
+    """Completed pairs outside the reserved tail and strictly after the watermark.
+
+    The pair that just finished stays in the tail, so it is not included.
+    A watermark that already sits on the last aged-out pair yields an empty delta.
+    """
+    pair_turns = list(iter_thread_pair_turns(rows))
+    total = len(pair_turns)
+    tail_start = total if reserve_tail <= 0 else max(0, total - reserve_tail)
+    watermark_idx = _pair_index_for_trigger(pair_turns, through_trigger_message_id)
+    start = 0 if watermark_idx is None else watermark_idx + 1
+    if start >= tail_start:
+        return []
+    return pair_turns[start:tail_start]
+
+
+def select_main_pairs_with_watermark(
+    rows: list[ThreadMainMessageDomain],
+    *,
+    agent_id: int,
+    through_trigger_message_id: str | None,
+    reserve_tail: int | None,
+) -> list[ThreadMainMessageDomain]:
+    """Agent-scoped main pairs: verbatim tail, plus pairs after the watermark."""
     rows = scope_main_timeline_rows_for_agent(rows, agent_id)
     pair_turns: list[list[ThreadMainMessageDomain]] = []
     for turn in iter_agent_scoped_turns(rows, agent_id):
         if turn[0].type != "human":
             continue
-        agent_ais = [row for row in turn if row.type == "ai"]
-        if not agent_ais:
-            continue
-        if covered_session_ids and any(
-            _agent_ai_session_covered(ai, covered_session_ids) for ai in agent_ais
-        ):
+        if not any(row.type == "ai" for row in turn):
             continue
         pair_turns.append(turn)
-
-    if turn_limit is not None:
-        if turn_limit <= 0:
-            return []
-        pair_turns = pair_turns[-turn_limit:]
-
-    return [row for turn in pair_turns for row in turn]
+    kept = context_pair_turns(
+        pair_turns,
+        through_trigger_message_id=through_trigger_message_id,
+        reserve_tail=reserve_tail,
+    )
+    return [row for turn in kept for row in turn]
 
 
 def slice_main_timeline_turns(
@@ -254,7 +329,6 @@ def slice_main_timeline_turns(
     return select_main_timeline_pairs_for_context(
         rows,
         agent_id=agent_id,
-        covered_session_ids=frozenset(),
         turn_limit=turn_limit,
     )
 
@@ -267,24 +341,18 @@ def exclude_trigger_human_from_main_rows(
     """Remove the active run's human from history; it is appended after main load."""
     if not trigger_message_id:
         return list(rows)
-    return [
-        row
-        for row in rows
-        if not (row.type == "human" and row.message_id == trigger_message_id)
-    ]
+    return [row for row in rows if not (row.type == "human" and row.message_id == trigger_message_id)]
 
 
 def filter_main_timeline_for_context_load(
     rows: list[ThreadMainMessageDomain],
     *,
     agent_id: int,
-    covered_session_ids: frozenset[str],
 ) -> list[ThreadMainMessageDomain]:
     """All qualifying pair turns before turn cap (wrapper around ``select_main_timeline_pairs_for_context``)."""
     return select_main_timeline_pairs_for_context(
         rows,
         agent_id=agent_id,
-        covered_session_ids=covered_session_ids,
         turn_limit=None,
     )
 
@@ -308,8 +376,4 @@ def drop_run_rows_duplicating_promoted_main(
     """Remove run AI rows whose ``message_id`` matches promoted main timeline AI."""
     if not promoted_main_message_id:
         return run_rows
-    return [
-        row
-        for row in run_rows
-        if not (row.type == "ai" and row.message_id == promoted_main_message_id)
-    ]
+    return [row for row in run_rows if not (row.type == "ai" and row.message_id == promoted_main_message_id)]

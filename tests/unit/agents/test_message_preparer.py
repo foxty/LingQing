@@ -390,9 +390,7 @@ class TestTrimMessages(TestMessagePreparer):
 
     def test_trim_no_human_message_anywhere(self):
         """No crash when the entire message list has no HumanMessage (e.g. HITL resume)."""
-        messages = [
-            AIMessage(content=f"ai {i}") for i in range(6)
-        ]
+        messages = [AIMessage(content=f"ai {i}") for i in range(6)]
         result, dropped = self.preparer.trim_messages(messages)
 
         assert len(result) == 4
@@ -593,6 +591,24 @@ class TestCompressAndPreserve(TestMessagePreparer):
         assert result[2].content == long_content
         assert compressed_count == 0
         assert compressed_chars_saved == 0
+
+    def test_older_tool_round_in_current_run_is_truncated(self):
+        """Transient output from an earlier tool round is capped; the latest round stays full."""
+        long_content = "q" * (TRANSIENT_COMPRESS_MAX_CHARS + 80)
+        human = HumanMessage(content="question")
+        first_ai = self._create_ai_message_with_tools(["search"])
+        first_tool = self._tool_msg("call_search_0", long_content, RETENTION_TRANSIENT)
+        second_ai = self._create_ai_message_with_tools(["fetch"])
+        second_tool = self._tool_msg("call_fetch_0", long_content, RETENTION_TRANSIENT)
+
+        kept = [human, first_ai, first_tool, second_ai, second_tool]
+        result, _preserved_count, _preserved_chars, compressed_count, _compressed_chars_saved = (
+            self.preparer._compress_and_preserve(kept, [])
+        )
+
+        assert result[2].content.endswith("... [truncated]")
+        assert result[4].content == long_content
+        assert compressed_count == 1
 
     def test_short_transient_tool_output_not_truncated(self):
         """Transient ToolMessages under the char limit are left as-is."""

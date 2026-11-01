@@ -14,7 +14,6 @@ from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.domain import AgentRuntimeContext, AgentUserContext
 from apps.tenant_app_service.agents.mini import MiniAgentConfig, MiniAgentExecutor
 from apps.tenant_app_service.agents.system_agent_config import get_config_loader
-from apps.tenant_app_service.chat.domain import MessageDomain
 from apps.tenant_app_service.tenant.domain import TenantDomain
 from apps.tenant_app_service.tenant.repository import TenantRepository
 
@@ -107,106 +106,31 @@ class MiniAgentService(TenantAwareService):
         result = await self.executor.execute(config=mini_config, context=runtime_context, user_prompt=user_prompt)
         return result.content
 
-    async def summarize_session(
+    async def summarize_thread_status(
         self,
+        *,
         thread_id: str,
-        session_id: str,
-        messages: list[MessageDomain],
-        max_messages: int = 50,
-    ) -> str:
-        """Summarize a chat session from raw conversation messages.
+        previous_summary: str | None,
+        aged_out_turns: list[str],
+        recompress: bool,
+    ) -> str | None:
+        """Merge the previous thread status with turns that left the verbatim tail."""
+        turns = "\n\n".join(f"Turn {index}:\n{block}" for index, block in enumerate(aged_out_turns, 1))
+        recompress_line = ""
+        if recompress:
+            recompress_line = "The previous status is too long. Recompress it while merging these turns.\n"
+        user_prompt = f"""Update the thread status.
 
-        Uses the full conversation history to allow the LLM to identify:
-        - Natural conversation flow and user intent evolution
-        - Problem-solving patterns and error recovery
-        - Tools used and their outcomes
-        - Key results and lessons learned
+Previous status:
+{previous_summary or "(none)"}
 
-        Args:
-            thread_id: Thread ID for tracking
-            session_id: Session ID for tracking
-            messages: List of MessageDomain objects representing the conversation
-            max_messages: Maximum number of messages to include (default 50, truncates from end)
+Turns that aged out of the recent verbatim window:
+{turns}
 
-        Returns:
-            Session summary capturing conversation flow, patterns, and insights
-
-        Raises:
-            ValueError: If summarization fails
-        """
-        # Truncate messages if too long (keep most recent)
-        if len(messages) > max_messages:
-            messages = messages[-max_messages:]
-            logger.info(f"Truncated session messages from {len(messages)} to {max_messages} for summarization")
-
-        # Format messages into conversation format
-        conversation_lines = []
-        for msg in messages:
-            role = msg.role.upper()
-            content = msg.content or ""
-
-            # Include tool call information for AI messages
-            if msg.tool_calls:
-                tool_names = [tc.get("name", "unknown") for tc in msg.tool_calls]
-                content += f" [Tools called: {', '.join(tool_names)}]"
-
-            # Include tool result indicator
-            if msg.role == "tool" and msg.tool_call_id:
-                role = "TOOL_RESULT"
-
-            conversation_lines.append(f"{role}: {content}")
-
-        conversation_text = "\n".join(conversation_lines)
-
-        # Build user prompt with raw conversation
-        user_prompt = f"""Analyze this conversation session and create a concise summary:
-{conversation_text}
-"""
-
-        # Get config from registry (includes agent_id and agent_name)
-        loader = get_config_loader()
-        mini_config = loader.create_mini_agent_config(agent_name="SessionSummarizer")
-        runtime_context = await self._create_system_runtime_context(
-            config=mini_config,
-            thread_id=thread_id,
-            session_id=session_id,
-        )
-
-        result = await self.executor.execute(config=mini_config, context=runtime_context, user_prompt=user_prompt)
-        return result.content
-
-    async def summarize_thread(
-        self,
-        thread_id: str,
-        session_summaries: list[dict],
-    ) -> str:
-        """Summarize a conversation thread from multiple session summaries.
-
-        Specialized method for creating thread-level summaries that capture
-        the overall conversation theme and key accomplishments across sessions.
-
-        Args:
-            thread_id: Thread ID
-            session_summaries: List of session summary dicts with keys:
-                - session_id: ID of the session
-                - summary: Text summary of the session
-
-        Returns:
-            Thread summary text
-
-        Raises:
-            ValueError: If summarization fails
-        """
-        # Format session summaries into user prompt
-        summary_parts = [f"Session-{i}:  {s['summary']}" for i, s in enumerate(session_summaries, 1)]
-        combined_text = "\n".join(summary_parts)
-        user_prompt = f"""Create a concise thread-level summary based on these recent sessions:
-
-{combined_text}
-
-"""
-
-        # Get config from registry (includes agent_id and agent_name)
+Write a concise status covering the goal, decisions, open items, and failures.
+A failed answer is an outcome, not the new goal.
+Do not paste tool transcripts.
+{recompress_line}"""
         loader = get_config_loader()
         mini_config = loader.create_mini_agent_config(agent_name="ThreadSummarizer")
         runtime_context = await self._create_system_runtime_context(
@@ -214,7 +138,38 @@ class MiniAgentService(TenantAwareService):
             thread_id=thread_id,
         )
         result = await self.executor.execute(config=mini_config, context=runtime_context, user_prompt=user_prompt)
-        return result.content
+        content = (result.content or "").strip()
+        return content or None
+
+    async def summarize_run_prefix(
+        self,
+        *,
+        thread_id: str,
+        run_id: str,
+        previous_summary: str | None,
+        prefix_text: str,
+    ) -> str | None:
+        """Compress the older prefix of the current run so the next step still fits."""
+        user_prompt = f"""Compress the earlier steps of this agent run so the model can continue.
+
+Previous compress:
+{previous_summary or "(none)"}
+
+Earlier steps:
+{prefix_text}
+
+Keep the user request, decisions, tool names, and errors. Drop raw payloads.
+"""
+        loader = get_config_loader()
+        mini_config = loader.create_mini_agent_config(agent_name="SessionSummarizer")
+        runtime_context = await self._create_system_runtime_context(
+            config=mini_config,
+            thread_id=thread_id,
+            session_id=run_id,
+        )
+        result = await self.executor.execute(config=mini_config, context=runtime_context, user_prompt=user_prompt)
+        content = (result.content or "").strip()
+        return content or None
 
     async def generate_table_metadata(
         self,

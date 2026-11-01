@@ -4,23 +4,21 @@ from __future__ import annotations
 
 import asyncio
 import json
-from contextlib import asynccontextmanager
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from apps.shared.core.exceptions import ValidationError
 from apps.shared.schemas.user import UserDTO
-from uuid import uuid4
-
 from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain, AgentRunStatus
+from apps.tenant_app_service.chat.application import iter_prepared_chat_stream_committed
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
-from apps.tenant_app_service.chat.application import iter_prepared_chat_stream_committed
 
 
 async def _committed_stream(chat_service, chat_request, current_user, access_token=None):
@@ -55,11 +53,11 @@ def _mock_send_human_and_runs(agent_id: int = -1, thread_id: str = "thread-1"):
     ]
 
 from apps.tenant_app_service.chat.streaming import (
-    PreparedChatStream,
     SSE_HEARTBEAT_PAYLOAD,
     STREAM_ERROR_KIND_DOMAIN,
     STREAM_ERROR_KIND_RATE_LIMIT,
     STREAM_ERROR_KIND_TIMEOUT,
+    PreparedChatStream,
     format_user_stream_error,
     is_transient_postgres_connection_error,
     stream_error_kind,

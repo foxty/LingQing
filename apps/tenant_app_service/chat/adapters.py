@@ -1,8 +1,8 @@
 """Adapters for converting between domain models and DTOs."""
 
 from apps.shared.artifact.domain import ArtifactDomain
-from apps.shared.db.models import Artifact, ChatMessage, ChatThread, SessionSummary, ThreadSummary
-from apps.tenant_app_service.chat.domain import MessageDomain, SessionSummaryDomain, ThreadDomain, ThreadSummaryDomain
+from apps.shared.db.models import Artifact, ChatMessage, ChatThread, ThreadSummary
+from apps.tenant_app_service.chat.domain import MessageDomain, ThreadDomain, ThreadSummaryDomain
 from apps.tenant_app_service.chat.schemas import ConversationHistoryResponse, Message
 from apps.tenant_app_service.hitl.utils import has_hitl_payload
 
@@ -189,32 +189,8 @@ def thread_summary_domain_to_db(domain: ThreadSummaryDomain) -> ThreadSummary:
         session_count=domain.session_count,
         token_count_before=domain.token_count_before,
         token_count_after=domain.token_count_after,
+        through_trigger_message_id=domain.through_trigger_message_id,
     )
-
-
-def session_summary_to_domain(db_session: SessionSummary) -> SessionSummaryDomain:
-    """Convert SessionSummary DB model to SessionSummaryDomain.
-
-    Creates a SessionSummaryDomain with pre-extracted session data from DB cache.
-    Used for thread summarization where full message history is not needed.
-
-    Args:
-        db_session: SessionSummary DB model
-
-    Returns:
-        SessionSummaryDomain instance with cached session summary data
-    """
-    # Create SessionSummaryDomain with pre-extracted data from DB cache
-    session = SessionSummaryDomain.__new__(SessionSummaryDomain)
-    session.session_id = db_session.session_id
-    session.thread_id = db_session.thread_id
-    session.user_intent = db_session.user_intent
-    session.tools_used = db_session.tools_used
-    session.key_results = db_session.key_results
-    session.messages = []  # Not needed for cached summary
-    session.message_time_range = db_session.message_range  # Use cached range from DB
-    session.summary = db_session.summary_text
-    return session
 
 
 def artifact_domain_to_artifact_response(domain: ArtifactDomain) -> dict:
