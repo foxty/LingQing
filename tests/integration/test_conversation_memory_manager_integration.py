@@ -153,9 +153,7 @@ async def _insert_main_paired_turn(
         sess = session_id or str(uuid4())
     ai_message_id = ai_id or f"{human_id}-ai"
     ai_t = t_human + 10 if t_ai is None else t_ai
-    await _insert_main_human(
-        session, thread_id=thread.id, message_id=human_id, content=human_content, t=t_human
-    )
+    await _insert_main_human(session, thread_id=thread.id, message_id=human_id, content=human_content, t=t_human)
     await _insert_main_ai(
         session,
         thread_id=thread.id,
@@ -256,9 +254,7 @@ async def _insert_msg(
 ):
     """Legacy helper: humans → main timeline; other types → agent_run_messages."""
     if msg_type == "human":
-        return await _insert_main_human(
-            session, thread_id=thread_id, message_id=msg_id, content=content, t=t
-        )
+        return await _insert_main_human(session, thread_id=thread_id, message_id=msg_id, content=content, t=t)
     if not run_id:
         raise ValueError("run_id is required for non-human _insert_msg")
     return await _insert_run_msg(
@@ -362,9 +358,7 @@ class TestSaveAndLoadRoundTrip:
         run_id, trigger_id, session_id = await _seed_run(
             pg_async_db_session, thread, session_id="session-integ-001", trigger_message_id="rt-h1"
         )
-        await _insert_main_human(
-            pg_async_db_session, thread_id=thread.id, message_id=trigger_id, content="Hello"
-        )
+        await _insert_main_human(pg_async_db_session, thread_id=thread.id, message_id=trigger_id, content="Hello")
         mgr = await _manager(pg_async_db_session, thread, run_id=run_id)
         config = RunnableConfig(
             configurable={
@@ -378,9 +372,7 @@ class TestSaveAndLoadRoundTrip:
 
         await mgr.add_messages([AIMessage(id="rt-a1", content="Hi")], config)
 
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=None, run_message_limit=None)
 
         assert len(loaded) == 2
         assert isinstance(loaded[0], HumanMessage)
@@ -418,9 +410,7 @@ class TestSaveAndLoadRoundTrip:
             config,
         )
 
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=None, run_message_limit=None)
 
         assert isinstance(loaded[0], AIMessage)
         assert loaded[0].tool_calls[0]["id"] == tc_id
@@ -451,9 +441,7 @@ class TestSaveAndLoadRoundTrip:
             config,
         )
 
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=None, run_message_limit=None)
 
         assert len(loaded) == 1
         assert isinstance(loaded[0], AIMessage)
@@ -477,9 +465,7 @@ class TestSaveAndLoadRoundTrip:
             )
         await pg_async_db_session.commit()
 
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=None, run_message_limit=None)
 
         assert [m.content for m in loaded] == [
             "First",
@@ -519,9 +505,7 @@ class TestUnsummarizedFiltering:
             session_id=old_sess,
             t_human=0,
         )
-        await _insert_main_human(
-            pg_async_db_session, thread_id=thread.id, message_id="f-2", content="New Q", t=20
-        )
+        await _insert_main_human(pg_async_db_session, thread_id=thread.id, message_id="f-2", content="New Q", t=20)
         await _insert_run_msg(
             pg_async_db_session,
             run_id=old_run_id,
@@ -548,9 +532,7 @@ class TestUnsummarizedFiltering:
         await pg_async_db_session.commit()
 
         mgr = await _manager(pg_async_db_session, thread, run_id=new_run_id)
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=None, run_message_limit=None)
 
         assert [m.content for m in loaded if isinstance(m, HumanMessage)] == ["Old Q", "New Q"]
         assert [m.content for m in loaded if isinstance(m, AIMessage)] == ["Old A main", "New A"]
@@ -586,9 +568,7 @@ class TestUnsummarizedFiltering:
         await pg_async_db_session.commit()
 
         mgr = await _manager(pg_async_db_session, thread, run_id=run_id)
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=2, run_message_limit=2
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=2, run_message_limit=2)
 
         # Main tail 2 pairs + run unsummarized tail 2
         assert [m.content for m in loaded] == [
@@ -631,8 +611,6 @@ class TestUnsummarizedFiltering:
 
         mgr = await _manager(pg_async_db_session, thread, run_id=run_id)
         loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0,
-            session_summary_limit=0,
             main_timeline_turn_limit=1,
             run_message_limit=None,
         )
@@ -664,15 +642,11 @@ class TestUnsummarizedFiltering:
             trigger_message_id="h-sure",
             session_id="sess-pair",
         )
-        await _insert_main_human(
-            pg_async_db_session, thread_id=thread.id, message_id="h-sure", content="sure", t=15
-        )
+        await _insert_main_human(pg_async_db_session, thread_id=thread.id, message_id="h-sure", content="sure", t=15)
         await pg_async_db_session.commit()
 
         mgr = await _manager(pg_async_db_session, thread, run_id=run_id)
         loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0,
-            session_summary_limit=0,
             main_timeline_turn_limit=1,
             run_message_limit=0,
         )
@@ -693,8 +667,6 @@ class TestUnsummarizedFiltering:
         await pg_async_db_session.commit()
 
         loaded_two = await mgr.load_messages_with_summary(
-            thread_summary_limit=0,
-            session_summary_limit=0,
             main_timeline_turn_limit=2,
             run_message_limit=0,
         )
@@ -705,9 +677,7 @@ class TestUnsummarizedFiltering:
             "sure",
         ]
 
-    async def test_zero_limits_load_no_main_or_run_messages(
-        self, pg_async_db_session, sample_tenant_user_thread
-    ):
+    async def test_zero_limits_load_no_main_or_run_messages(self, pg_async_db_session, sample_tenant_user_thread):
         """main_timeline_turn_limit=0, run_message_limit=0 should load zero main tail and zero run rows."""
         thread, *_ = sample_tenant_user_thread
         run_id, _, sess = await _seed_run(pg_async_db_session, thread, session_id="sess-zero")
@@ -727,9 +697,7 @@ class TestUnsummarizedFiltering:
         await pg_async_db_session.commit()
 
         mgr = await _manager(pg_async_db_session, thread, run_id=run_id)
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=0, run_message_limit=0
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=0, run_message_limit=0)
 
         assert loaded == []
 
@@ -770,7 +738,7 @@ class TestUnsummarizedFiltering:
         await mgr.add_messages([AIMessage(id="pg-a1", content="A1")], config)
 
         # main_timeline_turn_limit=1, run_message_limit=1 caps main tail and run tail separately (no spurious HITL tool_calls)
-        loaded = await mgr.load_messages_with_summary(thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=1, run_message_limit=1)
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=1, run_message_limit=1)
 
         assert len(loaded) == 3
         assert loaded[0].content == "Q2"
@@ -839,7 +807,7 @@ class TestHITLEndToEnd:
         await pg_async_db_session.commit()
 
         loaded = await (await _manager(pg_async_db_session, thread, run_id=run_id)).load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=2, run_message_limit=2
+            main_timeline_turn_limit=2, run_message_limit=2
         )
 
         assert len(loaded) == 6
@@ -895,7 +863,7 @@ class TestHITLEndToEnd:
         await pg_async_db_session.commit()
 
         loaded = await (await _manager(pg_async_db_session, thread, run_id=run_id)).load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
+            main_timeline_turn_limit=None, run_message_limit=None
         )
 
         assert len(loaded) == 4
@@ -976,7 +944,7 @@ class TestHITLEndToEnd:
         await pg_async_db_session.commit()
 
         loaded = await (await _manager(pg_async_db_session, thread, run_id=run_id)).load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=1, run_message_limit=1
+            main_timeline_turn_limit=1, run_message_limit=1
         )
 
         assert len(loaded) == 4
@@ -1046,7 +1014,7 @@ class TestHITLEndToEnd:
         await pg_async_db_session.commit()
 
         loaded = await (await _manager(pg_async_db_session, thread, run_id=run_id)).load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
+            main_timeline_turn_limit=None, run_message_limit=None
         )
 
         assert len(loaded) == 2
@@ -1086,7 +1054,7 @@ class TestHITLEndToEnd:
         await pg_async_db_session.commit()
 
         loaded = await (await _manager(pg_async_db_session, thread, run_id=run_id)).load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
+            main_timeline_turn_limit=None, run_message_limit=None
         )
 
         assert len(loaded) == 3
@@ -1168,7 +1136,7 @@ class TestHITLEndToEnd:
         await pg_async_db_session.commit()
 
         loaded = await (await _manager(pg_async_db_session, thread, run_id=run_id)).load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
+            main_timeline_turn_limit=None, run_message_limit=None
         )
 
         assert len(loaded) == 2
@@ -1237,7 +1205,7 @@ class TestHITLEndToEnd:
         await pg_async_db_session.commit()
 
         loaded = await (await _manager(pg_async_db_session, thread, run_id=run_id)).load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
+            main_timeline_turn_limit=None, run_message_limit=None
         )
 
         assert [m.content for m in loaded if isinstance(m, HumanMessage)] == ["Unrelated follow-up"]
@@ -1245,9 +1213,7 @@ class TestHITLEndToEnd:
         assert len(ai_with_tools) == 1
         assert ai_with_tools[0].tool_calls[0]["id"] == tc_id
         assert any(isinstance(m, ToolMessage) for m in loaded)
-        assert not any(
-            isinstance(m, AIMessage) and m.content == "Let me re-run the query now." for m in loaded
-        )
+        assert not any(isinstance(m, AIMessage) and m.content == "Let me re-run the query now." for m in loaded)
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -1259,10 +1225,18 @@ class TestHITLEndToEnd:
 class TestMainTimelineRunContextDedup:
     """Main timeline + run composition and summary dedup on real Postgres."""
 
-    async def test_session_summary_omits_covered_main_ai_keeps_human(
-        self, pg_async_db_session, sample_tenant_user_thread
-    ):
+    async def test_session_summary_row_does_not_hide_main_pair(self, pg_async_db_session, sample_tenant_user_thread):
+        """Legacy session_summaries rows are not injected and do not XOR the main pair."""
         thread, tenant_id, _ = sample_tenant_user_thread
+        await _insert_main_paired_turn(
+            pg_async_db_session,
+            thread=thread,
+            human_id="dedup-prior-h",
+            human_content="Prior question",
+            ai_id="dedup-prior-a",
+            ai_content="Prior answer",
+            t_human=0,
+        )
         trigger = "dedup-trigger-1"
         run_id, _, session_id = await _seed_run(
             pg_async_db_session,
@@ -1271,7 +1245,7 @@ class TestMainTimelineRunContextDedup:
             session_id="dedup-sess-1",
         )
         await _insert_main_human(
-            pg_async_db_session, thread_id=thread.id, message_id=trigger, content="User question", t=0
+            pg_async_db_session, thread_id=thread.id, message_id=trigger, content="User question", t=10
         )
         await _insert_main_ai(
             pg_async_db_session,
@@ -1282,7 +1256,18 @@ class TestMainTimelineRunContextDedup:
             trigger_message_id=trigger,
             agent_run_id=run_id,
             session_id=session_id,
-            t=10,
+            t=11,
+        )
+        await _insert_run_msg(
+            pg_async_db_session,
+            run_id=run_id,
+            thread_id=thread.id,
+            agent_id=thread.agent_id,
+            msg_id="dedup-ai-main",
+            msg_type="ai",
+            content="Promoted answer",
+            session_id=session_id,
+            t=11,
         )
         await _insert_session_summary(
             pg_async_db_session,
@@ -1294,21 +1279,20 @@ class TestMainTimelineRunContextDedup:
         await pg_async_db_session.commit()
 
         mgr = await _manager(pg_async_db_session, thread, run_id=run_id)
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=1, main_timeline_turn_limit=None, run_message_limit=None
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=None, run_message_limit=None)
 
         conv = [m for m in loaded if not isinstance(m, SystemMessage)]
-        assert [m.content for m in conv if isinstance(m, HumanMessage)] == ["User question"]
-        assert not any(isinstance(m, AIMessage) and m.content == "Promoted answer" for m in conv)
-        assert any(
+        human_contents = [m.content for m in conv if isinstance(m, HumanMessage)]
+        assert "Prior question" in human_contents
+        assert "User question" in human_contents
+        assert any(isinstance(m, AIMessage) and m.content == "Promoted answer" for m in conv)
+        assert any(isinstance(m, AIMessage) and m.content == "Prior answer" for m in conv)
+        assert not any(
             isinstance(m, SystemMessage) and m.additional_kwargs.get("summary_type") == "session_summary"
             for m in loaded
         )
 
-    async def test_promoted_main_not_duplicated_from_run_messages(
-        self, pg_async_db_session, sample_tenant_user_thread
-    ):
+    async def test_promoted_main_not_duplicated_from_run_messages(self, pg_async_db_session, sample_tenant_user_thread):
         thread, *_ = sample_tenant_user_thread
         q_trigger = "dedup-trigger-2"
         active_trigger = "dedup-active-human"
@@ -1321,9 +1305,7 @@ class TestMainTimelineRunContextDedup:
         await _insert_main_human(
             pg_async_db_session, thread_id=thread.id, message_id=active_trigger, content="Active Q", t=0
         )
-        await _insert_main_human(
-            pg_async_db_session, thread_id=thread.id, message_id=q_trigger, content="Q", t=5
-        )
+        await _insert_main_human(pg_async_db_session, thread_id=thread.id, message_id=q_trigger, content="Q", t=5)
         await _insert_main_ai(
             pg_async_db_session,
             thread_id=thread.id,
@@ -1361,20 +1343,18 @@ class TestMainTimelineRunContextDedup:
         await pg_async_db_session.commit()
 
         mgr = await _manager(pg_async_db_session, thread, run_id=run_id)
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=None, run_message_limit=None)
 
         finals = [m for m in loaded if getattr(m, "content", None) == "Final"]
         assert len(finals) == 1
         assert isinstance(finals[0], AIMessage)
         assert any(isinstance(m, ToolMessage) for m in loaded)
 
-    async def test_multi_agent_same_trigger_summarized_peer_ai_omitted(
+    async def test_multi_agent_same_trigger_omits_peer_ai(
         self, pg_async_db_session, sample_tenant_user_thread
     ):
-        """Agent B loader keeps shared human; agent A promoted AI omitted when A session summarized."""
-        thread, tenant_id, _ = sample_tenant_user_thread
+        """Agent B loader keeps the shared human and its own reply; peer AI stays out of scope."""
+        thread, *_ = sample_tenant_user_thread
         trigger = "multi-trigger"
         peer_agent_id = thread.agent_id + 1000
         run_a, _, sess_a = await _seed_run(
@@ -1420,13 +1400,6 @@ class TestMainTimelineRunContextDedup:
             invoke_index=1,
             t=11,
         )
-        await _insert_session_summary(
-            pg_async_db_session,
-            session_id=sess_a,
-            thread_id=thread.id,
-            tenant_id=tenant_id,
-            summary_text="Agent A session summary",
-        )
         await _insert_run_msg(
             pg_async_db_session,
             run_id=run_b,
@@ -1441,9 +1414,7 @@ class TestMainTimelineRunContextDedup:
         await pg_async_db_session.commit()
 
         mgr = await _manager(pg_async_db_session, thread, run_id=run_b, agent_id=thread.agent_id)
-        loaded = await mgr.load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=1, main_timeline_turn_limit=None, run_message_limit=None
-        )
+        loaded = await mgr.load_messages_with_summary(main_timeline_turn_limit=None, run_message_limit=None)
 
         conv = [m for m in loaded if not isinstance(m, SystemMessage)]
         assert any(isinstance(m, HumanMessage) and m.content == "Shared ask" for m in conv)
@@ -1459,41 +1430,6 @@ class TestMainTimelineRunContextDedup:
 @pytest.mark.asyncio
 class TestSummaryLoading:
     """Validate summary loading and structural ordering on real Postgres."""
-
-    async def test_only_unsummarized_session_summaries_shown(self, pg_async_db_session, sample_tenant_user_thread):
-        """Sessions with included_in_thread_summary=True are excluded."""
-        thread, tenant_id, _ = sample_tenant_user_thread
-
-        await _insert_session_summary(
-            pg_async_db_session,
-            session_id="ss-old",
-            thread_id=thread.id,
-            tenant_id=tenant_id,
-            summary_text="Old session",
-            included_in_thread_summary=True,
-        )
-        await _insert_session_summary(
-            pg_async_db_session,
-            session_id="ss-new",
-            thread_id=thread.id,
-            tenant_id=tenant_id,
-            summary_text="New session",
-            included_in_thread_summary=False,
-        )
-        await pg_async_db_session.commit()
-
-        loaded = await (await _manager(pg_async_db_session, thread)).load_messages_with_summary(
-            thread_summary_limit=0, session_summary_limit=5, main_timeline_turn_limit=None, run_message_limit=None
-        )
-
-        session_sys = [
-            m
-            for m in loaded
-            if isinstance(m, SystemMessage) and m.additional_kwargs.get("summary_type") == "session_summary"
-        ]
-        assert len(session_sys) == 1
-        assert "New session" in session_sys[0].content
-        assert "Old session" not in session_sys[0].content
 
     async def test_thread_summary_appears_before_all_other_messages(
         self, pg_async_db_session, sample_tenant_user_thread
@@ -1515,7 +1451,7 @@ class TestSummaryLoading:
         await pg_async_db_session.commit()
 
         loaded = await (await _manager(pg_async_db_session, thread)).load_messages_with_summary(
-            thread_summary_limit=1, session_summary_limit=0, main_timeline_turn_limit=None, run_message_limit=None
+            main_timeline_turn_limit=None, run_message_limit=None
         )
 
         assert isinstance(loaded[0], SystemMessage)

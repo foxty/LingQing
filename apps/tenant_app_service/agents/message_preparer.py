@@ -20,6 +20,31 @@ logger = get_logger(__name__)
 TRANSIENT_COMPRESS_MAX_CHARS = 200
 
 
+def _older_tool_message_indexes(messages: List[BaseMessage]) -> set[int]:
+    """ToolMessage indexes that belong to a tool round before the latest one."""
+    rounds: list[list[int]] = []
+    current: list[int] | None = None
+    for index, message in enumerate(messages):
+        if isinstance(message, AIMessage) and message.tool_calls:
+            if current:
+                rounds.append(current)
+            current = []
+        elif isinstance(message, ToolMessage) and current is not None:
+            current.append(index)
+        elif isinstance(message, HumanMessage):
+            if current:
+                rounds.append(current)
+            current = None
+    if current:
+        rounds.append(current)
+    if len(rounds) <= 1:
+        return set()
+    older: set[int] = set()
+    for round_indexes in rounds[:-1]:
+        older.update(round_indexes)
+    return older
+
+
 class CompressionAndPreservationResult(NamedTuple):
     """Typed result for _compress_and_preserve stage."""
 
@@ -244,18 +269,26 @@ class MessagePreparer:
                 preserved_count += 1
                 preserved_chars += self._message_char_len(msg)
 
-        # 2. Compress transient tool outputs in kept messages that are older
-        #    than the last HumanMessage (i.e. no longer the "active" cycle).
+        # 2. Compress transient tool outputs that are no longer the active step:
+        #    before the last human, and older tool rounds inside the current run.
+        #    The latest tool round stays full.
         last_human_idx = -1
         for i, msg in enumerate(kept_messages):
             if isinstance(msg, HumanMessage):
                 last_human_idx = i
+        older_tool_indexes = _older_tool_message_indexes(kept_messages)
 
         compressed_messages: List[BaseMessage] = []
         compressed_count = 0
         compressed_chars_saved = 0
         for i, msg in enumerate(kept_messages):
-            if isinstance(msg, ToolMessage) and i < last_human_idx and len(msg.content) > TRANSIENT_COMPRESS_MAX_CHARS:
+            in_older_round = i in older_tool_indexes
+            before_last_human = i < last_human_idx
+            if (
+                isinstance(msg, ToolMessage)
+                and (before_last_human or in_older_round)
+                and len(msg.content) > TRANSIENT_COMPRESS_MAX_CHARS
+            ):
                 retention = (msg.additional_kwargs or {}).get("result_retention")
                 if retention != RETENTION_LONG_LIVED:
                     truncated_content = msg.content[:TRANSIENT_COMPRESS_MAX_CHARS] + "\n... [truncated]"

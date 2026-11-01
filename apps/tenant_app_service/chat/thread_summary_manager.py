@@ -1,289 +1,275 @@
-"""Thread summary manager and trigger logic."""
-
-from dataclasses import dataclass
+"""Cumulative thread summary: merge the previous status with pairs that aged out of the main-line tail."""
 
 from langchain_core.messages import SystemMessage
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.db.models import ChatThread, SessionSummary, ThreadSummary
+from apps.shared.db.models import ChatThread, ThreadSummary
 from apps.shared.utils.logger import get_logger
+from apps.tenant_app_service.agents.memory.memory_budget import (
+    THREAD_SUMMARY_MAX_TOKENS,
+    THREAD_SUMMARY_MIN_AGED_PAIRS,
+    THREAD_SUMMARY_TURN_FIELD_CHARS,
+    thread_summary_context_pressure_tokens,
+)
 from apps.tenant_app_service.agents.token_counter import count_tokens
-from apps.tenant_app_service.chat.adapters import session_summary_to_domain, thread_summary_domain_to_db
-from apps.tenant_app_service.chat.domain import SessionSummaryDomain, ThreadSummaryDomain
-from apps.tenant_app_service.chat.session_summary_repository import SessionSummaryRepository
+from apps.tenant_app_service.chat.adapters import thread_summary_domain_to_db
+from apps.tenant_app_service.chat.agent_run_domain import (
+    ThreadMainMessageDomain,
+    aged_out_uncovered_turns,
+    context_pair_turns,
+    iter_thread_pair_turns,
+    sort_timeline_trigger_anchored,
+)
+from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
+from apps.tenant_app_service.chat.agent_run_summary_repository import AgentRunSummaryRepository
+from apps.tenant_app_service.chat.domain import ThreadSummaryDomain
+from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+from apps.tenant_app_service.chat.service_base import DEFAULT_MAIN_TIMELINE_TURN_LIMIT
 from apps.tenant_app_service.chat.thread_summary_repository import ThreadSummaryRepository
 
 logger = get_logger(__name__)
 
 
-@dataclass
-class TriggerResult:
-    """Thread summary trigger check result."""
+def _clip(text: str) -> str:
+    """Cap turn fields sent to the thread summarizer (not the stored summary text)."""
+    if len(text) <= THREAD_SUMMARY_TURN_FIELD_CHARS:
+        return text
+    return text[:THREAD_SUMMARY_TURN_FIELD_CHARS] + "..."
 
-    should_trigger: bool
-    reason: str
-    session_count: int
-    estimated_tokens: int
 
-    def __str__(self) -> str:
-        return (
-            f"TriggerResult(should_trigger={self.should_trigger}, reason='{self.reason}', "
-            f"session_count={self.session_count}, estimated_tokens={self.estimated_tokens})"
+def _estimate_verbatim_tail_tokens(
+    rows: list[ThreadMainMessageDomain],
+    *,
+    through_trigger_message_id: str | None,
+) -> int:
+    """Rough token count for main-line pairs kept verbatim beside the thread summary."""
+    pair_turns = list(iter_thread_pair_turns(rows))
+    kept = context_pair_turns(
+        pair_turns,
+        through_trigger_message_id=through_trigger_message_id,
+        reserve_tail=DEFAULT_MAIN_TIMELINE_TURN_LIMIT,
+    )
+    chunks = [
+        f"{row.type}: {row.content}"
+        for turn in kept
+        for row in turn
+        if row.content
+    ]
+    if not chunks:
+        return 0
+    return count_tokens([SystemMessage(content=chunk) for chunk in chunks])
+
+
+def should_write_thread_summary_delta(
+    *,
+    delta: list[list[ThreadMainMessageDomain]],
+    previous_summary: str | None,
+    main_rows: list[ThreadMainMessageDomain],
+    through_trigger_message_id: str | None,
+) -> tuple[bool, str]:
+    """Whether pending aged-out pairs should be merged now (vs left for the next run)."""
+    if not delta:
+        return False, "no_delta"
+
+    if len(delta) >= THREAD_SUMMARY_MIN_AGED_PAIRS:
+        return True, "batch_threshold"
+
+    if previous_summary:
+        summary_tokens = count_tokens([SystemMessage(content=previous_summary)])
+        if summary_tokens > THREAD_SUMMARY_MAX_TOKENS:
+            return True, "summary_over_max"
+
+        tail_tokens = _estimate_verbatim_tail_tokens(
+            main_rows,
+            through_trigger_message_id=through_trigger_message_id,
         )
+        pressure = thread_summary_context_pressure_tokens()
+        if summary_tokens + tail_tokens >= pressure:
+            return True, "context_pressure"
 
-
-class ThreadSummaryTrigger:
-    """Thread summary trigger using hybrid strategy."""
-
-    STANDARD_SESSION_WINDOW = 5
-    EARLY_TRIGGER_MIN_SESSIONS = 3
-    EARLY_TRIGGER_TOKEN_THRESHOLD = 18000
-    LATE_TRIGGER_MAX_SESSIONS = 7
-    LATE_TRIGGER_MIN_TOKENS = 6000
-
-    async def check(
-        self,
-        thread_id: str,
-        unsummarized_sessions: list[SessionSummary],
-    ) -> TriggerResult:
-        """Check if thread summary should be created.
-
-        Args:
-            thread_id: Thread ID
-            unsummarized_sessions: List of unsummarized session summaries
-
-        Returns:
-            TriggerResult with decision
-        """
-        session_count = len(unsummarized_sessions)
-        session_messages = [SystemMessage(content=f"{s.summary_text}") for s in unsummarized_sessions]
-        estimated_tokens = count_tokens(session_messages)
-
-        # Rule 1: Standard window (only when input is large enough to benefit from compression)
-        if session_count == self.STANDARD_SESSION_WINDOW:
-            if estimated_tokens < self.LATE_TRIGGER_MIN_TOKENS:
-                return TriggerResult(
-                    should_trigger=False,
-                    reason="delaying_light_sessions_at_window",
-                    session_count=session_count,
-                    estimated_tokens=estimated_tokens,
-                )
-            return TriggerResult(
-                should_trigger=True,
-                reason="standard_window",
-                session_count=session_count,
-                estimated_tokens=estimated_tokens,
-            )
-
-        # Rule 2: Early trigger (heavy sessions)
-        if session_count >= self.EARLY_TRIGGER_MIN_SESSIONS and estimated_tokens >= self.EARLY_TRIGGER_TOKEN_THRESHOLD:
-            logger.warning(
-                f"Early trigger for thread {thread_id}: {session_count} sessions with {estimated_tokens} tokens"
-            )
-            return TriggerResult(
-                should_trigger=True,
-                reason="early_trigger_heavy_sessions",
-                session_count=session_count,
-                estimated_tokens=estimated_tokens,
-            )
-
-        # Rule 3: Late trigger handling (light sessions)
-        if session_count > self.STANDARD_SESSION_WINDOW:
-            # Max sessions reached
-            if session_count >= self.LATE_TRIGGER_MAX_SESSIONS:
-                return TriggerResult(
-                    should_trigger=True,
-                    reason="late_trigger_max_sessions",
-                    session_count=session_count,
-                    estimated_tokens=estimated_tokens,
-                )
-
-            # Tokens still too low, continue delaying
-            if estimated_tokens < self.LATE_TRIGGER_MIN_TOKENS:
-                return TriggerResult(
-                    should_trigger=False,
-                    reason="delaying_light_sessions",
-                    session_count=session_count,
-                    estimated_tokens=estimated_tokens,
-                )
-
-            # Sufficient tokens, trigger
-            return TriggerResult(
-                should_trigger=True,
-                reason="late_trigger_sufficient_tokens",
-                session_count=session_count,
-                estimated_tokens=estimated_tokens,
-            )
-
-        # Default: wait
-        return TriggerResult(
-            should_trigger=False,
-            reason="waiting",
-            session_count=session_count,
-            estimated_tokens=estimated_tokens,
-        )
+    return False, "defer_batch"
 
 
 class ThreadSummaryManager:
-    """Manages thread-level summarization."""
+    """Writes the next cumulative thread summary after a run completes."""
 
     def __init__(self, db: AsyncSession, tenant_id: int):
-        """Initialize thread summary manager.
-
-        Args:
-            db: Database session
-            tenant_id: Tenant ID
-        """
         self.db = db
         self.tenant_id = tenant_id
         self.repo = ThreadSummaryRepository(db)
-        self.session_repo = SessionSummaryRepository(db)
-        self.trigger = ThreadSummaryTrigger()
+        self.main_repo = MainMessageRepository(db)
+        self.run_summary_repo = AgentRunSummaryRepository(db)
+        self.run_message_repo = AgentRunMessageRepository(db)
         self._mini_agent_service = None
 
     async def check_and_create_if_needed(self, thread_id: str) -> ThreadSummary | None:
-        """Check if thread summary is needed and create it.
+        """Create the next cumulative version when aged-out pairs should be folded.
 
-        Args:
-            thread_id: Thread ID
-
-        Returns:
-            Created ThreadSummary or None if not needed
+        The check runs after every terminal run; the LLM runs only when batch or
+        context-pressure rules say so. A failed summarizer leaves the previous version.
         """
-        unsummarized = await self.session_repo.get_unsummarized_sessions(thread_id)
-        result = await self.trigger.check(thread_id, unsummarized)
-        logger.info(f"Thread summary check for {thread_id}: {result} ")
-        if result.should_trigger:
-            return await self.create_thread_summary(thread_id, unsummarized)
-        else:
+        rows = sort_timeline_trigger_anchored(await self.main_repo.list_for_thread(thread_id))
+        latest_rows = await self.repo.get_recent_summaries(thread_id, limit=1)
+        previous = latest_rows[0] if latest_rows else None
+        watermark = previous.through_trigger_message_id if previous is not None else None
+        delta = aged_out_uncovered_turns(
+            rows,
+            reserve_tail=DEFAULT_MAIN_TIMELINE_TURN_LIMIT,
+            through_trigger_message_id=watermark,
+        )
+        if not delta:
+            logger.info("Thread summary skipped for %s: no aged-out pairs", thread_id)
             return None
 
-    async def create_thread_summary(
-        self,
-        thread_id: str,
-        session_summaries: list[SessionSummary],
-    ) -> ThreadSummary | None:
-        """Create a thread summary from session summaries.
-
-        Orchestrates summary generation, delegates business logic to domain, handles persistence.
-
-        Args:
-            thread_id: Thread ID
-            session_summaries: List of SessionSummary DB models
-
-        Returns:
-            Created ThreadSummary DB model or None if creation failed
-        """
-        if not session_summaries:
-            logger.warning(f"No session summaries provided for thread {thread_id}")
+        previous_text = previous.summary_content if previous is not None else None
+        should_write, reason = should_write_thread_summary_delta(
+            delta=delta,
+            previous_summary=previous_text,
+            main_rows=rows,
+            through_trigger_message_id=watermark,
+        )
+        if not should_write:
+            logger.info(
+                "Thread summary deferred for %s: %s aged-out pair(s) (%s)",
+                thread_id,
+                len(delta),
+                reason,
+            )
             return None
 
         try:
-            # Get next version
-            current_version = await self.repo.get_latest_version(thread_id)
-            new_version = current_version + 1
-
-            # Convert DB models to domain (at the boundary)
-            session_domains = [session_summary_to_domain(ss) for ss in session_summaries]
-
-            # Try to generate LLM summary (orchestrated by manager)
-            llm_summary = await self._try_generate_llm_summary(thread_id, session_domains)
-
-            # Delegate to domain: create with LLM or fallback summary
-            if llm_summary:
-                # Use LLM-generated summary
-                thread_summary_domain = ThreadSummaryDomain.create_from_sessions(
-                    thread_id=thread_id,
-                    tenant_id=self.tenant_id,
-                    version=new_version,
-                    sessions=session_domains,
-                    summary_content=llm_summary,
-                )
-            else:
-                # Use domain's fallback summary logic
-                logger.warning(f"Using fallback summary for thread {thread_id}")
-                thread_summary_domain = ThreadSummaryDomain.create_with_fallback_summary(
-                    thread_id=thread_id,
-                    tenant_id=self.tenant_id,
-                    version=new_version,
-                    sessions=session_domains,
-                )
-
-            # Convert domain to DB model (at the boundary)
-            thread_summary_db = thread_summary_domain_to_db(thread_summary_domain)
-
-            # Persist to database
-            await self.repo.create(thread_summary_db)
-
-            # Update ChatThread summary_count
-            thread = await self.db.get(ChatThread, thread_id)
-            if thread:
-                thread.summary_count += 1
-
-            # Mark sessions as summarized
-            session_ids = [s.session_id for s in session_summaries]
-            await self.session_repo.mark_sessions_as_summarized(session_ids, new_version)
-
-            await self.db.commit()
-
-            logger.info(
-                f"Created thread summary v{new_version} for thread {thread_id}: "
-                f"{len(session_summaries)} sessions, "
-                f"tokens: {thread_summary_domain.token_count_before} → "
-                f"{thread_summary_domain.token_count_after} "
-                f"({thread_summary_domain.format_token_metrics()})"
-            )
-
-            return thread_summary_db
-
-        except Exception as e:
-            logger.error(f"Failed to create thread summary for {thread_id}: {e}", exc_info=True)
+            return await self._write_cumulative(thread_id, previous, delta, write_reason=reason)
+        except Exception as exc:
+            logger.error("Failed to create thread summary for %s: %s", thread_id, exc, exc_info=True)
             await self.db.rollback()
             return None
 
-    async def _try_generate_llm_summary(
+    async def _write_cumulative(
         self,
         thread_id: str,
-        sessions: list[SessionSummaryDomain],
-    ) -> str | None:
-        """Try to generate summary using LLM service.
+        previous: ThreadSummary | None,
+        delta: list[list[ThreadMainMessageDomain]],
+        *,
+        write_reason: str,
+    ) -> ThreadSummary | None:
+        previous_text = previous.summary_content if previous is not None else None
+        recompress = False
+        if previous_text:
+            recompress = count_tokens([SystemMessage(content=previous_text)]) > THREAD_SUMMARY_MAX_TOKENS
 
-        Manager orchestrates service calls. Returns None on failure,
-        letting caller decide whether to use domain fallback.
+        turn_blocks = []
+        for turn in delta:
+            turn_blocks.append(await self._format_turn_for_summary(turn))
 
-        Args:
-            thread_id: Thread ID
-            sessions: List of SessionSummaryDomain objects
-
-        Returns:
-            LLM-generated summary content or None if failed
-        """
-        try:
-            # Initialize MiniAgentService lazily if needed
-            if self._mini_agent_service is None:
-                from apps.tenant_app_service.agents.mini_agent import MiniAgentService
-
-                self._mini_agent_service = MiniAgentService.create(self.db, self.tenant_id)
-            session_dicts = [
-                {
-                    "session_id": s.session_id,
-                    "summary": s.summary,
-                }
-                for s in sessions
-            ]
-
-            # Try LLM summarization
-            result = await self._mini_agent_service.summarize_thread(
-                thread_id=thread_id,
-                session_summaries=session_dicts,
-            )
-
-            if result:
-                return result.strip()
-            else:
-                logger.warning(f"MiniAgent returned no summary for thread: {thread_id}")
-                return None
-
-        except Exception as e:
-            logger.warning(f"Failed to generate summary with LLM: {e}", exc_info=True)
+        summary_content = await self._summarize(
+            thread_id,
+            previous_summary=previous_text,
+            turn_blocks=turn_blocks,
+            recompress=recompress,
+        )
+        if not summary_content:
+            logger.warning("Thread summarizer returned no text for %s; keeping previous version", thread_id)
             return None
+
+        current_version = await self.repo.get_latest_version(thread_id)
+        new_version = current_version + 1
+        through_trigger_message_id = delta[-1][0].message_id
+        session_ids = [row.session_id for turn in delta for row in turn if row.session_id]
+        times = [row.timestamp for turn in delta for row in turn if row.timestamp]
+        prompt_tokens = count_tokens([SystemMessage(content=block) for block in turn_blocks])
+        if previous_text:
+            prompt_tokens += count_tokens([SystemMessage(content=previous_text)])
+        domain = ThreadSummaryDomain.create_cumulative(
+            thread_id=thread_id,
+            tenant_id=self.tenant_id,
+            version=new_version,
+            through_trigger_message_id=through_trigger_message_id,
+            summary_content=summary_content,
+            session_range={
+                "from_session_id": session_ids[0] if session_ids else None,
+                "to_session_id": session_ids[-1] if session_ids else None,
+                "session_count": len(delta),
+                "from_trigger_message_id": delta[0][0].message_id,
+                "to_trigger_message_id": through_trigger_message_id,
+            },
+            message_range={
+                "from_time": min(times).isoformat() if times else None,
+                "to_time": max(times).isoformat() if times else None,
+                "count": sum(len(turn) for turn in delta),
+            },
+            session_count=len(delta),
+            token_count_before=prompt_tokens,
+            token_count_after=count_tokens([SystemMessage(content=summary_content)]),
+        )
+        row = thread_summary_domain_to_db(domain)
+        await self.repo.create(row)
+        thread = await self.db.get(ChatThread, thread_id)
+        if thread:
+            thread.summary_count += 1
+        await self.db.commit()
+        logger.info(
+            "Created cumulative thread summary v%s for %s (%s): %s aged-out pair(s) through %s",
+            new_version,
+            thread_id,
+            write_reason,
+            len(delta),
+            through_trigger_message_id,
+        )
+        return row
+
+    async def _format_turn_for_summary(self, turn: list[ThreadMainMessageDomain]) -> str:
+        """One user trigger with every promoted reply and run-level detail for that turn."""
+        human = next(row for row in turn if row.type == "human")
+        lines = [f"User: {_clip(human.content)}"]
+        ai_rows = [row for row in turn if row.type == "ai"]
+        for index, ai in enumerate(ai_rows, start=1):
+            header = "Assistant"
+            if len(ai_rows) > 1:
+                header = f"Assistant invoke {index}"
+            if ai.agent_id is not None:
+                header = f"{header} (agent {ai.agent_id})"
+            lines.append(f"{header}: {_clip(ai.content)}")
+            if not ai.agent_run_id:
+                continue
+            run_detail = await self._run_detail_for_summary(ai.agent_run_id, ai.agent_id)
+            if run_detail:
+                lines.append(f"Run detail: {_clip(run_detail)}")
+        return "\n".join(lines)
+
+    async def _run_detail_for_summary(self, run_id: str, agent_id: int | None) -> str | None:
+        """Prefer persisted in-run summary; otherwise a clipped run transcript."""
+        row = await self.run_summary_repo.get_for_run(self.tenant_id, run_id)
+        if row is not None and row.summary_text:
+            return row.summary_text
+
+        messages = await self.run_message_repo.list_for_run(run_id)
+        if not messages:
+            return None
+        lines: list[str] = []
+        for message in messages:
+            if agent_id is not None and message.agent_id != agent_id:
+                continue
+            content = message.content or ""
+            if not content.strip():
+                continue
+            lines.append(f"{message.type}: {_clip(content)}")
+        return "\n".join(lines) if lines else None
+
+    async def _summarize(
+        self,
+        thread_id: str,
+        *,
+        previous_summary: str | None,
+        turn_blocks: list[str],
+        recompress: bool,
+    ) -> str | None:
+        if self._mini_agent_service is None:
+            from apps.tenant_app_service.agents.mini_agent import MiniAgentService
+
+            self._mini_agent_service = MiniAgentService.create(self.db, self.tenant_id)
+        return await self._mini_agent_service.summarize_thread_status(
+            thread_id=thread_id,
+            previous_summary=previous_summary,
+            aged_out_turns=turn_blocks,
+            recompress=recompress,
+        )

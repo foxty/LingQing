@@ -11,13 +11,12 @@ from apps.tenant_app_service.chat.agent_run_domain import (
     AgentRunStatus,
     ThreadMainMessageDomain,
     drop_run_rows_duplicating_promoted_main,
-    run_status_allows_session_summary,
     exclude_trigger_human_from_main_rows,
     filter_main_timeline_for_context_load,
+    run_status_allows_thread_rollup,
     slice_main_timeline_turns,
     sort_timeline_trigger_anchored,
 )
-from tests.unit.chat.main_timeline_pair_assertions import assert_main_timeline_summary_pairs_consistent
 from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 
 
@@ -87,34 +86,24 @@ def test_sort_timeline_invoke_index_siblings():
     assert [m.message_id for m in ordered] == ["h1", "a0", "a1"]
 
 
-def _filter_and_assert_pairs(
+def _filter_pairs(
     rows: list[ThreadMainMessageDomain],
     *,
     agent_id: int,
-    covered: frozenset[str],
 ) -> list[ThreadMainMessageDomain]:
-    ordered = sort_timeline_trigger_anchored(rows)
-    filtered = filter_main_timeline_for_context_load(
-        ordered,
+    return filter_main_timeline_for_context_load(
+        sort_timeline_trigger_anchored(rows),
         agent_id=agent_id,
-        covered_session_ids=covered,
     )
-    assert_main_timeline_summary_pairs_consistent(
-        ordered,
-        filtered,
-        agent_id=agent_id,
-        covered_session_ids=covered,
-    )
-    return filtered
 
 
-def test_filter_main_timeline_drops_covered_turn_human_and_ai():
+def test_filter_main_timeline_keeps_pair_regardless_of_session_id():
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     rows = [
         _human("h1", t0, row_id=1),
         _ai("a1", "h1", row_id=2, created_at=t0, session_id="sess-old"),
     ]
-    assert _filter_and_assert_pairs(rows, agent_id=1, covered=frozenset({"sess-old"})) == []
+    assert [m.message_id for m in _filter_pairs(rows, agent_id=1)] == ["h1", "a1"]
 
 
 def test_exclude_trigger_human_from_main_rows():
@@ -128,7 +117,7 @@ def test_exclude_trigger_human_from_main_rows():
     assert [m.message_id for m in excluded] == ["h1", "a1"]
 
 
-def test_filter_main_timeline_drops_human_when_legacy_ai_missing_trigger():
+def test_filter_main_timeline_keeps_legacy_ai_without_trigger():
     """Legacy promoted AI without trigger_message_id still pairs with preceding human."""
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     t1 = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
@@ -145,11 +134,11 @@ def test_filter_main_timeline_drops_human_when_legacy_ai_missing_trigger():
         created_at=t1,
     )
     rows = [_human("h1", t0, row_id=1), legacy_ai]
-    assert _filter_and_assert_pairs(rows, agent_id=1, covered=frozenset({"sess-covered"})) == []
+    assert [m.message_id for m in _filter_pairs(rows, agent_id=1)] == ["h1", "a1"]
 
 
-def test_filter_main_timeline_drops_all_agent_ai_siblings_when_any_invoke_covered():
-    """Summarized invoke drops the whole trigger turn, not only the covered AI row."""
+def test_filter_main_timeline_keeps_both_invokes_on_one_human():
+    """One covered session id does not drop either invoke on the turn."""
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     t1 = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
     t2 = datetime(2026, 1, 1, 0, 2, tzinfo=UTC)
@@ -160,7 +149,7 @@ def test_filter_main_timeline_drops_all_agent_ai_siblings_when_any_invoke_covere
             _ai("a1", "h1", row_id=3, invoke_index=1, created_at=t2, session_id="sess-open"),
         ]
     )
-    assert _filter_and_assert_pairs(rows, agent_id=1, covered=frozenset({"sess-covered"})) == []
+    assert [m.message_id for m in _filter_pairs(rows, agent_id=1)] == ["h1", "a0", "a1"]
 
 
 def test_filter_main_timeline_omits_human_when_agent_never_replied():
@@ -184,7 +173,7 @@ def test_filter_main_timeline_omits_human_when_agent_never_replied():
             ),
         ]
     )
-    filtered = _filter_and_assert_pairs(rows, agent_id=1, covered=frozenset({"sess-other"}))
+    filtered = _filter_pairs(rows, agent_id=1)
     assert filtered == []
 
 
@@ -198,7 +187,7 @@ def test_filter_main_timeline_drops_unanswered_human_only_turns():
             _ai("a-ok", "h-ok", row_id=3, created_at=t1, session_id="sess-open"),
         ]
     )
-    filtered = _filter_and_assert_pairs(rows, agent_id=1, covered=frozenset())
+    filtered = _filter_pairs(rows, agent_id=1)
     assert [m.message_id for m in filtered] == ["h-ok", "a-ok"]
 
 
@@ -238,7 +227,7 @@ def test_filter_one_human_two_agents_keeps_human_and_own_ai_only():
             ),
         ]
     )
-    filtered = _filter_and_assert_pairs(rows, agent_id=10, covered=frozenset())
+    filtered = _filter_pairs(rows, agent_id=10)
     assert [m.message_id for m in filtered] == ["h1", "a-agent-10"]
 
 
@@ -254,7 +243,7 @@ def test_filter_same_agent_two_invokes_on_one_human_keeps_both_when_open():
             _ai("a1", "h1", row_id=3, invoke_index=1, created_at=t2, session_id="sess-1"),
         ]
     )
-    filtered = _filter_and_assert_pairs(rows, agent_id=1, covered=frozenset())
+    filtered = _filter_pairs(rows, agent_id=1)
     assert [m.message_id for m in filtered] == ["h1", "a0", "a1"]
 
 
@@ -272,11 +261,11 @@ def test_filter_sequential_humans_same_agent_keeps_independent_turns():
             _ai("a2", "h2", row_id=4, created_at=t3, session_id="sess-2"),
         ]
     )
-    filtered = _filter_and_assert_pairs(rows, agent_id=1, covered=frozenset())
+    filtered = _filter_pairs(rows, agent_id=1)
     assert [m.message_id for m in filtered] == ["h1", "a1", "h2", "a2"]
 
 
-def test_filter_main_timeline_mixed_covered_and_open_turns():
+def test_filter_main_timeline_keeps_older_and_newer_turns():
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     t1 = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
     t2 = datetime(2026, 1, 1, 0, 2, tzinfo=UTC)
@@ -289,15 +278,14 @@ def test_filter_main_timeline_mixed_covered_and_open_turns():
             _ai("a-new", "h-new", row_id=4, created_at=t3, session_id="sess-open"),
         ]
     )
-    filtered = _filter_and_assert_pairs(rows, agent_id=1, covered=frozenset({"sess-covered"}))
-    assert [m.message_id for m in filtered] == ["h-new", "a-new"]
+    filtered = _filter_pairs(rows, agent_id=1)
+    assert [m.message_id for m in filtered] == ["h-old", "a-old", "h-new", "a-new"]
 
 
 def test_slice_main_timeline_turns_keeps_last_k_full_turns():
     t0 = datetime(2026, 1, 1, tzinfo=UTC)
     t1 = datetime(2026, 1, 1, 0, 1, tzinfo=UTC)
     t2 = datetime(2026, 1, 1, 0, 2, tzinfo=UTC)
-    t3 = datetime(2026, 1, 1, 0, 3, tzinfo=UTC)
     rows = sort_timeline_trigger_anchored(
         [
             _human("h1", t0, row_id=1, content="offer"),
@@ -408,11 +396,11 @@ async def test_send_human_two_runs_distinct_invoke_index():
     assert runs[0].trigger_message_id == runs[1].trigger_message_id
 
 
-def test_run_status_allows_session_summary():
-    assert run_status_allows_session_summary(AgentRunStatus.COMPLETED) is True
-    assert run_status_allows_session_summary(AgentRunStatus.FAILED) is True
-    assert run_status_allows_session_summary(AgentRunStatus.AWAITING_HITL) is False
-    assert run_status_allows_session_summary(AgentRunStatus.RUNNING) is False
+def test_run_status_allows_thread_rollup():
+    assert run_status_allows_thread_rollup(AgentRunStatus.COMPLETED) is True
+    assert run_status_allows_thread_rollup(AgentRunStatus.FAILED) is True
+    assert run_status_allows_thread_rollup(AgentRunStatus.AWAITING_HITL) is False
+    assert run_status_allows_thread_rollup(AgentRunStatus.RUNNING) is False
 
 
 def test_find_promotable_final_ai_row_skips_tool_call_ai():

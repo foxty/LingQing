@@ -25,7 +25,6 @@ from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
 from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse, Message
 from apps.tenant_app_service.chat.service_base import ChatServiceBase
-from apps.tenant_app_service.chat.session_summary_manager import SessionSummaryManager
 from apps.tenant_app_service.chat.streaming import (
     PreparedChatStream,
     format_user_stream_error,
@@ -315,7 +314,7 @@ class ChatTurnService(ChatServiceBase):
         """
         try:
             from apps.shared.db.session import app_db_session
-            from apps.tenant_app_service.chat.agent_run_domain import run_status_allows_session_summary
+            from apps.tenant_app_service.chat.agent_run_domain import run_status_allows_thread_rollup
 
             # Background tasks must use their own session: the router-level session
             # is closed as soon as the response is sent, which may happen before
@@ -324,30 +323,16 @@ class ChatTurnService(ChatServiceBase):
             async with app_db_session() as db:
                 if run_id:
                     run = await AgentRunRepository(db).get_run(self.tenant_id, run_id)
-                    if run and not run_status_allows_session_summary(run.status):
+                    if run and not run_status_allows_thread_rollup(run.status):
                         self.logger.info(
-                            "Deferred session summary for session %s (run %s status=%s)",
+                            "Deferred thread roll-up for session %s (run %s status=%s)",
                             session_id,
                             run_id,
                             run.status,
                         )
                         return
-                # 1. Create session summary + mark messages as summarized, then commit.
-                # These two writes must be persisted regardless of whether a thread
-                # summary is triggered next.
-                session_summary_manager = SessionSummaryManager(db, self.tenant_id)
-                session_summary = await session_summary_manager.create_session_summary(
-                    session_id=session_id,
-                    thread_id=thread_id,
-                )
-                await db.commit()
-
-                if not session_summary:
-                    self.logger.warning(f"Failed to create session summary for session {session_id}")
-
-                # 2. Check and create thread summary if needed.
-                # ThreadSummaryManager.create_thread_summary() manages its own
-                # commit/rollback internally.
+                # Cumulative thread summary. The manager commits on success.
+                # Pairs still inside the reserved main-line tail are not folded in.
                 thread_summary_manager = ThreadSummaryManager(db, self.tenant_id)
                 thread_summary = await thread_summary_manager.check_and_create_if_needed(thread_id)
 
@@ -475,7 +460,7 @@ class ChatTurnService(ChatServiceBase):
         *,
         run_id: str | None = None,
     ) -> None:
-        """Schedule async session summary work after a turn completes."""
+        """Schedule cumulative thread roll-up after a turn completes."""
         if not thread_id:
             return
         asyncio.create_task(
