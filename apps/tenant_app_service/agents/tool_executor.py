@@ -20,6 +20,8 @@ from apps.tenant_app_service.agents.agent_config import AgentConfig
 from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.domain import ToolCache, ToolCallCounts, ToolExecResult
 from apps.tenant_app_service.agents.metrics import tool_call_tracker
+from apps.tenant_app_service.agents.ports.resolve_agent_run_port import resolve_agent_run_port
+from apps.tenant_app_service.agents.ports.tool_hitl import HITL_ACTION_REQUIRE_HITL
 from apps.tenant_app_service.agents.tools import ToolError, ToolResult, ToolResultStatus
 from apps.tenant_app_service.agents.tools.tool_result import (
     SKIP_CODE_KEY,
@@ -28,17 +30,6 @@ from apps.tenant_app_service.agents.tools.tool_result import (
     ToolErrorCode,
     ToolSkipCode,
 )
-from apps.tenant_app_service.hitl.domain import (
-    HITL_ACTION_REQUIRE_HITL,
-    HITL_PAYLOAD_TYPE_APPROVAL_REQUEST,
-    HITL_PAYLOAD_TYPE_APPROVAL_RESULT,
-    HITL_STATUS_APPROVED,
-    HITL_STATUS_EXECUTED,
-    HITL_STATUS_REJECTED,
-)
-from apps.tenant_app_service.hitl.policy_engine import evaluate_approval_decision
-from apps.tenant_app_service.hitl.service import HitlApprovalService
-from apps.tenant_app_service.hitl.utils import build_hitl_gate_tool_content
 
 
 def _build_cache_key(tool_name: str, tool_args: dict) -> str:
@@ -115,94 +106,6 @@ class ToolExecutor:
         except Exception:
             self.logger.exception("Failed to rollback runtime db session after tool failure: %s", tool_name)
 
-    async def _handle_hitl_gate(
-        self,
-        *,
-        runtime,
-        config: RunnableConfig,
-        approval_service: HitlApprovalService,
-        risk_level: str,
-        tool_name: str,
-        tool_call_id: str,
-        tool_args: dict,
-        additional_kwargs: dict,
-    ) -> tuple[ToolMessage | None, str | None]:
-        configured_proposal_id = config.get("configurable", {}).get("hitl_proposal_id")
-        if configured_proposal_id:
-            proposal_id = str(configured_proposal_id)
-        else:
-            proposal_id = approval_service.build_proposal_id(
-                thread_id=runtime.thread_id,
-                session_id=runtime.session_id,
-                tool_name=tool_name,
-                tool_args=tool_args,
-            )
-        approval = await approval_service.get_or_create_pending(
-            tenant_id=runtime.user.tenant_id,
-            thread_id=runtime.thread_id,
-            session_id=runtime.session_id,
-            agent_id=runtime.agent_id,
-            proposal_id=proposal_id,
-            tool_name=tool_name,
-            tool_args=tool_args,
-            risk_level=risk_level,
-            requested_by=runtime.user.user_id,
-        )
-
-        if approval.status == HITL_STATUS_APPROVED:
-            self.logger.info("HITL approved, executing tool: %s (%s)", tool_name, proposal_id)
-            return None, proposal_id
-
-        if approval.status == HITL_STATUS_EXECUTED:
-            return (
-                ToolMessage(
-                    id=str(uuid4()),
-                    content=f"Tool '{tool_name}' already executed for approved proposal.",
-                    tool_call_id=tool_call_id,
-                    additional_kwargs={
-                        **additional_kwargs,
-                        "hitl": {
-                            "type": HITL_PAYLOAD_TYPE_APPROVAL_RESULT,
-                            "proposal_id": proposal_id,
-                        },
-                    },
-                ),
-                proposal_id,
-            )
-
-        if approval.status == HITL_STATUS_REJECTED:
-            return (
-                ToolMessage(
-                    id=str(uuid4()),
-                    content=f"Tool '{tool_name}' was rejected by approver.",
-                    tool_call_id=tool_call_id,
-                    additional_kwargs={
-                        **additional_kwargs,
-                        "hitl": {
-                            "type": HITL_PAYLOAD_TYPE_APPROVAL_RESULT,
-                            "proposal_id": proposal_id,
-                        },
-                    },
-                ),
-                proposal_id,
-            )
-
-        return (
-            ToolMessage(
-                id=str(uuid4()),
-                content=build_hitl_gate_tool_content(tool_name),
-                tool_call_id=tool_call_id,
-                additional_kwargs={
-                    **additional_kwargs,
-                    "hitl": {
-                        "type": HITL_PAYLOAD_TYPE_APPROVAL_REQUEST,
-                        "proposal_id": proposal_id,
-                    },
-                },
-            ),
-            proposal_id,
-        )
-
     async def execute_single_tool(
         self,
         call: dict,
@@ -257,21 +160,19 @@ class ToolExecutor:
                 tool_cache,
             )
 
-        db_session = config.get("configurable", {}).get("db_session")
-        approval_service = HitlApprovalService(runtime.user.tenant_id, db_session)
-        decision = evaluate_approval_decision(tool_config)
+        run_port = resolve_agent_run_port(config)
+        decision = run_port.evaluate_tool_approval(tool_config)
         self.logger.info("Tool '%s' approval decision: %s (reason: %s)", tool_name, decision.action, decision.reason)
         proposal_id: str | None = None
 
         if decision.action == HITL_ACTION_REQUIRE_HITL:
-            hitl_message, proposal_id = await self._handle_hitl_gate(
+            hitl_message, proposal_id = await run_port.gate_tool_call(
                 runtime=runtime,
                 config=config,
-                approval_service=approval_service,
-                risk_level=decision.risk_level,
                 tool_name=tool_name,
                 tool_call_id=tool_call_id,
                 tool_args=tool_args,
+                decision=decision,
                 additional_kwargs=additional_kwargs,
             )
             if hitl_message is not None:
@@ -327,7 +228,7 @@ class ToolExecutor:
         try:
             self.logger.debug(f"Executing tool: {tool_name} (call #{current_count + 1})")
             if decision.action == HITL_ACTION_REQUIRE_HITL and proposal_id:
-                async with approval_service.execution_state_manager(proposal_id):
+                async with run_port.hitl_tool_execution_guard(proposal_id):
                     async with tool_call_tracker(tool_name, tool_call_id, tool_args, runtime) as tracker:
                         observation = await tool_config.tool.ainvoke(tool_args, config=config)
                         normalized_result = self._normalize_observation_to_tool_result(observation)

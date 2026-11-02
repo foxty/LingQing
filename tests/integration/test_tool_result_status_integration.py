@@ -251,6 +251,8 @@ async def test_executor_limit_persisted_and_visible_in_history(
     agent_config.get_tool_config.return_value = mock_tool_config
     agent_config.has_skills.return_value = False
 
+    from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
+
     executor = ToolExecutor(agent_config, "test_agent")
     config = RunnableConfig(
         configurable={
@@ -258,6 +260,12 @@ async def test_executor_limit_persisted_and_visible_in_history(
             "session_id": session_id,
             "run_id": run.id,
             "db_session": pg_async_db_session,
+            "agent_run_port": chat_agent_run_port_for_run(
+                db=pg_async_db_session,
+                tenant_id=tenant_id,
+                agent_id=thread.agent_id,
+                run_id=run.id,
+            ),
             "runtime": {
                 "tenant": {"tenant_id": tenant_id, "tenant_name": "Integration Tenant", "config": {}},
                 "user": {

@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.memory.memory_budget import input_token_budget
-from apps.tenant_app_service.agents.ports.agent_run_context_port import AgentRunContextPort
+from apps.tenant_app_service.agents.ports.agent_run_port import AgentRunPort
 from apps.tenant_app_service.agents.token_counter import count_tokens
 
 logger = get_logger(__name__)
@@ -100,15 +100,15 @@ async def compact_prepared_messages(
     thread_id: str,
     run_id: str,
     tools: list[BaseTool] | None = None,
-    run_context_port: AgentRunContextPort | None = None,
+    agent_run_port: AgentRunPort | None = None,
 ) -> list[BaseMessage]:
     """Apply an existing in-run summary, and extend it when the prompt is still over budget.
 
     The latest tool round is left intact. A summarizer failure keeps the already spliced view.
     """
-    if run_context_port is None:
+    if agent_run_port is None:
         return messages
-    context_port = run_context_port
+    context_port = agent_run_port
     try:
         existing = await context_port.get_in_run_summary(tenant_id, run_id)
         view = list(messages)
@@ -127,10 +127,9 @@ async def compact_prepared_messages(
             logger.info("Run %s is over budget but has no older tool round to compress", run_id)
             return view
 
-        from apps.tenant_app_service.agents.mini_agent import MiniAgentService
-
         previous = existing.summary_text if existing is not None else None
-        summary_text = await MiniAgentService.create(db, tenant_id).summarize_run_prefix(
+        summary_text = await agent_run_port.summarize_run_prefix(
+            tenant_id=tenant_id,
             thread_id=thread_id,
             run_id=run_id,
             previous_summary=previous,

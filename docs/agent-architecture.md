@@ -26,7 +26,7 @@ graph TD
     H --> L["Save Messages Node\n(_save_messages)"]
 
     I --> M["Model Binding Manager\n(ModelBindingManager)"]
-    I --> N["In-run compact\n(AgentRunContextPort)"]
+    I --> N["In-run compact\n(AgentRunPort)"]
 
     J --> O["Tool Executor\n(ToolExecutor)"]
     J --> P["Skill Control Tools\n(load_skill/unload_skill)"]
@@ -40,7 +40,7 @@ graph TD
     R --> U["Skill Configurations\n(YAML files)"]
     R --> V["Tenant-scoped Skills"]
 
-    C --> CA["Chat adapters\n(ChatRunContextAdapter, AgentRunLifecycle)"]
+    C --> CA["Chat adapters\n(ChatAgentRunPort)"]
     CA --> W["Database Storage\n(PostgreSQL)"]
     K --> CA
     L --> CA
@@ -156,7 +156,7 @@ graph TD
   - LLM Call Node: Processes language model requests
   - Tool Node: Executes tool calls
   - Load History Node: Merges prompt context from injected ports + current turn
-  - Save Messages Node: Persists run transcript via `AgentRunContextPort`
+  - Save Messages Node: Persists run transcript via `AgentRunPort`
 
 ### 4.1 Chat ↔ agent boundary
 
@@ -164,12 +164,11 @@ Chat owns orchestration and persistence; the agent harness owns the graph loop a
 
 | `configurable` key | Port | Chat adapter | Used by harness for |
 | --- | --- | --- | --- |
-| `run_context_port` | `AgentRunContextPort` | `ChatRunContextAdapter` | `_load_history`, `_persist_run_messages`, in-run compact in `_llm_call` |
-| `agent_run_lifecycle` | `AgentRunLifecycle` | `ChatAgentRunLifecycle` | HITL pause (`mark_run_awaiting_hitl`) |
+| `agent_run_port` | `AgentRunPort` | `ChatAgentRunPort` | `_load_history`, persist, in-run compact, HITL hydrate/gate, lifecycle |
 | `run_id`, `db_session`, `runtime`, `thread_id` | — | — | Identity and DB session |
-| `skip_load_history` | — | — | Checkpoint/HITL resume (skip load; persist still uses memory) |
+| `skip_load_history` | — | — | Checkpoint/HITL resume (skip load; persist still uses port) |
 
-Port definitions and the contract summary live in `apps/tenant_app_service/agents/ports/__init__.py`. `AgentRunScope` is run identity (keys) passed into port methods; `run_context_port` in config is the injectable adapter. In-run summarization logic stays under `agents/memory/` and uses the same port for summary I/O.
+Port definitions and the contract summary live in `apps/tenant_app_service/agents/ports/__init__.py`. `AgentRunScope` is run identity (keys) passed into port methods. Checkpoints stay in LangGraph compile/checkpointer — not on `AgentRunPort`. In-run summarization logic stays under `agents/memory/` and uses the same port for summary I/O.
 
 ### 5. LLM Integration Layer
 

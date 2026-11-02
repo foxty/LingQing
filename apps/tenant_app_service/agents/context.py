@@ -7,7 +7,6 @@ isolated from API dependencies.
 
 from langchain_core.runnables import RunnableConfig
 
-from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.domain import (
     AgentCapabilityProfile,
     AgentRuntimeContext,
@@ -45,26 +44,6 @@ def extract_runtime_context(config: RunnableConfig) -> AgentRuntimeContext:
     if not runtime_dict:
         raise ValueError("Runtime context is missing in RunnableConfig")
     return AgentRuntimeContext.model_validate(runtime_dict)
-
-
-def create_agent_runtime_user_context(user: UserDTO, access_token: str | None = None) -> AgentUserContext:
-    """Convert API User to AgentUserContext.
-
-    Args:
-        user: API layer User model
-
-    Returns:
-        AgentUserContext for agent execution
-    """
-    return AgentUserContext(
-        user_id=user.id,
-        username=user.username,
-        role=user.role,
-        tenant_id=user.tenant_id,
-        tenant_name=user.tenant_name,
-        timezone_iana=user.timezone_iana,
-        access_token=access_token,
-    )
 
 
 def create_agent_runtime_tenant_context(tenant_id: int, tenant_name: str, config: dict[str, any]) -> AgentTenantContext:
@@ -133,10 +112,11 @@ def create_thread_id(user_id: int, tenant_id: int, agent_id: int) -> str:
 
 
 __all__ = [
-    "AgentUserContext",
     "AgentRuntimeContext",
-    "extract_runtime_context",
-    "create_agent_runtime_user_context",
+    "AgentTenantContext",
+    "AgentUserContext",
     "create_agent_runtime_context",
+    "create_agent_runtime_tenant_context",
     "create_thread_id",
+    "extract_runtime_context",
 ]

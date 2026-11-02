@@ -12,7 +12,7 @@ from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
 from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.application.turn_flow import run_non_stream_chat_turn
-from apps.tenant_app_service.chat.run_context_adapter import ChatRunContextAdapter
+from apps.tenant_app_service.chat.agent_run_port_adapter import ChatAgentRunPort
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from tests.integration.helpers.agent_runtime_stub import patch_agent_base_stub_llm, patch_turn_session_end_noop
 from tests.integration.test_thread_turn_admission_integration import _chat_post_body
@@ -37,7 +37,7 @@ async def _owner_dto(committed_chat_setup: dict) -> UserDTO:
 
 @pytest.mark.asyncio
 async def test_run_non_stream_turn_wires_ports_and_persists_run(committed_chat_setup: dict, monkeypatch):
-    """prepare → complete uses ``run_context_port`` + real load/save nodes."""
+    """prepare → complete uses ``agent_run_port`` + real load/save nodes."""
     patch_agent_base_stub_llm(monkeypatch, content="runtime-e2e-ai")
     patch_turn_session_end_noop(monkeypatch)
 
@@ -66,9 +66,8 @@ async def test_run_non_stream_turn_wires_ports_and_persists_run(committed_chat_s
     response = await run_non_stream_chat_turn(committed_chat_setup["tenant_id"], request, user)
     assert "runtime-e2e-ai" in response.response.content
     assert captured, "expected _build_runtime_config with run_id during complete"
-    port = captured[-1]["configurable"].get("run_context_port")
-    assert isinstance(port, ChatRunContextAdapter)
-    assert "agent_run_lifecycle" in captured[-1]["configurable"]
+    port = captured[-1]["configurable"].get("agent_run_port")
+    assert isinstance(port, ChatAgentRunPort)
 
     async with committed_chat_setup["session_local"]() as db:
         run = await AgentRunRepository(db).get_by_session_id(response.response.session_id)

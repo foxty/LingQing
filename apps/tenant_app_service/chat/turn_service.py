@@ -240,8 +240,8 @@ class ChatTurnService(ChatServiceBase):
         from apps.tenant_app_service.agents.context import (
             create_agent_runtime_context,
             create_agent_runtime_tenant_context,
-            create_agent_runtime_user_context,
         )
+        from apps.tenant_app_service.chat.runtime_context_builders import create_agent_runtime_user_context
 
         thread_id = request.thread_id
         if not thread_id:
@@ -281,17 +281,16 @@ class ChatTurnService(ChatServiceBase):
             "recursion_limit": 999,  # Safety net, should be higher than MAX_ITERATIONS
         }
         if run_id:
-            from apps.tenant_app_service.chat.agent_run_lifecycle import chat_agent_run_lifecycle
-            from apps.tenant_app_service.chat.run_context_adapter import chat_run_context_adapter_for_run
+            from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
 
             db = db_session or self.db
-            config["configurable"]["run_context_port"] = chat_run_context_adapter_for_run(
+            run_port = chat_agent_run_port_for_run(
                 db=db,
                 tenant_id=self.tenant_id,
                 agent_id=agent_id,
                 run_id=run_id,
             )
-            config["configurable"]["agent_run_lifecycle"] = chat_agent_run_lifecycle(db, self.tenant_id)
+            config["configurable"]["agent_run_port"] = run_port
         self.logger.debug(
             f"Agent runtime context created - session_id: {session_id}, thread_id: {runtime_ctx.thread_id}, "
             f"user: {runtime_ctx.user.username}, role: {runtime_ctx.user.role}, "

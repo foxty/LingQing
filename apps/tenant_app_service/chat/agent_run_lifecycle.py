@@ -19,4 +19,5 @@ class ChatAgentRunLifecycle:
 
 
 def chat_agent_run_lifecycle(db: AsyncSession, tenant_id: int) -> AgentRunLifecycle:
+    """Lifecycle-only adapter factory (unit tests); production uses ``ChatAgentRunPort``."""
     return ChatAgentRunLifecycle(db, tenant_id)
