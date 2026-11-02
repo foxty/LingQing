@@ -14,7 +14,7 @@ import { getThreadFeedback } from '@/lib/feedbackApi'
 
 export type ThreadLoadError = 'forbidden' | 'not_found' | 'unknown'
 
-function resolveThreadLoadError(error: unknown): ThreadLoadError {
+export function resolveThreadLoadError(error: unknown): ThreadLoadError {
   const status = axios.isAxiosError(error) ? error.response?.status : undefined
   if (status === 403) return 'forbidden'
   if (status === 404) return 'not_found'

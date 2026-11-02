@@ -8,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useThread, useThreads } from '@/hooks/useThreads'
 import { useUserPreferences } from '@/hooks/useUserPreferences'
 import { useAgentThinkingEffortControl } from '@/hooks/useAgentThinkingEffortControl'
+import { resolveThreadLoadError } from '@/hooks/useChatHistory'
 import { useWorkbenchChat } from '@/hooks/useWorkbenchChat'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -76,10 +77,21 @@ export default function WorkbenchPage() {
   const artifactsPanelVisibleRef = useRef(false)
   const artifactsPanelDismissedForThreadRef = useRef(false)
   const { showInfoWithAction } = useNotification()
-  const { data: routeThread, isFetched: routeThreadFetched } = useThread(
-    threadIdParam,
-    threadIdParam !== departedThreadId
-  )
+  const isDeepLinkThread = Boolean(threadIdParam) && threadIdParam !== departedThreadId
+  const {
+    data: routeThread,
+    isFetched: routeThreadFetched,
+    error: routeThreadQueryError,
+  } = useThread(threadIdParam, isDeepLinkThread)
+
+  const routeThreadLoadError = useMemo(() => {
+    if (!isDeepLinkThread || !routeThreadFetched || routeThread) {
+      return null
+    }
+    return resolveThreadLoadError(routeThreadQueryError)
+  }, [isDeepLinkThread, routeThread, routeThreadFetched, routeThreadQueryError])
+
+  const routeThreadResolving = isDeepLinkThread && !routeThreadFetched
 
   const accessibleAgentIds = useMemo(() => new Set(agents.map((agent) => agent.id)), [agents])
   const fallbackAgentId = useMemo(() => {
@@ -144,6 +156,10 @@ export default function WorkbenchPage() {
     setArtifactsPanelVisible(false)
   }, [])
 
+  const chatHistoryEnabled =
+    Boolean(currentThreadId) &&
+    (!isDeepLinkThread || (routeThreadFetched && Boolean(routeThread)))
+
   const {
     displayMessages,
     historyLoading,
@@ -161,6 +177,7 @@ export default function WorkbenchPage() {
   } = useWorkbenchChat({
     agentId,
     threadId: currentThreadId,
+    historyEnabled: chatHistoryEnabled,
     createThread,
     navigate,
     updateThreadTitle,
@@ -224,6 +241,8 @@ export default function WorkbenchPage() {
     agentsLoaded && !agentsFailed && selectedAgentId > 0 && !agents.some((agent) => agent.id === selectedAgentId)
   const sessionTitle = currentThread?.title || t('workbench.untitledThread')
   const isArtifactSplit = artifacts.length > 0 && artifactsPanelVisible
+  const displayThreadLoadError = routeThreadLoadError ?? threadLoadError
+  const displayHistoryLoading = (historyLoading || routeThreadResolving) && !displayThreadLoadError
 
   useEffect(() => {
     if (threadIdParam && threadIdParam !== departedThreadId) {
@@ -264,19 +283,12 @@ export default function WorkbenchPage() {
         return
       }
       if (!routeThread) {
-        navigate(`/workbench?agent=${selectedAgentId}`, { replace: true })
         return
       }
-      if (accessibleAgentIds.has(routeThread.agent_id)) {
-        if (routeThread.agent_id !== selectedAgentId) {
-          setSelectedAgentId(routeThread.agent_id)
-          updatePreferences({ lastAgentId: routeThread.agent_id })
-        }
-        return
+      if (routeThread.agent_id !== selectedAgentId) {
+        setSelectedAgentId(routeThread.agent_id)
+        updatePreferences({ lastAgentId: routeThread.agent_id })
       }
-      setSelectedAgentId(fallbackAgentId)
-      updatePreferences({ lastAgentId: fallbackAgentId })
-      navigate(`/workbench?agent=${fallbackAgentId}`, { replace: true })
       return
     }
     if (!accessibleAgentIds.has(selectedAgentId)) {
@@ -330,12 +342,18 @@ export default function WorkbenchPage() {
 
   useEffect(() => {
     const state = location.state as { initialMessage?: string } | null
-    if (state?.initialMessage && threadIdParam && !initialMessageSentRef.current && user) {
+    if (
+      state?.initialMessage &&
+      threadIdParam &&
+      !displayThreadLoadError &&
+      !initialMessageSentRef.current &&
+      user
+    ) {
       initialMessageSentRef.current = true
       window.history.replaceState({}, document.title)
       handleSendMessage(state.initialMessage, [])
     }
-  }, [location.state, threadIdParam, user, handleSendMessage])
+  }, [displayThreadLoadError, location.state, threadIdParam, user, handleSendMessage])
 
   const handleNewThread = useCallback(async () => {
     try {
@@ -353,6 +371,12 @@ export default function WorkbenchPage() {
     },
     [navigate]
   )
+
+  const handleOpenRecentConversation = useCallback(() => {
+    if (latestThread) {
+      navigate(`/workbench/${latestThread.id}`)
+    }
+  }, [latestThread, navigate])
 
   const handleDeleteThread = useCallback(
     async (threadId: string) => {
@@ -435,9 +459,13 @@ export default function WorkbenchPage() {
             agentModelId={agentModelId}
             agentProfileName={agentProfileName}
             threadId={currentThreadId || undefined}
-            isLoadingHistory={historyLoading}
-            threadLoadError={threadLoadError}
+            isLoadingHistory={displayHistoryLoading}
+            threadLoadError={displayThreadLoadError}
             agentAccessRevoked={agentAccessRevoked}
+            onStartNewConversation={displayThreadLoadError ? handleNewThread : undefined}
+            onOpenRecentConversation={
+              displayThreadLoadError && latestThread ? handleOpenRecentConversation : undefined
+            }
             exampleQuestions={selectedAgent?.example_questions ?? []}
             hasMore={hasMore}
             isLoadingMore={isLoadingMore}

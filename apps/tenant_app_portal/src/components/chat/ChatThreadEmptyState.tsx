@@ -12,6 +12,8 @@ interface ChatThreadEmptyStateProps {
   exampleQuestions: string[]
   inputDisabled: boolean
   onSendExample: (question: string) => void
+  onStartNewConversation?: () => void
+  onOpenRecentConversation?: () => void
 }
 
 export default function ChatThreadEmptyState({
@@ -22,11 +24,13 @@ export default function ChatThreadEmptyState({
   exampleQuestions,
   inputDisabled,
   onSendExample,
+  onStartNewConversation,
+  onOpenRecentConversation,
 }: ChatThreadEmptyStateProps) {
   const { t } = useTranslation()
 
   const content = (() => {
-    if (isLoadingHistory && threadId) {
+    if (isLoadingHistory && threadId && !threadLoadError) {
       return {
         icon: <Loader2 className="mb-4 h-16 w-16 animate-spin text-muted-foreground" />,
         title: t('common.loading'),
@@ -79,6 +83,20 @@ export default function ChatThreadEmptyState({
       <h2 className="mb-2 text-xl font-semibold">{content.title}</h2>
       {content.description ? (
         <p className="max-w-md text-muted-foreground">{content.description}</p>
+      ) : null}
+      {threadLoadError && (onStartNewConversation || onOpenRecentConversation) ? (
+        <div className="mt-6 flex flex-wrap justify-center gap-2">
+          {onStartNewConversation ? (
+            <Button type="button" onClick={onStartNewConversation}>
+              {t('workbench.startNewConversation')}
+            </Button>
+          ) : null}
+          {onOpenRecentConversation ? (
+            <Button type="button" variant="outline" onClick={onOpenRecentConversation}>
+              {t('workbench.openRecentConversation')}
+            </Button>
+          ) : null}
+        </div>
       ) : null}
       {!threadLoadError && !agentAccessRevoked && exampleQuestions.length > 0 ? (
         <div className="mt-6 flex max-w-lg flex-wrap justify-center gap-2">
