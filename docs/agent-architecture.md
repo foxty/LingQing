@@ -26,7 +26,7 @@ graph TD
     H --> L["Save Messages Node\n(_save_messages)"]
 
     I --> M["Model Binding Manager\n(ModelBindingManager)"]
-    I --> N["Conversation Memory Manager\n(ConversationMemoryManager)"]
+    I --> N["In-run compact\n(AgentRunContextPort)"]
 
     J --> O["Tool Executor\n(ToolExecutor)"]
     J --> P["Skill Control Tools\n(load_skill/unload_skill)"]
@@ -40,9 +40,11 @@ graph TD
     R --> U["Skill Configurations\n(YAML files)"]
     R --> V["Tenant-scoped Skills"]
 
-    N --> W["Database Storage\n(PostgreSQL)"]
-    K --> W
-    L --> W
+    C --> CA["Chat adapters\n(ChatRunContextAdapter, AgentRunLifecycle)"]
+    CA --> W["Database Storage\n(PostgreSQL)"]
+    K --> CA
+    L --> CA
+    N --> CA
 
     E --> W
     F --> W
@@ -59,7 +61,7 @@ graph TD
     M --> X
     G --> Y
     J --> Z
-    N --> AA
+    CA --> AA
     R --> BB
 
     subgraph "Data Flow"
@@ -78,7 +80,7 @@ graph TD
     C --> DD
     E --> EE
     K --> FF
-    N --> GG
+    CA --> GG
     I --> HH
     O --> II
     I --> JJ
@@ -97,6 +99,7 @@ graph TD
     style L fill:#e0f2f1
     style M fill:#fff8e1
     style N fill:#fff8e1
+    style CA fill:#e8f5e8
     style O fill:#fff8e1
     style P fill:#fff8e1
     style Q fill:#e1bee7
@@ -139,25 +142,39 @@ graph TD
 
 ### 3. Core Services
 
-- **Chat Service** (`ChatService`): Orchestrates chat operations
+- **Chat turn orchestration** (`ChatTurnService`): Prepares turns, builds `RunnableConfig`, streams SSE
 - **Agent Pool** (`AgentPool`): Manages agent instances
 - **Thread Management** (`ThreadRepository`): Handles conversation threads
 - **Timeline stores** (`MainMessageRepository`, `AgentRunMessageRepository`): Main transcript and per-run message persistence (legacy `chat_messages` is backfill-only)
+- **Conversation memory** (`ConversationMemoryManager` in `chat/`): Loads thread summaries, main-line pairs, and run rows; persists run transcripts (used only via chat adapters, not from the agent harness directly)
 
 ### 4. Agent Execution Engine
 
-- **Agent Base** (`AgentBase`): Core agent implementation
+- **Agent Base** (`AgentBase`): Core agent implementation (LangGraph harness)
 - **LangGraph State Machine** (`StateGraph`): Manages agent state transitions
 - **Nodes**:
   - LLM Call Node: Processes language model requests
   - Tool Node: Executes tool calls
-  - Load History Node: Retrieves conversation history
-  - Save Messages Node: Persists messages
+  - Load History Node: Merges prompt context from injected ports + current turn
+  - Save Messages Node: Persists run transcript via `AgentRunContextPort`
+
+### 4.1 Chat ↔ agent boundary
+
+Chat owns orchestration and persistence; the agent harness owns the graph loop and prompt preparation. The harness **must not** import `apps.tenant_app_service.chat`. Instead, `ChatTurnService._build_runtime_config` injects chat adapter implementations of agent **ports** when `run_id` is set:
+
+| `configurable` key | Port | Chat adapter | Used by harness for |
+| --- | --- | --- | --- |
+| `run_context_port` | `AgentRunContextPort` | `ChatRunContextAdapter` | `_load_history`, `_persist_run_messages`, in-run compact in `_llm_call` |
+| `agent_run_lifecycle` | `AgentRunLifecycle` | `ChatAgentRunLifecycle` | HITL pause (`mark_run_awaiting_hitl`) |
+| `run_id`, `db_session`, `runtime`, `thread_id` | — | — | Identity and DB session |
+| `skip_load_history` | — | — | Checkpoint/HITL resume (skip load; persist still uses memory) |
+
+Port definitions and the contract summary live in `apps/tenant_app_service/agents/ports/__init__.py`. `AgentRunScope` is run identity (keys) passed into port methods; `run_context_port` in config is the injectable adapter. In-run summarization logic stays under `agents/memory/` and uses the same port for summary I/O.
 
 ### 5. LLM Integration Layer
 
 - **Model Binding Manager** (`ModelBindingManager`): Manages LLM model connections
-- **Conversation Memory Manager** (`ConversationMemoryManager`): Handles conversation context
+- **Message preparer / memory budget** (`MessagePreparer`, `memory_budget`, `agent_run_summary_service`): Prompt shaping and in-run compact (via port)
 
 ### 6. Tool System
 
@@ -193,9 +210,9 @@ graph TD
 
 ### 4. Memory Management
 
-- **Conversation History**: Full message persistence
-- **Summarization**: Automatic conversation summarization
-- **Context Window**: Intelligent context management
+- **Thread timeline**: Cumulative thread summaries + recent main-line pairs (chat repos)
+- **Run transcript**: Per-run messages and optional in-run compact summaries (`agent_run_summaries`)
+- **Context window**: Tail reserve, tool-round caps, and LLM compact when over input budget
 
 ### 5. Skill System
 

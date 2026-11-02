@@ -12,7 +12,7 @@ Requires Docker daemon (container is started automatically by the pg_container
 fixture in tests/integration/conftest.py).
 
 Run with:
-    uv run pytest tests/integration/test_conversation_memory_manager_integration.py -m integration
+    uv run pytest tests/integration/chat/test_conversation_memory_manager_integration.py -m integration
 """
 
 from datetime import datetime, timedelta, timezone
@@ -29,7 +29,7 @@ from apps.shared.db.models import (
     ThreadMainMessage,
     ThreadSummary,
 )
-from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
+from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
 
 pytestmark = pytest.mark.integration
 

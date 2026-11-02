@@ -24,7 +24,6 @@ from langchain_core.messages import (
 )
 from langchain_core.runnables import RunnableConfig
 from langgraph.graph import END, START, StateGraph
-from sqlalchemy.ext.asyncio import AsyncSession
 from typing_extensions import NotRequired, TypedDict
 
 from apps.shared.utils.logger import get_logger
@@ -38,11 +37,12 @@ from apps.tenant_app_service.agents.domain import (
     ToolCallCounts,
 )
 from apps.tenant_app_service.agents.memory.agent_run_summary_service import compact_prepared_messages
-from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
 from apps.tenant_app_service.agents.message_content import ensure_visible_ai_content
 from apps.tenant_app_service.agents.message_preparer import MessagePreparer
 from apps.tenant_app_service.agents.metrics import llm_call_tracker
 from apps.tenant_app_service.agents.model_binding_manager import ModelBindingManager
+from apps.tenant_app_service.agents.ports.agent_run_context_port import AgentRunContextPort
+from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
 from apps.tenant_app_service.agents.tool_executor import ToolExecutor
 from apps.tenant_app_service.hitl.utils import is_hitl_approval_request
 
@@ -131,23 +131,27 @@ class AgentBase(ABC):
             raise ValidationError("configurable.run_id is required for conversation persistence")
         return str(run_id)
 
-    def _get_or_create_manager(
-        self,
-        runtime: "AgentRuntimeContext",
-        db_session: AsyncSession,
-        *,
-        run_id: str,
-    ) -> ConversationMemoryManager:
-        """Create a new ConversationMemoryManager bound to one agent run.
+    @staticmethod
+    def _require_run_context_port(config: RunnableConfig) -> AgentRunContextPort:
+        port = config.get("configurable", {}).get("run_context_port")
+        if port is None:
+            from apps.shared.core.exceptions import ValidationError
 
-        No caching is used to avoid concurrency issues in multi-tenant scenarios.
-        """
-        return ConversationMemoryManager(
-            db_session=db_session,
-            thread_id=runtime.thread_id,
+            raise ValidationError("configurable.run_context_port is required for run-scoped conversation I/O")
+        return port
+
+    @staticmethod
+    def _run_scope(config: RunnableConfig, runtime: AgentRuntimeContext, agent_id: int) -> AgentRunScope:
+        run_id = config.get("configurable", {}).get("run_id")
+        if not run_id:
+            from apps.shared.core.exceptions import ValidationError
+
+            raise ValidationError("configurable.run_id is required for run scope")
+        return AgentRunScope(
             tenant_id=runtime.user.tenant_id,
-            agent_id=self.agent_config.agent_id,
-            run_id=run_id,
+            thread_id=runtime.thread_id,
+            run_id=str(run_id),
+            agent_id=agent_id,
         )
 
     async def _load_history(self, state: AgentState, config: RunnableConfig) -> dict:
@@ -173,14 +177,13 @@ class AgentBase(ABC):
 
         runtime = extract_runtime_context(config)
         db_session = config.get("configurable", {}).get("db_session")
-        run_id = self._run_id_from_config(config)
-        manager = self._get_or_create_manager(runtime, db_session, run_id=run_id)
-        context_messages = []
+        configurable = config.get("configurable") or {}
+        context_messages: list = []
 
         # ============================================
         # Layer 1: Parent Context (if sub-agent)
         # ============================================
-        parent_context = config.get("configurable", {}).get("parent_context")
+        parent_context = configurable.get("parent_context")
         if parent_context and parent_context.get("summary"):
             context_messages.append(
                 SystemMessage(
@@ -193,15 +196,10 @@ class AgentBase(ABC):
             )
             self.logger.debug(f"Loaded parent context for agent {self.agent_config.agent_name}")
 
-        from apps.tenant_app_service.chat.service_base import (
-            DEFAULT_MAIN_TIMELINE_TURN_LIMIT,
-            RUN_HISTORY_MESSAGE_LIMIT,
-        )
-
-        historical_messages = await manager.load_messages_with_summary(
-            main_timeline_turn_limit=DEFAULT_MAIN_TIMELINE_TURN_LIMIT,
-            run_message_limit=RUN_HISTORY_MESSAGE_LIMIT,
-        )
+        context_port = self._require_run_context_port(config)
+        run_id = configurable.get("run_id")
+        scope = self._run_scope(config, runtime, self.agent_config.agent_id)
+        historical_messages = await context_port.load_prompt_context(scope)
 
         if db_session:
             from apps.tenant_app_service.hitl.history import hydrate_hitl_history_messages
@@ -224,7 +222,7 @@ class AgentBase(ABC):
             "context_load_turn_merge thread_id=%s run_id=%s session_id=%s agent=%s "
             "parent_context=%s historical=%s current_turn=%s combined=%s",
             runtime.thread_id,
-            run_id,
+            str(run_id) if run_id else None,
             runtime.session_id,
             self.agent_config.agent_name,
             bool(parent_context and parent_context.get("summary")),
@@ -345,6 +343,7 @@ class AgentBase(ABC):
                     thread_id=runtime.thread_id,
                     run_id=str(run_id),
                     tools=tools,
+                    run_context_port=configurable.get("run_context_port"),
                 )
             model_with_tools = await self._model_binding_manager.get_or_create(
                 model_profile_id=model_profile_id,
@@ -612,12 +611,16 @@ class AgentBase(ABC):
     ) -> None:
         """Persist run-scoped messages (shared by save_messages and HITL interrupt)."""
         runtime = extract_runtime_context(config)
-        db_session = config.get("configurable", {}).get("db_session")
         run_id = self._run_id_from_config(config)
-        manager = self._get_or_create_manager(runtime, db_session, run_id=run_id)
+        context_port = self._require_run_context_port(config)
         messages_to_save = state.get("messages", [])
         if messages_to_save:
-            await manager.add_messages(messages_to_save, config, deduplicate=True)
+            await context_port.persist_run_messages(
+                self._run_scope(config, runtime, self.agent_config.agent_id),
+                messages_to_save,
+                config,
+                deduplicate=True,
+            )
         if mark_awaiting_hitl:
             await self._pause_agent_run_for_hitl(config, run_id)
 
@@ -662,8 +665,7 @@ class AgentBase(ABC):
     async def _save_messages(self, state: AgentState, config: RunnableConfig) -> dict:
         """Save all unsaved messages to database (executed after loop completes).
 
-        This node saves all messages from state["messages"].
-        The ConversationMemoryManager handles deduplication by message ID.
+        Run transcript persistence is delegated to ``AgentRunContextPort`` from config.
 
         Note: state["messages"] only contains conversation messages (not ephemeral system prompts).
         Ephemeral system prompts are created in _prepare_messages and never added to state.
@@ -681,13 +683,11 @@ class AgentBase(ABC):
 
     async def _pause_agent_run_for_hitl(self, config: RunnableConfig, run_id: str) -> None:
         """Mark the agent run paused for HITL after run messages are persisted."""
-        db_session = config.get("configurable", {}).get("db_session")
-        if not db_session:
+        lifecycle = config.get("configurable", {}).get("agent_run_lifecycle")
+        if lifecycle is None:
+            self.logger.warning("agent_run_lifecycle missing; run %s not marked awaiting HITL", run_id)
             return
-        from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
-
-        runtime = extract_runtime_context(config)
-        await ThreadRunService(db_session, runtime.tenant.tenant_id).mark_run_awaiting_hitl(run_id)
+        await lifecycle.mark_run_awaiting_hitl(run_id)
 
     def _should_continue(self, state: AgentState) -> Literal["tool_node", "save_messages"]:
         """Determine if the agent should continue to tool execution or end.

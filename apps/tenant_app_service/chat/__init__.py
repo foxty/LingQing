@@ -7,6 +7,8 @@ Layer map (inward dependencies only):
   **Application Services** (one ``AsyncSession`` per call).
 - ``turn_admission`` — Postgres advisory lock + busy gate (prepare transaction).
 - ``domain``, ``agent_run_domain`` — Pure domain types and rules (no I/O).
+- ``conversation_memory_manager``, ``run_context_adapter``, ``agent_run_lifecycle`` —
+  Chat adapters; wired as ``configurable.run_context_port`` and ``agent_run_lifecycle``.
 - ``*_repository`` — Persistence adapters.
 - ``streaming`` — SSE transport only.
 - ``schemas`` — HTTP/DTO contracts.

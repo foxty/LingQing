@@ -4,7 +4,7 @@ import json
 
 from langchain_core.messages import AIMessage, HumanMessage
 
-from apps.tenant_app_service.agents.memory.conversation_memory_manager import _serialize_additional_kwargs
+from apps.tenant_app_service.chat.conversation_memory_manager import _serialize_additional_kwargs
 
 
 class TestSerializeAdditionalKwargs:

@@ -10,6 +10,13 @@ from apps.tenant_app_service.agents.memory.agent_run_summary_service import (
     older_tool_round_prefix,
     splice_run_summary,
 )
+from apps.tenant_app_service.agents.ports.agent_run_context_port import RunSummaryRecord
+
+
+def _mock_context_port(*, existing: RunSummaryRecord | None = None) -> AsyncMock:
+    port = AsyncMock()
+    port.get_in_run_summary.return_value = existing
+    return port
 
 
 def test_older_tool_round_prefix_keeps_the_latest_round():
@@ -59,14 +66,8 @@ def test_splice_drops_prefix_and_keeps_trigger_human():
 
 @pytest.mark.asyncio
 async def test_existing_run_summary_is_spliced_when_under_budget(monkeypatch):
-    existing = MagicMock()
-    existing.summary_text = "did the search"
-    existing.cutoff_message_id = "tool-1"
-    repo = AsyncMock()
-    repo.get_for_run.return_value = existing
-    monkeypatch.setattr(
-        "apps.tenant_app_service.chat.agent_run_summary_repository.AgentRunSummaryRepository",
-        lambda db: repo,
+    port = _mock_context_port(
+        existing=RunSummaryRecord(summary_text="did the search", cutoff_message_id="tool-1"),
     )
     monkeypatch.setattr(
         "apps.tenant_app_service.agents.memory.agent_run_summary_service.count_tokens",
@@ -85,21 +86,35 @@ async def test_existing_run_summary_is_spliced_when_under_budget(monkeypatch):
         thread_id="thread-1",
         run_id="run-1",
         tools=[],
+        run_context_port=port,
     )
 
-    repo.upsert.assert_not_called()
+    port.upsert_in_run_summary.assert_not_called()
     assert result[1].additional_kwargs["summary_type"] == "agent_run_summary"
     assert [message.id for message in result if getattr(message, "id", None)] == ["trigger", "ai-2"]
 
 
 @pytest.mark.asyncio
-async def test_over_budget_latest_tool_round_is_left_verbatim(monkeypatch):
-    repo = AsyncMock()
-    repo.get_for_run.return_value = None
-    monkeypatch.setattr(
-        "apps.tenant_app_service.chat.agent_run_summary_repository.AgentRunSummaryRepository",
-        lambda db: repo,
+async def test_compact_without_context_port_returns_messages_unchanged():
+    messages = [
+        HumanMessage(id="trigger", content="ask"),
+        AIMessage(id="ai-1", content="answer"),
+    ]
+    result = await compact_prepared_messages(
+        list(messages),
+        db=AsyncMock(),
+        tenant_id=1,
+        thread_id="thread-1",
+        run_id="run-1",
+        tools=[],
+        run_context_port=None,
     )
+    assert result == messages
+
+
+@pytest.mark.asyncio
+async def test_over_budget_latest_tool_round_is_left_verbatim(monkeypatch):
+    port = _mock_context_port(existing=None)
     monkeypatch.setattr(
         "apps.tenant_app_service.agents.memory.agent_run_summary_service.count_tokens",
         lambda *args, **kwargs: 10**9,
@@ -116,7 +131,8 @@ async def test_over_budget_latest_tool_round_is_left_verbatim(monkeypatch):
         thread_id="thread-1",
         run_id="run-1",
         tools=[],
+        run_context_port=port,
     )
 
-    repo.upsert.assert_not_called()
+    port.upsert_in_run_summary.assert_not_called()
     assert [message.id for message in result] == ["trigger", "ai-1", "tool-1"]

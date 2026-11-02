@@ -1,9 +1,6 @@
-"""Integration tests for AgentBase with ConversationMemoryManager.
+"""Unit tests for AgentBase with run-scoped context (``run_context_port``).
 
-Tests the complete flow of agent execution with conversation memory:
-- Loading historical messages before execution
-- Merging with new user input
-- Saving new messages after execution
+Tests load history, merge with the current turn, and persist via the chat adapter.
 """
 
 import os
@@ -18,9 +15,23 @@ from sqlalchemy.orm import sessionmaker
 
 from apps.shared.db.models import AgentRun, AgentRunMessage, Base, ChatMessage, ChatThread
 from apps.tenant_app_service.agents.agent_base import AgentBase
-from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
+from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
 
 TEST_RUN_ID = "00000000-0000-4000-8000-000000000001"
+
+# Integration suites may replace ``AgentBase._llm_call`` on the class; restore for unit isolation.
+_ORIGINAL_LLM_CALL = AgentBase._llm_call
+
+
+@pytest.fixture(autouse=True)
+def _restore_agent_base_llm_call():
+    from apps.tenant_app_service.agent_pool import get_agent_pool
+
+    AgentBase._llm_call = _ORIGINAL_LLM_CALL
+    get_agent_pool()._pool.clear()
+    yield
+    AgentBase._llm_call = _ORIGINAL_LLM_CALL
+    get_agent_pool()._pool.clear()
 
 
 async def _seed_agent_run(session: AsyncSession, thread: ChatThread, *, session_id: str = "test-session") -> str:
@@ -103,75 +114,7 @@ async def test_thread_with_history(async_session, runtime_context):
 
 @pytest.mark.asyncio
 class TestAgentWithMemory:
-    """Test suite for AgentBase with ConversationMemoryManager enabled."""
-
-    async def test_agent_loads_conversation_history(
-        self,
-        async_session,
-        runtime_context,
-        test_thread_with_history,
-        agent_stub_config_factory,
-        patch_agent_config_manager,
-    ):
-        """Test that agent loads historical messages before execution.
-
-        Now uses load_messages_with_summary for optimized loading.
-        """
-        # Patch AgentConfig to avoid reading real YAML and to include a default role
-        stub_config = agent_stub_config_factory(
-            agent_id=runtime_context.agent_id,
-            agent_name=runtime_context.agent_name,
-            system_prompt="test prompt",
-        )
-        patch_agent_config_manager(stub_config)
-
-        # Create agent
-        agent = AgentBase(stub_config)
-
-        # Compile agent (returns compiled graph with built-in message persistence)
-        compiled_agent = await agent.compile()
-
-        # Verify that historical messages can be loaded via manager
-        manager = ConversationMemoryManager(
-            async_session,
-            test_thread_with_history.id,
-            tenant_id=runtime_context.tenant.tenant_id,
-            agent_id=runtime_context.agent_id,
-            run_id=TEST_RUN_ID,
-        )
-        loaded_messages = await manager.load_messages_with_summary(
-            main_timeline_turn_limit=50,
-            run_message_limit=50,
-        )
-
-        assert len(loaded_messages) == 1
-        assert isinstance(loaded_messages[0], AIMessage)
-        assert "4" in loaded_messages[0].content
-
-    async def test_agent_saves_new_messages_to_db(self, async_session, test_thread_with_history, runnable_config):
-        """Test that agent saves new messages to database after execution."""
-        manager = ConversationMemoryManager(
-            async_session, test_thread_with_history.id, tenant_id=1, agent_id=1, run_id=TEST_RUN_ID
-        )
-
-        new_messages = [
-            AIMessage(content="Why did the chicken cross the road? To get to the other side!"),
-        ]
-
-        await manager.add_messages(new_messages, runnable_config)
-
-        result = await async_session.execute(
-            select(AgentRunMessage)
-            .where(AgentRunMessage.thread_id == test_thread_with_history.id)
-            .order_by(AgentRunMessage.created_at)
-        )
-        all_messages = result.scalars().all()
-
-        assert len(all_messages) == 2
-
-        # Check the new AI message was saved
-        assert all_messages[-1].type == "ai"
-        assert "chicken" in all_messages[-1].content
+    """AgentBase graph tests with ``run_context_port`` and seeded history."""
 
     async def test_agent_without_conversation_manager_works(
         self,
@@ -212,6 +155,7 @@ class TestAgentWithMemory:
         runtime_context,
         agent_stub_config_factory,
         patch_agent_config_manager,
+        monkeypatch,
     ):
         """Test that graph correctly loads and merges messages via load_history node.
 
@@ -229,21 +173,27 @@ class TestAgentWithMemory:
         # Mock the _llm_call method to capture the state it receives BEFORE compiling
         received_state = None
 
-        async def mock_llm_call(state, config):
+        async def mock_llm_call(self, state, config):
             nonlocal received_state
             received_state = state
-            # Return minimal response with session_id
             from apps.tenant_app_service.agents.context import extract_runtime_context
 
             runtime = extract_runtime_context(config)
+            current_messages = state.get("messages", [])
             return {
-                "messages": [AIMessage(content="Response", additional_kwargs={"session_id": runtime.session_id})],
+                "messages": current_messages
+                + [
+                    AIMessage(
+                        id="merged-ai-msg",
+                        content="Response",
+                        additional_kwargs={"session_id": runtime.session_id},
+                    )
+                ],
                 "loop_count": state.get("loop_count", 0) + 1,
             }
 
-        agent._llm_call = mock_llm_call
+        monkeypatch.setattr(AgentBase, "_llm_call", mock_llm_call)
 
-        # Compile with mock already set
         compiled_agent = await agent.compile()
 
         # Update runtime context to match thread_id
@@ -259,6 +209,14 @@ class TestAgentWithMemory:
                 "run_id": TEST_RUN_ID,
             }
         }
+        from apps.tenant_app_service.chat.run_context_adapter import chat_run_context_adapter_for_run
+
+        config["configurable"]["run_context_port"] = chat_run_context_adapter_for_run(
+            db=async_session,
+            tenant_id=runtime_context.tenant.tenant_id,
+            agent_id=runtime_context.agent_id,
+            run_id=TEST_RUN_ID,
+        )
 
         result = await compiled_agent.ainvoke(
             {"messages": [new_message], "loop_count": 0, "tool_call_counts": {}},
@@ -272,85 +230,10 @@ class TestAgentWithMemory:
             f"Third message should be 'New question', got: {messages[1].content}"
         )
 
-    async def test_astream_saves_messages_to_db(
-        self,
-        async_session,
-        test_thread_with_history,
-        runtime_context,
-        agent_stub_config_factory,
-        patch_agent_config_manager,
-    ):
-        """Test that astream saves new messages to database via AgentWithMemory wrapper.
-
-        The wrapper saves all new messages after stream completes.
-        """
-        initial_count = test_thread_with_history.message_count
-
-        # Patch AgentConfig and construct AgentBase with a manager
-        stub_config = agent_stub_config_factory(
-            agent_id=runtime_context.agent_id,
-            agent_name=runtime_context.agent_name,
-            system_prompt="test prompt",
-        )
-        patch_agent_config_manager(stub_config)
-        agent = AgentBase(stub_config)
-
-        # Mock _llm_call to return a simple response with session_id
-        async def mock_llm_call(state, config):
-            from apps.tenant_app_service.agents.context import extract_runtime_context
-
-            runtime = extract_runtime_context(config)
-            # Return all existing messages + new AI response (mimicking real behavior)
-            current_messages = state.get("messages", [])
-            return {
-                "messages": current_messages
-                + [
-                    AIMessage(
-                        id="new-ai-msg",
-                        content="Streamed response",
-                        additional_kwargs={"session_id": runtime.session_id},
-                    )
-                ],
-                "loop_count": state.get("loop_count", 0) + 1,
-            }
-
-        agent._llm_call = mock_llm_call
-
-        compiled_agent = await agent.compile()
-
-        # Update runtime context to match thread_id
-        runtime_context.thread_id = test_thread_with_history.id
-
-        # Execute stream
-        config = {
-            "configurable": {
-                "thread_id": test_thread_with_history.id,
-                "db_session": async_session,
-                "runtime": runtime_context.model_dump(),
-                "run_id": TEST_RUN_ID,
-            }
-        }
-
-        chunks = []
-        async for chunk in compiled_agent.astream(
-            {
-                "messages": [HumanMessage(id="new-human-msg", content="Stream test")],
-                "loop_count": 0,
-                "tool_call_counts": {},
-            },
-            config=config,
-        ):
-            chunks.append(chunk)
-
-        # Verify chunks were yielded
-        assert len(chunks) > 0
-
         await async_session.commit()
-
-        result = await async_session.execute(
+        persisted = await async_session.execute(
             select(AgentRunMessage)
             .where(AgentRunMessage.thread_id == test_thread_with_history.id)
             .order_by(AgentRunMessage.created_at)
         )
-        all_messages = result.scalars().all()
-        assert any("Streamed response" in (m.content or "") for m in all_messages)
+        assert any("Response" in (m.content or "") for m in persisted.scalars().all())

@@ -1,14 +1,9 @@
-"""Memory management for agents.
+"""Agent harness memory: in-run compact and shared budgets (persistence lives in chat)."""
 
-This module handles conversation memory, including:
-- Message persistence
-- Conversation summarization
-"""
-
-from apps.tenant_app_service.agents.memory.conversation_memory_manager import (
-    ConversationMemoryManager,
-)
+from apps.tenant_app_service.agents.memory.agent_run_summary_service import compact_prepared_messages
+from apps.tenant_app_service.agents.memory.memory_budget import input_token_budget
 
 __all__ = [
-    "ConversationMemoryManager",
+    "compact_prepared_messages",
+    "input_token_budget",
 ]
