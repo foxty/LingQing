@@ -1,6 +1,6 @@
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.agent_base import AgentBase
-from apps.tenant_app_service.agents.context import create_agent_runtime_user_context
+from apps.tenant_app_service.chat.runtime_context_builders import create_agent_runtime_user_context
 from apps.tenant_app_service.agents.domain import AgentRuntimeContext, AgentTenantContext
 from apps.tenant_app_service.agents.system_agent_config import load_yaml_agent_config
 

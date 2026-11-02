@@ -338,7 +338,7 @@ class HitlApprovalService:
         config = self._build_persistence_config(approval)
         config["configurable"]["run_id"] = run.id
         from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
-        from apps.tenant_app_service.chat.run_context_adapter import ChatRunContextAdapter
+        from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
 
         scope = AgentRunScope(
             tenant_id=self.tenant_id,
@@ -346,13 +346,13 @@ class HitlApprovalService:
             run_id=run.id,
             agent_id=approval.agent_id,
         )
-        context_port = ChatRunContextAdapter(
+        run_port = chat_agent_run_port_for_run(
             db=self.db,
             tenant_id=self.tenant_id,
             agent_id=approval.agent_id,
             run_id=run.id,
         )
-        await context_port.persist_run_messages(scope, [ai_message], config, deduplicate=True)
+        await run_port.persist_run_messages(scope, [ai_message], config, deduplicate=True)
         await run_repo.set_status(
             run.id,
             status=AgentRunStatus.COMPLETED,

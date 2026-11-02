@@ -25,6 +25,7 @@ from sqlalchemy import select
 
 from apps.shared.db.models import Agent, ChatThread, Tenant, User
 from apps.tenant_app_service.agents.agent_base import AgentBase
+from apps.tenant_app_service.chat.agent_run_port_adapter import ChatAgentRunPort
 from apps.tenant_app_service.chat.run_context_adapter import ChatRunContextAdapter
 from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
 
@@ -113,8 +114,7 @@ async def _build_ainvoke_config(async_db_session, runtime_context, thread_id: st
         session_id=session_id,
     )
     user_runtime = replace(runtime_context, thread_id=thread_id, session_id=session_id)
-    from apps.tenant_app_service.chat.run_context_adapter import chat_run_context_adapter_for_run
-    from apps.tenant_app_service.chat.agent_run_lifecycle import chat_agent_run_lifecycle
+    from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
 
     return {
         "configurable": {
@@ -125,13 +125,12 @@ async def _build_ainvoke_config(async_db_session, runtime_context, thread_id: st
             "trigger_message_id": trigger_message_id,
             "invoke_index": 0,
             "session_id": session_id,
-            "run_context_port": chat_run_context_adapter_for_run(
+            "agent_run_port": chat_agent_run_port_for_run(
                 db=async_db_session,
                 tenant_id=tenant_id,
                 agent_id=runtime_context.agent_id,
                 run_id=run.id,
             ),
-            "agent_run_lifecycle": chat_agent_run_lifecycle(async_db_session, tenant_id),
         }
     }
 

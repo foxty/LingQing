@@ -169,8 +169,7 @@ class TestToolLimitAndRunLifecycle:
     async def test_persist_run_messages_marks_awaiting_hitl_once(self, agent, runtime_context):
         run_id = str(uuid4())
         state = {"messages": [HumanMessage(id="h1", content="hello")]}
-        mock_lifecycle = AsyncMock()
-        mock_memory = AsyncMock()
+        mock_port = AsyncMock()
         config = RunnableConfig(
             configurable={
                 "thread_id": runtime_context.thread_id,
@@ -179,11 +178,10 @@ class TestToolLimitAndRunLifecycle:
                 "run_id": run_id,
                 "trigger_message_id": "human-1",
                 "db_session": AsyncMock(),
-                "run_context_port": mock_memory,
-                "agent_run_lifecycle": mock_lifecycle,
+                "agent_run_port": mock_port,
             }
         )
         await agent._persist_run_messages(state, config, mark_awaiting_hitl=True)
 
-        mock_memory.persist_run_messages.assert_awaited_once()
-        mock_lifecycle.mark_run_awaiting_hitl.assert_awaited_once_with(run_id)
+        mock_port.persist_run_messages.assert_awaited_once()
+        mock_port.mark_run_awaiting_hitl.assert_awaited_once_with(run_id)

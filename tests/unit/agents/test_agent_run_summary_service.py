@@ -86,7 +86,7 @@ async def test_existing_run_summary_is_spliced_when_under_budget(monkeypatch):
         thread_id="thread-1",
         run_id="run-1",
         tools=[],
-        run_context_port=port,
+        agent_run_port=port,
     )
 
     port.upsert_in_run_summary.assert_not_called()
@@ -107,7 +107,7 @@ async def test_compact_without_context_port_returns_messages_unchanged():
         thread_id="thread-1",
         run_id="run-1",
         tools=[],
-        run_context_port=None,
+        agent_run_port=None,
     )
     assert result == messages
 
@@ -131,7 +131,7 @@ async def test_over_budget_latest_tool_round_is_left_verbatim(monkeypatch):
         thread_id="thread-1",
         run_id="run-1",
         tools=[],
-        run_context_port=port,
+        agent_run_port=port,
     )
 
     port.upsert_in_run_summary.assert_not_called()

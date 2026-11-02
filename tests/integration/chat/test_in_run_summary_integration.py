@@ -13,7 +13,7 @@ from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.agent_run_summary_repository import AgentRunSummaryRepository
 from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
 from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
-from apps.tenant_app_service.chat.run_context_adapter import chat_run_context_adapter_for_run
+from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
 
 pytestmark = pytest.mark.integration
 
@@ -70,7 +70,7 @@ async def test_compact_persists_in_run_summary_row(
     await mgr.add_messages([ai1, tool1, ai2, tool2], config)
     await pg_async_db_session.commit()
 
-    port = chat_run_context_adapter_for_run(
+    port = chat_agent_run_port_for_run(
         db=pg_async_db_session,
         tenant_id=tenant_id,
         agent_id=thread.agent_id,
@@ -96,7 +96,7 @@ async def test_compact_persists_in_run_summary_row(
         thread_id=thread.id,
         run_id=run.id,
         tools=[],
-        run_context_port=port,
+        agent_run_port=port,
     )
     await pg_async_db_session.commit()
 

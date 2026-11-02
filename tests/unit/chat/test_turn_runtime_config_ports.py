@@ -4,8 +4,7 @@ from unittest.mock import MagicMock
 from uuid import uuid4
 
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.chat.run_context_adapter import ChatRunContextAdapter
-from apps.tenant_app_service.chat.agent_run_lifecycle import ChatAgentRunLifecycle
+from apps.tenant_app_service.chat.agent_run_port_adapter import ChatAgentRunPort
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
 from apps.tenant_app_service.tenant.domain import TenantConfig, TenantDomain
@@ -46,8 +45,7 @@ def test_build_runtime_config_without_run_id_omits_harness_ports():
     )
     configurable = config["configurable"]
     assert "run_id" not in configurable
-    assert "run_context_port" not in configurable
-    assert "agent_run_lifecycle" not in configurable
+    assert "agent_run_port" not in configurable
 
 
 def test_build_runtime_config_with_run_id_injects_chat_adapters():
@@ -67,8 +65,7 @@ def test_build_runtime_config_with_run_id_injects_chat_adapters():
     configurable = config["configurable"]
     assert configurable["run_id"] == run_id
     assert configurable["trigger_message_id"] == "human-1"
-    assert isinstance(configurable["run_context_port"], ChatRunContextAdapter)
-    assert isinstance(configurable["agent_run_lifecycle"], ChatAgentRunLifecycle)
+    assert isinstance(configurable["agent_run_port"], ChatAgentRunPort)
     assert configurable["thread_id"] == run_id
 
 
@@ -87,4 +84,4 @@ def test_build_runtime_config_skip_load_history_flag():
         skip_load_history=True,
     )
     assert config["configurable"]["skip_load_history"] is True
-    assert "run_context_port" in config["configurable"]
+    assert "agent_run_port" in config["configurable"]

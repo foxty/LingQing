@@ -94,6 +94,26 @@ class ChatRunContextAdapter:
             return None
         return row.id
 
+    async def hydrate_prompt_messages(
+        self,
+        messages: list[BaseMessage],
+        *,
+        tenant_id: int,
+        db: AsyncSession,
+    ) -> list[BaseMessage]:
+        return messages
+
+    async def summarize_run_prefix(
+        self,
+        *,
+        tenant_id: int,
+        thread_id: str,
+        run_id: str,
+        previous_summary: str | None,
+        prefix_text: str,
+    ) -> str | None:
+        return None
+
 
 def chat_run_context_adapter_for_run(
     *,
@@ -102,7 +122,7 @@ def chat_run_context_adapter_for_run(
     agent_id: int,
     run_id: str,
 ) -> AgentRunContextPort:
-    """Factory wired into ``RunnableConfig.run_context_port`` by turn orchestration."""
+    """Build context-only adapter (tests / internal); production uses ``ChatAgentRunPort``."""
     return ChatRunContextAdapter(
         db=db,
         tenant_id=tenant_id,

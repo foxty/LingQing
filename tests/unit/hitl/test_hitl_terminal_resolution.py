@@ -49,8 +49,8 @@ async def test_reject_persists_ai_ack_without_tool_message_mutation():
             "apps.tenant_app_service.chat.agent_run_repository.AgentRunRepository"
         ) as run_repo_cls,
         patch(
-            "apps.tenant_app_service.chat.run_context_adapter.ChatRunContextAdapter"
-        ) as manager_cls,
+            "apps.tenant_app_service.chat.agent_run_port_adapter.chat_agent_run_port_for_run"
+        ) as run_port_factory,
         patch(
             "apps.tenant_app_service.chat.thread_run_service.ThreadRunService"
         ) as run_service_cls,
@@ -58,8 +58,8 @@ async def test_reject_persists_ai_ack_without_tool_message_mutation():
         run_repo_cls.return_value.get_by_session_id = AsyncMock(return_value=run_domain)
         run_repo_cls.return_value.set_status = AsyncMock()
         run_service_cls.return_value.finalize_run_for_main = AsyncMock()
-        manager = manager_cls.return_value
-        manager.persist_run_messages = AsyncMock()
+        run_port = run_port_factory.return_value
+        run_port.persist_run_messages = AsyncMock()
 
         result = await service.reject(
             proposal_id="hitl_abc",
@@ -70,7 +70,7 @@ async def test_reject_persists_ai_ack_without_tool_message_mutation():
     assert result.status == HITL_STATUS_REJECTED
     assert result.needs_agent_resume is False
     assert result.ack_message == build_hitl_rejected_ai_message("hitl_test_echo")
-    manager.persist_run_messages.assert_awaited_once()
+    run_port.persist_run_messages.assert_awaited_once()
     run_repo_cls.return_value.set_status.assert_awaited_once()
     run_service_cls.return_value.finalize_run_for_main.assert_awaited_once_with("run-1")
 

@@ -174,13 +174,32 @@ def runtime_context():
 @pytest.fixture
 def runnable_config(runtime_context):
     """Create test RunnableConfig with runtime context."""
+    from contextlib import asynccontextmanager
+
     from langchain_core.runnables import RunnableConfig
+
+    from apps.tenant_app_service.agents.ports.tool_hitl import HITL_ACTION_ALLOW, ToolHitlDecision
+
+    class _FakeAgentRunPort:
+        """Minimal port stub for tool tests (HITL allow only; no load/persist)."""
+
+        def evaluate_tool_approval(self, tool_config):
+            return ToolHitlDecision(action=HITL_ACTION_ALLOW, reason="test")
+
+        async def gate_tool_call(self, **kwargs):
+            return None, None
+
+        @asynccontextmanager
+        async def hitl_tool_execution_guard(self, proposal_id: str):
+            yield
 
     return RunnableConfig(
         configurable={
             "thread_id": runtime_context.thread_id,
             "runtime": runtime_context.model_dump(),
             "session_id": runtime_context.session_id,
+            "run_id": "00000000-0000-4000-8000-000000000099",
+            "agent_run_port": _FakeAgentRunPort(),
         }
     )
 

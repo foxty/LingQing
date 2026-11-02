@@ -1,4 +1,4 @@
-"""Unit tests for AgentBase with run-scoped context (``run_context_port``).
+"""Unit tests for AgentBase with run-scoped context (``agent_run_port``).
 
 Tests load history, merge with the current turn, and persist via the chat adapter.
 """
@@ -114,7 +114,7 @@ async def test_thread_with_history(async_session, runtime_context):
 
 @pytest.mark.asyncio
 class TestAgentWithMemory:
-    """AgentBase graph tests with ``run_context_port`` and seeded history."""
+    """AgentBase graph tests with ``agent_run_port`` and seeded history."""
 
     async def test_agent_without_conversation_manager_works(
         self,
@@ -209,9 +209,9 @@ class TestAgentWithMemory:
                 "run_id": TEST_RUN_ID,
             }
         }
-        from apps.tenant_app_service.chat.run_context_adapter import chat_run_context_adapter_for_run
+        from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
 
-        config["configurable"]["run_context_port"] = chat_run_context_adapter_for_run(
+        config["configurable"]["agent_run_port"] = chat_agent_run_port_for_run(
             db=async_session,
             tenant_id=runtime_context.tenant.tenant_id,
             agent_id=runtime_context.agent_id,

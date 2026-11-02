@@ -36,15 +36,16 @@ from apps.tenant_app_service.agents.domain import (
     ToolCache,
     ToolCallCounts,
 )
+from apps.tenant_app_service.agents.hitl_message import is_hitl_approval_request
 from apps.tenant_app_service.agents.memory.agent_run_summary_service import compact_prepared_messages
 from apps.tenant_app_service.agents.message_content import ensure_visible_ai_content
 from apps.tenant_app_service.agents.message_preparer import MessagePreparer
 from apps.tenant_app_service.agents.metrics import llm_call_tracker
 from apps.tenant_app_service.agents.model_binding_manager import ModelBindingManager
-from apps.tenant_app_service.agents.ports.agent_run_context_port import AgentRunContextPort
+from apps.tenant_app_service.agents.ports.agent_run_port import AgentRunPort
+from apps.tenant_app_service.agents.ports.resolve_agent_run_port import resolve_agent_run_port
 from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
 from apps.tenant_app_service.agents.tool_executor import ToolExecutor
-from apps.tenant_app_service.hitl.utils import is_hitl_approval_request
 
 
 class AgentState(TypedDict):
@@ -132,13 +133,8 @@ class AgentBase(ABC):
         return str(run_id)
 
     @staticmethod
-    def _require_run_context_port(config: RunnableConfig) -> AgentRunContextPort:
-        port = config.get("configurable", {}).get("run_context_port")
-        if port is None:
-            from apps.shared.core.exceptions import ValidationError
-
-            raise ValidationError("configurable.run_context_port is required for run-scoped conversation I/O")
-        return port
+    def _require_agent_run_port(config: RunnableConfig) -> AgentRunPort:
+        return resolve_agent_run_port(config)
 
     @staticmethod
     def _run_scope(config: RunnableConfig, runtime: AgentRuntimeContext, agent_id: int) -> AgentRunScope:
@@ -196,15 +192,13 @@ class AgentBase(ABC):
             )
             self.logger.debug(f"Loaded parent context for agent {self.agent_config.agent_name}")
 
-        context_port = self._require_run_context_port(config)
         run_id = configurable.get("run_id")
+        run_port = self._require_agent_run_port(config)
         scope = self._run_scope(config, runtime, self.agent_config.agent_id)
-        historical_messages = await context_port.load_prompt_context(scope)
+        historical_messages = await run_port.load_prompt_context(scope)
 
         if db_session:
-            from apps.tenant_app_service.hitl.history import hydrate_hitl_history_messages
-
-            historical_messages = await hydrate_hitl_history_messages(
+            historical_messages = await run_port.hydrate_prompt_messages(
                 historical_messages,
                 tenant_id=runtime.tenant.tenant_id,
                 db=db_session,
@@ -343,7 +337,7 @@ class AgentBase(ABC):
                     thread_id=runtime.thread_id,
                     run_id=str(run_id),
                     tools=tools,
-                    run_context_port=configurable.get("run_context_port"),
+                    agent_run_port=resolve_agent_run_port(config),
                 )
             model_with_tools = await self._model_binding_manager.get_or_create(
                 model_profile_id=model_profile_id,
@@ -612,10 +606,10 @@ class AgentBase(ABC):
         """Persist run-scoped messages (shared by save_messages and HITL interrupt)."""
         runtime = extract_runtime_context(config)
         run_id = self._run_id_from_config(config)
-        context_port = self._require_run_context_port(config)
+        run_port = self._require_agent_run_port(config)
         messages_to_save = state.get("messages", [])
         if messages_to_save:
-            await context_port.persist_run_messages(
+            await run_port.persist_run_messages(
                 self._run_scope(config, runtime, self.agent_config.agent_id),
                 messages_to_save,
                 config,
@@ -683,11 +677,8 @@ class AgentBase(ABC):
 
     async def _pause_agent_run_for_hitl(self, config: RunnableConfig, run_id: str) -> None:
         """Mark the agent run paused for HITL after run messages are persisted."""
-        lifecycle = config.get("configurable", {}).get("agent_run_lifecycle")
-        if lifecycle is None:
-            self.logger.warning("agent_run_lifecycle missing; run %s not marked awaiting HITL", run_id)
-            return
-        await lifecycle.mark_run_awaiting_hitl(run_id)
+        port = resolve_agent_run_port(config)
+        await port.mark_run_awaiting_hitl(run_id)
 
     def _should_continue(self, state: AgentState) -> Literal["tool_node", "save_messages"]:
         """Determine if the agent should continue to tool execution or end.
