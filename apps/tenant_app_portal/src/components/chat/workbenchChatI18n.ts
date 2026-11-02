@@ -12,6 +12,8 @@ i18n.addResourceBundle(
         'This conversation belongs to another user. Select one of your conversations or start a new one.',
       threadNotFound: 'Conversation not found',
       threadNotFoundDesc: 'This conversation may have been deleted or is no longer available.',
+      startNewConversation: 'Start new conversation',
+      openRecentConversation: 'Open recent conversation',
       threadLoadFailed: 'Failed to load conversation',
       threadLoadFailedDesc:
         'Something went wrong while loading this conversation. Try again or start a new one.',
@@ -58,6 +60,8 @@ i18n.addResourceBundle(
       threadNotAccessibleDesc: '此对话属于其他用户。请选择您自己的对话或开始新对话。',
       threadNotFound: '未找到对话',
       threadNotFoundDesc: '此对话可能已被删除或不再可用。',
+      startNewConversation: '开始新对话',
+      openRecentConversation: '打开最近的对话',
       threadLoadFailed: '加载对话失败',
       threadLoadFailedDesc: '加载此对话时出错。请重试或开始新对话。',
       agentAccessRevoked: '你已没有此智能体的访问权限',

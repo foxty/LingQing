@@ -47,6 +47,8 @@ interface ChatAreaProps {
   onThinkingEffortChange: (value: ThinkingEffort) => void
   onHitlApprovedContinue?: (proposalId: string) => void | Promise<void>
   onHitlRejected?: (proposalId: string) => void | Promise<void>
+  onStartNewConversation?: () => void
+  onOpenRecentConversation?: () => void
 }
 
 export default function ChatArea({
@@ -76,6 +78,8 @@ export default function ChatArea({
   onThinkingEffortChange,
   onHitlApprovedContinue,
   onHitlRejected,
+  onStartNewConversation,
+  onOpenRecentConversation,
 }: ChatAreaProps) {
   const { t } = useTranslation()
 
@@ -126,6 +130,8 @@ export default function ChatArea({
             exampleQuestions={exampleQuestions}
             inputDisabled={inputDisabled}
             onSendExample={(question) => onSendMessage(question, [])}
+            onStartNewConversation={onStartNewConversation}
+            onOpenRecentConversation={onOpenRecentConversation}
           />
         ) : null}
 

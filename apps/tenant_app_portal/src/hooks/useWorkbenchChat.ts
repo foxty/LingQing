@@ -21,6 +21,8 @@ import type { Artifact, AttachedArtifact, Message } from '@/types'
 interface UseWorkbenchChatOptions {
   agentId: number
   threadId: string | null
+  /** When false, skips history fetch (e.g. route metadata already failed). */
+  historyEnabled?: boolean
   createThread: (params: { agentId: number }) => Promise<{ id: string }>
   navigate: (path: string, options?: { replace?: boolean }) => void
   updateThreadTitle: (params: { threadId: string; title: string }) => void
@@ -48,6 +50,7 @@ function withOptimisticMessage(history: Message[], optimistic: Message | null): 
 export function useWorkbenchChat({
   agentId,
   threadId,
+  historyEnabled = true,
   createThread,
   navigate,
   updateThreadTitle,
@@ -77,7 +80,7 @@ export function useWorkbenchChat({
     loadError: threadLoadError,
     loadMore,
     refreshTail,
-  } = useChatHistory(agentId, threadId || undefined, !!threadId)
+  } = useChatHistory(agentId, threadId || undefined, !!threadId && historyEnabled)
 
   const {
     optimisticMessage,
