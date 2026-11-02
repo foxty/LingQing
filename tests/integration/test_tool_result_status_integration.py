@@ -17,7 +17,7 @@ from sqlalchemy.pool import NullPool
 from apps.shared.db.models import ChatThread, Tenant, TenantMembership, User
 from apps.shared.db.session import get_db
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
+from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
 from apps.tenant_app_service.agents.tool_executor import ToolExecutor
 from apps.tenant_app_service.agents.tools import ToolResult
 from apps.tenant_app_service.agents.tools.tool_result import (

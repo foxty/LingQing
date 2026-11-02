@@ -22,7 +22,7 @@ from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, Tool
 from langchain_core.runnables import RunnableConfig
 
 from apps.shared.db.models import ChatMessage
-from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
+from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
 from apps.tenant_app_service.chat.agent_run_domain import ThreadMainMessageDomain
 
 # ─── Constants ────────────────────────────────────────────────────────────────

@@ -287,9 +287,6 @@ class HitlApprovalService:
         if resolution != HITL_RESOLUTION_REJECTED:
             raise ValidationError(f"unsupported terminal resolution: {resolution}")
 
-        from apps.tenant_app_service.agents.memory.conversation_memory_manager import (
-            ConversationMemoryManager,
-        )
         from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
         from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
         from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
@@ -340,14 +337,22 @@ class HitlApprovalService:
         )
         config = self._build_persistence_config(approval)
         config["configurable"]["run_id"] = run.id
-        manager = ConversationMemoryManager(
-            db_session=self.db,
+        from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
+        from apps.tenant_app_service.chat.run_context_adapter import ChatRunContextAdapter
+
+        scope = AgentRunScope(
+            tenant_id=self.tenant_id,
             thread_id=approval.thread_id,
+            run_id=run.id,
+            agent_id=approval.agent_id,
+        )
+        context_port = ChatRunContextAdapter(
+            db=self.db,
             tenant_id=self.tenant_id,
             agent_id=approval.agent_id,
             run_id=run.id,
         )
-        await manager.add_messages([ai_message], config, deduplicate=True)
+        await context_port.persist_run_messages(scope, [ai_message], config, deduplicate=True)
         await run_repo.set_status(
             run.id,
             status=AgentRunStatus.COMPLETED,

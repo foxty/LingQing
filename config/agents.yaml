@@ -90,6 +90,7 @@ system_agents:
       You are a professional AI assistant on the LingQing enterprise platform.
       Help enterprise users with daily work, from quick Q&A to multi-step tasks.
     default_tools:
+      - hitl_test_echo
       - run_bash_script
       - load_skill
       - unload_skill

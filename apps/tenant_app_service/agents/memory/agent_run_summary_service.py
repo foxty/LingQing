@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.memory.memory_budget import input_token_budget
+from apps.tenant_app_service.agents.ports.agent_run_context_port import AgentRunContextPort
 from apps.tenant_app_service.agents.token_counter import count_tokens
 
 logger = get_logger(__name__)
@@ -99,18 +100,19 @@ async def compact_prepared_messages(
     thread_id: str,
     run_id: str,
     tools: list[BaseTool] | None = None,
+    run_context_port: AgentRunContextPort | None = None,
 ) -> list[BaseMessage]:
     """Apply an existing in-run summary, and extend it when the prompt is still over budget.
 
     The latest tool round is left intact. A summarizer failure keeps the already spliced view.
     """
-    from apps.tenant_app_service.chat.agent_run_summary_repository import AgentRunSummaryRepository
-
-    repo = AgentRunSummaryRepository(db)
+    if run_context_port is None:
+        return messages
+    context_port = run_context_port
     try:
-        existing = await repo.get_for_run(tenant_id, run_id)
+        existing = await context_port.get_in_run_summary(tenant_id, run_id)
         view = list(messages)
-        if existing is not None and existing.summary_text:
+        if existing is not None:
             view = splice_run_summary(
                 view,
                 summary_text=existing.summary_text,
@@ -138,8 +140,8 @@ async def compact_prepared_messages(
             return view
 
         cutoff_message_id = str(prefix[-1].id)
-        through_id = await _resolve_db_id(db, cutoff_message_id, run_id)
-        await repo.upsert(
+        through_id = await context_port.resolve_run_message_db_id(cutoff_message_id, run_id)
+        await context_port.upsert_in_run_summary(
             tenant_id=tenant_id,
             thread_id=thread_id,
             run_id=run_id,
@@ -155,12 +157,3 @@ async def compact_prepared_messages(
     except Exception as exc:
         logger.warning("In-run summary skipped for run %s: %s", run_id, exc, exc_info=True)
         return messages
-
-
-async def _resolve_db_id(db: AsyncSession, message_id: str, run_id: str) -> int | None:
-    from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
-
-    row = await AgentRunMessageRepository(db).get_message_by_message_id(message_id)
-    if row is None or row.run_id != run_id:
-        return None
-    return row.id

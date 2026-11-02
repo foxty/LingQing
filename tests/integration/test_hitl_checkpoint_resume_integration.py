@@ -148,6 +148,9 @@ async def test_hitl_pause_approve_resume_executes_tool(pg_async_db_session, samp
     try:
         compiled = await pool.get_or_create_agent(_hitl_agent_config(agent_id=thread.agent_id))
 
+        from apps.tenant_app_service.chat.run_context_adapter import chat_run_context_adapter_for_run
+        from apps.tenant_app_service.chat.agent_run_lifecycle import chat_agent_run_lifecycle
+
         graph_config = {
             "configurable": {
                 "thread_id": run.id,
@@ -156,6 +159,13 @@ async def test_hitl_pause_approve_resume_executes_tool(pg_async_db_session, samp
                 "run_id": run.id,
                 "trigger_message_id": trigger_message_id,
                 "invoke_index": 0,
+                "run_context_port": chat_run_context_adapter_for_run(
+                    db=pg_async_db_session,
+                    tenant_id=tenant_id,
+                    agent_id=thread.agent_id,
+                    run_id=run.id,
+                ),
+                "agent_run_lifecycle": chat_agent_run_lifecycle(pg_async_db_session, tenant_id),
             }
         }
 
@@ -203,6 +213,17 @@ async def test_hitl_pause_approve_resume_executes_tool(pg_async_db_session, samp
 
         turn._get_agent_graph = _same_graph  # type: ignore[method-assign]
 
+        resume_runtime_configs: list[dict] = []
+        original_build = ChatTurnService._build_runtime_config
+
+        def _capture_resume_config(self, *args, **kwargs):
+            built = original_build(self, *args, **kwargs)
+            if kwargs.get("skip_load_history"):
+                resume_runtime_configs.append(built)
+            return built
+
+        ChatTurnService._build_runtime_config = _capture_resume_config  # type: ignore[method-assign]
+
         payloads: list[str] = []
         async for line in turn.run_hitl_checkpoint_resume_stream(
             request=ChatRequest(
@@ -221,6 +242,12 @@ async def test_hitl_pause_approve_resume_executes_tool(pg_async_db_session, samp
             proposal_id=approval_row.proposal_id,
         ):
             payloads.append(line)
+
+        ChatTurnService._build_runtime_config = original_build  # type: ignore[method-assign]
+        assert resume_runtime_configs, "HITL resume should build runtime config with skip_load_history"
+        assert resume_runtime_configs[-1]["configurable"].get("skip_load_history") is True
+        assert resume_runtime_configs[-1]["configurable"].get("run_context_port") is not None
+        assert resume_runtime_configs[-1]["configurable"].get("agent_run_lifecycle") is not None
 
         tool_rows = await pg_async_db_session.execute(
             select(AgentRunMessage).where(

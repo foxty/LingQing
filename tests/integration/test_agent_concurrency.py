@@ -23,9 +23,10 @@ import pytest_asyncio
 from langchain_core.messages import AIMessage, HumanMessage
 from sqlalchemy import select
 
-from apps.shared.db.models import Agent, ChatMessage, ChatThread, Tenant, User
+from apps.shared.db.models import Agent, ChatThread, Tenant, User
 from apps.tenant_app_service.agents.agent_base import AgentBase
-from apps.tenant_app_service.agents.memory.conversation_memory_manager import ConversationMemoryManager
+from apps.tenant_app_service.chat.run_context_adapter import ChatRunContextAdapter
+from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
 
 pytestmark = pytest.mark.integration
 
@@ -112,15 +113,25 @@ async def _build_ainvoke_config(async_db_session, runtime_context, thread_id: st
         session_id=session_id,
     )
     user_runtime = replace(runtime_context, thread_id=thread_id, session_id=session_id)
+    from apps.tenant_app_service.chat.run_context_adapter import chat_run_context_adapter_for_run
+    from apps.tenant_app_service.chat.agent_run_lifecycle import chat_agent_run_lifecycle
+
     return {
         "configurable": {
-            "thread_id": thread_id,
+            "thread_id": run.id,
             "db_session": async_db_session,
             "runtime": user_runtime.model_dump(),
             "run_id": run.id,
             "trigger_message_id": trigger_message_id,
             "invoke_index": 0,
             "session_id": session_id,
+            "run_context_port": chat_run_context_adapter_for_run(
+                db=async_db_session,
+                tenant_id=tenant_id,
+                agent_id=runtime_context.agent_id,
+                run_id=run.id,
+            ),
+            "agent_run_lifecycle": chat_agent_run_lifecycle(async_db_session, tenant_id),
         }
     }
 
@@ -229,23 +240,25 @@ class TestAgentConcurrency:
         sync_session = SyncSession()
 
         try:
-            agent = AgentBase(stub_config)
+            AgentBase(stub_config)
             thread_ids = [f"concurrent-thread-{i}" for i in range(10)]
-            managers: List[ConversationMemoryManager] = []
-            results: List[tuple[str, ConversationMemoryManager]] = []
+            managers: List[ChatRunContextAdapter] = []
+            results: List[tuple[str, ChatRunContextAdapter]] = []
             errors: List = []
             lock = threading.Lock()
 
             def create_manager_in_thread(thread_id: str):
-                """Create manager in a separate thread."""
+                """Create run memory adapter in a separate thread."""
                 try:
-                    runtime = replace(runtime_context, thread_id=thread_id)
-                    manager = agent._get_or_create_manager(
-                        runtime, sync_session, run_id=f"concurrency-run-{thread_id}"
+                    memory = ChatRunContextAdapter(
+                        db=sync_session,
+                        tenant_id=runtime_context.user.tenant_id,
+                        agent_id=runtime_context.agent_id,
+                        run_id=f"concurrency-run-{thread_id}",
                     )
                     with lock:
-                        managers.append(manager)
-                        results.append((thread_id, manager))
+                        managers.append(memory)
+                        results.append((thread_id, memory))
                 except Exception as e:
                     with lock:
                         errors.append((thread_id, str(e)))
@@ -265,11 +278,9 @@ class TestAgentConcurrency:
 
             _assert_distinct_instances(managers)
 
-            # Verify each manager has correct thread_id
-            for thread_id, manager in results:
-                assert manager.thread_id == thread_id, (
-                    f"Manager thread_id mismatch: expected {thread_id}, got {manager.thread_id}"
-                )
+            # Verify each adapter has the expected run_id
+            for thread_id, memory in results:
+                assert memory._run_id == f"concurrency-run-{thread_id}"
         finally:
             sync_session.close()
             sync_engine.dispose()
@@ -294,20 +305,17 @@ class TestAgentConcurrency:
         )
         patch_agent_config_manager(stub_config)
 
-        agent = AgentBase(stub_config)
         thread_ids = [f"async-concurrent-{i}" for i in range(10)]
 
         async def create_manager_async(thread_id: str):
-            """Create manager using asyncio.to_thread for true concurrency."""
-            runtime = replace(runtime_context, thread_id=thread_id)
-            # Run synchronous manager creation in thread pool
-            manager = await asyncio.to_thread(
-                agent._get_or_create_manager,
-                runtime,
-                async_db_session.sync_session,
+            """Create run memory adapter using asyncio.to_thread for true concurrency."""
+            return await asyncio.to_thread(
+                ChatRunContextAdapter,
+                db=async_db_session,
+                tenant_id=runtime_context.user.tenant_id,
+                agent_id=runtime_context.agent_id,
                 run_id=f"concurrency-run-{thread_id}",
             )
-            return manager
 
         # TRUE concurrent execution
         managers = await asyncio.gather(*[create_manager_async(tid) for tid in thread_ids])
@@ -317,9 +325,8 @@ class TestAgentConcurrency:
 
         _assert_distinct_instances(managers)
 
-        # Verify each manager has correct thread_id
         for manager, expected_thread_id in zip(managers, thread_ids):
-            assert manager.thread_id == expected_thread_id
+            assert manager._run_id == f"concurrency-run-{expected_thread_id}"
 
     @pytest.mark.asyncio
     async def test_message_isolation(
@@ -424,24 +431,22 @@ class TestAgentConcurrency:
         )
         patch_agent_config_manager(stub_config)
 
-        agent = AgentBase(stub_config)
         same_thread_id = "same-thread-concurrent"
 
         # Create managers sequentially for the same thread_id
         managers = []
-        for _ in range(5):
-            runtime = replace(runtime_context, thread_id=same_thread_id)
-            manager = agent._get_or_create_manager(
-                runtime, async_db_session, run_id=f"concurrency-run-{same_thread_id}-{_}"
+        for index in range(5):
+            managers.append(
+                ChatRunContextAdapter(
+                    db=async_db_session,
+                    tenant_id=runtime_context.user.tenant_id,
+                    agent_id=runtime_context.agent_id,
+                    run_id=f"concurrency-run-{same_thread_id}-{index}",
+                )
             )
-            managers.append(manager)
 
-        # With no caching, each call should return a new instance
+        # All adapters should be distinct instances for the same thread
         _assert_distinct_instances(managers)
-
-        # All managers should have the same thread_id
-        for manager in managers:
-            assert manager.thread_id == same_thread_id
 
     @pytest.mark.asyncio
     async def test_agent_pool_get_or_create(
@@ -506,31 +511,30 @@ class TestAgentConcurrency:
         )
         patch_agent_config_manager(stub_config)
 
-        agent = AgentBase(stub_config)
         num_requests = 50
 
         # Create managers sequentially (SQLAlchemy async sessions don't support concurrent ops)
         managers = []
         for i in range(num_requests):
             thread_id = f"stress-thread-{i}"
-            runtime = replace(runtime_context, thread_id=thread_id)
-            manager = agent._get_or_create_manager(
-                runtime, async_db_session, run_id=f"concurrency-run-{thread_id}"
+            memory = ChatRunContextAdapter(
+                db=async_db_session,
+                tenant_id=runtime_context.user.tenant_id,
+                agent_id=runtime_context.agent_id,
+                run_id=f"concurrency-run-{thread_id}",
             )
-
-            # Verify manager is functional
-            assert manager.thread_id == thread_id
-            assert manager.tenant_id == runtime_context.tenant.tenant_id
-            managers.append(manager)
+            assert memory._run_id == f"concurrency-run-{thread_id}"
+            assert memory._tenant_id == runtime_context.tenant.tenant_id
+            managers.append(memory)
 
         # Verify all managers were created successfully
         assert len(managers) == num_requests
 
         _assert_distinct_instances(managers)
 
-        # Verify thread_id isolation
-        thread_ids = [m.thread_id for m in managers]
-        assert len(set(thread_ids)) == num_requests, "All managers should have unique thread_ids"
+        # Verify run_id isolation
+        run_ids = [m._run_id for m in managers]
+        assert len(set(run_ids)) == num_requests, "All adapters should have unique run_ids"
 
     @pytest.mark.asyncio
     async def test_multi_user_concurrent_agent_invocation(
