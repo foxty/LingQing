@@ -399,6 +399,7 @@ async def test_send_human_two_runs_distinct_invoke_index():
 def test_run_status_allows_thread_rollup():
     assert run_status_allows_thread_rollup(AgentRunStatus.COMPLETED) is True
     assert run_status_allows_thread_rollup(AgentRunStatus.FAILED) is True
+    assert run_status_allows_thread_rollup(AgentRunStatus.CANCELLED) is False
     assert run_status_allows_thread_rollup(AgentRunStatus.AWAITING_HITL) is False
     assert run_status_allows_thread_rollup(AgentRunStatus.RUNNING) is False
 

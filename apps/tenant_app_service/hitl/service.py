@@ -347,7 +347,6 @@ class HitlApprovalService:
             agent_id=approval.agent_id,
         )
         run_port = chat_agent_run_port_for_run(
-            db=self.db,
             tenant_id=self.tenant_id,
             agent_id=approval.agent_id,
             run_id=run.id,

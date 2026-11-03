@@ -85,6 +85,9 @@ async def lifespan(app: FastAPI):
     yield
 
     # Shutdown
+    from apps.tenant_app_service.chat.agent_run_execution_registry import cancel_all_registered
+
+    cancel_all_registered()
     await shutdown_langgraph_checkpointer()
     logger.info("LingQing Backend Server shutdown")
 

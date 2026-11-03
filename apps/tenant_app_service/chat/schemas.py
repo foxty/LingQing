@@ -16,6 +16,14 @@ class SimpleMessage(BaseModel):
     content: str
 
 
+class AgentRunSummary(BaseModel):
+    run_id: str
+    agent_id: int
+    invoke_index: int
+    session_id: str
+    status: str
+
+
 class Message(BaseModel):
     """Message model with strict role validation.
 
@@ -34,6 +42,10 @@ class Message(BaseModel):
     session_id: str | None = None  # For linking to observability metrics
     additional_kwargs: dict[str, Any] | None = None  # Additional metadata (e.g., tool_metadata)
     message_metadata: dict[str, Any] | None = None  # Full message metadata
+    trigger_runs: list[AgentRunSummary] | None = Field(
+        default=None,
+        description="Runs spawned by this human message (history/timeline read projection)",
+    )
 
 
 class ChatRequest(BaseModel):
@@ -151,6 +163,13 @@ class PendingHitlInfo(BaseModel):
     session_id: str | None = None
 
 
+class CancelAgentRunResponse(BaseModel):
+    """Result of cancelling an in-flight agent run."""
+
+    run_id: str
+    status: Literal["cancelled"] = "cancelled"
+
+
 class ActiveRunResponse(BaseModel):
     """Active agent run snapshot for polling and admission (idle when ``run_id`` is null)."""
 
@@ -174,14 +193,6 @@ class SendThreadMessageRequest(BaseModel):
         default=None,
         description="Agents to run; empty or omitted for message-only",
     )
-
-
-class AgentRunSummary(BaseModel):
-    run_id: str
-    agent_id: int
-    invoke_index: int
-    session_id: str
-    status: str
 
 
 class SendThreadMessageResponse(BaseModel):

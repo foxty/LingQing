@@ -2,6 +2,10 @@
 // Frontend Types (camelCase - for internal use)
 // ============================================================================
 
+import type { TriggerAgentRunSummary } from '@/lib/agentRunStatus'
+
+export type { TriggerAgentRunSummary }
+
 export interface User {
   id: number // User ID from database
   username: string
@@ -39,6 +43,8 @@ export interface Message {
     hitl?: HitlPayload
     [key: string]: any
   } // Provider-specific extras
+  /** Runs for this human message (history/timeline read projection). */
+  trigger_runs?: TriggerAgentRunSummary[]
   message_metadata?: {
     // System metadata (NOT sent to LLM)
     visibility?: 'internal' | 'public'

@@ -9,7 +9,17 @@ from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import AgentRun
-from apps.tenant_app_service.chat.agent_run_domain import ACTIVE_AGENT_RUN_STATUSES, AgentRunDomain, AgentRunStatus
+from apps.tenant_app_service.chat.agent_run_domain import (
+    ACTIVE_AGENT_RUN_STATUSES,
+    AgentRunDomain,
+    AgentRunStatus,
+)
+
+_CANCELLABLE_AGENT_RUN_STATUSES: tuple[str, ...] = (
+    AgentRunStatus.QUEUED.value,
+    AgentRunStatus.RUNNING.value,
+    AgentRunStatus.AWAITING_HITL.value,
+)
 
 
 def _to_domain(row: AgentRun) -> AgentRunDomain:
@@ -136,6 +146,34 @@ class AgentRunRepository:
         )
         return [_to_domain(row) for row in result.scalars().all()]
 
+    async def list_for_thread(self, thread_id: str) -> list[AgentRunDomain]:
+        result = await self.db.execute(
+            select(AgentRun)
+            .where(AgentRun.thread_id == thread_id)
+            .order_by(AgentRun.created_at.asc(), AgentRun.id.asc())
+        )
+        return [_to_domain(row) for row in result.scalars().all()]
+
+    async def list_for_triggers(
+        self,
+        thread_id: str,
+        trigger_message_ids: list[str],
+    ) -> dict[str, list[AgentRunDomain]]:
+        if not trigger_message_ids:
+            return {}
+        result = await self.db.execute(
+            select(AgentRun)
+            .where(
+                AgentRun.thread_id == thread_id,
+                AgentRun.trigger_message_id.in_(trigger_message_ids),
+            )
+            .order_by(AgentRun.invoke_index.asc())
+        )
+        grouped: dict[str, list[AgentRunDomain]] = {}
+        for row in result.scalars().all():
+            grouped.setdefault(row.trigger_message_id, []).append(_to_domain(row))
+        return grouped
+
     async def set_status(
         self,
         run_id: str,
@@ -147,6 +185,32 @@ class AgentRunRepository:
         if completed_at is not None:
             values["completed_at"] = completed_at
         await self.db.execute(update(AgentRun).where(AgentRun.id == run_id).values(**values))
+
+    async def cancel_active_run(
+        self,
+        tenant_id: int,
+        run_id: str,
+        *,
+        completed_at: datetime,
+    ) -> AgentRunDomain | None:
+        """Move run to ``cancelled`` when queued, running, or awaiting HITL; returns None if no row matched."""
+        now = datetime.now(UTC)
+        result = await self.db.execute(
+            update(AgentRun)
+            .where(
+                AgentRun.id == run_id,
+                AgentRun.tenant_id == tenant_id,
+                AgentRun.status.in_(_CANCELLABLE_AGENT_RUN_STATUSES),
+            )
+            .values(
+                status=AgentRunStatus.CANCELLED.value,
+                completed_at=completed_at,
+                updated_at=now,
+            )
+            .returning(AgentRun)
+        )
+        row = result.scalar_one_or_none()
+        return _to_domain(row) if row else None
 
     async def transition_status(
         self,

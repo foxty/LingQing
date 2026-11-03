@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
+import { AGENT_RUN_STATUS, messageAgentRunStatus } from '@/lib/agentRunStatus'
 import { SessionMetrics } from '@/types'
 
 i18n.addResourceBundle('en', 'translation', {
@@ -27,6 +28,8 @@ i18n.addResourceBundle('en', 'translation', {
     generatingResponse: 'Generating response',
     thinking: 'Thinking...',
     noResponseGenerated: 'No response was generated.',
+    runCancelledInline:
+      'Generation was stopped before the agent finished.',
     reasoningTitle: 'Model reasoning',
     reasoningStatus: 'Reasoning',
     reasoningEffortRequested: 'Workbench effort requested',
@@ -74,6 +77,7 @@ i18n.addResourceBundle('zh', 'translation', {
     generatingResponse: '正在生成回复',
     thinking: '思考中...',
     noResponseGenerated: '未生成回复内容。',
+    runCancelledInline: '生成已停止，智能体未完成回复。',
     reasoningTitle: '模型推理',
     reasoningStatus: '推理',
     reasoningEffortRequested: '工作台选择的深度',
@@ -94,7 +98,16 @@ i18n.addResourceBundle('zh', 'translation', {
     hideReasoning: '收起推理',
   },
 }, true, true)
-import { AlertCircle, Bot, Check, ChevronDown, ChevronUp, Copy, Loader2 } from 'lucide-react'
+import {
+  AlertCircle,
+  Bot,
+  Check,
+  ChevronDown,
+  ChevronUp,
+  CircleStop,
+  Copy,
+  Loader2,
+} from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { copyToClipboard } from '@/lib/utils'
 import { AiTurn, TurnProcessItem } from '@/lib/chatTurns'
@@ -238,6 +251,7 @@ export default function AiTurnMessage({
   }
 
   const isError = turn.finalMessage.content.startsWith('❌')
+  const cancelledNotice = t('workbench.runCancelledInline')
   const sessionMetrics = isSessionMetrics(turn.metrics)
     ? turn.metrics
     : isSessionMetrics(turn.finalMessage.metrics)
@@ -273,6 +287,10 @@ export default function AiTurnMessage({
   const finalContent = turn.finalMessage.content?.trim() || ''
   const hasRealFinalContent =
     finalContent.length > 0 && finalContent !== thinkingPlaceholder
+  const agentRunStatus = messageAgentRunStatus(turn.finalMessage)
+  const isCancelled = agentRunStatus === AGENT_RUN_STATUS.CANCELLED
+  const showCancelledNoticeOnly = isCancelled && !hasRealFinalContent
+  const showCancelledPartial = isCancelled && hasRealFinalContent
   const showInitialWorkingState = isStreaming && !hasProcessArea && !hasRealFinalContent
 
   return (
@@ -280,10 +298,12 @@ export default function AiTurnMessage({
       <div
         className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full ${
           isError ? 'bg-destructive/10 text-destructive' : 'bg-muted'
-        } ${isStreaming ? 'ring-2 ring-primary/30' : ''}`}
+        } ${isStreaming ? 'ring-2 ring-primary/30' : ''} ${isCancelled ? 'ring-1 ring-border' : ''}`}
       >
         {isError ? (
           <AlertCircle className="h-4 w-4" />
+        ) : isCancelled ? (
+          <CircleStop className="h-4 w-4 text-muted-foreground" />
         ) : isStreaming ? (
           <Loader2 className="h-4 w-4 animate-spin text-primary" />
         ) : (
@@ -307,9 +327,14 @@ export default function AiTurnMessage({
         <div
           className={`relative min-w-0 max-w-[min(92%,42rem)] rounded-lg px-4 py-3 ${
             isError ? 'bg-destructive/5 border border-destructive/20' : 'bg-muted'
-          } ${isStreaming ? 'border border-primary/20' : ''}`}
+          } ${isStreaming ? 'border border-primary/20' : ''} ${
+            isCancelled ? 'border border-dashed border-muted-foreground/35' : ''
+          }`}
         >
-          {hasProcessArea && (
+          {showCancelledNoticeOnly ? (
+            <p className="text-sm italic text-muted-foreground">{cancelledNotice}</p>
+          ) : null}
+          {!showCancelledNoticeOnly && hasProcessArea && (
             <div className="mb-3 border-l-2 border-border pl-3">
               <button
                 onClick={() => setShowProcessDetails((prev) => !prev)}
@@ -406,9 +431,10 @@ export default function AiTurnMessage({
             </div>
           )}
 
+          {!showCancelledNoticeOnly ? (
           <div className="mb-1 flex items-center justify-between gap-2">
             <div className="text-xs font-semibold text-muted-foreground">{t('workbench.finalResponse')}</div>
-            {!isStreaming && (
+            {!isStreaming && !isCancelled && (
             <div className="inline-flex items-center gap-1">
               <MessageFeedbackButtons
                 threadId={threadId}
@@ -431,29 +457,33 @@ export default function AiTurnMessage({
             </div>
             )}
           </div>
-          {hasRealFinalContent ? (
+          ) : null}
+          {!showCancelledNoticeOnly && hasRealFinalContent ? (
           <div className="min-w-0 text-sm">
             <MarkdownDocument content={turn.finalMessage.content} density="default" />
+            {showCancelledPartial ? (
+              <p className="mt-2 text-xs italic text-muted-foreground">{cancelledNotice}</p>
+            ) : null}
             {isStreaming ? (
               <span className="inline-block w-1 h-4 bg-primary ml-1 animate-pulse" />
             ) : null}
           </div>
-          ) : isStreaming ? (
+          ) : !showCancelledNoticeOnly && isStreaming ? (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <Loader2 className="h-3.5 w-3.5 animate-spin" />
               <span>{hasRunningTool ? t('workbench.working') : t('workbench.generatingResponse')}</span>
             </div>
-          ) : (
+          ) : !showCancelledNoticeOnly ? (
           <div className="text-sm text-muted-foreground">
             {t('workbench.noResponseGenerated')}
           </div>
-          )}
+          ) : null}
 
-          {!isStreaming && copyStatus === 'error' && (
+          {!showCancelledNoticeOnly && !isStreaming && copyStatus === 'error' && (
             <div className="mt-1 text-[11px] text-destructive">{t('workbench.copyFailed')}</div>
           )}
 
-          {!isStreaming && (
+          {!showCancelledNoticeOnly && !isStreaming && (
           <div className="mt-2 flex items-center justify-between text-xs text-muted-foreground/80">
             <span>{turn.timestamp && new Date(turn.timestamp).toLocaleTimeString()}</span>
             {sessionMetrics && (

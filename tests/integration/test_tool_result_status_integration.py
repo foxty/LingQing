@@ -261,7 +261,6 @@ async def test_executor_limit_persisted_and_visible_in_history(
             "run_id": run.id,
             "db_session": pg_async_db_session,
             "agent_run_port": chat_agent_run_port_for_run(
-                db=pg_async_db_session,
                 tenant_id=tenant_id,
                 agent_id=thread.agent_id,
                 run_id=run.id,

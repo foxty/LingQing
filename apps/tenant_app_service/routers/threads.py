@@ -22,6 +22,7 @@ from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.chat.schemas import (
     ActiveRunResponse,
     AgentRunSummary,
+    CancelAgentRunResponse,
     ConversationHistoryResponse,
     Message,
     SendThreadMessageRequest,
@@ -476,6 +477,29 @@ async def get_thread_active_run(
     _assert_user_owns_thread(thread, current_user)
 
     return await chat_service.get_active_run(thread_id=thread_id, agent_id=thread.agent_id)
+
+
+@router.post(
+    "/{thread_id}/agent-runs/{run_id}/cancel",
+    response_model=CancelAgentRunResponse,
+)
+async def cancel_thread_agent_run(
+    thread_id: str,
+    run_id: str,
+    current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
+    db: AsyncSession = Depends(get_db),
+):
+    """Cancel an in-flight agent run (user Stop). Idempotent when already cancelled."""
+    chat_service = ThreadService(current_user.tenant_id, db)
+
+    thread = await chat_service.get_thread(thread_id)
+    if not thread:
+        raise ResourceNotFoundError(f"Thread {thread_id} not found")
+    _assert_user_owns_thread(thread, current_user)
+
+    run_service = ThreadRunService(db, current_user.tenant_id)
+    cancelled = await run_service.cancel_agent_run(thread_id=thread_id, run_id=run_id)
+    return CancelAgentRunResponse(run_id=cancelled.id, status="cancelled")
 
 
 # ============================================================================

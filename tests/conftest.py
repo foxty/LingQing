@@ -193,6 +193,12 @@ def runnable_config(runtime_context):
         async def hitl_tool_execution_guard(self, proposal_id: str):
             yield
 
+        async def mark_run_awaiting_hitl(self, run_id: str) -> None:
+            return None
+
+        async def is_run_cancelled(self, run_id: str) -> bool:
+            return False
+
     return RunnableConfig(
         configurable={
             "thread_id": runtime_context.thread_id,

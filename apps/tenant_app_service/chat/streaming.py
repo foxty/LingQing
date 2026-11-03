@@ -116,8 +116,14 @@ class PreparedChatStream:
 
 def prepared_stream_opening_sse(prepared: PreparedChatStream) -> list[str]:
     """Initial SSE events after prepare (session id, optional thread title)."""
+    session_payload: dict[str, str] = {
+        "type": "session_started",
+        "session_id": prepared.session_id,
+    }
+    if prepared.run_id:
+        session_payload["run_id"] = prepared.run_id
     lines = [
-        f"data: {json.dumps({'type': 'session_started', 'session_id': prepared.session_id})}\n\n",
+        f"data: {json.dumps(session_payload)}\n\n",
     ]
     if prepared.thread_title:
         lines.append(

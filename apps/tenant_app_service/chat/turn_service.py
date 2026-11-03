@@ -1,8 +1,9 @@
-"""Session-scoped chat turn executor (one ``AsyncSession`` per instance).
+"""Application layer — chat turn use cases (one ``AsyncSession`` per instance where pinned).
 
-**Role:** Implement prepare / invoke / complete for a *single* DB transaction.
-**Callers:** ``chat.application.turn_flow`` (production), or tests with a mock session.
-**Must not:** Open ``app_db_session`` for multi-step HTTP/SSE flows — use application layer.
+Prepare / invoke / complete steps. **Callers:** ``chat.application.turn_flow`` (production),
+or tests with a mock session.
+**Must not:** Pin one ``AsyncSession`` across LangGraph / LLM I/O — use ephemeral stream paths;
+``ChatAgentRunPort`` opens a session per call.
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.exceptions import AuthorizationError
 from apps.shared.schemas.user import UserDTO
+from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.context import create_thread_id, extract_runtime_context
 from apps.tenant_app_service.agents.metrics import session_tracker
 from apps.tenant_app_service.chat.adapters import db_artifact_to_domain
@@ -223,6 +225,7 @@ class ChatTurnService(ChatServiceBase):
         *,
         skip_load_history: bool = False,
         hitl_proposal_id: str | None = None,
+        pin_graph_db_session: bool = True,
     ) -> dict:
         """Build configuration for agent invocation.
 
@@ -266,10 +269,11 @@ class ChatTurnService(ChatServiceBase):
 
         checkpoint_thread_id = run_id or thread_id
 
+        pinned_db = (db_session or self.db) if pin_graph_db_session else None
         config = {
             "configurable": {
                 "thread_id": checkpoint_thread_id,
-                "db_session": db_session or self.db,
+                "db_session": pinned_db,
                 "runtime": runtime_ctx.model_dump(),
                 "thinking_effort": request.thinking_effort,
                 **({"run_id": run_id} if run_id else {}),
@@ -283,9 +287,7 @@ class ChatTurnService(ChatServiceBase):
         if run_id:
             from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
 
-            db = db_session or self.db
             run_port = chat_agent_run_port_for_run(
-                db=db,
                 tenant_id=self.tenant_id,
                 agent_id=agent_id,
                 run_id=run_id,
@@ -514,6 +516,7 @@ class ChatTurnService(ChatServiceBase):
         run_id: str | None,
         *,
         failed: bool = False,
+        cancelled: bool = False,
     ) -> None:
         from apps.tenant_app_service.agents.langgraph_invoke import (
             AgentInvokeOutcome,
@@ -524,11 +527,28 @@ class ChatTurnService(ChatServiceBase):
         if not run_id:
             return
         thread_runs = ThreadRunService(self.db, self.tenant_id)
+        if cancelled:
+            await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.CANCELLED)
+            return
         if failed:
+            run = await AgentRunRepository(self.db).get_run(self.tenant_id, run_id)
+            if run and run.status == AgentRunStatus.CANCELLED:
+                await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.CANCELLED)
+                return
             await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.FAILED)
+            return
+        run = await AgentRunRepository(self.db).get_run(self.tenant_id, run_id)
+        if run and run.status == AgentRunStatus.CANCELLED:
+            await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.CANCELLED)
             return
         outcome = await classify_invoke_outcome(agent_graph, config)
         await thread_runs.on_invoke_outcome(run_id, outcome)
+
+    async def _run_is_cancelled_in_db(self, run_id: str | None) -> bool:
+        if not run_id:
+            return False
+        run = await AgentRunRepository(self.db).get_run(self.tenant_id, run_id)
+        return run is not None and run.status == AgentRunStatus.CANCELLED
 
     def _build_initial_agent_messages(self, lc_messages: list, request: ChatRequest) -> list:
         """Build agent initial state messages.
@@ -595,6 +615,8 @@ class ChatTurnService(ChatServiceBase):
                         if sse_payload:
                             yield sse_payload
                 return
+            except asyncio.CancelledError:
+                raise
             except Exception as exc:
                 if (
                     not yielded
@@ -618,8 +640,25 @@ class ChatTurnService(ChatServiceBase):
         run_id: str | None = None,
         trigger_message_id: str | None = None,
         invoke_index: int = 0,
+        ephemeral_graph: bool = False,
     ) -> AsyncIterator[str]:
         """Execute one streaming turn and yield SSE payload lines."""
+        if ephemeral_graph:
+            async for line in self._run_stream_turn_ephemeral(
+                request=request,
+                current_user=current_user,
+                session_id=session_id,
+                agent_id=agent_id,
+                agent_name=agent_name,
+                access_token=access_token,
+                initial_messages=initial_messages,
+                run_id=run_id,
+                trigger_message_id=trigger_message_id,
+                invoke_index=invoke_index,
+            ):
+                yield line
+            return
+
         tenant = await self.get_tenant_domain()
         agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
         config = self._build_runtime_config(
@@ -639,9 +678,12 @@ class ChatTurnService(ChatServiceBase):
         runtime_context = extract_runtime_context(config)
 
         if run_id:
+            if await self._run_is_cancelled_in_db(run_id):
+                return
             await AgentRunRepository(self.db).set_status(run_id, status=AgentRunStatus.RUNNING)
 
         stream_failed = False
+        stream_cancelled = False
         try:
             async for sse_payload in self._iter_graph_sse_events(
                 agent_graph,
@@ -654,12 +696,26 @@ class ChatTurnService(ChatServiceBase):
                 runtime_context=runtime_context,
             ):
                 yield sse_payload
+        except asyncio.CancelledError:
+            if run_id and await self._run_is_cancelled_in_db(run_id):
+                stream_cancelled = True
+            else:
+                stream_failed = True
+            raise
         except Exception:
             stream_failed = True
             raise
         finally:
             if run_id:
-                await self._finish_graph_stream(agent_graph, config, run_id, failed=stream_failed)
+                if not stream_cancelled and await self._run_is_cancelled_in_db(run_id):
+                    stream_cancelled = True
+                await self._finish_graph_stream(
+                    agent_graph,
+                    config,
+                    run_id,
+                    failed=stream_failed,
+                    cancelled=stream_cancelled,
+                )
 
         self.logger.info(
             "Background stream completed for agent %s session %s",
@@ -671,6 +727,98 @@ class ChatTurnService(ChatServiceBase):
             thread_id=request.thread_id or runtime_context.thread_id,
             run_id=run_id,
         )
+
+    async def _run_stream_turn_ephemeral(
+        self,
+        *,
+        request: ChatRequest,
+        current_user: UserDTO,
+        session_id: str,
+        agent_id: int,
+        agent_name: str,
+        access_token: str | None,
+        initial_messages: list,
+        run_id: str | None,
+        trigger_message_id: str | None,
+        invoke_index: int,
+    ) -> AsyncIterator[str]:
+        """Stream turn without holding a DB connection during LangGraph / LLM I/O."""
+        from apps.tenant_app_service.chat.turn_db import turn_service_session
+
+        agent_graph = None
+        config = None
+        runtime_context = None
+        async with turn_service_session(self.tenant_id) as prep:
+            tenant = await prep.get_tenant_domain()
+            agent_graph, capability_profile = await prep._get_agent_graph(agent_id, current_user)
+            config = prep._build_runtime_config(
+                tenant=tenant,
+                current_user=current_user,
+                request=request,
+                agent_id=agent_id,
+                agent_name=agent_name,
+                session_id=session_id,
+                access_token=access_token,
+                capability_profile=capability_profile,
+                run_id=run_id,
+                trigger_message_id=trigger_message_id,
+                invoke_index=invoke_index,
+                pin_graph_db_session=False,
+            )
+            runtime_context = extract_runtime_context(config)
+            if run_id:
+                if await prep._run_is_cancelled_in_db(run_id):
+                    return
+                await AgentRunRepository(prep.db).set_status(run_id, status=AgentRunStatus.RUNNING)
+
+        graph_input = {
+            "messages": initial_messages,
+            "loop_count": 0,
+            "tool_call_counts": {},
+        }
+        stream_failed = False
+        stream_cancelled = False
+        try:
+            async for sse_payload in prep._iter_graph_sse_events(
+                agent_graph,
+                graph_input,
+                config=config,
+                runtime_context=runtime_context,
+            ):
+                yield sse_payload
+        except asyncio.CancelledError:
+            async with turn_service_session(self.tenant_id) as check:
+                if run_id and await check._run_is_cancelled_in_db(run_id):
+                    stream_cancelled = True
+                else:
+                    stream_failed = True
+            raise
+        except Exception:
+            stream_failed = True
+            raise
+        finally:
+            if run_id:
+                async with turn_service_session(self.tenant_id) as fin:
+                    if not stream_cancelled and await fin._run_is_cancelled_in_db(run_id):
+                        stream_cancelled = True
+                    await fin._finish_graph_stream(
+                        agent_graph,
+                        config,
+                        run_id,
+                        failed=stream_failed,
+                        cancelled=stream_cancelled,
+                    )
+            async with turn_service_session(self.tenant_id) as fin:
+                self.logger.info(
+                    "Background stream completed for agent %s session %s",
+                    agent_id,
+                    session_id,
+                )
+                fin.schedule_session_end(
+                    session_id=session_id,
+                    thread_id=request.thread_id or runtime_context.thread_id,
+                    run_id=run_id,
+                )
 
     async def run_hitl_checkpoint_resume_stream(
         self,
@@ -709,7 +857,11 @@ class ChatTurnService(ChatServiceBase):
         )
         runtime_context = extract_runtime_context(config)
 
+        if await self._run_is_cancelled_in_db(run_id):
+            return
+
         stream_failed = False
+        stream_cancelled = False
         try:
             async for sse_payload in self._iter_graph_sse_events(
                 agent_graph,
@@ -724,11 +876,25 @@ class ChatTurnService(ChatServiceBase):
                 runtime_context=runtime_context,
             ):
                 yield sse_payload
+        except asyncio.CancelledError:
+            if await self._run_is_cancelled_in_db(run_id):
+                stream_cancelled = True
+            else:
+                stream_failed = True
+            raise
         except Exception:
             stream_failed = True
             raise
         finally:
-            await self._finish_graph_stream(agent_graph, config, run_id, failed=stream_failed)
+            if not stream_cancelled and await self._run_is_cancelled_in_db(run_id):
+                stream_cancelled = True
+            await self._finish_graph_stream(
+                agent_graph,
+                config,
+                run_id,
+                failed=stream_failed,
+                cancelled=stream_cancelled,
+            )
 
         self.schedule_session_end(
             session_id=session_id,
@@ -747,6 +913,7 @@ class ChatTurnService(ChatServiceBase):
     ) -> None:
         """Run a prepared stream turn and push SSE payloads into a queue."""
         session_id = prepared.session_id
+        run_cancelled = False
         try:
             async for payload in self.run_stream_turn(
                 request=request,
@@ -761,6 +928,11 @@ class ChatTurnService(ChatServiceBase):
                 invoke_index=prepared.invoke_index,
             ):
                 await event_queue.put(payload)
+        except asyncio.CancelledError:
+            if prepared.run_id and await self._run_is_cancelled_in_db(prepared.run_id):
+                run_cancelled = True
+            else:
+                raise
         except Exception as exc:
             self.logger.error(
                 "Background agent run failed for session %s: %s",
@@ -771,6 +943,15 @@ class ChatTurnService(ChatServiceBase):
             error_data = user_stream_error_sse_payload(exc)
             await event_queue.put(f"data: {json.dumps(error_data)}\n\n")
         finally:
+            if run_cancelled or (
+                prepared.run_id and await self._run_is_cancelled_in_db(prepared.run_id)
+            ):
+                cancelled_data = {
+                    "type": "cancelled",
+                    "session_id": session_id,
+                    "run_id": prepared.run_id,
+                }
+                await event_queue.put(f"data: {json.dumps(cancelled_data)}\n\n")
             done_data = {"type": "done", "session_id": session_id}
             await event_queue.put(f"data: {json.dumps(done_data)}\n\n")
             await event_queue.put(None)
@@ -947,6 +1128,10 @@ class ChatTurnService(ChatServiceBase):
 
         try:
             if prepared.run_id:
+                if await self._run_is_cancelled_in_db(prepared.run_id):
+                    from apps.shared.core.exceptions import InternalServiceError
+
+                    raise InternalServiceError("Agent run was cancelled")
                 await AgentRunRepository(self.db).set_status(prepared.run_id, status=AgentRunStatus.RUNNING)
             async with session_tracker(runtime_ctx):
                 result = await agent_graph.ainvoke(
@@ -999,14 +1184,89 @@ class ChatTurnService(ChatServiceBase):
             from apps.shared.core.exceptions import InternalServiceError
 
             if prepared.run_id:
-                await AgentRunRepository(self.db).set_status(prepared.run_id, status=AgentRunStatus.FAILED)
+                if not await self._run_is_cancelled_in_db(prepared.run_id):
+                    await AgentRunRepository(self.db).set_status(prepared.run_id, status=AgentRunStatus.FAILED)
             raise InternalServiceError(f"Error invoking agent: {str(e)}") from e
         finally:
             if prepared.run_id:
-                await ThreadRunService(self.db, self.tenant_id).finalize_run_for_main(prepared.run_id)
+                if not await self._run_is_cancelled_in_db(prepared.run_id):
+                    await ThreadRunService(self.db, self.tenant_id).finalize_run_for_main(prepared.run_id)
             self.schedule_session_end(
                 session_id=session_id,
                 thread_id=request.thread_id or runtime_ctx.thread_id,
                 run_id=prepared.run_id,
             )
+
+
+async def emit_prepared_agent_stream(
+    tenant_id: int,
+    *,
+    event_queue: asyncio.Queue[str | None],
+    request: ChatRequest,
+    current_user: UserDTO,
+    prepared: PreparedChatStream,
+    access_token: str | None = None,
+) -> None:
+    """Push SSE for a prepared stream turn without pinning a DB session for the graph."""
+    from apps.tenant_app_service.chat.turn_db import turn_service_session
+
+    logger = get_logger("ChatTurnService")
+    session_id = prepared.session_id
+    run_cancelled = False
+
+    async def _is_cancelled(run_id: str | None) -> bool:
+        if not run_id:
+            return False
+        async with turn_service_session(tenant_id) as svc:
+            return await svc._run_is_cancelled_in_db(run_id)
+
+    try:
+        async with turn_service_session(tenant_id) as svc:
+            stream = svc.run_stream_turn(
+                request=request,
+                current_user=current_user,
+                session_id=session_id,
+                agent_id=prepared.agent_id,
+                agent_name=prepared.agent_name,
+                access_token=access_token,
+                initial_messages=prepared.initial_messages,
+                run_id=prepared.run_id,
+                trigger_message_id=prepared.trigger_message_id,
+                invoke_index=prepared.invoke_index,
+                ephemeral_graph=True,
+            )
+        async for payload in stream:
+            await event_queue.put(payload)
+    except asyncio.CancelledError:
+        if prepared.run_id and await _is_cancelled(prepared.run_id):
+            run_cancelled = True
+        else:
+            raise
+    except Exception as exc:
+        logger.error(
+            "Background agent run failed for session %s: %s",
+            session_id,
+            exc,
+            exc_info=True,
+        )
+        error_data = user_stream_error_sse_payload(exc)
+        await event_queue.put(f"data: {json.dumps(error_data)}\n\n")
+    finally:
+        try:
+            if run_cancelled or (prepared.run_id and await _is_cancelled(prepared.run_id)):
+                cancelled_data = {
+                    "type": "cancelled",
+                    "session_id": session_id,
+                    "run_id": prepared.run_id,
+                }
+                await event_queue.put(f"data: {json.dumps(cancelled_data)}\n\n")
+        except Exception:
+            logger.exception(
+                "Failed cancel-status check for session %s run_id=%s",
+                session_id,
+                prepared.run_id,
+            )
+        done_data = {"type": "done", "session_id": session_id}
+        await event_queue.put(f"data: {json.dumps(done_data)}\n\n")
+        await event_queue.put(None)
 

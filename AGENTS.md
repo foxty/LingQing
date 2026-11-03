@@ -7,7 +7,7 @@
 ## Core Principles
 
 - **SOLID, KISS, DRY, YAGNI:** Apply at module/class/function level. Favor simplicity, single source of truth, avoid premature generalization.
-- **Clean Architecture:** Dependency points inward — API → Service → Domain. No circular imports.
+- **Clean Architecture:** Dependency points inward — Presentation → Application → Domain ← Infrastructure. No circular imports.
 - **Domain-Driven Design:** Code names mirror business terms; rich domain models with business rules; repository ports in domain, adapters in infra.
 - **Composition over Inheritance:** Prefer factory functions, strategies, explicit parameters over deep hierarchies.
 - **Tenant isolation:** Always scope repository/service operations by tenant.
@@ -33,47 +33,71 @@
 - Lint/format: ruff + black.
 - Fixtures: check `tests/conftest.py`.
 
-### Layers and models (DDD-aligned)
+### Layers and models (DDD)
 
-_Inward Dependency Rule:_ outer layers depend on inner layers, never the reverse.
+_Inward dependency rule:_ outer layers depend on inner layers; **Domain** depends on nothing outward. **Infrastructure** implements **ports** defined in Domain (DIP).
 
-**Dependency direction:** **Router → [Application →] Application Services → Domain ← Infrastructure/Adapters**. Bracketed **Application** is optional (`<module>/application/`); omit it when routers call `services.py` directly. Domain has zero outward dependencies; infrastructure implements domain ports (DIP).
+**Four layers:**
+
+```text
+Presentation (routers, ingress)  →  Application  →  Domain  ←  Infrastructure
+```
 
 | Layer | Responsibility | Must not |
 | --- | --- | --- |
-| **Router** | HTTP/auth, DTO ↔ domain mapping | Repos, domain rules, long-lived DB |
-| **Application** | Multi-step / multi-session **workflow**; composes services + transport | Repos directly, domain invariants, one session across LLM/SSE |
-| **Application Services** | One **transactional step** on a supplied `AsyncSession` | Own multi-session lifecycle (delegate to Application) |
-| **Domain** | Entities, invariants, ports | Framework / persistence |
-| **Repositories** | Tenant-scoped persistence; domain ↔ DB mapping at boundary | Business rules, `commit`/`rollback` |
-| **Adapters / infra** | DTO↔domain (routers); external I/O via domain ports | Business rules |
+| **Presentation** | HTTP/auth, Slack payloads, SSE response wiring; DTO ↔ domain mapping at the edge | Repositories, domain rules, long-lived `AsyncSession` across LLM/SSE |
+| **Application** | **Use cases:** orchestrate domain + persistence + external **ports**; decide transaction boundaries and transport (queues, background tasks) | Domain invariants re-encoded ad hoc; holding one DB session across long I/O |
+| **Domain** | Aggregates/entities, value objects, **domain services**, invariants, **repository and external ports** (interfaces) | Frameworks, ORM, HTTP, LangGraph |
+| **Infrastructure** | Repository implementations, ORM mapping, LangGraph/Slack/agent adapters, message buses | Business rules, `commit`/`rollback` in repos |
 
-Add `<module>/application/` only for multi-session flows (streaming, prepare-then-background, ingress); it may later move to a dedicated operational service. Session detail: [Database sessions](#database-sessions). Concrete layout: `chat/__init__.py` module docstring.
+There is **no separate “service layer”** below Application. Classes in **`services.py`** or **`*_service.py`** (e.g. `ThreadRunService`, `ChatTurnService`) are **Application layer** code: session-scoped use-case steps on a supplied `AsyncSession`. The **`application/`** package holds **orchestrating** use cases (multi-step, multi-session, or explicit entry points for routers/ingress). Both belong to Application; the split is **organization**, not a different tier.
 
-**Layer detail (normative — table is summary only):**
+**Dependency direction:** **Presentation → Application → Domain**. Application depends on Domain (and port interfaces). Infrastructure depends on Domain and is wired at the edges (handlers construct repos/adapters with `db`).
 
-- **Router:** Map DTOs; call Application and/or Application Services; let domain exceptions bubble ([Exception handling](#exception-handling)); no broad `try/except` around services.
-- **Application:** Workflow only — which services run in which committed session; transport wiring. No inline domain rules; no repository calls.
-- **Application Services:** Orchestrate **one transactional step**: call domain + repositories on the supplied session. **All business invariants live in domain models** — services do not re-encode rules. Return DTOs upward; do not expose domain entities to routers.
-- **Domain:** Pure business logic — entities, value objects, domain services, domain events. **Rich domain models** hold invariants and behavior. **Repository ports (interfaces) are defined here.** No framework, ORM, or HTTP imports. Innermost layer; depends on nothing outward.
-- **Repositories:** Implement domain ports. CRUD and queries only; tenant-scoped. Accept/return domain models internally; translate to/from DB entity models at the adapter boundary.
-- **Adapters:** Thin, explicit mapping at boundaries (router DTO↔domain; repository DB↔domain). Co-locate with the boundary.
-- **Infra:** Third-party connectors (message buses, APIs, storage). Used through ports; no business logic.
+**Application layer (detail):**
+
+- **Orchestrators** (`<module>/application/`, e.g. `turn_flow.py`): which use-case steps run, in which order, in which committed session; SSE/background wiring.
+- **Session-scoped use cases** (`services.py`, `*_service.py`): one transaction on supplied `AsyncSession` — load/save via repositories or port implementations, invoke **domain** behavior, return DTOs upward.
+- **Compose peers** in the same transaction when the use case spans aggregates (e.g. turn execution + run finalization): still Application, same layer.
+- **Invariants** live in **Domain**; Application coordinates only.
+- Prefer **ports** for cross-context I/O (e.g. `AgentRunPort`); concrete repositories in the same module are acceptable where ports are not yet extracted.
+
+**Domain (detail):**
+
+- **Aggregates** and **aggregate roots** define consistency boundaries (e.g. agent run status, promotion eligibility).
+- **Domain services** for rules that do not fit a single entity.
+- **Ports** (repository interfaces, invoker interfaces) declared here; no SQLAlchemy or FastAPI types.
+
+**Infrastructure (detail):**
+
+- **Repositories:** tenant-scoped persistence; `flush()` only; map ORM ↔ domain at the boundary.
+- **Adapters:** thin DTO↔domain mappers at presentation or persistence edges.
+- **External systems:** LangGraph invoke, Slack client, etc. — no business rules.
+
+**Bounded contexts:** Name modules by capability (chat, HITL, agents). Cross-context interaction via **application orchestration** or **ports**, not repositories reaching into another context’s tables ad hoc.
+
+**Incremental strictness:** New behavior → put rules on **domain** first; add port interfaces when swapping implementations or testing demands it; keep use cases thin. Refactor **inward**; no big-bang folder moves required.
+
+Add `<module>/application/` when use cases need **orchestration** (multiple steps, multiple committed sessions, cross-module glue, or long I/O). A single-session use case may live in **`services.py`** with **Presentation → `SomeService(db)`** — still Application layer. Session rules: [Database sessions](#database-sessions). Example: `chat/__init__.py` module docstring.
+
+**Layer detail (presentation):**
+
+- Map request/response DTOs; call Application use cases; let domain exceptions bubble ([Exception handling](#exception-handling)); no broad `try/except` around use cases.
 
 **Models (three types — do not mix):**
 
 - _Domain models_ — domain layer; behavior + invariants.
-- _DB entity models_ — repository layer; persistence schema.
-- _DTOs_ — router/service boundary; public API contracts ([API contracts](#api-contracts)).
+- _DB entity models_ — infrastructure persistence; ORM schema at the repository boundary.
+- _DTOs_ — presentation ↔ application boundary; public API contracts ([API contracts](#api-contracts)).
 
 ### Database sessions
 
-Session lifecycle is owned by the outer boundary — not by repositories or application services.
+Session lifecycle is owned by the **Application** entry point — not by repositories or domain.
 
 - **HTTP requests:** inject `AsyncSession = Depends(get_db)`. `get_db` commits on success and rolls back on exception.
 - **Background tasks / scripts:** use `async with app_db_session() as db:` — same commit-on-success, rollback-on-error behavior.
 - **Repositories:** `flush()` only to persist within the current transaction. Never `commit()` or `rollback()`.
-- **Application / Application Services:** see [Layers](#layers-and-models-ddd-aligned) — Application opens each `app_db_session()` step; services run inside that session and do **not** `commit()`/`rollback()` unless the entry-point doc says otherwise.
+- **Application use cases:** see [Layers](#layers-and-models-ddd) — orchestrators open each `app_db_session()` step; session-scoped use cases run inside the supplied session and do **not** `commit()`/`rollback()` unless the entry-point doc says otherwise.
 - **Routers:** do not `rollback()` — the dependency handles errors. Avoid `commit()` before background work; use `<module>/application/` instead of pinning `Depends(get_db)` across long I/O.
 
 **When explicit `commit()` is allowed:**
@@ -101,12 +125,12 @@ Prefer a flat, file-per-layer layout. Each layer is a single Python module; prom
 
 <module>/
 ├── **init**.py
-├── router.py # FastAPI routes; DTO ↔ domain mapping; calls application/ and/or services
-├── application/ # Optional: multi-session / multi-service orchestration (large modules)
-├── services.py # Application services: one DB session per call
-├── domain.py # Entities, value objects, domain services, ports, domain exceptions
-├── repository.py # Repo adapters + DB ORM models; implement domain ports
-└── dtos.py # Pydantic request/response contracts
+├── router.py # Presentation: DTO mapping; calls application/ and/or services.py
+├── application/ # Application: orchestrating use cases (multi-step / multi-session)
+├── services.py # Application: session-scoped use cases (one transaction per call)
+├── domain.py # Domain: entities, aggregates, domain services, port interfaces
+├── repository.py # Infrastructure: persistence adapters (+ ORM models at boundary)
+└── dtos.py # Presentation/application API contracts (Pydantic)
 
 _Why files over packages by default:_
 
@@ -118,8 +142,8 @@ _When to promote a file to a package:_
 
 - `domain.py` → `domain/` when entities, ports, and domain services each warrant their own file.
 - `repository.py` → `repos/` when multiple aggregates or ORM models bloat the file.
-- `services.py` → `services/` when session-scoped use cases multiply and cross-cut concerns.
-- Add `<module>/application/` when routers need orchestration across multiple services or committed sessions (not before).
+- `services.py` → `services/` when Application use-case classes multiply and cross-cut concerns.
+- Add `<module>/application/` when use cases need orchestration (multiple steps, committed sessions, cross-module glue, or long I/O — not before).
 - `dtos.py` → `dtos/` when request/response schemas diverge significantly (e.g. v1/v2).
 
 ## Frontend Guidelines
@@ -206,7 +230,7 @@ _Review the diff against sections above — not style preferences. Check each bo
 
 **Design & architecture**
 
-- [ ] **Layers & dependency rule** — [Layers and models](#layers-and-models-ddd-aligned): router → [application →] services → domain ← repos/infra; no inward imports of frameworks or UI transport.
+- [ ] **Layers & dependency rule** — [Layers and models](#layers-and-models-ddd): presentation → application → domain ← infrastructure; no inward imports of frameworks or UI transport into domain.
 - [ ] **Tenant isolation** — [Core Principles](#core-principles) / repos: tenant-scoped reads and writes where applicable.
 - [ ] **Database sessions** — [Database sessions](#database-sessions): no pinning `Depends(get_db)` for streaming/long waits; repos `flush()` only; commits only where this doc allows.
 - [ ] **Exceptions** — [Exception handling](#exception-handling): domain exceptions bubble; no router catch-and-log; chain with `from e`.

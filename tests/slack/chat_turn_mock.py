@@ -26,7 +26,7 @@ async def instant_slack_chat_turn_runner(
     log_label: str = "Slack chat",
 ) -> SlackCommittedChatTurnResult:
     """Lane A default: post thinking, skip prepare/complete (avoids savepoint lock contention)."""
-    thinking_ts = await post_thinking_placeholder()
+    thinking_ts = await post_thinking_placeholder(default_prepared_chat_stream())
     return SlackCommittedChatTurnResult(
         reply_text="ok",
         message_id="msg_test",
@@ -123,7 +123,7 @@ class StubSlackChatTurnRunner:
         else:
             prepared = default_prepared_chat_stream()
 
-        thinking_ts = await post_thinking_placeholder()
+        thinking_ts = await post_thinking_placeholder(prepared)
 
         if self._on_complete is not None:
             try:

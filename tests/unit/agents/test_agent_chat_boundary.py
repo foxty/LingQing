@@ -121,6 +121,7 @@ async def test_load_history_delegates_to_port(agent, runtime_context):
     port = AsyncMock()
     port.load_prompt_context.return_value = expected
     port.hydrate_prompt_messages = AsyncMock(side_effect=lambda msgs, **_: msgs)
+    port.is_run_cancelled = AsyncMock(return_value=False)
     state = {"messages": [HumanMessage(id="h1", content="hello")]}
     config = RunnableConfig(
         configurable={

@@ -10,6 +10,7 @@ from langchain_core.messages import BaseMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.db.session import app_db_session
 from apps.tenant_app_service.agents.domain import AgentRuntimeContext, ToolConfig
 from apps.tenant_app_service.agents.ports.agent_run_port import AgentRunPort
 from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
@@ -20,29 +21,41 @@ from apps.tenant_app_service.chat.run_context_adapter import ChatRunContextAdapt
 
 
 class ChatAgentRunPort:
-    """Context I/O, lifecycle, HITL tool gate, and summarization for the harness."""
+    """Context I/O, lifecycle, HITL tool gate — one DB session per port call."""
 
     def __init__(
         self,
         *,
-        db: AsyncSession,
         tenant_id: int,
         agent_id: int,
         run_id: str,
     ) -> None:
-        self._db = db
         self._tenant_id = tenant_id
-        self._context = ChatRunContextAdapter(
+        self._agent_id = agent_id
+        self._run_id = run_id
+
+    @asynccontextmanager
+    async def _db(self) -> AsyncIterator[AsyncSession]:
+        async with app_db_session() as session:
+            yield session
+
+    def _context(self, db: AsyncSession) -> ChatRunContextAdapter:
+        return ChatRunContextAdapter(
             db=db,
-            tenant_id=tenant_id,
-            agent_id=agent_id,
-            run_id=run_id,
+            tenant_id=self._tenant_id,
+            agent_id=self._agent_id,
+            run_id=self._run_id,
         )
-        self._lifecycle = ChatAgentRunLifecycle(db, tenant_id)
-        self._hitl = ChatHitlToolGate(db, tenant_id)
+
+    def _lifecycle(self, db: AsyncSession) -> ChatAgentRunLifecycle:
+        return ChatAgentRunLifecycle(db, self._tenant_id)
+
+    def _hitl(self, db: AsyncSession) -> ChatHitlToolGate:
+        return ChatHitlToolGate(db, self._tenant_id)
 
     async def load_prompt_context(self, scope: AgentRunScope) -> list[BaseMessage]:
-        return await self._context.load_prompt_context(scope)
+        async with self._db() as db:
+            return await self._context(db).load_prompt_context(scope)
 
     async def persist_run_messages(
         self,
@@ -52,27 +65,36 @@ class ChatAgentRunPort:
         *,
         deduplicate: bool = True,
     ) -> None:
-        await self._context.persist_run_messages(scope, messages, config, deduplicate=deduplicate)
+        async with self._db() as db:
+            await self._context(db).persist_run_messages(
+                scope, messages, config, deduplicate=deduplicate
+            )
 
     async def get_in_run_summary(self, tenant_id: int, run_id: str):
-        return await self._context.get_in_run_summary(tenant_id, run_id)
+        async with self._db() as db:
+            return await self._context(db).get_in_run_summary(tenant_id, run_id)
 
     async def upsert_in_run_summary(self, **kwargs) -> None:
-        await self._context.upsert_in_run_summary(**kwargs)
+        async with self._db() as db:
+            await self._context(db).upsert_in_run_summary(**kwargs)
 
     async def resolve_run_message_db_id(self, message_id: str, run_id: str):
-        return await self._context.resolve_run_message_db_id(message_id, run_id)
+        async with self._db() as db:
+            return await self._context(db).resolve_run_message_db_id(message_id, run_id)
 
     async def hydrate_prompt_messages(
         self,
         messages: list[BaseMessage],
         *,
         tenant_id: int,
-        db: AsyncSession,
+        db: AsyncSession | None = None,
     ) -> list[BaseMessage]:
         from apps.tenant_app_service.hitl.history import hydrate_hitl_history_messages
 
-        return await hydrate_hitl_history_messages(messages, tenant_id=tenant_id, db=db)
+        if db is not None:
+            return await hydrate_hitl_history_messages(messages, tenant_id=tenant_id, db=db)
+        async with self._db() as session:
+            return await hydrate_hitl_history_messages(messages, tenant_id=tenant_id, db=session)
 
     async def summarize_run_prefix(
         self,
@@ -85,18 +107,31 @@ class ChatAgentRunPort:
     ) -> str | None:
         from apps.tenant_app_service.agents.mini_agent import MiniAgentService
 
-        return await MiniAgentService.create(self._db, tenant_id).summarize_run_prefix(
-            thread_id=thread_id,
-            run_id=run_id,
-            previous_summary=previous_summary,
-            prefix_text=prefix_text,
-        )
+        async with self._db() as db:
+            return await MiniAgentService.create(db, tenant_id).summarize_run_prefix(
+                thread_id=thread_id,
+                run_id=run_id,
+                previous_summary=previous_summary,
+                prefix_text=prefix_text,
+            )
 
     async def mark_run_awaiting_hitl(self, run_id: str) -> None:
-        await self._lifecycle.mark_run_awaiting_hitl(run_id)
+        async with self._db() as db:
+            await self._lifecycle(db).mark_run_awaiting_hitl(run_id)
+
+    async def is_run_cancelled(self, run_id: str) -> bool:
+        async with self._db() as db:
+            return await self._lifecycle(db).is_run_cancelled(run_id)
 
     def evaluate_tool_approval(self, tool_config: ToolConfig | None) -> ToolHitlDecision:
-        return self._hitl.evaluate_tool_approval(tool_config)
+        from apps.tenant_app_service.hitl.policy_engine import evaluate_approval_decision
+
+        decision = evaluate_approval_decision(tool_config)
+        return ToolHitlDecision(
+            action=decision.action,
+            reason=decision.reason,
+            risk_level=getattr(decision, "risk_level", "medium"),
+        )
 
     async def gate_tool_call(
         self,
@@ -109,32 +144,32 @@ class ChatAgentRunPort:
         decision: ToolHitlDecision,
         additional_kwargs: dict[str, Any],
     ) -> tuple[ToolMessage | None, str | None]:
-        return await self._hitl.gate_tool_call(
-            runtime=runtime,
-            config=config,
-            tool_name=tool_name,
-            tool_call_id=tool_call_id,
-            tool_args=tool_args,
-            decision=decision,
-            additional_kwargs=additional_kwargs,
-        )
+        async with self._db() as db:
+            return await self._hitl(db).gate_tool_call(
+                runtime=runtime,
+                config=config,
+                tool_name=tool_name,
+                tool_call_id=tool_call_id,
+                tool_args=tool_args,
+                decision=decision,
+                additional_kwargs=additional_kwargs,
+            )
 
     @asynccontextmanager
     async def hitl_tool_execution_guard(self, proposal_id: str) -> AsyncIterator[None]:
-        async with self._hitl.hitl_tool_execution_guard(proposal_id):
-            yield
+        async with self._db() as db:
+            async with self._hitl(db).hitl_tool_execution_guard(proposal_id):
+                yield
 
 
 def chat_agent_run_port_for_run(
     *,
-    db: AsyncSession,
     tenant_id: int,
     agent_id: int,
     run_id: str,
 ) -> AgentRunPort:
     """Factory wired into ``RunnableConfig.agent_run_port`` by turn orchestration."""
     return ChatAgentRunPort(
-        db=db,
         tenant_id=tenant_id,
         agent_id=agent_id,
         run_id=run_id,

@@ -4,6 +4,7 @@
  */
 
 import api from './api'
+import type { AgentRunStatus } from '@/lib/agentRunStatus'
 import type { Message } from '@/types'
 
 export interface ChatHistoryResponse {
@@ -62,23 +63,13 @@ export interface SessionToolCallsResponse {
   tool_calls: ToolCallMetrics[]
 }
 
-/** Mirrors backend ``AgentRunStatus``. */
-export const AGENT_RUN_STATUS = {
-  QUEUED: 'queued',
-  RUNNING: 'running',
-  AWAITING_HITL: 'awaiting_hitl',
-  COMPLETED: 'completed',
-  FAILED: 'failed',
-  CANCELLED: 'cancelled',
-} as const
-
-export type AgentRunStatus = (typeof AGENT_RUN_STATUS)[keyof typeof AGENT_RUN_STATUS]
-
-export const ACTIVE_AGENT_RUN_STATUSES: readonly AgentRunStatus[] = [
-  AGENT_RUN_STATUS.QUEUED,
-  AGENT_RUN_STATUS.RUNNING,
-  AGENT_RUN_STATUS.AWAITING_HITL,
-]
+export {
+  ACTIVE_AGENT_RUN_STATUSES,
+  AGENT_RUN_STATUS,
+  isActiveRunStatus,
+  type AgentRunStatus,
+  type TriggerAgentRunSummary,
+} from '@/lib/agentRunStatus'
 
 export interface PendingHitlInfo {
   proposal_id: string
@@ -93,14 +84,24 @@ export interface ActiveRunResponse {
   pending_hitl?: PendingHitlInfo | null
 }
 
-export function isActiveRunStatus(status: AgentRunStatus | null | undefined): boolean {
-  if (!status) return false
-  return (ACTIVE_AGENT_RUN_STATUSES as readonly string[]).includes(status)
-}
-
 /** Poll in-progress agent work (idle when ``run_id`` is null). */
 export async function getActiveRun(threadId: string): Promise<ActiveRunResponse> {
   const response = await api.get<ActiveRunResponse>(`/threads/${threadId}/active-run`)
+  return response.data
+}
+
+export interface CancelAgentRunResponse {
+  run_id: string
+  status: 'cancelled'
+}
+
+export async function cancelAgentRun(
+  threadId: string,
+  runId: string
+): Promise<CancelAgentRunResponse> {
+  const response = await api.post<CancelAgentRunResponse>(
+    `/threads/${threadId}/agent-runs/${encodeURIComponent(runId)}/cancel`
+  )
   return response.data
 }
 

@@ -71,7 +71,6 @@ async def test_compact_persists_in_run_summary_row(
     await pg_async_db_session.commit()
 
     port = chat_agent_run_port_for_run(
-        db=pg_async_db_session,
         tenant_id=tenant_id,
         agent_id=thread.agent_id,
         run_id=run.id,

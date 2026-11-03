@@ -211,8 +211,17 @@ class TestAgentWithMemory:
         }
         from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
 
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _test_app_db_session():
+            yield async_session
+
+        monkeypatch.setattr(
+            "apps.tenant_app_service.chat.agent_run_port_adapter.app_db_session",
+            _test_app_db_session,
+        )
         config["configurable"]["agent_run_port"] = chat_agent_run_port_for_run(
-            db=async_session,
             tenant_id=runtime_context.tenant.tenant_id,
             agent_id=runtime_context.agent_id,
             run_id=TEST_RUN_ID,

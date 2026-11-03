@@ -57,6 +57,7 @@ class AgentState(TypedDict):
     tool_cache: NotRequired[ToolCache]
     skill_state: NotRequired[SkillState]  # Skill runtime state
     tool_limit_blocked: NotRequired[bool]  # True after a tool hit its limit; one text-only LLM turn then stop
+    run_cancelled: NotRequired[bool]  # User/agent run stop; route to save_messages
 
 
 class AgentBase(ABC):
@@ -150,6 +151,35 @@ class AgentBase(ABC):
             agent_id=agent_id,
         )
 
+    async def _cooperative_run_cancelled(self, state: AgentState, config: RunnableConfig) -> bool:
+        if state.get("run_cancelled"):
+            return True
+        run_id = config.get("configurable", {}).get("run_id")
+        if not run_id:
+            return False
+        port = resolve_agent_run_port(config)
+        return await port.is_run_cancelled(str(run_id))
+
+    def _build_cancelled_llm_update(
+        self,
+        state: AgentState,
+        *,
+        skill_state: SkillState,
+        loop_count: int,
+        current_messages: list[BaseMessage],
+    ) -> dict:
+        response = AIMessage(
+            id=str(uuid4()),
+            content="Generation was stopped.",
+            additional_kwargs={"timestamp": datetime.now(UTC).isoformat(), "run_cancelled": True},
+        )
+        return {
+            "messages": [*current_messages, response],
+            "loop_count": loop_count + 1,
+            "skill_state": skill_state,
+            "run_cancelled": True,
+        }
+
     async def _load_history(self, state: AgentState, config: RunnableConfig) -> dict:
         """Load conversation history from database (first node in graph).
 
@@ -171,8 +201,11 @@ class AgentBase(ABC):
             self.logger.info("Skipping load_history (checkpoint resume)")
             return {}
 
+        if await self._cooperative_run_cancelled(state, config):
+            self.logger.info("Agent run cancelled before load_history for agent %s", self.agent_config.agent_name)
+            return {"run_cancelled": True}
+
         runtime = extract_runtime_context(config)
-        db_session = config.get("configurable", {}).get("db_session")
         configurable = config.get("configurable") or {}
         context_messages: list = []
 
@@ -197,12 +230,10 @@ class AgentBase(ABC):
         scope = self._run_scope(config, runtime, self.agent_config.agent_id)
         historical_messages = await run_port.load_prompt_context(scope)
 
-        if db_session:
-            historical_messages = await run_port.hydrate_prompt_messages(
-                historical_messages,
-                tenant_id=runtime.tenant.tenant_id,
-                db=db_session,
-            )
+        historical_messages = await run_port.hydrate_prompt_messages(
+            historical_messages,
+            tenant_id=runtime.tenant.tenant_id,
+        )
 
         context_messages.extend(historical_messages)
 
@@ -298,6 +329,15 @@ class AgentBase(ABC):
         loaded_skills = skill_state.get("loaded_skills", [])
         current_messages = state["messages"]
 
+        if await self._cooperative_run_cancelled(state, config):
+            self.logger.info("Agent run cancelled before LLM call for agent %s", self.agent_config.agent_name)
+            return self._build_cancelled_llm_update(
+                state,
+                skill_state=skill_state,
+                loop_count=loop_count,
+                current_messages=current_messages,
+            )
+
         # init the vars incase exception happens
         start_time = time.time()
         messages = []
@@ -329,23 +369,36 @@ class AgentBase(ABC):
             db_session = config.get("configurable", {}).get("db_session")
             configurable = config.get("configurable") or {}
             run_id = configurable.get("run_id")
-            if db_session and run_id and runtime.thread_id:
-                messages = await compact_prepared_messages(
-                    messages,
-                    db=db_session,
-                    tenant_id=runtime.tenant.tenant_id,
-                    thread_id=runtime.thread_id,
-                    run_id=str(run_id),
-                    tools=tools,
-                    agent_run_port=resolve_agent_run_port(config),
+
+            async def _with_graph_db(coro_factory):
+                if db_session is not None:
+                    return await coro_factory(db_session)
+                from apps.shared.db.session import app_db_session
+
+                async with app_db_session() as db:
+                    return await coro_factory(db)
+
+            if run_id and runtime.thread_id:
+                messages = await _with_graph_db(
+                    lambda db: compact_prepared_messages(
+                        messages,
+                        db=db,
+                        tenant_id=runtime.tenant.tenant_id,
+                        thread_id=runtime.thread_id,
+                        run_id=str(run_id),
+                        tools=tools,
+                        agent_run_port=resolve_agent_run_port(config),
+                    )
                 )
-            model_with_tools = await self._model_binding_manager.get_or_create(
-                model_profile_id=model_profile_id,
-                loaded_skills=loaded_skills,
-                tools=tools,
-                tenant_id=runtime.tenant.tenant_id,
-                db=db_session,
-                thinking_effort=thinking_effort,
+            model_with_tools = await _with_graph_db(
+                lambda db: self._model_binding_manager.get_or_create(
+                    model_profile_id=model_profile_id,
+                    loaded_skills=loaded_skills,
+                    tools=tools,
+                    tenant_id=runtime.tenant.tenant_id,
+                    db=db,
+                    thinking_effort=thinking_effort,
+                )
             )
 
             response = None
@@ -408,6 +461,10 @@ class AgentBase(ABC):
         return state_update
 
     async def _tool_node(self, state: AgentState, config: RunnableConfig) -> dict:
+        if await self._cooperative_run_cancelled(state, config):
+            self.logger.info("Agent run cancelled before tool execution for agent %s", self.agent_config.agent_name)
+            return {"run_cancelled": True}
+
         last = state["messages"][-1]
         tool_calls = getattr(last, "tool_calls", None)
         results = []
@@ -693,6 +750,10 @@ class AgentBase(ABC):
         Returns:
             Next node to execute: "tool_node" or "save_messages"
         """
+        if state.get("run_cancelled"):
+            self.logger.info("Agent %s ending after user/run cancel", self.agent_config.agent_name)
+            return "save_messages"
+
         if state.get("tool_limit_blocked"):
             self.logger.info(
                 "Agent %s ending after tool-limit finalize LLM turn",

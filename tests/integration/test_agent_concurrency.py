@@ -126,7 +126,6 @@ async def _build_ainvoke_config(async_db_session, runtime_context, thread_id: st
             "invoke_index": 0,
             "session_id": session_id,
             "agent_run_port": chat_agent_run_port_for_run(
-                db=async_db_session,
                 tenant_id=tenant_id,
                 agent_id=runtime_context.agent_id,
                 run_id=run.id,
