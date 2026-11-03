@@ -17,12 +17,20 @@ interface SSEBaseMessage {
     | 'hitl_request'
     | 'hitl_resolved'
     | 'error'
+    | 'cancelled'
     | 'done'
 }
 
 export interface SSESessionStartedMessage extends SSEBaseMessage {
   type: 'session_started'
   session_id: string
+  run_id?: string
+}
+
+export interface SSECancelledMessage extends SSEBaseMessage {
+  type: 'cancelled'
+  session_id: string
+  run_id?: string
 }
 
 export interface SSEUpdateThreadTitleMessage extends SSEBaseMessage {
@@ -77,6 +85,7 @@ export type SSEMessage =
   | SSEToolEndMessage
   | SSEHitlMessage
   | SSEErrorMessage
+  | SSECancelledMessage
   | SSEDoneMessage
 
 export class HttpStreamError extends Error {

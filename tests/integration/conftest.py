@@ -289,6 +289,23 @@ async def async_db_session(pg_async_db_session):
     yield pg_async_db_session
 
 
+@pytest.fixture(autouse=True)
+def route_app_db_session_to_integration(pg_async_db_session, monkeypatch):
+    """Route ``app_db_session()`` to the per-test Postgres session (agent port + turns)."""
+    from contextlib import asynccontextmanager
+
+    @asynccontextmanager
+    async def routed_app_db_session():
+        yield pg_async_db_session
+
+    for module_path in (
+        "apps.shared.db.session.app_db_session",
+        "apps.tenant_app_service.chat.agent_run_port_adapter.app_db_session",
+        "apps.tenant_app_service.chat.turn_db.app_db_session",
+    ):
+        monkeypatch.setattr(module_path, routed_app_db_session)
+
+
 # ─── Shared data fixtures ──────────────────────────────────────────────────────
 
 

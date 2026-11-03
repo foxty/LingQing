@@ -174,6 +174,7 @@ export default function WorkbenchPage() {
     handleSendMessage,
     handleHitlApprovedContinue,
     handleHitlRejected,
+    handleStopGeneration,
   } = useWorkbenchChat({
     agentId,
     threadId: currentThreadId,
@@ -482,6 +483,7 @@ export default function WorkbenchPage() {
             }}
             onHitlApprovedContinue={handleHitlApprovedContinue}
             onHitlRejected={handleHitlRejected}
+            onStopGeneration={handleStopGeneration}
           />
         </div>
       </div>

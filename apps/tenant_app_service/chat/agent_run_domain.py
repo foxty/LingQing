@@ -37,7 +37,10 @@ TERMINAL_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
 
 def run_status_allows_thread_rollup(status: str) -> bool:
     """Whether a finished run may roll into the cumulative thread summary."""
-    return status in TERMINAL_AGENT_RUN_STATUSES
+    return status in (
+        AgentRunStatus.COMPLETED,
+        AgentRunStatus.FAILED,
+    )
 
 
 # Orphaned runs (e.g. server reload after human persist) may be repaired after this window.

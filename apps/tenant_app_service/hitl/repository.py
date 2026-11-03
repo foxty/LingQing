@@ -39,6 +39,32 @@ class HitlApprovalRepository:
         await self.db.refresh(approval)
         return approval
 
+    async def cancel_pending_for_session(
+        self,
+        tenant_id: int,
+        session_id: str,
+        *,
+        reason: str,
+    ) -> int:
+        """Cancel pending approvals tied to one agent run session."""
+        now = datetime.now(UTC)
+        stmt = (
+            update(HitlApproval)
+            .where(
+                HitlApproval.tenant_id == tenant_id,
+                HitlApproval.session_id == session_id,
+                HitlApproval.status == HITL_STATUS_PENDING,
+            )
+            .values(
+                status=HITL_STATUS_CANCELLED,
+                reason=reason,
+                updated_at=now,
+            )
+        )
+        result = await self.db.execute(stmt)
+        await self.db.flush()
+        return result.rowcount or 0
+
     async def cancel_all_pending_by_thread(
         self,
         tenant_id: int,

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 
@@ -18,10 +19,11 @@ from apps.tenant_app_service.chat.application import (
     prepare_chat_turn_committed,
 )
 from apps.tenant_app_service.chat.schemas import ChatRequest
+from apps.tenant_app_service.chat.streaming import PreparedChatStream
 
 logger = get_logger(__name__)
 
-PostThinkingFn = Callable[[], Awaitable[str | None]]
+PostThinkingFn = Callable[[PreparedChatStream], Awaitable[str | None]]
 
 
 @dataclass(frozen=True)
@@ -59,14 +61,24 @@ async def run_slack_committed_chat_turn(
             access_token=access_token,
             log_label=log_label,
         )
-        thinking_ts = await post_thinking_placeholder()
-        response = await complete_chat_turn_committed(
-            tenant_id,
-            chat_request,
-            user_dto,
-            prepared,
-            access_token=access_token,
-        )
+        thinking_ts = await post_thinking_placeholder(prepared)
+        from apps.tenant_app_service.chat.agent_run_execution_registry import register, unregister
+
+        run_id = prepared.run_id
+        current = asyncio.current_task()
+        if run_id and current is not None:
+            register(run_id, current)
+        try:
+            response = await complete_chat_turn_committed(
+                tenant_id,
+                chat_request,
+                user_dto,
+                prepared,
+                access_token=access_token,
+            )
+        finally:
+            if run_id:
+                unregister(run_id)
         message_id = response.response.message_id
         session_id = response.response.session_id
         content = response.response.content

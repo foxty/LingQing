@@ -45,6 +45,8 @@ def _issue_token(user_id: int, username: str, role: str, tenant_id: int, tenant_
 def _patch_app_db_session(session_local: async_sessionmaker[AsyncSession]) -> dict[str, Any]:
     from apps.shared.core import auth as auth_module
     from apps.shared.db import session as session_module
+    from apps.tenant_app_service.chat import agent_run_port_adapter as port_module
+    from apps.tenant_app_service.chat import turn_db as turn_db_module
     from apps.tenant_app_service.chat.application import turn_flow as turn_flow_module
     from apps.tenant_app_service.routers import chat as chat_router_module
 
@@ -53,6 +55,8 @@ def _patch_app_db_session(session_local: async_sessionmaker[AsyncSession]) -> di
         "auth": auth_module.app_db_session,
         "chat_router": chat_router_module.app_db_session,
         "turn_flow": turn_flow_module.app_db_session,
+        "port_adapter": port_module.app_db_session,
+        "turn_db": turn_db_module.app_db_session,
     }
 
     @asynccontextmanager
@@ -69,12 +73,16 @@ def _patch_app_db_session(session_local: async_sessionmaker[AsyncSession]) -> di
     auth_module.app_db_session = committed_app_db_session
     chat_router_module.app_db_session = committed_app_db_session
     turn_flow_module.app_db_session = committed_app_db_session
+    port_module.app_db_session = committed_app_db_session
+    turn_db_module.app_db_session = committed_app_db_session
     return originals
 
 
 def _restore_app_db_session(originals: dict[str, Any]) -> None:
     from apps.shared.core import auth as auth_module
     from apps.shared.db import session as session_module
+    from apps.tenant_app_service.chat import agent_run_port_adapter as port_module
+    from apps.tenant_app_service.chat import turn_db as turn_db_module
     from apps.tenant_app_service.chat.application import turn_flow as turn_flow_module
     from apps.tenant_app_service.routers import chat as chat_router_module
 
@@ -82,6 +90,8 @@ def _restore_app_db_session(originals: dict[str, Any]) -> None:
     auth_module.app_db_session = originals["auth"]
     chat_router_module.app_db_session = originals["chat_router"]
     turn_flow_module.app_db_session = originals["turn_flow"]
+    port_module.app_db_session = originals["port_adapter"]
+    turn_db_module.app_db_session = originals["turn_db"]
 
 
 @pytest_asyncio.fixture

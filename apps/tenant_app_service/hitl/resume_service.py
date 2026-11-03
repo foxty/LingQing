@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 from dataclasses import dataclass
 from typing import AsyncIterator
 
@@ -92,23 +93,33 @@ class HitlResumeService:
         *,
         current_user: UserDTO,
     ) -> AsyncIterator[str]:
-        async with app_db_session() as db:
-            turn = ChatTurnService(self.tenant_id, db)
-            request = ChatRequest(
-                tenant_id=self.tenant_id,
-                agent_id=ctx.agent_id,
-                thread_id=ctx.thread_id,
-                message=SimpleMessage(role="human", content=""),
-            )
-            async for payload in turn.run_hitl_checkpoint_resume_stream(
-                request=request,
-                current_user=current_user,
-                session_id=ctx.session_id,
-                agent_id=ctx.agent_id,
-                agent_name=ctx.agent_name,
-                run_id=ctx.run_id,
-                trigger_message_id=ctx.trigger_message_id,
-                invoke_index=ctx.invoke_index,
-                proposal_id=ctx.proposal_id,
-            ):
-                yield payload
+        from apps.tenant_app_service.chat.agent_run_execution_registry import register, unregister
+
+        run_id = ctx.run_id
+        current = asyncio.current_task()
+        if run_id and current is not None:
+            register(run_id, current)
+        try:
+            async with app_db_session() as db:
+                turn = ChatTurnService(self.tenant_id, db)
+                request = ChatRequest(
+                    tenant_id=self.tenant_id,
+                    agent_id=ctx.agent_id,
+                    thread_id=ctx.thread_id,
+                    message=SimpleMessage(role="human", content=""),
+                )
+                async for payload in turn.run_hitl_checkpoint_resume_stream(
+                    request=request,
+                    current_user=current_user,
+                    session_id=ctx.session_id,
+                    agent_id=ctx.agent_id,
+                    agent_name=ctx.agent_name,
+                    run_id=ctx.run_id,
+                    trigger_message_id=ctx.trigger_message_id,
+                    invoke_index=ctx.invoke_index,
+                    proposal_id=ctx.proposal_id,
+                ):
+                    yield payload
+        finally:
+            if run_id:
+                unregister(run_id)

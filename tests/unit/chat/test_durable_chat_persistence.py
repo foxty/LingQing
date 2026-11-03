@@ -150,7 +150,7 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
         call_order.append("send_human")
         return _mock_send_human_and_runs(agent_id=chat_request.agent_id, thread_id=chat_request.thread_id)
 
-    async def fake_run_agent_and_emit(**kwargs):
+    async def fake_run_agent_and_emit(*_args, **kwargs):
         call_order.append("background")
         background_started.set()
         await kwargs["event_queue"].put('data: {"type":"done","session_id":"x"}\n\n')
@@ -180,7 +180,10 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
             side_effect=track_send,
         ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
-        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
+        patch(
+            "apps.tenant_app_service.chat.application.turn_flow.emit_prepared_agent_stream",
+            side_effect=fake_run_agent_and_emit,
+        ),
         patch("apps.tenant_app_service.chat.turn_service.AgentRunRepository.set_status", AsyncMock()),
     ):
         events = []
@@ -196,7 +199,7 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
 async def test_chat_stream_sse_disconnect_leaves_background_running(chat_service, chat_request, current_user):
     background_started = asyncio.Event()
 
-    async def fake_run_agent_and_emit(**kwargs):
+    async def fake_run_agent_and_emit(*_args, **kwargs):
         background_started.set()
         await asyncio.Event().wait()
 
@@ -224,7 +227,10 @@ async def test_chat_stream_sse_disconnect_leaves_background_running(chat_service
             AsyncMock(return_value=_mock_send_human_and_runs()),
         ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
-        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
+        patch(
+            "apps.tenant_app_service.chat.application.turn_flow.emit_prepared_agent_stream",
+            side_effect=fake_run_agent_and_emit,
+        ),
         patch("apps.tenant_app_service.chat.turn_service.AgentRunRepository.set_status", AsyncMock()),
     ):
 
@@ -247,7 +253,7 @@ async def test_chat_stream_delivers_background_events(chat_service, chat_request
 
     background_started = asyncio.Event()
 
-    async def fake_run_agent_and_emit(**kwargs):
+    async def fake_run_agent_and_emit(*_args, **kwargs):
         background_started.set()
         await kwargs["event_queue"].put('data: {"type":"done","session_id":"x"}\n\n')
         await kwargs["event_queue"].put(None)
@@ -276,7 +282,10 @@ async def test_chat_stream_delivers_background_events(chat_service, chat_request
             AsyncMock(return_value=_mock_send_human_and_runs()),
         ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
-        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
+        patch(
+            "apps.tenant_app_service.chat.application.turn_flow.emit_prepared_agent_stream",
+            side_effect=fake_run_agent_and_emit,
+        ),
         patch("apps.tenant_app_service.chat.turn_service.AgentRunRepository.set_status", AsyncMock()),
     ):
         chunks = []
@@ -300,7 +309,7 @@ async def test_chat_stream_emits_heartbeat_while_agent_is_idle(chat_service, cha
         thread_title=None,
     )
 
-    async def fake_run_agent_and_emit(**kwargs):
+    async def fake_run_agent_and_emit(*_args, **kwargs):
         await asyncio.Event().wait()
 
     chunks: list[str] = []
@@ -322,7 +331,10 @@ async def test_chat_stream_emits_heartbeat_while_agent_is_idle(chat_service, cha
             "apps.tenant_app_service.chat.application.turn_flow.with_chat_service",
             side_effect=_with_same_service,
         ),
-        patch.object(ChatTurnService, "run_agent_and_emit_prepared", side_effect=fake_run_agent_and_emit),
+        patch(
+            "apps.tenant_app_service.chat.application.turn_flow.emit_prepared_agent_stream",
+            side_effect=fake_run_agent_and_emit,
+        ),
         patch(
             "apps.tenant_app_service.chat.streaming.SSE_HEARTBEAT_INTERVAL_SECONDS",
             0.05,

@@ -2,9 +2,59 @@
 
 from __future__ import annotations
 
+from collections import defaultdict
+
 from apps.shared.db.models import AgentRunMessage
-from apps.tenant_app_service.chat.agent_run_domain import ThreadMainMessageDomain
-from apps.tenant_app_service.chat.schemas import Message
+from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain, ThreadMainMessageDomain
+from apps.tenant_app_service.chat.schemas import AgentRunSummary, Message
+
+
+def agent_run_to_summary(run: AgentRunDomain) -> AgentRunSummary:
+    return AgentRunSummary(
+        run_id=run.id,
+        agent_id=run.agent_id,
+        invoke_index=run.invoke_index,
+        session_id=run.session_id,
+        status=run.status,
+    )
+
+
+def group_runs_by_trigger(runs: list[AgentRunDomain]) -> dict[str, list[AgentRunDomain]]:
+    grouped: dict[str, list[AgentRunDomain]] = defaultdict(list)
+    for run in runs:
+        grouped[run.trigger_message_id].append(run)
+    for trigger_id in grouped:
+        grouped[trigger_id].sort(key=lambda r: r.invoke_index)
+    return dict(grouped)
+
+
+def enrich_messages_with_trigger_runs(
+    messages: list[Message],
+    runs_by_trigger: dict[str, list[AgentRunDomain]],
+) -> list[Message]:
+    """Attach ``trigger_runs`` to humans and ``agent_run_status`` on promoted AI rows."""
+    if not runs_by_trigger:
+        return messages
+    status_by_run_id = {
+        run.id: run.status for runs in runs_by_trigger.values() for run in runs
+    }
+    enriched: list[Message] = []
+    for message in messages:
+        msg = message
+        if message.role == "human" and message.message_id:
+            runs = runs_by_trigger.get(message.message_id)
+            if runs:
+                msg = msg.model_copy(
+                    update={"trigger_runs": [agent_run_to_summary(run) for run in runs]},
+                )
+        if msg.role == "ai":
+            meta = dict(msg.message_metadata or {})
+            run_id = meta.get("agent_run_id")
+            if isinstance(run_id, str) and run_id in status_by_run_id:
+                meta["agent_run_status"] = status_by_run_id[run_id]
+                msg = msg.model_copy(update={"message_metadata": meta or None})
+        enriched.append(msg)
+    return enriched
 
 
 def main_timeline_rows_to_api_messages(

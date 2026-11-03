@@ -203,6 +203,11 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
     resetStreamState()
   }, [threadId, resetStreamState])
 
+  const abortActiveStream = useCallback(() => {
+    streamAbortRef.current?.abort()
+    streamAbortRef.current = null
+  }, [])
+
   return {
     optimisticMessage,
     isStreaming,
@@ -213,5 +218,6 @@ export function useChatStream({ threadId, onEvent }: UseChatStreamOptions) {
     runHitlResumeStream,
     resetStreamState,
     failStream,
+    abortActiveStream,
   }
 }

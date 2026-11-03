@@ -1,3 +1,4 @@
+import { AGENT_RUN_STATUS } from '@/lib/agentRunStatus'
 import { HitlPayload, Message, SessionMetrics } from '@/types'
 import i18n from '@/i18n/config'
 import {
@@ -80,6 +81,66 @@ function humanMessageKey(message: Message): string {
 
 function aiTurnKey(turn: AiTurn): string {
   return `turn-${turn.id}`
+}
+
+function promotedMainTimelineRunIds(messages: Message[]): Set<string> {
+  const ids = new Set<string>()
+  for (const message of messages) {
+    if (message.role !== 'ai') {
+      continue
+    }
+    const runId = message.message_metadata?.agent_run_id
+    if (typeof runId === 'string' && runId.length > 0) {
+      ids.add(runId)
+    }
+  }
+  return ids
+}
+
+function humanTurnWasCancelled(
+  message: Message,
+  messages: Message[],
+  humanIndex: number
+): boolean {
+  if (turnHasAiBeforeNextHuman(messages, humanIndex)) {
+    return false
+  }
+  const promoted = promotedMainTimelineRunIds(messages)
+  const runs = message.trigger_runs
+  if (!runs?.length) {
+    return false
+  }
+  return runs.some(
+    (run) => run.status === AGENT_RUN_STATUS.CANCELLED && !promoted.has(run.run_id)
+  )
+}
+
+function turnHasAiBeforeNextHuman(messages: Message[], startIndex: number): boolean {
+  for (let i = startIndex; i < messages.length; i += 1) {
+    if (messages[i].role === 'human') {
+      break
+    }
+    if (messages[i].role === 'ai') {
+      return true
+    }
+  }
+  return false
+}
+
+function buildCancelledPlaceholderAi(human: Message): Message {
+  const cancelledRun = human.trigger_runs?.find(
+    (run) => run.status === AGENT_RUN_STATUS.CANCELLED
+  )
+  return {
+    role: 'ai',
+    content: '',
+    timestamp: human.timestamp,
+    message_metadata: {
+      agent_run_status: AGENT_RUN_STATUS.CANCELLED,
+      agent_run_id: cancelledRun?.run_id,
+      trigger_message_id: human.message_id,
+    },
+  }
 }
 
 function applyHitlStatusMap(
@@ -398,6 +459,16 @@ export function buildMessageRenderItems(
         message,
       })
       index += 1
+      if (humanTurnWasCancelled(message, messages, index)) {
+        turnIndex += 1
+        const placeholder = buildCancelledPlaceholderAi(message)
+        const turn = buildTurn([placeholder], toolResultsMap, turnIndex, hitlStatusMap)
+        renderItems.push({
+          type: 'ai-turn',
+          key: `turn-cancelled-${humanMessageKey(message)}`,
+          turn,
+        })
+      }
       continue
     }
 

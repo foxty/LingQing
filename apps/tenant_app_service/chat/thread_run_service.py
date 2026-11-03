@@ -1,9 +1,8 @@
-"""Write-side orchestration for main timeline + agent runs (single DB session).
+"""Application layer — agent run + main timeline writes (one ``AsyncSession`` per call).
 
-**Layer:** Session-scoped service — persist human rows, create/update ``agent_runs``,
-promotion, active-run poll/repair, invoke-outcome lifecycle. No LangGraph streaming.
-**Callers:** ``ChatTurnService``, ``turn_admission``, ``ThreadService`` (read delegate).
-**Contrast:** ``ThreadService`` = thread CRUD + history reads; ``ChatTurnService`` = agent invoke.
+Persist human rows, create/update ``agent_runs``, promotion, active-run poll/repair,
+invoke-outcome lifecycle. No LangGraph streaming.
+**Callers:** ``ChatTurnService``, ``turn_admission``, ``ThreadService`` (read paths).
 """
 
 from __future__ import annotations
@@ -81,6 +80,10 @@ class ThreadRunService:
     async def mark_run_running(self, run_id: str) -> None:
         await self.run_repo.set_status(run_id, status=AgentRunStatus.RUNNING)
 
+    async def is_run_cancelled(self, run_id: str) -> bool:
+        run = await self.run_repo.get_run(self.tenant_id, run_id)
+        return run is not None and run.status == AgentRunStatus.CANCELLED
+
     async def mark_run_awaiting_hitl(self, run_id: str) -> None:
         await self.run_repo.set_status(run_id, status=AgentRunStatus.AWAITING_HITL)
 
@@ -97,6 +100,85 @@ class ThreadRunService:
             status=AgentRunStatus.FAILED,
             completed_at=datetime.now(UTC),
         )
+
+    async def cancel_agent_run(self, *, thread_id: str, run_id: str) -> AgentRunDomain:
+        """Cancel an in-flight run (user Stop). Idempotent when already cancelled."""
+        from apps.shared.core.exceptions import ValidationError
+        from apps.tenant_app_service.chat.agent_run_execution_registry import cancel_local
+
+        existing = await self.run_repo.get_run(self.tenant_id, run_id)
+        if not existing:
+            from apps.shared.core.exceptions import ResourceNotFoundError
+
+            raise ResourceNotFoundError(f"Agent run {run_id} not found")
+        if existing.thread_id != thread_id:
+            raise ValidationError(
+                "Agent run does not belong to this thread",
+                details={"code": "RUN_THREAD_MISMATCH", "run_id": run_id, "thread_id": thread_id},
+            )
+
+        if existing.status == AgentRunStatus.CANCELLED:
+            cancel_local(run_id)
+            return existing
+
+        if existing.status not in (
+            AgentRunStatus.QUEUED,
+            AgentRunStatus.RUNNING,
+            AgentRunStatus.AWAITING_HITL,
+        ):
+            raise ValidationError(
+                f"Agent run cannot be cancelled from status {existing.status}",
+                details={"code": "RUN_NOT_CANCELLABLE", "run_id": run_id, "status": existing.status},
+            )
+
+        now = datetime.now(UTC)
+        cancelled = await self.run_repo.cancel_active_run(
+            self.tenant_id,
+            run_id,
+            completed_at=now,
+        )
+        if cancelled is None:
+            refreshed = await self.run_repo.get_run(self.tenant_id, run_id)
+            if refreshed and refreshed.status == AgentRunStatus.CANCELLED:
+                cancel_local(run_id)
+                return refreshed
+            if refreshed and refreshed.status in (
+                AgentRunStatus.COMPLETED,
+                AgentRunStatus.FAILED,
+            ):
+                raise ValidationError(
+                    "Agent run already finished",
+                    details={
+                        "code": "RUN_ALREADY_FINISHED",
+                        "run_id": run_id,
+                        "status": refreshed.status,
+                    },
+                )
+            raise ValidationError(
+                "Agent run could not be cancelled",
+                details={
+                    "code": "RUN_CANCEL_FAILED",
+                    "run_id": run_id,
+                    "status": refreshed.status if refreshed else None,
+                },
+            )
+
+        if cancelled.session_id:
+            hitl_repo = HitlApprovalRepository(self.db)
+            await hitl_repo.cancel_pending_for_session(
+                self.tenant_id,
+                cancelled.session_id,
+                reason="agent_run_cancelled",
+            )
+
+        cancel_local(run_id)
+        logger.info(
+            "Agent run cancelled run_id=%s thread_id=%s tenant_id=%s",
+            run_id,
+            thread_id,
+            self.tenant_id,
+        )
+        return cancelled
 
     async def promote_final_ai(
         self,
@@ -242,6 +324,9 @@ class ThreadRunService:
             return
         if outcome == AgentInvokeOutcome.INTERRUPTED_FOR_HITL:
             logger.info("Agent run paused at HITL checkpoint run_id=%s", run_id)
+            return
+        if outcome == AgentInvokeOutcome.CANCELLED:
+            logger.info("Agent run invoke ended cancelled run_id=%s", run_id)
             return
         if outcome == AgentInvokeOutcome.FAILED:
             await self.run_repo.set_status(run_id, status=AgentRunStatus.FAILED)

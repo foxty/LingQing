@@ -159,7 +159,6 @@ async def test_hitl_pause_approve_resume_executes_tool(pg_async_db_session, samp
                 "trigger_message_id": trigger_message_id,
                 "invoke_index": 0,
                 "agent_run_port": chat_agent_run_port_for_run(
-                    db=pg_async_db_session,
                     tenant_id=tenant_id,
                     agent_id=thread.agent_id,
                     run_id=run.id,

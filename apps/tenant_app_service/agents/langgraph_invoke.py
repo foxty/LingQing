@@ -9,6 +9,7 @@ class AgentInvokeOutcome(StrEnum):
     INTERRUPTED_FOR_HITL = "interrupted_for_hitl"
     COMPLETED = "completed"
     FAILED = "failed"
+    CANCELLED = "cancelled"
 
 
 async def invoke_has_pending_interrupt(agent_graph, config: dict) -> bool:

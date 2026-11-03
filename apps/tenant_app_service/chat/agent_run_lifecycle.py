@@ -17,6 +17,9 @@ class ChatAgentRunLifecycle:
     async def mark_run_awaiting_hitl(self, run_id: str) -> None:
         await self._service.mark_run_awaiting_hitl(run_id)
 
+    async def is_run_cancelled(self, run_id: str) -> bool:
+        return await self._service.is_run_cancelled(run_id)
+
 
 def chat_agent_run_lifecycle(db: AsyncSession, tenant_id: int) -> AgentRunLifecycle:
     """Lifecycle-only adapter factory (unit tests); production uses ``ChatAgentRunPort``."""

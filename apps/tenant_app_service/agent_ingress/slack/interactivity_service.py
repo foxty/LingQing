@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.core.exceptions import AuthorizationError, DomainException, ValidationError
 from apps.shared.db.models import AgentIngressEndpoint
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_ingress.slack.access import resolve_eligible_slack_user_id
@@ -21,7 +23,10 @@ from apps.tenant_app_service.agent_ingress.slack.feedback_blocks import (
     replace_feedback_actions,
 )
 from apps.tenant_app_service.agent_ingress.slack.identity_service import SlackIdentityService
+from apps.tenant_app_service.agent_ingress.slack.messages import SlackMessageKey, slack_user_message
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
+from apps.tenant_app_service.agent_ingress.slack.run_cancel import cancel_slack_thread_run_by_run_id
+from apps.tenant_app_service.agent_ingress.slack.run_control_blocks import ACTION_AGENT_RUN_STOP
 from apps.tenant_app_service.message_feedback.domain import (
     FEEDBACK_RATING_NEGATIVE,
     FEEDBACK_RATING_POSITIVE,
@@ -30,6 +35,26 @@ from apps.tenant_app_service.message_feedback.domain import (
 from apps.tenant_app_service.message_feedback.service import MessageFeedbackService
 
 logger = get_logger(__name__)
+
+
+async def _safe_execute_agent_run_stop(endpoint_id: int, payload: dict[str, Any], run_id: str) -> None:
+    """Background cancel + message update (Slack interactivity must ack HTTP within 3s)."""
+    from sqlalchemy import select
+
+    from apps.shared.db.models import AgentIngressEndpoint
+    from apps.shared.db.session import app_db_session
+
+    try:
+        async with app_db_session() as db:
+            result = await db.execute(select(AgentIngressEndpoint).where(AgentIngressEndpoint.id == endpoint_id))
+            endpoint = result.scalar_one_or_none()
+            if endpoint is None:
+                logger.warning("Slack run stop background: endpoint %s not found", endpoint_id)
+                return
+            service = SlackInteractivityService(db)
+            await service.execute_agent_run_stop(payload, endpoint, run_id)
+    except Exception:
+        logger.exception("Slack run stop background failed endpoint_id=%s run_id=%s", endpoint_id, run_id)
 
 
 class SlackInteractivityService:
@@ -60,6 +85,12 @@ class SlackInteractivityService:
             return {}
         action = actions[0]
         action_id = action.get("action_id")
+        if action_id == ACTION_AGENT_RUN_STOP:
+            run_id = action.get("value") or ""
+            if run_id:
+                return await self._handle_agent_run_stop(payload, endpoint, run_id)
+            return {}
+
         message_id = action.get("value")
         if not message_id:
             return {}
@@ -129,6 +160,110 @@ class SlackInteractivityService:
                     logger.exception("Failed to open Slack feedback comment modal")
 
         return {}
+
+    async def _handle_agent_run_stop(
+        self,
+        payload: dict[str, Any],
+        endpoint: AgentIngressEndpoint,
+        run_id: str,
+    ) -> dict[str, Any]:
+        """Ack Slack within 3s; cancel the agent run only (ingress owns the thinking message)."""
+        asyncio.create_task(_safe_execute_agent_run_stop(endpoint.id, payload, run_id))
+        return {}
+
+    async def execute_agent_run_stop(
+        self,
+        payload: dict[str, Any],
+        endpoint: AgentIngressEndpoint,
+        run_id: str,
+    ) -> None:
+        """Request cooperative cancel; do not update the thinking message (ingress posts the reply)."""
+        slack_user_id = (payload.get("user") or {}).get("id", "")
+        user_id = await resolve_eligible_slack_user_id(
+            self.db,
+            tenant_id=endpoint.tenant_id,
+            slack_user_id=slack_user_id,
+            endpoint=endpoint,
+            identity_service=self.identity_service,
+        )
+        if user_id is None:
+            logger.warning("Slack run stop denied for user %s on tenant %s", slack_user_id, endpoint.tenant_id)
+            return
+
+        channel = (payload.get("channel") or {}).get("id") or (payload.get("container") or {}).get("channel_id")
+        bot_token = self.repo.decrypt_bot_token(endpoint)
+
+        try:
+            await cancel_slack_thread_run_by_run_id(
+                self.db,
+                tenant_id=endpoint.tenant_id,
+                user_id=user_id,
+                run_id=run_id,
+            )
+            logger.info(
+                "Slack run stop cancel requested tenant=%s run=%s user=%s",
+                endpoint.tenant_id,
+                run_id,
+                user_id,
+            )
+        except ValidationError as exc:
+            details = getattr(exc, "details", None) or {}
+            code = details.get("code")
+            if code == "RUN_ALREADY_FINISHED":
+                logger.info(
+                    "Slack run stop noop (run finished) tenant=%s run=%s user=%s status=%s",
+                    endpoint.tenant_id,
+                    run_id,
+                    user_id,
+                    details.get("status"),
+                )
+                return
+            logger.warning(
+                "Slack run stop failed tenant=%s run=%s user=%s: %s details=%s",
+                endpoint.tenant_id,
+                run_id,
+                user_id,
+                getattr(exc, "message", exc),
+                details,
+            )
+            await self._post_run_stop_ephemeral(
+                bot_token, channel, slack_user_id, payload, slack_user_message(SlackMessageKey.CHAT_GENERIC_FAILURE)
+            )
+        except (AuthorizationError, DomainException) as exc:
+            logger.warning(
+                "Slack run stop failed tenant=%s run=%s user=%s: %s",
+                endpoint.tenant_id,
+                run_id,
+                user_id,
+                getattr(exc, "message", exc),
+            )
+            await self._post_run_stop_ephemeral(
+                bot_token, channel, slack_user_id, payload, getattr(exc, "message", str(exc))
+            )
+
+    async def _post_run_stop_ephemeral(
+        self,
+        bot_token: str,
+        channel: str | None,
+        slack_user_id: str,
+        payload: dict[str, Any],
+        text: str,
+    ) -> None:
+        if not channel or not slack_user_id or not text:
+            return
+        message = payload.get("message") or {}
+        container = payload.get("container") or {}
+        thread_ts = message.get("thread_ts") or container.get("thread_ts") or message.get("ts")
+        try:
+            await self.client.chat_post_ephemeral(
+                bot_token=bot_token,
+                channel=channel,
+                user=slack_user_id,
+                text=text,
+                thread_ts=thread_ts,
+            )
+        except Exception:
+            logger.exception("Failed to post Slack ephemeral for run stop")
 
     async def _handle_view_submission(self, payload: dict[str, Any], endpoint: AgentIngressEndpoint) -> dict[str, Any]:
         view = payload.get("view") or {}

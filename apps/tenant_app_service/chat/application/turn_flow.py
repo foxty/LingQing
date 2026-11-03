@@ -35,6 +35,8 @@ from apps.tenant_app_service.chat.streaming import (
 if TYPE_CHECKING:
     from apps.tenant_app_service.chat.turn_service import ChatTurnService
 
+from apps.tenant_app_service.chat.turn_service import emit_prepared_agent_stream
+
 logger = get_logger(__name__)
 
 
@@ -156,16 +158,24 @@ async def iter_prepared_chat_stream_committed(
         yield line
 
     async def _background() -> None:
-        async def _run(service: ChatTurnService) -> None:
-            await service.run_agent_and_emit_prepared(
+        from apps.tenant_app_service.chat.agent_run_execution_registry import register, unregister
+
+        run_id = prepared.run_id
+        current = asyncio.current_task()
+        if run_id and current is not None:
+            register(run_id, current)
+        try:
+            await emit_prepared_agent_stream(
+                tenant_id,
                 event_queue=event_queue,
                 request=request,
                 current_user=current_user,
                 prepared=prepared,
                 access_token=access_token,
             )
-
-        await with_chat_service(tenant_id, _run)
+        finally:
+            if run_id:
+                unregister(run_id)
 
     asyncio.create_task(_background())
 

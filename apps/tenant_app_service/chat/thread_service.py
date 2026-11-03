@@ -1,7 +1,6 @@
-"""Thread metadata, history, and read-side chat APIs (single DB session).
+"""Application layer — thread CRUD and history reads (one ``AsyncSession`` per call).
 
-**Layer:** Session-scoped service — CRUD, history, tool detail, session status delegate.
-**Must not:** LangGraph invoke or multi-session turn orchestration (see ``application/``).
+**Must not:** LangGraph invoke or multi-session orchestration (see ``application/``).
 """
 
 from uuid import uuid4
@@ -206,15 +205,22 @@ class ThreadService(ChatServiceBase):
 
     async def get_main_timeline_messages(self, thread: ThreadDomain) -> list[Message]:
         """Trigger-anchored main timeline as API messages (human + promoted AI)."""
-        from apps.tenant_app_service.chat.history_adapters import main_timeline_rows_to_api_messages
+        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+        from apps.tenant_app_service.chat.history_adapters import (
+            enrich_messages_with_trigger_runs,
+            group_runs_by_trigger,
+            main_timeline_rows_to_api_messages,
+        )
 
         run_service = ThreadRunService(self.db, self.tenant_id)
         timeline = await run_service.get_timeline(thread.id)
-        return main_timeline_rows_to_api_messages(
+        messages = main_timeline_rows_to_api_messages(
             timeline,
             thread_id=thread.id,
             default_agent_id=thread.agent_id,
         )
+        runs = await AgentRunRepository(self.db).list_for_thread(thread.id)
+        return enrich_messages_with_trigger_runs(messages, group_runs_by_trigger(runs))
 
     async def list_runs_for_trigger(
         self,
@@ -280,12 +286,22 @@ class ThreadService(ChatServiceBase):
         use_run_detail = include_tools or session_id is not None or before_session_id is not None
 
         if not use_run_detail:
+            from apps.tenant_app_service.chat.history_adapters import (
+                enrich_messages_with_trigger_runs,
+                group_runs_by_trigger,
+            )
+
             timeline = sort_timeline_trigger_anchored(await main_repo.list_for_thread(thread.id))
             api_messages = [
                 main_timeline_row_to_api_message(row, thread_id=thread.id, default_agent_id=agent_id)
                 for row in timeline
                 if row.type in ("human", "ai")
             ]
+            thread_runs = await run_repo.list_for_thread(thread.id)
+            api_messages = enrich_messages_with_trigger_runs(
+                api_messages,
+                group_runs_by_trigger(thread_runs),
+            )
             return ConversationHistoryResponse(
                 thread_id=thread.id,
                 tenant_id=thread.tenant_id,
@@ -306,8 +322,12 @@ class ThreadService(ChatServiceBase):
             session_id=session_id,
         )
 
+        from apps.tenant_app_service.chat.history_adapters import enrich_messages_with_trigger_runs
+
         api_messages: list[Message] = []
         humans_emitted_for_trigger: set[str] = set()
+        trigger_ids = {run.trigger_message_id for run in runs}
+        runs_by_trigger = await run_repo.list_for_triggers(thread.id, list(trigger_ids))
 
         for run in runs:
             if run.trigger_message_id not in humans_emitted_for_trigger:
@@ -338,6 +358,8 @@ class ThreadService(ChatServiceBase):
                     api_messages.append(
                         agent_run_row_to_api_message(final_ai, thread_id=thread.id, default_agent_id=agent_id)
                     )
+
+        api_messages = enrich_messages_with_trigger_runs(api_messages, runs_by_trigger)
 
         return ConversationHistoryResponse(
             thread_id=thread.id,

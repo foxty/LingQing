@@ -43,7 +43,7 @@ async def test_run_slack_turn_posts_thinking_between_prepare_and_complete():
             response=MagicMock(content="reply", message_id="m1", session_id="s1"),
         )
 
-    async def post_thinking():
+    async def post_thinking(_prepared):
         order.append("thinking")
         return "ts-thinking"
 

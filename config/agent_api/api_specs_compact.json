@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-27T11:16:26.997338+00:00",
+  "generated_at": "2026-11-03T08:23:39.463191+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -388,6 +388,39 @@
           "status"
         ],
         "title": "AgentResponse"
+      },
+      "AgentRunSummary": {
+        "properties": {
+          "run_id": {
+            "type": "string",
+            "title": "Run Id"
+          },
+          "agent_id": {
+            "type": "integer",
+            "title": "Agent Id"
+          },
+          "invoke_index": {
+            "type": "integer",
+            "title": "Invoke Index"
+          },
+          "session_id": {
+            "type": "string",
+            "title": "Session Id"
+          },
+          "status": {
+            "type": "string",
+            "title": "Status"
+          }
+        },
+        "type": "object",
+        "required": [
+          "run_id",
+          "agent_id",
+          "invoke_index",
+          "session_id",
+          "status"
+        ],
+        "title": "AgentRunSummary"
       },
       "AgentSkillCatalogItem": {
         "properties": {
@@ -5918,6 +5951,21 @@
               }
             ],
             "title": "Message Metadata"
+          },
+          "trigger_runs": {
+            "anyOf": [
+              {
+                "items": {
+                  "$ref": "#/components/schemas/AgentRunSummary"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trigger Runs",
+            "description": "Runs spawned by this human message (history/timeline read projection)"
           }
         },
         "type": "object",

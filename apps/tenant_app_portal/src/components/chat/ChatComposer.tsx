@@ -15,7 +15,7 @@ import {
 } from '@/lib/chatMention'
 import type { ArtifactsAutoOpenPreference, ThinkingEffort } from '@/lib/userPreferencesTypes'
 import type { AttachedArtifact } from '@/types'
-import { Send } from 'lucide-react'
+import { Send, Square } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 
@@ -40,6 +40,8 @@ interface ChatComposerProps {
   onArtifactsAutoOpenChange: (value: ArtifactsAutoOpenPreference) => void
   onThinkingEffortChange: (value: ThinkingEffort) => void
   onBeforeSend?: () => void
+  onStopGeneration?: () => void
+  showStop?: boolean
 }
 
 export default function ChatComposer({
@@ -61,6 +63,8 @@ export default function ChatComposer({
   onArtifactsAutoOpenChange,
   onThinkingEffortChange,
   onBeforeSend,
+  onStopGeneration,
+  showStop = false,
 }: ChatComposerProps) {
   const { t } = useTranslation()
   const [input, setInput] = useState('')
@@ -187,17 +191,31 @@ export default function ChatComposer({
                 className="max-h-32 min-h-[2.75rem] resize-none overflow-y-auto rounded-md border-0 bg-transparent px-2 py-2 text-sm shadow-none focus-visible:ring-0 focus-visible:ring-offset-0"
               />
             </div>
-            <Button
-              type="button"
-              size="icon"
-              className="h-11 w-11 shrink-0"
-              onClick={handleSend}
-              disabled={inputDisabled || !input.trim()}
-              title={t('workbench.send')}
-              aria-label={t('workbench.send')}
-            >
-              <Send className="h-4 w-4" />
-            </Button>
+            {showStop && onStopGeneration ? (
+              <Button
+                type="button"
+                size="icon"
+                variant="destructive"
+                className="h-11 w-11 shrink-0"
+                onClick={onStopGeneration}
+                title={t('workbench.stop')}
+                aria-label={t('workbench.stop')}
+              >
+                <Square className="h-4 w-4 fill-current" />
+              </Button>
+            ) : (
+              <Button
+                type="button"
+                size="icon"
+                className="h-11 w-11 shrink-0"
+                onClick={handleSend}
+                disabled={inputDisabled || !input.trim()}
+                title={t('workbench.send')}
+                aria-label={t('workbench.send')}
+              >
+                <Send className="h-4 w-4" />
+              </Button>
+            )}
           </div>
         </div>
 
