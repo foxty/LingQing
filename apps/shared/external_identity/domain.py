@@ -216,7 +216,8 @@ def decide_bind(
 
     Order (tenant-scoped, all inputs already scoped to one tenant):
       1. Domain allowlist check (deny first).
-      2. Subject hit -> reuse user (active login / pending wait / rejected deny).
+      2. Subject hit -> reuse user (active login / pending attach-if-email /
+         pending wait / rejected deny).
       3. Unique email hit -> attach to that user.
       4. Apply first-login policy.
 
@@ -237,6 +238,12 @@ def decide_bind(
         if subject_match.status == STATUS_ACTIVE:
             return BindDecision(action=BindAction.LOGIN, user_id=subject_match.user_id)
         if subject_match.status == STATUS_PENDING:
+            if (
+                subject_match.user_id is None
+                and email_match is not None
+                and email_match.count == 1
+            ):
+                return BindDecision(action=BindAction.ATTACH, user_id=email_match.user_id)
             return BindDecision(action=BindAction.PENDING, reason="subject_pending")
         # rejected or unknown status
         return BindDecision(action=BindAction.DENY, reason="subject_rejected")

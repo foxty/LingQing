@@ -79,6 +79,22 @@ def test_subject_hit_pending_waits():
     assert decision.reason == "subject_pending"
 
 
+def test_subject_hit_pending_attaches_when_admin_added_matching_user():
+    subject = ExistingIdentityMatch(identity_id=1, user_id=None, status=STATUS_PENDING)
+    email = ExistingUserMatch(user_id=42, count=1)
+    decision = _decide(subject_match=subject, email_match=email)
+    assert decision.action == "attach"
+    assert decision.user_id == 42
+
+
+def test_subject_hit_pending_stays_pending_on_email_collision():
+    subject = ExistingIdentityMatch(identity_id=1, user_id=None, status=STATUS_PENDING)
+    email = ExistingUserMatch(user_id=42, count=2)
+    decision = _decide(subject_match=subject, email_match=email)
+    assert decision.action == "pending"
+    assert decision.reason == "subject_pending"
+
+
 def test_subject_hit_rejected_denies():
     match = ExistingIdentityMatch(identity_id=1, user_id=42, status=STATUS_REJECTED)
     decision = _decide(subject_match=match)

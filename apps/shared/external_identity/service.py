@@ -57,10 +57,14 @@ class IdentityBindingService(IdentityBindingPort):
             )
 
         email_match: ExistingUserMatch | None = None
-        if extracted.email and subject_match is None:
-            members = await self.repo.count_members_by_email(tenant_id, extracted.email)
-            if members:
-                email_match = ExistingUserMatch(user_id=members[0].id, count=len(members))
+        if extracted.email:
+            needs_email_lookup = subject_match is None or (
+                subject_match.status == STATUS_PENDING and subject_match.user_id is None
+            )
+            if needs_email_lookup:
+                members = await self.repo.count_members_by_email(tenant_id, extracted.email)
+                if members:
+                    email_match = ExistingUserMatch(user_id=members[0].id, count=len(members))
 
         decision = decide_bind(
             extracted=extracted,
@@ -166,23 +170,44 @@ class IdentityBindingService(IdentityBindingPort):
                 identity_id=existing.id if existing else None,
             )
         if decision.action == BindAction.ATTACH and decision.user_id is not None:
-            row = await self.repo.create_identity(
-                tenant_id=tenant_id,
-                identity_source_id=identity_source_id,
-                external_subject=extracted.external_subject,
-                user_id=decision.user_id,
-                email=extracted.email,
-                display_name=extracted.display_name,
-                status=STATUS_ACTIVE,
+            existing = await self.repo.get_identity_by_subject(
+                tenant_id, identity_source_id, extracted.external_subject
             )
+            if existing:
+                row = await self.repo.update_identity_status(
+                    tenant_id,
+                    existing.id,
+                    STATUS_ACTIVE,
+                    user_id=decision.user_id,
+                )
+            else:
+                row = await self.repo.create_identity(
+                    tenant_id=tenant_id,
+                    identity_source_id=identity_source_id,
+                    external_subject=extracted.external_subject,
+                    user_id=decision.user_id,
+                    email=extracted.email,
+                    display_name=extracted.display_name,
+                    status=STATUS_ACTIVE,
+                )
             return IdentityBindingResult(
                 action=BindAction.ATTACH,
                 user_id=decision.user_id,
-                identity_id=row.id,
+                identity_id=row.id if row else None,
             )
         if decision.action == BindAction.JIT_CREATE:
             return IdentityBindingResult(action=BindAction.JIT_CREATE)
         if decision.action == BindAction.PENDING:
+            existing = await self.repo.get_identity_by_subject(
+                tenant_id, identity_source_id, extracted.external_subject
+            )
+            if existing:
+                return IdentityBindingResult(
+                    action=BindAction.PENDING,
+                    identity_id=existing.id,
+                    user_id=existing.user_id,
+                    reason=decision.reason,
+                )
             row = await self.repo.create_identity(
                 tenant_id=tenant_id,
                 identity_source_id=identity_source_id,
