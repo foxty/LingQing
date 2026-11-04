@@ -180,7 +180,7 @@ class AgentBase(ABC):
             "run_cancelled": True,
         }
 
-    async def _load_history(self, state: AgentState, config: RunnableConfig) -> dict:
+    async def _load_history(self, state: AgentState, config: RunnableConfig | None = None) -> dict:
         """Load conversation history from database (first node in graph).
 
         Context loading:
@@ -197,6 +197,7 @@ class AgentBase(ABC):
         """
         from langchain_core.messages import SystemMessage
 
+        assert config is not None
         if config.get("configurable", {}).get("skip_load_history"):
             self.logger.info("Skipping load_history (checkpoint resume)")
             return {}
@@ -305,7 +306,7 @@ class AgentBase(ABC):
 
         return system_messages
 
-    async def _llm_call(self, state: AgentState, config: RunnableConfig) -> dict:
+    async def _llm_call(self, state: AgentState, config: RunnableConfig | None = None) -> dict:
         """Call the LLM with automatic stats tracking and message management.
 
         This method handles:
@@ -322,6 +323,7 @@ class AgentBase(ABC):
         Returns:
             Updated state with LLM response and stats
         """
+        assert config is not None
         loop_count = state.get("loop_count", 0)
         tool_call_counts = state.get("tool_call_counts", {})
         runtime = extract_runtime_context(config)
@@ -460,7 +462,8 @@ class AgentBase(ABC):
         }
         return state_update
 
-    async def _tool_node(self, state: AgentState, config: RunnableConfig) -> dict:
+    async def _tool_node(self, state: AgentState, config: RunnableConfig | None = None) -> dict:
+        assert config is not None
         if await self._cooperative_run_cancelled(state, config):
             self.logger.info("Agent run cancelled before tool execution for agent %s", self.agent_config.agent_name)
             return {"run_cancelled": True}
@@ -713,7 +716,7 @@ class AgentBase(ABC):
             )
         return True
 
-    async def _save_messages(self, state: AgentState, config: RunnableConfig) -> dict:
+    async def _save_messages(self, state: AgentState, config: RunnableConfig | None = None) -> dict:
         """Save all unsaved messages to database (executed after loop completes).
 
         Run transcript persistence is delegated to ``AgentRunContextPort`` from config.
@@ -728,6 +731,7 @@ class AgentBase(ABC):
         Returns:
             Empty dict (no state update needed)
         """
+        assert config is not None
         await self._persist_run_messages(state, config)
 
         return {}

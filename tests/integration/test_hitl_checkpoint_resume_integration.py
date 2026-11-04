@@ -14,9 +14,9 @@ from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agent_pool import get_agent_pool
 from apps.tenant_app_service.agents.agent_base import AgentBase
 from apps.tenant_app_service.agents.graph_checkpointer import init_langgraph_checkpointer
-from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
-from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+from apps.tenant_app_service.chat.domain import AgentRunStatus
+from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
+from apps.tenant_app_service.chat.infrastructure.persistence.main_message_repository import MainMessageRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
 from apps.tenant_app_service.hitl.domain import (

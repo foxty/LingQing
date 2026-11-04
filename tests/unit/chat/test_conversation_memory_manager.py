@@ -23,7 +23,7 @@ from langchain_core.runnables import RunnableConfig
 
 from apps.shared.db.models import ChatMessage
 from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
-from apps.tenant_app_service.chat.agent_run_domain import ThreadMainMessageDomain
+from apps.tenant_app_service.chat.domain import ThreadMainMessageDomain
 
 # ─── Constants ────────────────────────────────────────────────────────────────
 
@@ -32,10 +32,10 @@ AGENT_ID = 456
 TENANT_ID = 1
 _T0 = datetime(2024, 1, 1, tzinfo=timezone.utc)
 
-_TSR_PATH = "apps.tenant_app_service.chat.thread_summary_repository.ThreadSummaryRepository"
-_RUN_MR_PATH = "apps.tenant_app_service.chat.agent_run_message_repository.AgentRunMessageRepository"
-_MAIN_MR_PATH = "apps.tenant_app_service.chat.main_message_repository.MainMessageRepository"
-_AGENT_RUN_REPO_PATH = "apps.tenant_app_service.chat.agent_run_repository.AgentRunRepository"
+_TSR_PATH = "apps.tenant_app_service.chat.infrastructure.persistence.ThreadSummaryRepository"
+_RUN_MR_PATH = "apps.tenant_app_service.chat.infrastructure.persistence.AgentRunMessageRepository"
+_MAIN_MR_PATH = "apps.tenant_app_service.chat.infrastructure.persistence.MainMessageRepository"
+_THREAD_RUNS_PATH = "apps.tenant_app_service.chat.application.runs.thread_run_service.ThreadRunService"
 RUN_ID = "run-unit-1"
 TRIGGER_MSG_ID = "trigger-human-1"
 _HITL_BLOCKING_PATH = "apps.tenant_app_service.hitl.history.is_hitl_proposal_blocking"
@@ -113,7 +113,7 @@ def _make_manager(*, trigger_message_id: str | None = None) -> tuple:
         patch(_RUN_MR_PATH) as MockRunMR,
         patch(_MAIN_MR_PATH) as MockMainMR,
         patch(_TSR_PATH) as MockTSR,
-        patch(_AGENT_RUN_REPO_PATH) as MockAgentRunRepo,
+        patch(_THREAD_RUNS_PATH) as MockThreadRuns,
     ):
         run_repo_mock = AsyncMock()
         run_repo_mock.get_tool_message_by_call_id.return_value = None
@@ -126,14 +126,14 @@ def _make_manager(*, trigger_message_id: str | None = None) -> tuple:
         thread_summary_repo_mock = AsyncMock()
         thread_summary_repo_mock.get_recent_summaries.return_value = []
         MockTSR.return_value = thread_summary_repo_mock
-        agent_run_repo_mock = AsyncMock()
+        thread_runs_mock = AsyncMock()
         if trigger_message_id is not None:
             run_domain = MagicMock()
             run_domain.trigger_message_id = trigger_message_id
-            agent_run_repo_mock.get_run = AsyncMock(return_value=run_domain)
+            thread_runs_mock.get_run = AsyncMock(return_value=run_domain)
         else:
-            agent_run_repo_mock.get_run = AsyncMock(return_value=None)
-        MockAgentRunRepo.return_value = agent_run_repo_mock
+            thread_runs_mock.get_run = AsyncMock(return_value=None)
+        MockThreadRuns.return_value = thread_runs_mock
         mgr = ConversationMemoryManager(
             db_mock,
             THREAD_ID,

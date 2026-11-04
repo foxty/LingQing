@@ -9,8 +9,8 @@ from sqlalchemy import select
 
 from apps.shared.db.models import AgentRunMessage, Tenant, ThreadMainMessage, User
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
-from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+from apps.tenant_app_service.chat.domain import AgentRunStatus
+from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.application.turn_flow import run_non_stream_chat_turn
 from apps.tenant_app_service.chat.agent_run_port_adapter import ChatAgentRunPort
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage

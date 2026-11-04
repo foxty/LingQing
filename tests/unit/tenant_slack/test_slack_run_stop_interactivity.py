@@ -26,8 +26,13 @@ async def test_block_action_stop_acks_without_updating_message():
         "actions": [{"action_id": "agent_run_stop", "value": "run-99"}],
     }
 
+    def _consume_create_task(coro):
+        coro.close()
+        return MagicMock()
+
     with patch(
-        "apps.tenant_app_service.agent_ingress.slack.interactivity_service.asyncio.create_task"
+        "apps.tenant_app_service.agent_ingress.slack.interactivity_service.asyncio.create_task",
+        side_effect=_consume_create_task,
     ) as create_task:
         body = await service.handle_payload(payload, endpoint)
 

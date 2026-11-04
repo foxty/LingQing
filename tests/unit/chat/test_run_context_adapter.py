@@ -21,7 +21,7 @@ async def test_load_prompt_context_delegates_to_conversation_memory_manager():
     expected = [HumanMessage(content="hello")]
 
     with patch(
-        "apps.tenant_app_service.chat.run_context_adapter.ConversationMemoryManager",
+        "apps.tenant_app_service.chat.infrastructure.adapters.run_context_adapter.ConversationMemoryManager",
     ) as manager_cls:
         manager = AsyncMock()
         manager.load_messages_with_summary.return_value = expected
@@ -46,7 +46,7 @@ async def test_persist_run_messages_delegates_to_conversation_memory_manager():
     config = {"configurable": {"runtime": {}}}
 
     with patch(
-        "apps.tenant_app_service.chat.run_context_adapter.ConversationMemoryManager",
+        "apps.tenant_app_service.chat.infrastructure.adapters.run_context_adapter.ConversationMemoryManager",
     ) as manager_cls:
         manager = AsyncMock()
         manager_cls.return_value = manager

@@ -24,7 +24,7 @@ def test_factory_returns_lifecycle_instance():
     from apps.tenant_app_service.chat.agent_run_lifecycle import chat_agent_run_lifecycle
 
     with patch(
-        "apps.tenant_app_service.chat.agent_run_lifecycle.ThreadRunService",
+        "apps.tenant_app_service.chat.infrastructure.adapters.agent_run_lifecycle.ThreadRunService",
     ):
         adapter = chat_agent_run_lifecycle(AsyncMock(), tenant_id=1)
     assert isinstance(adapter, ChatAgentRunLifecycle)

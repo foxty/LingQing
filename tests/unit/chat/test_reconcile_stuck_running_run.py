@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain, AgentRunStatus
+from apps.tenant_app_service.chat.domain import AgentRunDomain, AgentRunStatus
 from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
 
@@ -57,7 +57,7 @@ async def test_thread_run_repair_finalizes_running_with_promotable_ai():
     with (
         patch.object(thread_runs, "run_message_repo") as run_msg_repo,
         patch(
-            "apps.tenant_app_service.chat.thread_run_service.find_promotable_final_ai_row",
+            "apps.tenant_app_service.chat.application.runs.thread_run_service.find_promotable_final_ai_row",
             return_value=final_ai,
         ),
         patch.object(thread_runs, "finalize_run_for_main", AsyncMock()) as finalize,

@@ -79,8 +79,8 @@ async def _build_ainvoke_config(async_db_session, runtime_context, thread_id: st
     """RunnableConfig with agent run + main human (matches production turn persistence)."""
     from uuid import uuid4
 
-    from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-    from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+    from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
+    from apps.tenant_app_service.chat.infrastructure.persistence.main_message_repository import MainMessageRepository
 
     await _ensure_runtime_entities(async_db_session, runtime_context)
 
@@ -367,7 +367,7 @@ class TestAgentConcurrency:
         from uuid import uuid4
 
         from apps.shared.db.models import AgentRunMessage
-        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+        from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
 
         # Add messages to each thread sequentially
         # (SQLAlchemy async sessions don't support concurrent operations)

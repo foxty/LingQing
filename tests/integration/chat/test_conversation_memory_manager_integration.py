@@ -83,7 +83,7 @@ async def _seed_run(
     """Create agent_runs row; returns (run_id, trigger_message_id, session_id)."""
     from uuid import uuid4
 
-    from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+    from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
 
     trigger = trigger_message_id or str(uuid4())
     sess = session_id or str(uuid4())

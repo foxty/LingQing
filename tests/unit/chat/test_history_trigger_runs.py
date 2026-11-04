@@ -3,7 +3,7 @@
 from datetime import UTC, datetime
 from uuid import uuid4
 
-from apps.tenant_app_service.chat.agent_run_domain import (
+from apps.tenant_app_service.chat.domain import (
     AgentRunDomain,
     AgentRunStatus,
     ThreadMainMessageDomain,

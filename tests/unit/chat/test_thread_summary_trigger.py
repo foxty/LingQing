@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from apps.tenant_app_service.agents.memory.memory_budget import THREAD_SUMMARY_MIN_AGED_PAIRS
-from apps.tenant_app_service.chat.agent_run_domain import (
+from apps.tenant_app_service.chat.domain import (
     ThreadMainMessageDomain,
     aged_out_uncovered_turns,
     context_pair_turns,

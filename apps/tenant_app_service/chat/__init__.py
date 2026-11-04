@@ -2,18 +2,20 @@
 
 Layer map (see ``AGENTS.md`` — DDD four layers):
 
-- **Presentation:** routers/ingress (outside this package); ``schemas`` = DTO contracts.
-- **Application:** ``application/`` (orchestrating use cases); ``turn_service``, ``thread_service``,
-  ``thread_run_service`` (session-scoped use cases); ``turn_admission`` (lock + busy gate in prepare txn).
-- **Domain:** ``domain``, ``agent_run_domain`` — types, invariants, rules (no I/O).
-- **Infrastructure:** ``*_repository``, ``agent_run_port_adapter``, ``run_context_adapter``,
-  ``conversation_memory_manager``; ``streaming`` = SSE bytes (transport).
+- **Presentation:** ``schemas`` (DTOs); routers live under ``tenant_app_service/routers``.
+- **Application:** ``application/`` — ``turn/``, ``runs/``, ``threads/``, ``turn_flow``, ``queries/``.
+- **Domain:** ``domain/`` — aggregates, policies, ``ports/``.
+- **Infrastructure:** ``infrastructure/persistence/``, ``infrastructure/adapters/``.
 
-Routers and ingress import ``application`` for turns; not ``ChatTurnService`` directly for streaming.
+Legacy import paths (``thread_run_service``, ``turn_service``, adapters at package root) re-export from the layers above.
+Composition helpers: ``chat.deps``.
 """
 
+from apps.tenant_app_service.chat.application.runs import ThreadRunService
+from apps.tenant_app_service.chat.application.threads import ThreadService
+from apps.tenant_app_service.chat.application.turn import ChatTurnService
 from apps.tenant_app_service.chat.domain import MessageDomain, ThreadDomain
-from apps.tenant_app_service.chat.repository import ThreadRepository
+from apps.tenant_app_service.chat.infrastructure.persistence.thread_repository import ThreadRepository
 from apps.tenant_app_service.chat.schemas import (
     ChatRequest,
     ChatResponse,
@@ -22,11 +24,10 @@ from apps.tenant_app_service.chat.schemas import (
     ThreadResponse,
     ThreadUpdate,
 )
-from apps.tenant_app_service.chat.thread_service import ThreadService
-from apps.tenant_app_service.chat.turn_service import ChatTurnService
 
 __all__ = [
     "ChatTurnService",
+    "ThreadRunService",
     "ThreadService",
     "MessageDomain",
     "ThreadDomain",

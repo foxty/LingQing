@@ -58,11 +58,11 @@ def chat_request():
 async def test_prepare_chat_turn_raises_thread_busy(chat_service, chat_request, current_user):
     with (
         patch(
-            "apps.tenant_app_service.chat.turn_service.guard_thread_turn_start",
+            "apps.tenant_app_service.chat.application.turn.prepare_complete.guard_thread_turn_start",
             AsyncMock(side_effect=ThreadBusyError("busy", details={"code": "THREAD_BUSY"})),
         ),
         patch(
-            "apps.tenant_app_service.chat.turn_service.ThreadRunService.send_human_and_create_runs",
+            "apps.tenant_app_service.chat.application.turn.prepare_complete.ThreadRunService.send_human_and_create_runs",
             AsyncMock(),
         ) as send_mock,
     ):

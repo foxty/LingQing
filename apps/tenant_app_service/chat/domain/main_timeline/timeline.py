@@ -1,98 +1,10 @@
-"""Domain types for thread main timeline and agent runs."""
+"""Main timeline domain services (pure functions)."""
 
 from __future__ import annotations
 
 from collections.abc import Iterator
-from dataclasses import dataclass
-from datetime import UTC, datetime, timedelta
-from enum import StrEnum
-from typing import Final
 
-
-class AgentRunStatus(StrEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    AWAITING_HITL = "awaiting_hitl"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-ACTIVE_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
-    {
-        AgentRunStatus.QUEUED,
-        AgentRunStatus.RUNNING,
-        AgentRunStatus.AWAITING_HITL,
-    }
-)
-
-TERMINAL_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
-    {
-        AgentRunStatus.COMPLETED,
-        AgentRunStatus.FAILED,
-        AgentRunStatus.CANCELLED,
-    }
-)
-
-
-def run_status_allows_thread_rollup(status: str) -> bool:
-    """Whether a finished run may roll into the cumulative thread summary."""
-    return status in (
-        AgentRunStatus.COMPLETED,
-        AgentRunStatus.FAILED,
-    )
-
-
-# Orphaned runs (e.g. server reload after human persist) may be repaired after this window.
-RUN_STALE_ACTIVE_SECONDS: Final = 900
-
-
-def is_stale_active_run(
-    started_at: datetime | None,
-    *,
-    stale_after_seconds: int = RUN_STALE_ACTIVE_SECONDS,
-    now: datetime | None = None,
-) -> bool:
-    """True when an ACTIVE run row should be treated as abandoned for repair."""
-    if started_at is None:
-        return False
-    current = now or datetime.now(UTC)
-    if started_at.tzinfo is None:
-        started_at = started_at.replace(tzinfo=UTC)
-    return current - started_at > timedelta(seconds=stale_after_seconds)
-
-
-@dataclass(frozen=True)
-class AgentRunDomain:
-    id: str
-    tenant_id: int
-    thread_id: str
-    agent_id: int
-    trigger_message_id: str
-    invoke_index: int
-    status: str
-    session_id: str
-    created_at: datetime
-    updated_at: datetime
-    completed_at: datetime | None = None
-
-
-@dataclass(frozen=True)
-class ThreadMainMessageDomain:
-    id: int
-    message_id: str
-    thread_id: str
-    type: str
-    content: str
-    timestamp: datetime
-    agent_id: int | None = None
-    trigger_message_id: str | None = None
-    agent_run_id: str | None = None
-    invoke_index: int | None = None
-    session_id: str | None = None
-    additional_kwargs: dict | None = None
-    message_metadata: dict | None = None
-    created_at: datetime | None = None
+from apps.tenant_app_service.chat.domain.main_timeline.message import ThreadMainMessageDomain
 
 
 def sort_timeline_trigger_anchored(rows: list[ThreadMainMessageDomain]) -> list[ThreadMainMessageDomain]:
@@ -360,23 +272,3 @@ def filter_main_timeline_for_context_load(
     )
 
 
-def find_promotable_final_ai_row(run_rows: list) -> object | None:
-    """Last run-scoped AI row with no tool calls (user-visible terminal reply)."""
-    for row in reversed(run_rows):
-        if getattr(row, "type", None) != "ai":
-            continue
-        if getattr(row, "tool_calls", None):
-            continue
-        return row
-    return None
-
-
-def drop_run_rows_duplicating_promoted_main(
-    run_rows: list,
-    *,
-    promoted_main_message_id: str | None,
-) -> list:
-    """Remove run AI rows whose ``message_id`` matches promoted main timeline AI."""
-    if not promoted_main_message_id:
-        return run_rows
-    return [row for row in run_rows if not (row.type == "ai" and row.message_id == promoted_main_message_id)]

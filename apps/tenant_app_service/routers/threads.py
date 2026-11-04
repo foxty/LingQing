@@ -532,7 +532,7 @@ async def list_linked_artifacts(
         AuthorizationError: If user doesn't have access to the thread
     """
     from apps.shared.artifact.repository import ArtifactRepository
-    from apps.tenant_app_service.chat.repository import ThreadRepository
+    from apps.tenant_app_service.chat.infrastructure.persistence import ThreadRepository
 
     # Verify thread exists and user has access
     thread_repo = ThreadRepository(db)
@@ -592,7 +592,7 @@ async def unlink_artifact_link(
         AuthorizationError: If user doesn't have access
     """
     from apps.shared.artifact.repository import ArtifactRepository
-    from apps.tenant_app_service.chat.repository import ThreadRepository
+    from apps.tenant_app_service.chat.infrastructure.persistence import ThreadRepository
 
     # Verify thread exists and user has access
     thread_repo = ThreadRepository(db)

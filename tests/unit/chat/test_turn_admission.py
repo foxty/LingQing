@@ -5,7 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from apps.shared.core.exceptions import ThreadBusyError
-from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
+from apps.tenant_app_service.chat.domain import AgentRunStatus
 from apps.tenant_app_service.chat.turn_admission import (
     assert_thread_accepts_new_user_turn,
     guard_thread_turn_start,

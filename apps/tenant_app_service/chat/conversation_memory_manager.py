@@ -152,15 +152,17 @@ class ConversationMemoryManager:
         self.run_id = run_id
         self.logger = get_logger(__name__)
         # Lazy import to avoid circular dependency
-        from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
-        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-        from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
-        from apps.tenant_app_service.chat.thread_summary_repository import ThreadSummaryRepository
+        from apps.tenant_app_service.chat.application.runs.thread_run_service import ThreadRunService
+        from apps.tenant_app_service.chat.infrastructure.persistence import (
+            AgentRunMessageRepository,
+            MainMessageRepository,
+            ThreadSummaryRepository,
+        )
 
         self.run_message_repo = AgentRunMessageRepository(db_session)
         self.main_message_repo = MainMessageRepository(db_session)
-        self.agent_run_repo = AgentRunRepository(db_session)
         self.thread_summary_repo = ThreadSummaryRepository(db_session)
+        self._thread_runs = ThreadRunService(db_session, tenant_id)
 
         self.logger.info(
             f"Initialized ConversationMemoryManager for thread {thread_id} "
@@ -453,7 +455,7 @@ class ConversationMemoryManager:
         exclude_trigger_message_id: str | None,
         through_trigger_message_id: str | None = None,
     ) -> list[BaseMessage]:
-        from apps.tenant_app_service.chat.agent_run_domain import (
+        from apps.tenant_app_service.chat.domain import (
             exclude_trigger_human_from_main_rows,
             select_main_pairs_with_watermark,
             sort_timeline_trigger_anchored,
@@ -482,7 +484,7 @@ class ConversationMemoryManager:
         *,
         run_message_limit: int | None,
     ) -> tuple[list[AgentRunMessage], int, int]:
-        from apps.tenant_app_service.chat.agent_run_domain import drop_run_rows_duplicating_promoted_main
+        from apps.tenant_app_service.chat.domain import drop_run_rows_duplicating_promoted_main
 
         promoted_main = await self.main_message_repo.get_promoted_ai_for_run(self.run_id)
         promoted_message_id = promoted_main.message_id if promoted_main else None
@@ -534,7 +536,7 @@ class ConversationMemoryManager:
             self.logger.warning(f"Thread {self.thread_id} not found")
             return []
 
-        run = await self.agent_run_repo.get_run(self.tenant_id, self.run_id)
+        run = await self._thread_runs.get_run(self.run_id)
         trigger_message_id = run.trigger_message_id if run else None
 
         messages: list[BaseMessage] = []

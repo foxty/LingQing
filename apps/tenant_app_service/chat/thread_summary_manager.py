@@ -13,19 +13,21 @@ from apps.tenant_app_service.agents.memory.memory_budget import (
 )
 from apps.tenant_app_service.agents.token_counter import count_tokens
 from apps.tenant_app_service.chat.adapters import thread_summary_domain_to_db
-from apps.tenant_app_service.chat.agent_run_domain import (
+from apps.tenant_app_service.chat.domain import (
     ThreadMainMessageDomain,
+    ThreadSummaryDomain,
     aged_out_uncovered_turns,
     context_pair_turns,
     iter_thread_pair_turns,
     sort_timeline_trigger_anchored,
 )
-from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
-from apps.tenant_app_service.chat.agent_run_summary_repository import AgentRunSummaryRepository
-from apps.tenant_app_service.chat.domain import ThreadSummaryDomain
-from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+from apps.tenant_app_service.chat.infrastructure.persistence import (
+    AgentRunMessageRepository,
+    AgentRunSummaryRepository,
+    MainMessageRepository,
+    ThreadSummaryRepository,
+)
 from apps.tenant_app_service.chat.service_base import DEFAULT_MAIN_TIMELINE_TURN_LIMIT
-from apps.tenant_app_service.chat.thread_summary_repository import ThreadSummaryRepository
 
 logger = get_logger(__name__)
 

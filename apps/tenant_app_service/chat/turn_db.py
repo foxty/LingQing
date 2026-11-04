@@ -14,7 +14,7 @@ T = TypeVar("T")
 @asynccontextmanager
 async def turn_service_session(tenant_id: int):
     """One commit/rollback scope for a single orchestration step."""
-    from apps.tenant_app_service.chat.turn_service import ChatTurnService
+    from apps.tenant_app_service.chat.application.turn import ChatTurnService
 
     async with app_db_session() as db:
         yield ChatTurnService(tenant_id, db)

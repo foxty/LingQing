@@ -45,7 +45,9 @@ def _issue_token(user_id: int, username: str, role: str, tenant_id: int, tenant_
 def _patch_app_db_session(session_local: async_sessionmaker[AsyncSession]) -> dict[str, Any]:
     from apps.shared.core import auth as auth_module
     from apps.shared.db import session as session_module
-    from apps.tenant_app_service.chat import agent_run_port_adapter as port_module
+    from apps.tenant_app_service.chat.infrastructure.adapters import (
+        agent_run_port_adapter as port_module,
+    )
     from apps.tenant_app_service.chat import turn_db as turn_db_module
     from apps.tenant_app_service.chat.application import turn_flow as turn_flow_module
     from apps.tenant_app_service.routers import chat as chat_router_module
@@ -81,7 +83,9 @@ def _patch_app_db_session(session_local: async_sessionmaker[AsyncSession]) -> di
 def _restore_app_db_session(originals: dict[str, Any]) -> None:
     from apps.shared.core import auth as auth_module
     from apps.shared.db import session as session_module
-    from apps.tenant_app_service.chat import agent_run_port_adapter as port_module
+    from apps.tenant_app_service.chat.infrastructure.adapters import (
+        agent_run_port_adapter as port_module,
+    )
     from apps.tenant_app_service.chat import turn_db as turn_db_module
     from apps.tenant_app_service.chat.application import turn_flow as turn_flow_module
     from apps.tenant_app_service.routers import chat as chat_router_module
@@ -190,9 +194,9 @@ async def seed_running_human_turn(
     content: str = "in-flight user message",
 ) -> str:
     """Main-line human + RUNNING agent run (no AI) — matches durable active-run busy gate."""
-    from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
-    from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-    from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+    from apps.tenant_app_service.chat.domain import AgentRunStatus
+    from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
+    from apps.tenant_app_service.chat.infrastructure.persistence.main_message_repository import MainMessageRepository
 
     thread = await session.get(ChatThread, thread_id)
     if thread is None:

@@ -18,8 +18,8 @@ def test_factory_returns_chat_agent_run_port():
 
 
 @pytest.mark.asyncio
-@patch("apps.tenant_app_service.chat.agent_run_port_adapter.ChatAgentRunLifecycle")
-@patch("apps.tenant_app_service.chat.agent_run_port_adapter.ChatRunContextAdapter")
+@patch("apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter.ChatAgentRunLifecycle")
+@patch("apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter.ChatRunContextAdapter")
 async def test_mark_run_awaiting_hitl_delegates_to_lifecycle(mock_context_cls, mock_lifecycle_cls):
     db = AsyncMock()
     lifecycle = AsyncMock()
@@ -31,7 +31,7 @@ async def test_mark_run_awaiting_hitl_delegates_to_lifecycle(mock_context_cls, m
         yield db
 
     with patch(
-        "apps.tenant_app_service.chat.agent_run_port_adapter.app_db_session",
+        "apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter.app_db_session",
         fake_app_db_session,
     ):
         port = ChatAgentRunPort(tenant_id=5, agent_id=1, run_id="run-x")
@@ -40,8 +40,8 @@ async def test_mark_run_awaiting_hitl_delegates_to_lifecycle(mock_context_cls, m
 
 
 @pytest.mark.asyncio
-@patch("apps.tenant_app_service.chat.agent_run_port_adapter.ChatAgentRunLifecycle")
-@patch("apps.tenant_app_service.chat.agent_run_port_adapter.ChatRunContextAdapter")
+@patch("apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter.ChatAgentRunLifecycle")
+@patch("apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter.ChatRunContextAdapter")
 async def test_is_run_cancelled_delegates_to_lifecycle(mock_context_cls, mock_lifecycle_cls):
     db = AsyncMock()
     lifecycle = AsyncMock()
@@ -54,7 +54,7 @@ async def test_is_run_cancelled_delegates_to_lifecycle(mock_context_cls, mock_li
         yield db
 
     with patch(
-        "apps.tenant_app_service.chat.agent_run_port_adapter.app_db_session",
+        "apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter.app_db_session",
         fake_app_db_session,
     ):
         port = ChatAgentRunPort(tenant_id=5, agent_id=1, run_id="run-x")

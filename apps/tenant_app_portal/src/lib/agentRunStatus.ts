@@ -1,4 +1,4 @@
-/** Mirrors backend ``AgentRunStatus`` (``apps.tenant_app_service.chat.agent_run_domain``). */
+/** Mirrors backend ``AgentRunStatus`` (``apps.tenant_app_service.chat.domain``). */
 
 export const AGENT_RUN_STATUS = {
   QUEUED: 'queued',

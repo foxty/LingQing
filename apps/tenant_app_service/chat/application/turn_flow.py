@@ -33,9 +33,9 @@ from apps.tenant_app_service.chat.streaming import (
 )
 
 if TYPE_CHECKING:
-    from apps.tenant_app_service.chat.turn_service import ChatTurnService
+    from apps.tenant_app_service.chat.application.turn import ChatTurnService
 
-from apps.tenant_app_service.chat.turn_service import emit_prepared_agent_stream
+from apps.tenant_app_service.chat.application.turn import emit_prepared_agent_stream
 
 logger = get_logger(__name__)
 
@@ -45,7 +45,7 @@ async def with_chat_turn_service(
     operation: Callable[[ChatTurnService], Awaitable],
 ):
     """Run ``operation(service)`` with a committed short-lived DB session."""
-    from apps.tenant_app_service.chat.turn_service import ChatTurnService
+    from apps.tenant_app_service.chat.application.turn import ChatTurnService
 
     async with app_db_session() as db:
         service = ChatTurnService(tenant_id, db)

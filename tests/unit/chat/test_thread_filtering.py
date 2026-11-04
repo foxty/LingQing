@@ -8,7 +8,7 @@ import pytest
 from apps.shared.core.exceptions import AuthorizationError
 from apps.shared.domain.actor import ActorContext
 from apps.tenant_app_service.chat.domain import ThreadDomain
-from apps.tenant_app_service.chat.repository import ThreadRepository
+from apps.tenant_app_service.chat.infrastructure.persistence import ThreadRepository
 from apps.tenant_app_service.chat.thread_service import ThreadService
 
 

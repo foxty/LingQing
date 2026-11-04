@@ -12,9 +12,9 @@ from apps.shared.core.exceptions import AuthorizationError
 from apps.tenant_app_service.auth.adapters import db_user_to_domain, domain_user_to_api
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.token import JwtTokenIssuer
+from apps.tenant_app_service.chat.application.threads.thread_service import ThreadService
 from apps.tenant_app_service.chat.application.turn_flow import run_non_stream_chat_turn
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse, SimpleMessage
-from apps.tenant_app_service.chat.thread_service import ThreadService
 
 
 async def run_headless_chat_turn(

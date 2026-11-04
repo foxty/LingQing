@@ -12,8 +12,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.exceptions import ThreadBusyError
-from apps.tenant_app_service.chat.agent_run_domain import ACTIVE_AGENT_RUN_STATUSES
-from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
+from apps.tenant_app_service.chat.application.runs.thread_run_service import ThreadRunService
+from apps.tenant_app_service.chat.domain import ACTIVE_AGENT_RUN_STATUSES
 
 
 def thread_advisory_lock_keys(tenant_id: int, thread_id: str) -> tuple[int, int]:
