@@ -4,8 +4,10 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
-from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+from apps.tenant_app_service.chat.infrastructure.persistence import (
+    AgentRunMessageRepository,
+    MainMessageRepository,
+)
 
 
 async def resolve_latest_ai_message_id_for_session(

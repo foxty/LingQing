@@ -13,8 +13,8 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from apps.shared.db.models import ChatThread, Tenant, TenantMembership, User
-from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
-from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+from apps.tenant_app_service.chat.domain import AgentRunStatus
+from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
 from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.server import app
 from tests.integration.helpers.committed_chat_setup import seed_running_human_turn
@@ -191,7 +191,7 @@ async def test_durable_turn_active_run_running_then_idle(durable_chat_setup: dic
     assert running_http.json()["run_status"] == "running"
 
     async with durable_chat_setup["session_local"]() as db:
-        from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+        from apps.tenant_app_service.chat.infrastructure.persistence.main_message_repository import MainMessageRepository
 
         run = await AgentRunRepository(db).get_by_session_id(session_id)
         assert run is not None

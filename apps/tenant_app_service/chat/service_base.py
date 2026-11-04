@@ -7,7 +7,7 @@ from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import AuthorizationError
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_pool import get_agent_pool
-from apps.tenant_app_service.chat.repository import ThreadRepository
+from apps.tenant_app_service.chat.infrastructure.persistence.thread_repository import ThreadRepository
 from apps.tenant_app_service.tenant.adapters import db_tenant_to_domain
 from apps.tenant_app_service.tenant.domain import TenantDomain
 from apps.tenant_app_service.tenant.repository import TenantRepository

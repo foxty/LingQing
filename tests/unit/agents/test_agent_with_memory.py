@@ -218,7 +218,7 @@ class TestAgentWithMemory:
             yield async_session
 
         monkeypatch.setattr(
-            "apps.tenant_app_service.chat.agent_run_port_adapter.app_db_session",
+            "apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter.app_db_session",
             _test_app_db_session,
         )
         config["configurable"]["agent_run_port"] = chat_agent_run_port_for_run(

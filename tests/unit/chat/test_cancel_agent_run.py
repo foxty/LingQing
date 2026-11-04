@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
-from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain, AgentRunStatus
+from apps.tenant_app_service.chat.domain import AgentRunDomain, AgentRunStatus
 from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
 
 

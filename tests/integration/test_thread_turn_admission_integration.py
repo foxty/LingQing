@@ -88,8 +88,8 @@ async def test_guard_allows_thread_after_ai_response(committed_chat_setup: dict)
             user_id=committed_chat_setup["owner_id"],
         )
         from apps.shared.db.models import AgentRunMessage
-        from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
-        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+        from apps.tenant_app_service.chat.domain import AgentRunStatus
+        from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
 
         run = await AgentRunRepository(db).get_by_session_id(session_id)
         assert run is not None

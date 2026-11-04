@@ -30,6 +30,20 @@ from .utils import build_hitl_rejected_ai_message
 HITL_CANCEL_REASON_SUPERSEDED: str = "superseded_by_new_user_message"
 
 
+def _thread_run_service_for_session(db: AsyncSession, tenant_id: int):
+    """Construct ``ThreadRunService`` (patch target for unit tests)."""
+    from apps.tenant_app_service.chat.application.runs.thread_run_service import ThreadRunService
+
+    return ThreadRunService(db, tenant_id)
+
+
+def _agent_run_message_repository(db: AsyncSession):
+    """Construct run message repo (patch target for unit tests)."""
+    from apps.tenant_app_service.chat.infrastructure.persistence import AgentRunMessageRepository
+
+    return AgentRunMessageRepository(db)
+
+
 class HitlApprovalService:
     """Business logic for HITL approvals."""
 
@@ -287,10 +301,6 @@ class HitlApprovalService:
         if resolution != HITL_RESOLUTION_REJECTED:
             raise ValidationError(f"unsupported terminal resolution: {resolution}")
 
-        from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
-        from apps.tenant_app_service.chat.agent_run_message_repository import AgentRunMessageRepository
-        from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-
         tool_name = approval.tool_name or "tool"
         ai_content = build_hitl_rejected_ai_message(tool_name)
 
@@ -301,8 +311,8 @@ class HitlApprovalService:
             )
             return ai_content
 
-        run_repo = AgentRunRepository(self.db)
-        run = await run_repo.get_by_session_id(approval.session_id)
+        run_finalize = _thread_run_service_for_session(self.db, self.tenant_id)
+        run = await run_finalize.get_run_by_session_id(approval.session_id)
         if not run:
             self.logger.warning(
                 "Terminal HITL resolution missing agent run for session_id=%s proposal_id=%s",
@@ -311,17 +321,10 @@ class HitlApprovalService:
             )
             return ai_content
 
-        run_message_repo = AgentRunMessageRepository(self.db)
-        from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
-
-        run_finalize = ThreadRunService(self.db, self.tenant_id)
+        run_message_repo = _agent_run_message_repository(self.db)
         for message in await run_message_repo.get_messages_by_session(approval.session_id):
             if message.type == "ai" and message.content == ai_content:
-                await run_repo.set_status(
-                    run.id,
-                    status=AgentRunStatus.COMPLETED,
-                    completed_at=datetime.now(UTC),
-                )
+                await run_finalize.mark_run_completed(run.id)
                 await run_finalize.finalize_run_for_main(run.id)
                 self._schedule_thread_rollup_after_terminal_run(
                     session_id=approval.session_id,
@@ -338,7 +341,9 @@ class HitlApprovalService:
         config = self._build_persistence_config(approval)
         config["configurable"]["run_id"] = run.id
         from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
-        from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
+        from apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter import (
+            chat_agent_run_port_for_run,
+        )
 
         scope = AgentRunScope(
             tenant_id=self.tenant_id,
@@ -352,11 +357,7 @@ class HitlApprovalService:
             run_id=run.id,
         )
         await run_port.persist_run_messages(scope, [ai_message], config, deduplicate=True)
-        await run_repo.set_status(
-            run.id,
-            status=AgentRunStatus.COMPLETED,
-            completed_at=datetime.now(UTC),
-        )
+        await run_finalize.mark_run_completed(run.id)
         await run_finalize.finalize_run_for_main(run.id)
         self._schedule_thread_rollup_after_terminal_run(
             session_id=approval.session_id,

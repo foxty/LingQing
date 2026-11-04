@@ -9,10 +9,10 @@ import pytest
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 
 from apps.tenant_app_service.agents.memory.agent_run_summary_service import compact_prepared_messages
-from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-from apps.tenant_app_service.chat.agent_run_summary_repository import AgentRunSummaryRepository
+from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
+from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_summary_repository import AgentRunSummaryRepository
 from apps.tenant_app_service.chat.conversation_memory_manager import ConversationMemoryManager
-from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+from apps.tenant_app_service.chat.infrastructure.persistence.main_message_repository import MainMessageRepository
 from apps.tenant_app_service.chat.agent_run_port_adapter import chat_agent_run_port_for_run
 
 pytestmark = pytest.mark.integration

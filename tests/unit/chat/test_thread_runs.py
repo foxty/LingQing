@@ -7,7 +7,7 @@ from uuid import uuid4
 import pytest
 from langchain_core.messages import AIMessage
 
-from apps.tenant_app_service.chat.agent_run_domain import (
+from apps.tenant_app_service.chat.domain import (
     AgentRunStatus,
     ThreadMainMessageDomain,
     drop_run_rows_duplicating_promoted_main,
@@ -368,7 +368,7 @@ async def test_send_human_two_runs_distinct_invoke_index():
     )
 
     async def _create_run(**kwargs):
-        from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain
+        from apps.tenant_app_service.chat.domain import AgentRunDomain
 
         return AgentRunDomain(
             id=str(uuid4()),
@@ -405,7 +405,7 @@ def test_run_status_allows_thread_rollup():
 
 
 def test_find_promotable_final_ai_row_skips_tool_call_ai():
-    from apps.tenant_app_service.chat.agent_run_domain import find_promotable_final_ai_row
+    from apps.tenant_app_service.chat.domain import find_promotable_final_ai_row
 
     tool_ai = MagicMock(type="ai", message_id="a1", tool_calls=[{"id": "1"}])
     final_ai = MagicMock(type="ai", message_id="a2", tool_calls=None)
@@ -415,7 +415,7 @@ def test_find_promotable_final_ai_row_skips_tool_call_ai():
 
 @pytest.mark.asyncio
 async def test_finalize_run_for_main_promotes_and_completes():
-    from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain, AgentRunStatus
+    from apps.tenant_app_service.chat.domain import AgentRunDomain, AgentRunStatus
 
     db = AsyncMock()
     service = ThreadRunService(db, tenant_id=1)
@@ -451,7 +451,7 @@ async def test_finalize_run_for_main_promotes_and_completes():
 
 @pytest.mark.asyncio
 async def test_finalize_run_for_main_skips_awaiting_hitl():
-    from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain, AgentRunStatus
+    from apps.tenant_app_service.chat.domain import AgentRunDomain, AgentRunStatus
 
     db = AsyncMock()
     service = ThreadRunService(db, tenant_id=1)
@@ -531,9 +531,16 @@ async def test_prepare_skips_legacy_human_persist_for_normal_send():
     service.create_thread_title_if_1st_message = AsyncMock(return_value=None)
     service._reconcile_active_runs_before_new_turn = AsyncMock()
 
-    with patch("apps.tenant_app_service.chat.turn_service.guard_thread_turn_start", AsyncMock()):
-        with patch.object(ThreadRunService, "send_human_and_create_runs", AsyncMock()) as send_mock:
-            from apps.tenant_app_service.chat.agent_run_domain import AgentRunDomain
+    with patch("apps.tenant_app_service.chat.application.turn.prepare_complete.guard_thread_turn_start", AsyncMock()):
+        with (
+            patch.object(
+                ThreadRunService,
+                "send_human_and_create_runs",
+                AsyncMock(),
+            ) as send_mock,
+            patch.object(ThreadRunService, "mark_run_running", AsyncMock()),
+        ):
+            from apps.tenant_app_service.chat.domain import AgentRunDomain
 
             send_mock.return_value = (
                 "human-1",
@@ -566,12 +573,13 @@ async def test_get_tool_call_detail_returns_none_when_run_store_misses():
     service = ThreadService(tenant_id=1, db=db)
 
     with patch(
-        "apps.tenant_app_service.chat.agent_run_repository.AgentRunRepository.get_by_session_id",
+        "apps.tenant_app_service.chat.application.runs.thread_run_service.ThreadRunService.get_run_by_session_id",
         new_callable=AsyncMock,
         return_value=None,
     ):
         with patch(
-            "apps.tenant_app_service.chat.agent_run_message_repository.AgentRunMessageRepository.get_tool_message_by_call_id",
+            "apps.tenant_app_service.chat.infrastructure.persistence.agent_run_message_repository"
+            ".AgentRunMessageRepository.get_tool_message_by_call_id",
             new_callable=AsyncMock,
             return_value=None,
         ):
@@ -596,12 +604,13 @@ async def test_get_tool_call_detail_retries_run_lookup_without_run_id():
     run_row.additional_kwargs = {"tool_call_id": "call_xyz"}
 
     with patch(
-        "apps.tenant_app_service.chat.agent_run_repository.AgentRunRepository.get_by_session_id",
+        "apps.tenant_app_service.chat.application.runs.thread_run_service.ThreadRunService.get_run_by_session_id",
         new_callable=AsyncMock,
         return_value=run,
     ):
         with patch(
-            "apps.tenant_app_service.chat.agent_run_message_repository.AgentRunMessageRepository.get_tool_message_by_call_id",
+            "apps.tenant_app_service.chat.infrastructure.persistence.agent_run_message_repository"
+            ".AgentRunMessageRepository.get_tool_message_by_call_id",
             new_callable=AsyncMock,
             side_effect=[None, run_row],
         ) as get_tool:
@@ -610,11 +619,11 @@ async def test_get_tool_call_detail_retries_run_lookup_without_run_id():
                 return_value=MagicMock(),
             ):
                 with patch(
-                    "apps.tenant_app_service.chat.thread_service.chat_message_to_domain",
+                    "apps.tenant_app_service.chat.application.threads.thread_service.chat_message_to_domain",
                     return_value=MagicMock(),
                 ):
                     with patch(
-                        "apps.tenant_app_service.chat.thread_service.domain_message_to_api",
+                        "apps.tenant_app_service.chat.application.threads.thread_service.domain_message_to_api",
                         return_value=MagicMock(role="tool"),
                     ):
                         result = await service.get_tool_call_detail(

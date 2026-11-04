@@ -84,6 +84,10 @@ convention = "google"
 disable_error_code = ["import-untyped"]
 
 [tool.pytest.ini_options]
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
 filterwarnings = [
     "ignore::langchain_core._api.deprecation.LangChainPendingDeprecationWarning",
+    # SQLAlchemy 2.1+: migrate ORM relationships to lazy=\"raise\" in a dedicated change.
+    "ignore::sqlalchemy.exc.SADeprecationWarning",
 ]

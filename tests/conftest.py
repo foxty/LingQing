@@ -49,6 +49,11 @@ _isolate_parser_env()
 def pytest_configure(config):
     """Configure pytest markers and options."""
     _isolate_parser_env()
+    config.addinivalue_line("filterwarnings", "ignore::sqlalchemy.exc.SADeprecationWarning")
+    config.addinivalue_line(
+        "filterwarnings",
+        "ignore::UserWarning:apps.tenant_app_service.agents.agent_base",
+    )
     config.addinivalue_line("markers", "unit: marks tests as unit tests (fast, no external dependencies)")
     config.addinivalue_line("markers", "integration: marks tests as integration tests (require running server)")
     config.addinivalue_line("markers", "slow: marks tests as slow running")

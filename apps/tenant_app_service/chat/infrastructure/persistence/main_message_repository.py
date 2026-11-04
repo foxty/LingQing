@@ -8,7 +8,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import ThreadMainMessage
-from apps.tenant_app_service.chat.agent_run_domain import ThreadMainMessageDomain
+from apps.tenant_app_service.chat.domain import ThreadMainMessageDomain
 
 
 def _to_domain(row: ThreadMainMessage) -> ThreadMainMessageDomain:

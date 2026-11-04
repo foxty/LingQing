@@ -9,9 +9,9 @@ from uuid import uuid4
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import AgentRun, ChatThread
-from apps.tenant_app_service.chat.agent_run_domain import AgentRunStatus
-from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-from apps.tenant_app_service.chat.main_message_repository import MainMessageRepository
+from apps.tenant_app_service.chat.domain import AgentRunStatus
+from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
+from apps.tenant_app_service.chat.infrastructure.persistence.main_message_repository import MainMessageRepository
 
 
 async def seed_stale_running_turn(

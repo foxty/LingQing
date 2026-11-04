@@ -224,7 +224,7 @@ async def test_executor_limit_persisted_and_visible_in_history(
     sample_tenant_user_thread,
 ):
     """ToolExecutor → ConversationMemoryManager → ThreadService history."""
-    from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
+    from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
 
     thread, tenant_id, user_id = sample_tenant_user_thread
     session_id = f"sess-exec-{uuid4().hex[:8]}"

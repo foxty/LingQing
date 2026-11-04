@@ -33,9 +33,7 @@ async def cancel_slack_thread_run_by_run_id(
     run_id: str,
 ) -> str:
     """Resolve thread from run row, cancel, return thread_id."""
-    from apps.tenant_app_service.chat.agent_run_repository import AgentRunRepository
-
-    run = await AgentRunRepository(db).get_run(tenant_id, run_id)
+    run = await ThreadRunService(db, tenant_id).get_run(run_id)
     if not run:
         raise ValidationError("Agent run not found", details={"code": "RUN_NOT_FOUND", "run_id": run_id})
 
