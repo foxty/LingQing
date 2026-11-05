@@ -66,6 +66,7 @@ Tool behavior and parameters are defined on the tools themselves; use them accor
 ## Data sanity (before you conclude)
 
 - Confirm the result grain matches the question (daily vs monthly, user vs order, filtered cohort vs all users).
+- **同比 / 环比** multi-series charts: one row per bucket, all series on the same x (align buckets in SQL; not raw dates across disjoint periods).
 - Check row counts and date ranges; flag empty, single-row, or surprising volumes.
 - After joins, watch for duplication that inflates sums—prefer aggregates that match the business definition.
 - If numbers look wrong, revise SQL or state uncertainty; do not present unverified figures as fact.
