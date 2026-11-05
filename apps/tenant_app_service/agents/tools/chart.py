@@ -59,7 +59,11 @@ async def create_chart_from_structured_data(
         x_label: X-axis label (defaults to x_key)
         y_label: Y-axis label (defaults to y_key; set explicitly for multi-series charts)
         series_key: Column whose values identify the series on each row (pairs with y_key)
-        series_keys: List of columns, each holding one series (e.g. ["region_a", "region_b"])
+        series_keys: List of columns, each holding one series (e.g. ["region_a", "region_b"]).
+            Wide multi-series: every row must share the same x_key value with all series columns
+            populated on that row. When comparing time periods (current vs prior window, 同比 or
+            环比), align data to a shared comparison axis (day-in-window, bucket index); see
+            Examples — do not use raw calendar dates across disjoint periods on one axis.
         z_key: Value column for heatmap intensity
         stacked: With chart_type='bar' and multiple series, stack bars instead of grouping
         subtitle: Optional subtitle under the chart title
@@ -114,7 +118,7 @@ async def create_chart_from_structured_data(
             y_label="Sales",
         )
 
-        # Multi-series line — one column per series (series_keys)
+        # Multi-series line (wide) — same x on every row; both series columns populated per row
         create_chart_from_structured_data(
             chart_type="line",
             data='[{"date":"2026-09-01","current":100,"prior":90},{"date":"2026-09-02","current":110,"prior":95}]',
@@ -245,7 +249,10 @@ async def create_chart_from_sql(
         x_label: X-axis label (defaults to x_key)
         y_label: Y-axis label (defaults to y_key; set explicitly for multi-series charts)
         series_key: Result column that names the series on each row, with y_key as the value column
-        series_keys: Result columns where each column is one series (omit series_key)
+        series_keys: Result columns where each column is one series (omit series_key).
+            Wide multi-series: one shared x per row with all series populated. Period-over-period
+            SQL (同比, 环比, or any aligned current vs prior window) must use a shared comparison
+            axis; see Examples.
         z_key: Result column for heatmap cell values
         stacked: With chart_type='bar' and multiple series, stack bars instead of grouping
         subtitle: Optional subtitle under the chart title
@@ -307,18 +314,22 @@ async def create_chart_from_sql(
             y_label="Sales",
         )
 
-        # Multi-series line — one column per series (series_keys)
+        # Multi-series line — period comparison: align buckets (e.g. day-in-window), pivot wide
         create_chart_from_sql(
             data_source_id=2,
             chart_type="line",
             sql_query=(
-                "SELECT dt, SUM(CASE WHEN yr=2026 THEN amt END) AS current_yr, "
-                "SUM(CASE WHEN yr=2025 THEN amt END) AS prior_yr "
-                "FROM daily GROUP BY dt ORDER BY dt"
+                "WITH daily AS ("
+                "  SELECT DATEDIFF(dt, CASE WHEN yr=2025 THEN DATE'2025-01-01' ELSE DATE'2026-01-01' END) AS day_offset, "
+                "    yr, SUM(amt) AS amt FROM daily_fact GROUP BY 1, 2"
+                ") SELECT DATE_ADD(DATE'2025-01-01', day_offset) AS dt, "
+                "  MAX(CASE WHEN yr=2025 THEN amt END) AS prior_yr, "
+                "  MAX(CASE WHEN yr=2026 THEN amt END) AS current_yr "
+                "FROM daily GROUP BY day_offset, dt ORDER BY day_offset"
             ),
             title="Current vs Prior Year",
             x_key="dt",
-            series_keys=["current_yr", "prior_yr"],
+            series_keys=["prior_yr", "current_yr"],
             x_label="Date",
             y_label="Amount",
         )

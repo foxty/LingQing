@@ -86,7 +86,7 @@ NEVER call platform REST APIs directly (no GET_/dashboards, POST_/dashboards, ca
 
 ## Widget mapping patterns (field_mapping)
 - Metric: `{"value": "<alias>"}`
-- Line/Bar: `{"xAxis": "<x_alias>", "series": ["<y_alias_1>", ...]}`
+- Line/Bar: `{"xAxis": "<x_alias>", "series": ["<y_alias_1>", ...]}`. For multi-series **time comparison** (同比/环比): x must be a **shared bucket** per row with **every** `series` alias populated— not disjoint calendar dates on one axis; row count ≈ window length, not N× periods.
 - Pie: `{"xAxis": "<label_alias>", "value": "<value_alias>"}`
 - Scatter: `{"xAxis": "<x_alias>", "yAxis": "<y_alias>", "size": "<size_alias>?", "color": "<color_alias>?"}`
 - Gauge: `{"value": "<alias>"}`
