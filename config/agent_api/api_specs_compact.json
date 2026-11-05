@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-03T08:23:39.463191+00:00",
+  "generated_at": "2026-11-05T13:36:26.189602+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -6091,6 +6091,10 @@
             },
             "type": "array",
             "title": "Thinking Effort Options"
+          },
+          "default_thinking_effort": {
+            "type": "string",
+            "title": "Default Thinking Effort"
           },
           "exposes_thinking_content": {
             "type": "boolean",

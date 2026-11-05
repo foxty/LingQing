@@ -6,6 +6,7 @@ Used by tenant settings APIs and agent runtime resolution (Phase 2).
 from __future__ import annotations
 
 from copy import deepcopy
+from dataclasses import replace
 from datetime import UTC, datetime
 from typing import Any
 
@@ -36,6 +37,7 @@ from apps.shared.llm_providers.dtos import (
     UpdateLLMModelProfileRequest,
     UpdateLLMProviderRequest,
 )
+from apps.shared.llm_providers.reasoning_options import normalize_reasoning_config
 from apps.shared.llm_providers.repository import _UNSET, LLMModelProfileRepository, LLMProviderRepository
 from apps.shared.llm_providers.runtime_config import (
     seed_params_from_catalog,
@@ -158,6 +160,7 @@ class LLMProviderConfigService:
             if request.reasoning_config is not None
             else seed_reasoning_config_from_catalog(draft, provider_preset_key=preset_key)
         )
+        reasoning_config = normalize_reasoning_config(reasoning_config)
 
         source = ModelProfileSource(request.source)
         profile = await self._profile_repo.create_profile(
@@ -183,7 +186,9 @@ class LLMProviderConfigService:
             provider = await self._require_provider(profile.provider_id)
             preset_key = provider.preset_key.strip() if provider.preset_key and provider.preset_key.strip() else None
             params = seed_params_from_catalog(profile, provider_preset_key=preset_key)
-            reasoning_config = seed_reasoning_config_from_catalog(profile, provider_preset_key=preset_key)
+            reasoning_config = normalize_reasoning_config(
+                seed_reasoning_config_from_catalog(profile, provider_preset_key=preset_key)
+            )
             await self._provider_repo.update_provider(
                 provider,
                 config=seed_provider_config_from_catalog(preset_key),
@@ -193,6 +198,8 @@ class LLMProviderConfigService:
                 params = dict(request.params) if request.params is not None else None
             if "reasoning_config" in request.model_fields_set:
                 reasoning_config = dict(request.reasoning_config) if request.reasoning_config is not None else None
+                if isinstance(reasoning_config, dict):
+                    reasoning_config = normalize_reasoning_config(reasoning_config)
 
         updated = await self._profile_repo.update_profile(
             profile,
@@ -324,14 +331,9 @@ class LLMProviderConfigService:
 
     async def test_profile_connection(self, profile_id: int, api_key: str = "") -> str:
         resolved = await self.resolve_profile(profile_id)
-        key = api_key or resolved.api_key
-        category = ModelCategory.EMBEDDING if resolved.category == ModelProfileCategory.EMBEDDING else ModelCategory.LLM
-        return await self._test_connection(
-            api_base=resolved.api_base,
-            model_id=resolved.model_id,
-            api_key=key,
-            category=category,
-        )
+        if api_key:
+            resolved = replace(resolved, api_key=api_key)
+        return await self._test_resolved_connection(resolved)
 
     async def test_provider_connection(
         self,
@@ -373,12 +375,25 @@ class LLMProviderConfigService:
             resolved_api_base = api_base or provider.embedding_api_base or provider.api_base
 
         key = api_key or self._cipher.decrypt(provider.api_key_encrypted)
-        return await self._test_connection(
-            api_base=resolved_api_base,
+        resolved = ResolvedModelConfig(
+            profile_id=0,
+            profile_name="catalog-test",
+            category=(
+                ModelProfileCategory.EMBEDDING
+                if category == ModelCategory.EMBEDDING
+                else ModelProfileCategory.LLM
+            ),
             model_id=model_id,
+            params=None,
+            provider_id=provider.id,
+            provider_display_name=provider.display_name,
+            provider_type=provider.type,
+            provider_preset_key=provider.preset_key.strip() if provider.preset_key else None,
+            api_base=resolved_api_base,
             api_key=key,
-            category=category,
+            provider_config=deepcopy(provider.config) if provider.config else None,
         )
+        return await self._test_resolved_connection(resolved)
 
     async def test_connection(
         self,
@@ -390,57 +405,51 @@ class LLMProviderConfigService:
         provider_id: int | None = None,
     ) -> str:
         key = api_key
-        if not key and provider_id is not None:
+        provider_type = "openai-compatible"
+        provider_display_name = "test"
+        preset_key: str | None = None
+        pid = 0
+        if provider_id is not None:
             provider = await self._require_provider(provider_id)
-            key = self._cipher.decrypt(provider.api_key_encrypted)
-        return await self._test_connection(api_base=api_base, model_id=model_id, api_key=key, category=category)
+            if not key:
+                key = self._cipher.decrypt(provider.api_key_encrypted)
+            provider_type = provider.type
+            provider_display_name = provider.display_name
+            preset_key = provider.preset_key.strip() if provider.preset_key else None
+            pid = provider.id
+        resolved = ResolvedModelConfig(
+            profile_id=0,
+            profile_name="test",
+            category=(
+                ModelProfileCategory.EMBEDDING
+                if category == ModelCategory.EMBEDDING
+                else ModelProfileCategory.LLM
+            ),
+            model_id=model_id,
+            params=None,
+            provider_id=pid,
+            provider_display_name=provider_display_name,
+            provider_type=provider_type,
+            provider_preset_key=preset_key,
+            api_base=api_base,
+            api_key=key,
+        )
+        return await self._test_resolved_connection(resolved)
 
-    async def _test_connection(
-        self,
-        *,
-        api_base: str,
-        model_id: str,
-        api_key: str,
-        category: ModelCategory,
-    ) -> str:
-        if not api_key:
+    async def _test_resolved_connection(self, resolved: ResolvedModelConfig) -> str:
+        """Probe the provider using the same resolved profile snapshot as agent runtime."""
+        if not resolved.api_key:
             raise ValidationError("API key is required")
-        if not api_base:
+        if not resolved.api_base:
             raise ValidationError("API base URL is required")
-        if not model_id:
+        if not resolved.model_id:
             raise ValidationError("Model ID is required")
 
         try:
-            if category == ModelCategory.EMBEDDING:
-                resolved = ResolvedModelConfig(
-                    profile_id=0,
-                    profile_name="test",
-                    category=ModelProfileCategory.EMBEDDING,
-                    model_id=model_id,
-                    params=None,
-                    provider_id=0,
-                    provider_display_name="test",
-                    provider_type="openai-compatible",
-                    provider_preset_key=None,
-                    api_base=api_base,
-                    api_key=api_key,
-                )
+            if resolved.category == ModelProfileCategory.EMBEDDING:
                 embeddings = create_embeddings(resolved)
                 await embeddings.aembed_query("Hello, this is a connection test.")
             else:
-                resolved = ResolvedModelConfig(
-                    profile_id=0,
-                    profile_name="test",
-                    category=ModelProfileCategory.LLM,
-                    model_id=model_id,
-                    params=None,
-                    provider_id=0,
-                    provider_display_name="test",
-                    provider_type="openai-compatible",
-                    provider_preset_key=None,
-                    api_base=api_base,
-                    api_key=api_key,
-                )
                 llm = create_chat_model(resolved)
                 await llm.ainvoke("Hello, this is a connection test. Please respond with 'OK'.")
         except ValidationError:

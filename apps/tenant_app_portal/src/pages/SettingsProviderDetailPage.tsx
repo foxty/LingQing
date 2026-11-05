@@ -10,6 +10,7 @@ import {
   defaultBadgesForProfile,
   presetDisplayName,
   profileReasoningControlBadge,
+  summarizeConnectionTestMessage,
   unregisteredCatalogModels,
 } from '@/components/models-registry/utils'
 import { Alert, AlertDescription } from '@/components/ui/alert'
@@ -74,7 +75,6 @@ export default function SettingsProviderDetailPage() {
   const [busy, setBusy] = useState(false)
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionTestResult, setConnectionTestResult] = useState<ConnectionTestResult | null>(null)
-
   const provider = providers.find((item) => item.id === numericProviderId)
   const providerProfiles = useMemo(
     () => profiles.filter((profile) => profile.provider_id === numericProviderId),
@@ -85,25 +85,33 @@ export default function SettingsProviderDetailPage() {
     if (!query) {
       return providerProfiles
     }
-    return providerProfiles.filter((profile) => profile.model_id.toLowerCase().includes(query))
+    return providerProfiles.filter(
+      (profile) =>
+        profile.name.toLowerCase().includes(query) ||
+        profile.model_id.toLowerCase().includes(query)
+    )
   }, [providerProfiles, searchQuery])
 
   const catalogSuggestions = provider ? unregisteredCatalogModels(provider, profiles, catalog) : []
+
+  const fetchRegistryData = async () => {
+    const [catalogData, providerData, profileData, defaultsData] = await Promise.all([
+      listCatalogProviders(),
+      listRegistryProviders(),
+      listRegistryProfiles(),
+      getRegistryDefaults(),
+    ])
+    setCatalog(catalogData)
+    setProviders(providerData)
+    setProfiles(profileData)
+    setDefaults(defaultsData)
+  }
 
   const loadAll = async () => {
     setLoading(true)
     setError(null)
     try {
-      const [catalogData, providerData, profileData, defaultsData] = await Promise.all([
-        listCatalogProviders(),
-        listRegistryProviders(),
-        listRegistryProfiles(),
-        getRegistryDefaults(),
-      ])
-      setCatalog(catalogData)
-      setProviders(providerData)
-      setProfiles(profileData)
-      setDefaults(defaultsData)
+      await fetchRegistryData()
     } catch (err) {
       setError(err instanceof Error ? err.message : t(modelsRegistryKey('loadFailed')))
     } finally {
@@ -166,7 +174,9 @@ export default function SettingsProviderDetailPage() {
     } catch (err) {
       setConnectionTestResult({
         ok: false,
-        message: getApiErrorMessage(err, t(modelsRegistryKey('testFailed'))),
+        message: summarizeConnectionTestMessage(
+          getApiErrorMessage(err, t(modelsRegistryKey('testFailed')))
+        ),
       })
     } finally {
       setTestingConnection(false)
@@ -194,6 +204,10 @@ export default function SettingsProviderDetailPage() {
         </Button>
       </div>
     )
+  }
+
+  const openProfileEditor = (profile: LLMModelProfile) => {
+    setEditingProfile(profile)
   }
 
   const presetName = presetDisplayName(provider, catalog)
@@ -317,6 +331,7 @@ export default function SettingsProviderDetailPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
+                  <TableHead className="h-10">{t(modelsRegistryKey('profileName'))}</TableHead>
                   <TableHead className="h-10">{t(modelsRegistryKey('modelId'))}</TableHead>
                   <TableHead className="h-10 w-28">{t(modelsRegistryKey('category'))}</TableHead>
                   <TableHead className="h-10 w-44">{t(modelsRegistryKey('runtimeDefaultCol'))}</TableHead>
@@ -326,7 +341,18 @@ export default function SettingsProviderDetailPage() {
               <TableBody>
                 {filteredProfiles.map((profile) => (
                   <TableRow key={profile.id}>
-                    <TableCell className="py-2.5 font-mono text-xs">{profile.model_id}</TableCell>
+                    <TableCell className="py-2.5">
+                      <button
+                        type="button"
+                        onClick={() => openProfileEditor(profile)}
+                        className="text-left text-sm font-medium hover:underline"
+                      >
+                        {profile.name}
+                      </button>
+                    </TableCell>
+                    <TableCell className="py-2.5 font-mono text-xs text-muted-foreground">
+                      {profile.model_id}
+                    </TableCell>
                     <TableCell className="py-2.5">
                       <Badge variant="outline" className="font-normal">
                         {profile.category === 'embedding'
@@ -365,9 +391,7 @@ export default function SettingsProviderDetailPage() {
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
                           <DropdownMenuItem
-                            onClick={() => {
-                              setEditingProfile(profile)
-                            }}
+                            onClick={() => openProfileEditor(profile)}
                           >
                             {t(modelsRegistryKey('editModel'))}
                           </DropdownMenuItem>

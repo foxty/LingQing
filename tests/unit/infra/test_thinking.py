@@ -40,6 +40,19 @@ def test_coerce_uses_first_option_as_default():
     assert value == "none"
 
 
+def test_coerce_uses_profile_default_thinking_effort():
+    resolved = _resolved(
+        reasoning_config={
+            "supports_thinking": True,
+            "thinking_effort_options": ["none", "low", "max"],
+            "default_thinking_effort": "max",
+        }
+    )
+    value, supports = coerce_thinking_effort_value(None, resolved)
+    assert supports is True
+    assert value == "max"
+
+
 def test_coerce_rejects_unknown_selection():
     resolved = _resolved(
         reasoning_config={

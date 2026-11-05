@@ -7,7 +7,7 @@ from typing import Any
 from apps.shared.llm_providers.domain import ResolvedModelConfig
 from apps.shared.llm_providers.reasoning_options import (
     ThinkingEffortOption,
-    default_thinking_effort_value,
+    default_thinking_effort_from_reasoning_config,
     thinking_effort_options_from_reasoning_config,
 )
 from apps.shared.llm_providers.runtime_types import ThinkingRequestMode
@@ -44,7 +44,7 @@ def coerce_thinking_effort_value(
     if not options:
         return "", False
 
-    default = default_thinking_effort_value(options)
+    default = default_thinking_effort_from_reasoning_config(resolved.reasoning_config)
     allowed = {opt["value"] for opt in options}
     if requested is None or not str(requested).strip():
         return default, True

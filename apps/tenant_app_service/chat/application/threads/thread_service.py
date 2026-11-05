@@ -417,7 +417,7 @@ class ThreadService(ChatServiceBase):
     async def agent_thinking_effort_control(self, agent_id: int, actor: ActorContext) -> dict[str, object]:
         """Workbench thinking control from the agent model profile DB snapshot."""
         from apps.shared.infra.llm.thinking import list_thinking_effort_options, model_supports_thinking
-        from apps.shared.llm_providers.reasoning_options import default_thinking_effort_value
+        from apps.shared.llm_providers.reasoning_options import default_thinking_effort_from_reasoning_config
         from apps.shared.llm_providers.service import LLMProviderConfigService
         from apps.tenant_app_service.agent_catalog.adapters import resolve_assignable_skills
         from apps.tenant_app_service.agent_catalog.services import AgentCatalogService
@@ -436,7 +436,9 @@ class ThreadService(ChatServiceBase):
         return {
             "enabled": enabled,
             "options": options,
-            "default_value": default_thinking_effort_value(options) if options else "",
+            "default_value": default_thinking_effort_from_reasoning_config(resolved.reasoning_config)
+            if options
+            else "",
             "model_id": resolved.model_id,
             "profile_name": resolved.profile_name,
         }

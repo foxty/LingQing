@@ -77,7 +77,9 @@ const en = {
   paramTopP: 'Top P',
   reasoningOptions: 'Reasoning options',
   reasoningOptionsEmpty: 'No options yet — add at least one wire value.',
-  reasoningOptionsHint: 'First option is the default at runtime. Reset from catalog to copy platform YAML.',
+  reasoningOptionsHint:
+    'Choose a default effort for channels without per-turn control (Slack, scheduled runs). If unset, the first option applies.',
+  defaultThinkingEffort: 'Default reasoning effort',
   reasoningOptionValue: 'Wire value',
   reasoningOptionName: 'Label (optional)',
   addReasoningOption: 'Add option',
@@ -164,7 +166,9 @@ const zh = {
   paramTopP: 'Top P',
   reasoningOptions: '推理档位',
   reasoningOptionsEmpty: '暂无档位 — 请至少添加一个 wire 值。',
-  reasoningOptionsHint: '第一项为运行时默认。可从目录重置以同步平台 YAML。',
+  reasoningOptionsHint:
+    '为无法按轮选择深度的通道（Slack、定时任务）指定默认档位；未设置时使用列表第一项。',
+  defaultThinkingEffort: '默认推理深度',
   reasoningOptionValue: 'Wire 值',
   reasoningOptionName: '显示名称（可选）',
   addReasoningOption: '添加档位',

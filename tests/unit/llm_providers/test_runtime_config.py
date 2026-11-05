@@ -43,3 +43,32 @@ def test_seed_reasoning_config_from_catalog_model():
     assert config is not None
     assert config["supports_thinking"] is True
     assert [o["value"] for o in config["thinking_effort_options"]] == ["low", "high", "max"]
+
+
+def test_seed_reasoning_config_reads_catalog_default_thinking_effort(monkeypatch):
+    from apps.shared.infra.llm.model_profile import ModelProfile
+    from apps.shared.llm_providers import runtime_config
+
+    fake_profile = ModelProfile(
+        key="test/gateway-model",
+        name="Gateway Model",
+        provider="databricks",
+        model_id="system.ai.test-model",
+        metadata={
+            "supports_thinking": True,
+            "thinking_effort_options": ["low", "high", "max"],
+            "default_thinking_effort": "max",
+        },
+    )
+
+    def fake_catalog_model_profile(**_kwargs):
+        return fake_profile
+
+    monkeypatch.setattr(runtime_config, "_catalog_model_profile", fake_catalog_model_profile)
+
+    config = seed_reasoning_config_from_catalog(
+        _llm_profile(catalog_model_key="test/gateway-model", model_id="system.ai.test-model"),
+        provider_preset_key="databricks-ai-gateway",
+    )
+    assert config is not None
+    assert config.get("default_thinking_effort") == "max"
