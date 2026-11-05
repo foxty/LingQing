@@ -234,3 +234,92 @@ async def seed_running_human_turn(
     )
     await session.commit()
     return trigger_message_id
+
+
+async def seed_awaiting_hitl_turn(
+    session: AsyncSession,
+    *,
+    thread_id: str,
+    agent_id: int,
+    session_id: str,
+    tenant_id: int | None = None,
+    user_id: int | None = None,
+    content: str = "paused for approval",
+) -> str:
+    """Main-line human + AWAITING_HITL agent run (new user turns should not be blocked)."""
+    from apps.tenant_app_service.chat.domain import AgentRunStatus
+    from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
+    from apps.tenant_app_service.chat.infrastructure.persistence.main_message_repository import MainMessageRepository
+
+    thread = await session.get(ChatThread, thread_id)
+    if thread is None:
+        if tenant_id is None or user_id is None:
+            raise ValueError("tenant_id and user_id required when thread does not exist")
+        session.add(
+            ChatThread(
+                id=thread_id,
+                tenant_id=tenant_id,
+                user_id=user_id,
+                agent_id=agent_id,
+                title="hitl paused seed",
+                message_count=1,
+            )
+        )
+        await session.flush()
+        resolved_tenant_id = tenant_id
+    else:
+        resolved_tenant_id = thread.tenant_id
+
+    trigger_message_id = f"{thread_id}-human-{uuid4().hex[:6]}"
+    await MainMessageRepository(session).insert_human(
+        message_id=trigger_message_id,
+        thread_id=thread_id,
+        content=content,
+    )
+    await AgentRunRepository(session).create_run(
+        tenant_id=resolved_tenant_id,
+        thread_id=thread_id,
+        agent_id=agent_id,
+        trigger_message_id=trigger_message_id,
+        invoke_index=0,
+        session_id=session_id,
+        status=AgentRunStatus.AWAITING_HITL,
+    )
+    await session.commit()
+    return trigger_message_id
+
+
+async def seed_pending_hitl_proposal(
+    session: AsyncSession,
+    *,
+    tenant_id: int,
+    thread_id: str,
+    agent_id: int,
+    session_id: str,
+    requested_by: int,
+    proposal_id: str | None = None,
+    tool_name: str = "hitl_test_echo",
+) -> str:
+    """Pending HITL row anchored to a paused run session."""
+    from apps.shared.db.models import HitlApproval
+    from apps.tenant_app_service.hitl.domain import HITL_STATUS_PENDING
+
+    resolved_proposal_id = proposal_id or f"hitl_{uuid4().hex[:12]}"
+    session.add(
+        HitlApproval(
+            tenant_id=tenant_id,
+            thread_id=thread_id,
+            session_id=session_id,
+            agent_id=agent_id,
+            proposal_id=resolved_proposal_id,
+            version=1,
+            tool_name=tool_name,
+            tool_args={"message": "integration seed"},
+            args_hash=uuid4().hex,
+            risk_level="low",
+            status=HITL_STATUS_PENDING,
+            requested_by=requested_by,
+        )
+    )
+    await session.commit()
+    return resolved_proposal_id

@@ -1,5 +1,6 @@
 """Agent run aggregate, state, status, and policies."""
 
+from apps.tenant_app_service.chat.domain.agent_run.closure import RunClosureOutcome
 from apps.tenant_app_service.chat.domain.agent_run.policies import (
     RUN_STALE_ACTIVE_SECONDS,
     is_stale_active_run,
@@ -10,6 +11,7 @@ from apps.tenant_app_service.chat.domain.agent_run.state import AgentRunDomain, 
 from apps.tenant_app_service.chat.domain.agent_run.status import (
     ACTIVE_AGENT_RUN_STATUSES,
     CANCELLABLE_AGENT_RUN_STATUSES,
+    EXECUTING_AGENT_RUN_STATUSES,
     TERMINAL_AGENT_RUN_STATUSES,
     AgentRunStatus,
 )
@@ -20,7 +22,9 @@ from apps.tenant_app_service.chat.domain.agent_run.transitions import (
 
 __all__ = [
     "ACTIVE_AGENT_RUN_STATUSES",
+    "EXECUTING_AGENT_RUN_STATUSES",
     "AgentRun",
+    "RunClosureOutcome",
     "AtomicStatusTransition",
     "RunStatusUpdate",
     "AgentRunDomain",

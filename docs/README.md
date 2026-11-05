@@ -13,8 +13,7 @@ Public docs use **kebab-case** English filenames.
 
 | Document | Description |
 | --- | --- |
-| [testing-guide.md](testing-guide.md) | **Testing** — strategy, patterns, commands, CI |
-| [../tests/README.md](../tests/README.md) | One-page command cheat sheet |
+| [testing-guide.md](testing-guide.md) | **Testing** — strategy, layer → test type, commands, CI |
 
 ## Deploy & operations
 

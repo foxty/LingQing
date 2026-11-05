@@ -26,12 +26,18 @@ from apps.tenant_app_service.agent_ingress.slack.messages import SlackMessageKey
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
-from apps.tenant_app_service.chat.turn_admission import (
+from apps.tenant_app_service.chat.application.turn.admission import (
     guard_thread_turn_start,
     try_acquire_thread_turn_xact_lock,
 )
+from apps.tenant_app_service.chat.domain import AgentRunStatus
+from apps.tenant_app_service.hitl.domain import HITL_STATUS_PENDING
 from apps.tenant_app_service.server import app
-from tests.integration.helpers.committed_chat_setup import seed_running_human_turn
+from tests.integration.helpers.committed_chat_setup import (
+    seed_awaiting_hitl_turn,
+    seed_pending_hitl_proposal,
+    seed_running_human_turn,
+)
 from tests.integration.helpers.slow_agent_turn import patch_fast_agent_graph, patch_in_flight_agent_graph
 from tests.slack.fake_slack import make_slack_signature_headers
 from tests.slack.slack_event_factory import make_app_mention_event, make_event_callback_payload
@@ -69,6 +75,139 @@ async def test_guard_rejects_thread_with_running_human_turn(committed_chat_setup
     assert exc_info.value.details.get("reason") == "active_agent_run"
     assert exc_info.value.details.get("run_status") == "running"
     assert exc_info.value.details.get("session_id") == session_id
+
+
+@pytest.mark.asyncio
+async def test_guard_allows_thread_with_awaiting_hitl_run(committed_chat_setup: dict):
+    thread_id = committed_chat_setup["thread_id"]
+    tenant_id = committed_chat_setup["tenant_id"]
+    agent_id = committed_chat_setup["agent_id"]
+    session_id = f"sess-hitl-{uuid4().hex[:8]}"
+
+    async with committed_chat_setup["session_local"]() as db:
+        await seed_awaiting_hitl_turn(
+            db,
+            thread_id=thread_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            tenant_id=tenant_id,
+            user_id=committed_chat_setup["owner_id"],
+        )
+
+    async with committed_chat_setup["session_local"]() as db:
+        await guard_thread_turn_start(
+            db,
+            tenant_id=tenant_id,
+            thread_id=thread_id,
+            agent_id=agent_id,
+            skip_busy_check=False,
+        )
+
+
+@pytest.mark.asyncio
+async def test_reconcile_before_turn_leaves_awaiting_hitl_run(committed_chat_setup: dict):
+    from apps.tenant_app_service.chat.application.turn.reconcile_before_turn_flow import (
+        execute_reconcile_before_new_turn,
+    )
+    from apps.tenant_app_service.chat.domain import AgentRunStatus
+    from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
+
+    thread_id = committed_chat_setup["thread_id"]
+    tenant_id = committed_chat_setup["tenant_id"]
+    agent_id = committed_chat_setup["agent_id"]
+    session_id = f"sess-reconcile-{uuid4().hex[:8]}"
+
+    async with committed_chat_setup["session_local"]() as db:
+        await seed_awaiting_hitl_turn(
+            db,
+            thread_id=thread_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            tenant_id=tenant_id,
+            user_id=committed_chat_setup["owner_id"],
+        )
+
+    async with committed_chat_setup["session_local"]() as db:
+        await execute_reconcile_before_new_turn(
+            db,
+            tenant_id,
+            thread_id=thread_id,
+            agent_id=agent_id,
+        )
+        run = await AgentRunRepository(db).get_by_session_id(session_id)
+        assert run is not None
+        assert run.status == AgentRunStatus.AWAITING_HITL
+
+
+@pytest.mark.asyncio
+async def test_post_chat_accepts_second_message_while_awaiting_hitl(
+    committed_chat_setup: dict,
+    monkeypatch,
+):
+    from apps.shared.db.models import HitlApproval
+    from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_repository import AgentRunRepository
+
+    patch_fast_agent_graph(monkeypatch)
+    thread_id = committed_chat_setup["thread_id"]
+    tenant_id = committed_chat_setup["tenant_id"]
+    agent_id = committed_chat_setup["agent_id"]
+    session_id = f"sess-hitl-http-{uuid4().hex[:8]}"
+    proposal_id = f"hitl_{uuid4().hex[:12]}"
+
+    async with committed_chat_setup["session_local"]() as db:
+        await seed_awaiting_hitl_turn(
+            db,
+            thread_id=thread_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            tenant_id=tenant_id,
+            user_id=committed_chat_setup["owner_id"],
+        )
+        await seed_pending_hitl_proposal(
+            db,
+            tenant_id=tenant_id,
+            thread_id=thread_id,
+            agent_id=agent_id,
+            session_id=session_id,
+            requested_by=committed_chat_setup["owner_id"],
+            proposal_id=proposal_id,
+        )
+
+    async with committed_chat_setup["session_local"]() as db:
+        before = await db.scalar(
+            select(func.count())
+            .select_from(ThreadMainMessage)
+            .where(ThreadMainMessage.thread_id == thread_id, ThreadMainMessage.type == "human")
+        )
+
+    client = TestClient(app)
+    response = client.post(
+        "/chat",
+        headers=committed_chat_setup["owner_headers"],
+        json=_chat_post_body(committed_chat_setup, content="follow-up while hitl open"),
+    )
+    assert response.status_code == 200, response.text
+
+    async with committed_chat_setup["session_local"]() as db:
+        after = await db.scalar(
+            select(func.count())
+            .select_from(ThreadMainMessage)
+            .where(ThreadMainMessage.thread_id == thread_id, ThreadMainMessage.type == "human")
+        )
+        assert after == before + 1
+
+        paused = await AgentRunRepository(db).get_by_session_id(session_id)
+        assert paused is not None
+        assert paused.status == AgentRunStatus.AWAITING_HITL
+
+        pending = await db.scalar(
+            select(HitlApproval).where(
+                HitlApproval.tenant_id == tenant_id,
+                HitlApproval.proposal_id == proposal_id,
+            )
+        )
+        assert pending is not None
+        assert pending.status == HITL_STATUS_PENDING
 
 
 @pytest.mark.asyncio
@@ -189,7 +328,6 @@ async def test_prepare_chat_turn_rejects_while_run_in_progress(committed_chat_se
 
     service = ChatTurnService(tenant_id, AsyncMock())
     service._resolve_agent_id = AsyncMock(return_value=agent_id)
-    service._cancel_superseded_hitl_if_needed = AsyncMock()
     agent_graph = AsyncMock()
     agent_graph.get_name = lambda: "Agent"
     service._get_agent_graph = AsyncMock(return_value=(agent_graph, None))

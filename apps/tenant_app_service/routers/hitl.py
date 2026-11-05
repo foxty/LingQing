@@ -10,6 +10,8 @@ from apps.shared.core.exceptions import AuthorizationError
 from apps.shared.db.models import HitlApproval
 from apps.shared.db.session import get_db
 from apps.shared.schemas.user import UserDTO
+from apps.tenant_app_service.hitl.application.approve_flow import execute_hitl_approve
+from apps.tenant_app_service.hitl.application.reject_flow import execute_hitl_reject
 from apps.tenant_app_service.hitl.application.resume_flow import (
     assert_hitl_resume_allowed,
     iter_hitl_resume_stream_committed,
@@ -64,11 +66,12 @@ async def approve_approval(
     current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
     db: AsyncSession = Depends(get_db),
 ):
-    service = HitlApprovalService(current_user.tenant_id, db)
-    current = await service.get_approval(proposal_id)
+    current = await HitlApprovalService(current_user.tenant_id, db).get_approval(proposal_id)
     if current.requested_by != current_user.id:
         raise AuthorizationError("You are not allowed to approve this HITL proposal")
-    approval = await service.approve(
+    approval = await execute_hitl_approve(
+        db,
+        current_user.tenant_id,
         proposal_id=proposal_id,
         version=request.version,
         user_id=current_user.id,
@@ -89,11 +92,12 @@ async def reject_approval(
     current_user: UserDTO = Depends(require_permission(Permissions.CHAT_ACCESS)),
     db: AsyncSession = Depends(get_db),
 ):
-    service = HitlApprovalService(current_user.tenant_id, db)
-    current = await service.get_approval(proposal_id)
+    current = await HitlApprovalService(current_user.tenant_id, db).get_approval(proposal_id)
     if current.requested_by != current_user.id:
         raise AuthorizationError("You are not allowed to reject this HITL proposal")
-    result = await service.reject(
+    result = await execute_hitl_reject(
+        db,
+        current_user.tenant_id,
         proposal_id=proposal_id,
         version=request.version,
         user_id=current_user.id,

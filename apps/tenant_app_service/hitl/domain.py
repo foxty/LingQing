@@ -4,8 +4,6 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Literal
 
-HITL_RESOLUTION_REJECTED: Final = "rejected"
-
 HITL_STATUS_PENDING: Final = "pending"
 HITL_STATUS_APPROVED: Final = "approved"
 HITL_STATUS_REJECTED: Final = "rejected"

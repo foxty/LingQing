@@ -189,7 +189,7 @@ class TestHitlApprovalService:
         service.repository.save = AsyncMock(return_value=existing)
 
         with pytest.raises(ValidationError) as exc_info:
-            await service.reject(
+            await service.set_rejected(
                 proposal_id="hitl_1",
                 version=4,
                 user_id=100,
@@ -199,18 +199,3 @@ class TestHitlApprovalService:
         assert exc_info.value.details.get("status") == HITL_STATUS_EXPIRED
         assert existing.status == HITL_STATUS_EXPIRED
         service.repository.save.assert_awaited_once_with(existing)
-
-    async def test_cancel_superseded_pending_for_thread(self):
-        db = AsyncMock()
-        service = HitlApprovalService(tenant_id=1, db=db)
-        service.repository = MagicMock()
-        service.repository.cancel_all_pending_by_thread = AsyncMock(return_value=2)
-
-        cancelled = await service.cancel_superseded_pending_for_thread("thread_1")
-
-        assert cancelled == 2
-        service.repository.cancel_all_pending_by_thread.assert_awaited_once_with(
-            1,
-            "thread_1",
-            reason="superseded_by_new_user_message",
-        )

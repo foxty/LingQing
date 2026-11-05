@@ -1,10 +1,10 @@
-"""Chat turn application mixins — composed by ``ChatTurnService``."""
+"""Streaming turn application use case — LangGraph SSE, closure, HITL resume."""
 
 from __future__ import annotations
 
 import asyncio
 import json
-from typing import AsyncIterator
+from typing import TYPE_CHECKING, AsyncIterator
 
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.context import extract_runtime_context
@@ -14,16 +14,55 @@ from apps.tenant_app_service.chat.domain import AgentRun
 from apps.tenant_app_service.chat.schemas import ChatRequest
 from apps.tenant_app_service.chat.streaming import (
     PreparedChatStream,
-    format_user_stream_error,
     is_transient_postgres_connection_error,
     user_stream_error_sse_payload,
 )
 
+if TYPE_CHECKING:
+    from apps.tenant_app_service.chat.application.turn.service import ChatTurnService
 
-class ChatTurnStreamMixin:
-    _format_user_stream_error = staticmethod(format_user_stream_error)
 
-    async def _finish_graph_stream(
+class StreamTurnUseCase:
+    """Stream execution and teardown; composed by ``ChatTurnService``."""
+
+    __slots__ = ("_host",)
+
+    def __init__(self, host: ChatTurnService) -> None:
+        self._host = host
+
+    def schedule_run_closure_rollup(
+        self,
+        *,
+        session_id: str,
+        thread_id: str | None,
+        run_id: str | None = None,
+    ) -> None:
+        from apps.tenant_app_service.chat.application.runs.closure import schedule_run_closure_rollup
+
+        schedule_run_closure_rollup(
+            self._host.db,
+            self._host.tenant_id,
+            session_id=session_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+    def stream_closure_rollup(
+        self,
+        *,
+        session_id: str,
+        thread_id: str | None,
+        run_id: str | None,
+    ):
+        from apps.tenant_app_service.chat.application.runs.closure import RunClosureRollup
+
+        return RunClosureRollup(
+            session_id=session_id,
+            thread_id=thread_id,
+            run_id=run_id,
+        )
+
+    async def finish_graph_stream(
         self,
         agent_graph,
         config: dict,
@@ -31,6 +70,7 @@ class ChatTurnStreamMixin:
         *,
         failed: bool = False,
         cancelled: bool = False,
+        rollup=None,
     ) -> None:
         from apps.tenant_app_service.agents.langgraph_invoke import (
             AgentInvokeOutcome,
@@ -38,32 +78,47 @@ class ChatTurnStreamMixin:
         )
 
         if not run_id:
+            if rollup is not None:
+                self.schedule_run_closure_rollup(
+                    session_id=rollup.session_id,
+                    thread_id=rollup.thread_id,
+                    run_id=rollup.run_id,
+                )
             return
-        thread_runs = self._thread_runs()
+        thread_runs = self._host._thread_runs()
+        closure_rollup = rollup
         if cancelled:
-            await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.CANCELLED)
+            await thread_runs.on_invoke_outcome(
+                run_id, AgentInvokeOutcome.CANCELLED, rollup=closure_rollup
+            )
             return
         if failed:
             run = await thread_runs.get_run(run_id)
             if run and AgentRun.from_state(run).is_cancelled:
-                await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.CANCELLED)
+                await thread_runs.on_invoke_outcome(
+                    run_id, AgentInvokeOutcome.CANCELLED, rollup=closure_rollup
+                )
                 return
-            await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.FAILED)
+            await thread_runs.on_invoke_outcome(
+                run_id, AgentInvokeOutcome.FAILED, rollup=closure_rollup
+            )
             return
         run = await thread_runs.get_run(run_id)
         if run and AgentRun.from_state(run).is_cancelled:
-            await thread_runs.on_invoke_outcome(run_id, AgentInvokeOutcome.CANCELLED)
+            await thread_runs.on_invoke_outcome(
+                run_id, AgentInvokeOutcome.CANCELLED, rollup=closure_rollup
+            )
             return
         outcome = await classify_invoke_outcome(agent_graph, config)
-        await thread_runs.on_invoke_outcome(run_id, outcome)
+        await thread_runs.on_invoke_outcome(run_id, outcome, rollup=closure_rollup)
 
-    async def _run_is_cancelled_in_db(self, run_id: str | None) -> bool:
+    async def run_is_cancelled_in_db(self, run_id: str | None) -> bool:
         if not run_id:
             return False
-        return await self._thread_runs().is_run_cancelled(run_id)
+        return await self._host._thread_runs().is_run_cancelled(run_id)
 
     @staticmethod
-    def _stream_event_to_sse(event: dict) -> str | None:
+    def stream_event_to_sse(event: dict) -> str | None:
         """Convert an astream_events payload to an SSE data line."""
         tags = event.get("tags", [])
         if "mini-agent" in tags:
@@ -92,7 +147,7 @@ class ChatTurnStreamMixin:
             return f"data: {json.dumps(data)}\n\n"
         return None
 
-    async def _iter_graph_sse_events(
+    async def iter_graph_sse_events(
         self,
         agent_graph,
         graph_input,
@@ -112,7 +167,7 @@ class ChatTurnStreamMixin:
                         version="v2",
                     ):
                         yielded = True
-                        sse_payload = self._stream_event_to_sse(event)
+                        sse_payload = self.stream_event_to_sse(event)
                         if sse_payload:
                             yield sse_payload
                 return
@@ -160,9 +215,9 @@ class ChatTurnStreamMixin:
                 yield line
             return
 
-        tenant = await self.get_tenant_domain()
-        agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
-        config = self._build_runtime_config(
+        tenant = await self._host.get_tenant_domain()
+        agent_graph, capability_profile = await self._host._get_agent_graph(agent_id, current_user)
+        config = self._host._build_runtime_config(
             tenant=tenant,
             current_user=current_user,
             request=request,
@@ -170,7 +225,7 @@ class ChatTurnStreamMixin:
             agent_name=agent_name,
             session_id=session_id,
             access_token=access_token,
-            db_session=self.db,
+            db_session=self._host.db,
             capability_profile=capability_profile,
             run_id=run_id,
             trigger_message_id=trigger_message_id,
@@ -179,14 +234,14 @@ class ChatTurnStreamMixin:
         runtime_context = extract_runtime_context(config)
 
         if run_id:
-            if await self._run_is_cancelled_in_db(run_id):
+            if await self.run_is_cancelled_in_db(run_id):
                 return
-            await self._thread_runs().mark_run_running(run_id)
+            await self._host._thread_runs().mark_run_running(run_id)
 
         stream_failed = False
         stream_cancelled = False
         try:
-            async for sse_payload in self._iter_graph_sse_events(
+            async for sse_payload in self.iter_graph_sse_events(
                 agent_graph,
                 {
                     "messages": initial_messages,
@@ -198,7 +253,7 @@ class ChatTurnStreamMixin:
             ):
                 yield sse_payload
         except asyncio.CancelledError:
-            if run_id and await self._run_is_cancelled_in_db(run_id):
+            if run_id and await self.run_is_cancelled_in_db(run_id):
                 stream_cancelled = True
             else:
                 stream_failed = True
@@ -208,25 +263,31 @@ class ChatTurnStreamMixin:
             raise
         finally:
             if run_id:
-                if not stream_cancelled and await self._run_is_cancelled_in_db(run_id):
+                if not stream_cancelled and await self.run_is_cancelled_in_db(run_id):
                     stream_cancelled = True
-                await self._finish_graph_stream(
+                await self.finish_graph_stream(
                     agent_graph,
                     config,
                     run_id,
                     failed=stream_failed,
                     cancelled=stream_cancelled,
+                    rollup=self.stream_closure_rollup(
+                        session_id=session_id,
+                        thread_id=request.thread_id or runtime_context.thread_id,
+                        run_id=run_id,
+                    ),
+                )
+            else:
+                self.schedule_run_closure_rollup(
+                    session_id=session_id,
+                    thread_id=request.thread_id or runtime_context.thread_id,
+                    run_id=run_id,
                 )
 
-        self.logger.info(
+        self._host.logger.info(
             "Background stream completed for agent %s session %s",
             agent_id,
             session_id,
-        )
-        self.schedule_session_end(
-            session_id=session_id,
-            thread_id=request.thread_id or runtime_context.thread_id,
-            run_id=run_id,
         )
 
     async def _run_stream_turn_ephemeral(
@@ -249,7 +310,7 @@ class ChatTurnStreamMixin:
         agent_graph = None
         config = None
         runtime_context = None
-        async with turn_service_session(self.tenant_id) as prep:
+        async with turn_service_session(self._host.tenant_id) as prep:
             tenant = await prep.get_tenant_domain()
             agent_graph, capability_profile = await prep._get_agent_graph(agent_id, current_user)
             config = prep._build_runtime_config(
@@ -267,8 +328,9 @@ class ChatTurnStreamMixin:
                 pin_graph_db_session=False,
             )
             runtime_context = extract_runtime_context(config)
+            prep_stream = StreamTurnUseCase(prep)
             if run_id:
-                if await prep._run_is_cancelled_in_db(run_id):
+                if await prep_stream.run_is_cancelled_in_db(run_id):
                     return
                 await ThreadRunService(prep.db, prep.tenant_id).mark_run_running(run_id)
 
@@ -279,8 +341,9 @@ class ChatTurnStreamMixin:
         }
         stream_failed = False
         stream_cancelled = False
+        prep_stream = StreamTurnUseCase(prep)
         try:
-            async for sse_payload in prep._iter_graph_sse_events(
+            async for sse_payload in prep_stream.iter_graph_sse_events(
                 agent_graph,
                 graph_input,
                 config=config,
@@ -288,8 +351,8 @@ class ChatTurnStreamMixin:
             ):
                 yield sse_payload
         except asyncio.CancelledError:
-            async with turn_service_session(self.tenant_id) as check:
-                if run_id and await check._run_is_cancelled_in_db(run_id):
+            async with turn_service_session(self._host.tenant_id) as check:
+                if run_id and await StreamTurnUseCase(check).run_is_cancelled_in_db(run_id):
                     stream_cancelled = True
                 else:
                     stream_failed = True
@@ -299,26 +362,34 @@ class ChatTurnStreamMixin:
             raise
         finally:
             if run_id:
-                async with turn_service_session(self.tenant_id) as fin:
-                    if not stream_cancelled and await fin._run_is_cancelled_in_db(run_id):
+                async with turn_service_session(self._host.tenant_id) as fin:
+                    fin_stream = StreamTurnUseCase(fin)
+                    if not stream_cancelled and await fin_stream.run_is_cancelled_in_db(run_id):
                         stream_cancelled = True
-                    await fin._finish_graph_stream(
+                    await fin_stream.finish_graph_stream(
                         agent_graph,
                         config,
                         run_id,
                         failed=stream_failed,
                         cancelled=stream_cancelled,
+                        rollup=fin_stream.stream_closure_rollup(
+                            session_id=session_id,
+                            thread_id=request.thread_id or runtime_context.thread_id,
+                            run_id=run_id,
+                        ),
                     )
-            async with turn_service_session(self.tenant_id) as fin:
-                self.logger.info(
+            else:
+                async with turn_service_session(self._host.tenant_id) as fin:
+                    StreamTurnUseCase(fin).schedule_run_closure_rollup(
+                        session_id=session_id,
+                        thread_id=request.thread_id or runtime_context.thread_id,
+                        run_id=run_id,
+                    )
+            async with turn_service_session(self._host.tenant_id) as fin:
+                self._host.logger.info(
                     "Background stream completed for agent %s session %s",
                     agent_id,
                     session_id,
-                )
-                fin.schedule_session_end(
-                    session_id=session_id,
-                    thread_id=request.thread_id or runtime_context.thread_id,
-                    run_id=run_id,
                 )
 
     async def run_hitl_checkpoint_resume_stream(
@@ -338,9 +409,9 @@ class ChatTurnStreamMixin:
         """Resume a paused HITL run from LangGraph checkpoint (after approve)."""
         from langgraph.types import Command
 
-        tenant = await self.get_tenant_domain()
-        agent_graph, capability_profile = await self._get_agent_graph(agent_id, current_user)
-        config = self._build_runtime_config(
+        tenant = await self._host.get_tenant_domain()
+        agent_graph, capability_profile = await self._host._get_agent_graph(agent_id, current_user)
+        config = self._host._build_runtime_config(
             tenant=tenant,
             current_user=current_user,
             request=request,
@@ -348,7 +419,7 @@ class ChatTurnStreamMixin:
             agent_name=agent_name,
             session_id=session_id,
             access_token=access_token,
-            db_session=self.db,
+            db_session=self._host.db,
             capability_profile=capability_profile,
             run_id=run_id,
             trigger_message_id=trigger_message_id,
@@ -358,13 +429,13 @@ class ChatTurnStreamMixin:
         )
         runtime_context = extract_runtime_context(config)
 
-        if await self._run_is_cancelled_in_db(run_id):
+        if await self.run_is_cancelled_in_db(run_id):
             return
 
         stream_failed = False
         stream_cancelled = False
         try:
-            async for sse_payload in self._iter_graph_sse_events(
+            async for sse_payload in self.iter_graph_sse_events(
                 agent_graph,
                 Command(
                     resume={
@@ -378,7 +449,7 @@ class ChatTurnStreamMixin:
             ):
                 yield sse_payload
         except asyncio.CancelledError:
-            if await self._run_is_cancelled_in_db(run_id):
+            if await self.run_is_cancelled_in_db(run_id):
                 stream_cancelled = True
             else:
                 stream_failed = True
@@ -387,21 +458,20 @@ class ChatTurnStreamMixin:
             stream_failed = True
             raise
         finally:
-            if not stream_cancelled and await self._run_is_cancelled_in_db(run_id):
+            if not stream_cancelled and await self.run_is_cancelled_in_db(run_id):
                 stream_cancelled = True
-            await self._finish_graph_stream(
+            await self.finish_graph_stream(
                 agent_graph,
                 config,
                 run_id,
                 failed=stream_failed,
                 cancelled=stream_cancelled,
+                rollup=self.stream_closure_rollup(
+                    session_id=session_id,
+                    thread_id=request.thread_id or runtime_context.thread_id,
+                    run_id=run_id,
+                ),
             )
-
-        self.schedule_session_end(
-            session_id=session_id,
-            thread_id=request.thread_id or runtime_context.thread_id,
-            run_id=run_id,
-        )
 
     async def run_agent_and_emit_prepared(
         self,
@@ -430,12 +500,12 @@ class ChatTurnStreamMixin:
             ):
                 await event_queue.put(payload)
         except asyncio.CancelledError:
-            if prepared.run_id and await self._run_is_cancelled_in_db(prepared.run_id):
+            if prepared.run_id and await self.run_is_cancelled_in_db(prepared.run_id):
                 run_cancelled = True
             else:
                 raise
         except Exception as exc:
-            self.logger.error(
+            self._host.logger.error(
                 "Background agent run failed for session %s: %s",
                 session_id,
                 exc,
@@ -445,7 +515,7 @@ class ChatTurnStreamMixin:
             await event_queue.put(f"data: {json.dumps(error_data)}\n\n")
         finally:
             if run_cancelled or (
-                prepared.run_id and await self._run_is_cancelled_in_db(prepared.run_id)
+                prepared.run_id and await self.run_is_cancelled_in_db(prepared.run_id)
             ):
                 cancelled_data = {
                     "type": "cancelled",

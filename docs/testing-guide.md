@@ -1,6 +1,6 @@
 # Testing Guide
 
-Strategy, patterns, and commands for LingQing tests. Cheat sheet: [tests/README.md](../tests/README.md).
+Strategy, patterns, and commands for LingQing tests.
 
 ## Overview
 
@@ -17,17 +17,38 @@ LingQing uses a **test pyramid** aligned with the layered architecture:
 **Principles:**
 
 1. Fast feedback — unit tests on every change; full suite in CI
-2. Mock only at boundaries — DB, HTTP, env; not domain objects
-3. E2E covers critical paths — not every branch
-4. Tenant isolation — always verify in service and API tests
+2. Mock only at **external** boundaries — LLM, LangGraph, Slack, third-party HTTP; not domain objects; not whole application stacks (see [layer table](#where-tests-live-by-architecture-layer))
+3. Match test **depth** to code **layer** — domain and routers: unit; multi-step application orchestrators: integration with real Postgres
+4. E2E covers critical paths — not every branch
+5. Tenant isolation — always verify in service and API tests
 
-| Layer | Path | Speed | Depends on | When |
+| Test tier | Path | Speed | Depends on | When |
 | --- | --- | --- | --- | --- |
 | Unit | `tests/unit/` | ms | nothing | pre-push, every change |
 | Integration | `tests/integration/` | seconds | Docker | CI, before merge |
 | Manual E2E | full Docker stack + smoke checks | minutes | full stack | agent features |
 
+## Where tests live (by architecture layer)
+
+Map backend/frontend code to the **kind** of test agents should write. This is the normative reference for [AGENTS.md](../AGENTS.md#testing--ci) and the agent **Final check** test boxes.
+
+| Code layer | Typical paths | Test tier | What to assert | Mocking |
+| --- | --- | --- | --- | --- |
+| **Domain** | `domain/`, aggregates, value objects, domain services | **Unit** | Invariants, transitions, calculations | None — real domain instances |
+| **Application — session use case** | `*_service.py`, `services.py`, single-transaction coordination | **Unit** | Coordination + domain calls; tenant scope | Repository / port **interfaces** only |
+| **Application — orchestrator** | `application/*_flow.py`, multi-step closure, admission, committed sessions | **Integration** | End state in DB; idempotency (call twice) | External I/O only (LLM, graph, Slack) |
+| **Infrastructure** | `repository.py`, persistence adapters | **Integration** (or unit with DB for pure SQL mapping) | Tenant-scoped queries, ORM mapping | Real Postgres in integration |
+| **Presentation** | `routers/`, ingress | **Unit** | HTTP status, validation, DTO shape | Mock application entry or TestClient + overrides |
+| **Frontend** | `components/`, `hooks/`, `lib/*Api.ts` | **Unit** (Vitest) | Hooks/state; API helpers | Mock axios / MSW at transport |
+
+**Orchestrator rule of thumb:** If the test mostly checks “was internal mock A called / not called,” prefer **integration** with seeded rows. If it checks a **domain invariant** or **public HTTP/DTO contract**, **unit** is enough.
+
+**Example (terminal HITL reject closure):** `tests/integration/chat/test_terminal_hitl_reject_closure_integration.py` — first finalize persists ack + completes run; second finalize does not duplicate AI rows.
+
+**External I/O in integration:** Use real Postgres (testcontainers / `pg_async_db_session`); stub LangGraph, LLM, and long network ingress when the scenario is application-layer behavior.
+
 ---
+
 
 ## Quick commands
 
@@ -59,14 +80,9 @@ uv run pytest tests/unit/rag/ -v
 
 Common directories: `agents/`, `auth/`, `authz/`, `chat/`, `dashboard/`, `hitl/`, `infra/`, `rag/`, `services/`, `utils/`.
 
-### What to test
+### What to test (unit tier)
 
-| Layer | Focus | Mock? |
-| --- | --- | --- |
-| Domain | Invariants, validation, calculations | No — create real objects |
-| Adapter | Serialization round-trips, field mapping | No |
-| Service | Business logic, tenant isolation | Mock repository only |
-| Router | Input validation, HTTP status codes | TestClient + mock service |
+Follow [Where tests live (by architecture layer)](#where-tests-live-by-architecture-layer). Unit tests here cover **domain**, **session-scoped application** services, and **routers** — not multi-repo orchestrators (those belong in integration).
 
 **Domain example:**
 
@@ -233,5 +249,5 @@ Synthetic names only — never production tenant, schema, or customer identifier
 
 ## See also
 
-- [tests/README.md](../tests/README.md) — one-page command cheat sheet
 - `tests/conftest.py` — fixture definitions
+- [AGENTS.md](../AGENTS.md#testing--ci) — CI gates and agent test-data rules

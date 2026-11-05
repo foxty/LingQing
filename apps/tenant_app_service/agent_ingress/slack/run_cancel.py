@@ -4,9 +4,9 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.core.exceptions import AuthorizationError, ValidationError
+from apps.shared.core.exceptions import ValidationError
+from apps.tenant_app_service.chat.application.runs.cancel_flow import execute_cancel_agent_run
 from apps.tenant_app_service.chat.thread_run_service import ThreadRunService
-from apps.tenant_app_service.chat.thread_service import ThreadService
 
 
 async def cancel_slack_thread_run(
@@ -17,12 +17,14 @@ async def cancel_slack_thread_run(
     thread_id: str,
     run_id: str,
 ) -> None:
-    """Cancel run after verifying the linked LingQing user owns the chat thread."""
-    thread = await ThreadService(tenant_id, db).get_thread(thread_id)
-    if not thread or thread.user_id != user_id:
-        raise AuthorizationError("You do not have permission to stop this agent run")
-
-    await ThreadRunService(db, tenant_id).cancel_agent_run(thread_id=thread_id, run_id=run_id)
+    """Cancel run (ownership enforced in ``execute_cancel_agent_run``)."""
+    await execute_cancel_agent_run(
+        db,
+        tenant_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        user_id=user_id,
+    )
 
 
 async def cancel_slack_thread_run_by_run_id(
