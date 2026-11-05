@@ -103,6 +103,11 @@ def seed_reasoning_config_from_catalog(
         options = normalize_thinking_effort_options(fallback_raw)
     if options:
         config["thinking_effort_options"] = options
+        explicit = metadata.get("default_thinking_effort")
+        if isinstance(explicit, str):
+            wire = explicit.strip()
+            if wire and wire in {opt["value"] for opt in options}:
+                config["default_thinking_effort"] = wire
     if metadata.get("exposes_thinking_content") is True:
         config["exposes_thinking_content"] = True
     return config

@@ -33,4 +33,6 @@ class ModelReasoningConfig(TypedDict, total=False):
 
     supports_thinking: bool
     thinking_effort_options: list[ThinkingEffortOption]
+    """Wire value used when the client omits per-turn thinking_effort (e.g. Slack)."""
+    default_thinking_effort: str
     exposes_thinking_content: bool

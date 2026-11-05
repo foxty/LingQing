@@ -10,7 +10,8 @@
 # - providers[].embedding_models[]: embedding model entries
 # - providers[].metadata.thinking_request_mode: omit | extra_body_thinking | reasoning_effort
 # - llm_models[].metadata.supports_thinking: true when extended reasoning is available
-# - llm_models[].metadata.thinking_effort_options: wire values (strings) or {name, value}; first = default
+# - llm_models[].metadata.thinking_effort_options: wire values (strings) or {name, value}
+# - llm_models[].metadata.default_thinking_effort: optional wire value (must be in options); else first option
 # - llm_models[].metadata.exposes_thinking_content: true when gateway returns reasoning/thinking blocks (see DBX reason-model docs)
 # - llm_models[].default_params: per-model overrides (e.g. temperature: 1 for GPT-5.x); merged at profile create and resolve
 #

@@ -41,6 +41,8 @@ export interface ModelReasoningOption {
 export interface ModelReasoningConfig {
   supports_thinking?: boolean
   thinking_effort_options?: ModelReasoningOption[]
+  /** Used when the client omits per-turn thinking_effort (Slack, scheduler). */
+  default_thinking_effort?: string
   exposes_thinking_content?: boolean
 }
 

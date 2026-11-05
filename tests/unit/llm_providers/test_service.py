@@ -132,12 +132,12 @@ async def test_test_provider_connection_uses_linked_profile(async_db_session):
         )
     )
 
-    async def fake_test_connection(**kwargs):
-        assert kwargs["model_id"] == "deepseek-v4-pro"
-        assert kwargs["api_base"] == "https://api.deepseek.com"
+    async def fake_test_resolved(resolved):
+        assert resolved.model_id == "deepseek-v4-pro"
+        assert resolved.api_base == "https://api.deepseek.com"
         return "Connection test passed"
 
-    service._test_connection = fake_test_connection  # type: ignore[method-assign]
+    service._test_resolved_connection = fake_test_resolved  # type: ignore[method-assign]
     message = await service.test_provider_connection(provider.id)
     assert message == "Connection test passed"
     assert profile.id is not None
@@ -157,6 +157,263 @@ async def test_test_provider_connection_requires_profile_or_catalog_model(async_
 
     with pytest.raises(ValidationError, match="Create a model profile first"):
         await service.test_provider_connection(provider.id)
+
+
+async def test_test_profile_connection_uses_profile_runtime_snapshot(async_db_session, monkeypatch):
+    tenant = await _seed_tenant(async_db_session)
+    service = LLMProviderConfigService(tenant.id, async_db_session)
+
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="Provider",
+            api_base="https://api.example.com/v1",
+            api_key="plain-secret",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="Reasoning",
+            category=ModelProfileCategory.LLM,
+            model_id="test-model",
+            params={"temperature": 0.33, "max_tokens": 512},
+            reasoning_config={
+                "supports_thinking": True,
+                "thinking_effort_options": [
+                    {"name": "low", "value": "low"},
+                    {"name": "max", "value": "max"},
+                ],
+                "default_thinking_effort": "max",
+            },
+        )
+    )
+
+    captured: list = []
+
+    def fake_create_chat_model(resolved, *, thinking_effort=None):
+        captured.append(resolved)
+        assert thinking_effort is None
+
+        class _Model:
+            async def ainvoke(self, _msg):
+                return "ok"
+
+        return _Model()
+
+    monkeypatch.setattr(
+        "apps.shared.llm_providers.service.create_chat_model",
+        fake_create_chat_model,
+    )
+
+    message = await service.test_profile_connection(profile.id)
+    assert message == "Connection test passed"
+    assert len(captured) == 1
+    resolved = captured[0]
+    assert resolved.model_id == "test-model"
+    assert resolved.params == {"temperature": 0.33, "max_tokens": 512}
+    assert resolved.reasoning_config is not None
+    assert resolved.reasoning_config.get("default_thinking_effort") == "max"
+
+
+async def test_create_and_update_profile_persist_default_thinking_effort(async_db_session):
+    tenant = await _seed_tenant(async_db_session)
+    service = LLMProviderConfigService(tenant.id, async_db_session)
+
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="Provider",
+            api_base="https://api.example.com/v1",
+            api_key="plain-secret",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="Reasoning",
+            category=ModelProfileCategory.LLM,
+            model_id="test-model",
+            reasoning_config={
+                "supports_thinking": True,
+                "thinking_effort_options": [
+                    {"name": "low", "value": "low"},
+                    {"name": "max", "value": "max"},
+                ],
+                "default_thinking_effort": "max",
+            },
+        )
+    )
+
+    resolved = await service.resolve_profile(profile.id)
+    assert resolved.reasoning_config is not None
+    assert resolved.reasoning_config.get("default_thinking_effort") == "max"
+
+    await service.update_profile(
+        profile.id,
+        UpdateLLMModelProfileRequest(
+            reasoning_config={
+                "supports_thinking": True,
+                "thinking_effort_options": [
+                    {"name": "low", "value": "low"},
+                    {"name": "high", "value": "high"},
+                ],
+                "default_thinking_effort": "high",
+            },
+        ),
+    )
+    updated = await service.resolve_profile(profile.id)
+    assert updated.reasoning_config is not None
+    assert updated.reasoning_config.get("default_thinking_effort") == "high"
+
+
+async def test_test_profile_connection_applies_runtime_params_and_default_thinking(
+    async_db_session,
+    monkeypatch,
+):
+    tenant = await _seed_tenant(async_db_session)
+    service = LLMProviderConfigService(tenant.id, async_db_session)
+
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="DBX",
+            preset_key="databricks-ai-gateway",
+            api_base="https://workspace.example.com/ai-gateway/mlflow/v1",
+            api_key="plain-secret",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="GLM",
+            category=ModelProfileCategory.LLM,
+            model_id="system.ai.glm-5-3",
+            params={"temperature": 0.33, "max_tokens": 512, "top_p": 0.9},
+            reasoning_config={
+                "supports_thinking": True,
+                "thinking_effort_options": [
+                    {"name": "low", "value": "low"},
+                    {"name": "max", "value": "max"},
+                ],
+                "default_thinking_effort": "max",
+            },
+        )
+    )
+
+    captured: list[dict] = []
+
+    def fake_create_openai_compatible_chat_model(**kwargs):
+        captured.append(kwargs)
+
+        class _Model:
+            async def ainvoke(self, _msg):
+                return "ok"
+
+        return _Model()
+
+    monkeypatch.setattr(
+        "apps.shared.infra.llm.llm_model_resolver._create_openai_compatible_chat_model",
+        fake_create_openai_compatible_chat_model,
+    )
+
+    message = await service.test_profile_connection(profile.id)
+    assert message == "Connection test passed"
+    assert len(captured) == 1
+    wire = captured[0]
+    assert wire["thinking_effort"] == "max"
+    assert wire["temperature"] == 0.33
+    assert wire["max_tokens"] == 512
+    assert wire["top_p"] == 0.9
+    assert wire["resolved"].provider_config == {"thinking_request_mode": "reasoning_effort"}
+
+
+async def test_test_profile_connection_embedding_uses_resolved_profile(async_db_session, monkeypatch):
+    tenant = await _seed_tenant(async_db_session)
+    service = LLMProviderConfigService(tenant.id, async_db_session)
+
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="Provider",
+            api_base="https://api.example.com/v1",
+            embedding_api_base="https://api.example.com/v1",
+            api_key="plain-secret",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="Embed",
+            category=ModelProfileCategory.EMBEDDING,
+            model_id="text-embedding-test",
+        )
+    )
+
+    captured: list = []
+
+    class _Embeddings:
+        async def aembed_query(self, text: str):
+            captured.append(text)
+            return [0.1, 0.2]
+
+    def fake_create_embeddings(resolved):
+        captured.append(resolved)
+        return _Embeddings()
+
+    monkeypatch.setattr(
+        "apps.shared.llm_providers.service.create_embeddings",
+        fake_create_embeddings,
+    )
+
+    message = await service.test_profile_connection(profile.id)
+    assert message == "Connection test passed"
+    assert len(captured) == 2
+    resolved = captured[0]
+    assert resolved.model_id == "text-embedding-test"
+    assert resolved.api_base == "https://api.example.com/v1"
+    assert captured[1] == "Hello, this is a connection test."
+
+
+async def test_test_provider_connection_routes_through_profile_resolution(async_db_session, monkeypatch):
+    tenant = await _seed_tenant(async_db_session)
+    service = LLMProviderConfigService(tenant.id, async_db_session)
+
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="Provider",
+            api_base="https://api.example.com/v1",
+            api_key="plain-secret",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="Primary",
+            category=ModelProfileCategory.LLM,
+            model_id="primary-model",
+            params={"temperature": 0.5},
+        )
+    )
+    await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="Secondary",
+            category=ModelProfileCategory.LLM,
+            model_id="secondary-model",
+        )
+    )
+
+    seen_profile_ids: list[int] = []
+
+    async def fake_test_profile_connection(profile_id: int, api_key: str = "") -> str:
+        seen_profile_ids.append(profile_id)
+        resolved = await service.resolve_profile(profile_id)
+        assert resolved.model_id == "primary-model"
+        assert resolved.params == {"temperature": 0.5}
+        return "Connection test passed"
+
+    monkeypatch.setattr(service, "test_profile_connection", fake_test_profile_connection)
+
+    message = await service.test_provider_connection(provider.id)
+    assert message == "Connection test passed"
+    assert seen_profile_ids == [profile.id]
 
 
 async def test_resolve_for_agent_uses_override_profile(async_db_session):
@@ -340,7 +597,7 @@ async def test_update_profile_reset_runtime_from_catalog(async_db_session):
     )
     overridden = await service.resolve_profile(profile.id)
     assert overridden.params == {"temperature": 0.9}
-    assert overridden.reasoning_config == {"supports_thinking": False}
+    assert overridden.reasoning_config == {"supports_thinking": False, "thinking_effort_options": []}
 
     await service.update_profile(
         profile.id,
