@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
-import jwt
+from jose import jwt
 
 from apps.config import EnvConfig, get_settings
 from apps.shared.data_source.adapters import db_data_source_to_domain
