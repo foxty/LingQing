@@ -195,6 +195,7 @@ async def test_handle_message_commits_thread_before_chat_turn():
                     session_id="s1",
                     thinking_ts=None,
                     reply_text="ok",
+                    run_id=None,
                 )
             ),
         ) as run_turn,

@@ -26,7 +26,10 @@ from apps.tenant_app_service.agent_ingress.slack.identity_service import SlackId
 from apps.tenant_app_service.agent_ingress.slack.messages import SlackMessageKey, slack_user_message
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 from apps.tenant_app_service.agent_ingress.slack.run_cancel import cancel_slack_thread_run_by_run_id
-from apps.tenant_app_service.agent_ingress.slack.run_control_blocks import ACTION_AGENT_RUN_STOP
+from apps.tenant_app_service.agent_ingress.slack.run_control_blocks import (
+    ACTION_AGENT_RUN_STOP,
+    build_run_status_blocks,
+)
 from apps.tenant_app_service.message_feedback.domain import (
     FEEDBACK_RATING_NEGATIVE,
     FEEDBACK_RATING_POSITIVE,
@@ -167,7 +170,7 @@ class SlackInteractivityService:
         endpoint: AgentIngressEndpoint,
         run_id: str,
     ) -> dict[str, Any]:
-        """Ack Slack within 3s; cancel the agent run only (ingress owns the thinking message)."""
+        """Ack Slack within 3s; cancel run and update the thinking message in background."""
         asyncio.create_task(_safe_execute_agent_run_stop(endpoint.id, payload, run_id))
         return {}
 
@@ -177,7 +180,7 @@ class SlackInteractivityService:
         endpoint: AgentIngressEndpoint,
         run_id: str,
     ) -> None:
-        """Request cooperative cancel; do not update the thinking message (ingress posts the reply)."""
+        """Request cooperative cancel and replace the thinking placeholder (no Stop button)."""
         slack_user_id = (payload.get("user") or {}).get("id", "")
         user_id = await resolve_eligible_slack_user_id(
             self.db,
@@ -206,6 +209,12 @@ class SlackInteractivityService:
                 run_id,
                 user_id,
             )
+            await self._update_thinking_message_after_stop(
+                bot_token,
+                channel,
+                payload,
+                slack_user_message(SlackMessageKey.REQUEST_CANCELED),
+            )
         except ValidationError as exc:
             details = getattr(exc, "details", None) or {}
             code = details.get("code")
@@ -216,6 +225,12 @@ class SlackInteractivityService:
                     run_id,
                     user_id,
                     details.get("status"),
+                )
+                await self._update_thinking_message_after_stop(
+                    bot_token,
+                    channel,
+                    payload,
+                    slack_user_message(SlackMessageKey.REQUEST_ALREADY_FINISHED),
                 )
                 return
             logger.warning(
@@ -240,6 +255,32 @@ class SlackInteractivityService:
             await self._post_run_stop_ephemeral(
                 bot_token, channel, slack_user_id, payload, getattr(exc, "message", str(exc))
             )
+
+    async def _update_thinking_message_after_stop(
+        self,
+        bot_token: str,
+        channel: str | None,
+        payload: dict[str, Any],
+        text: str,
+    ) -> None:
+        if not channel or not text:
+            return
+        message = payload.get("message") or {}
+        container = payload.get("container") or {}
+        message_ts = message.get("ts") or container.get("message_ts")
+        if not message_ts:
+            return
+        blocks = build_run_status_blocks(text=text)
+        try:
+            await self.client.chat_update(
+                bot_token=bot_token,
+                channel=channel,
+                ts=message_ts,
+                text=ensure_slack_reply_text(text),
+                blocks=blocks,
+            )
+        except Exception:
+            logger.exception("Failed to update Slack thinking message after run stop")
 
     async def _post_run_stop_ephemeral(
         self,
