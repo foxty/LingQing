@@ -171,7 +171,7 @@ class CancelAgentRunResponse(BaseModel):
 
 
 class ActiveRunResponse(BaseModel):
-    """Active agent run snapshot for polling and admission (idle when ``run_id`` is null)."""
+    """Executing run snapshot for polling (idle when ``run_id`` is null; HITL pause via ``pending_hitl``)."""
 
     run_id: str | None = None
     session_id: str | None = Field(

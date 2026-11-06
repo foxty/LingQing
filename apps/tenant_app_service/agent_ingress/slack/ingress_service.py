@@ -180,6 +180,17 @@ class SlackIngressService:
             await self._post_ephemeral(bot_token, event, slack_chat_error_message(exc))
             return
 
+        if turn.run_id:
+            from apps.tenant_app_service.chat.application.runs.thread_run_service import ThreadRunService
+
+            if await ThreadRunService(self.db, tenant_id).is_run_cancelled(turn.run_id):
+                logger.info(
+                    "Skipping Slack reply delivery; run %s cancelled (thread %s)",
+                    turn.run_id,
+                    thread_id,
+                )
+                return
+
         message_id = turn.message_id
         session_id = turn.session_id
         thinking_ts = turn.thinking_ts

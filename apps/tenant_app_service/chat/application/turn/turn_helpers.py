@@ -1,4 +1,4 @@
-"""Chat turn application mixins — composed by ``ChatTurnService``."""
+"""Shared chat-turn helpers composed by ``ChatTurnService`` (messages, runs, titles)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from apps.tenant_app_service.chat.application.threads.thread_service import Thre
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse
 
 
-class ChatTurnBaseMixin:
+class ChatTurnHelpersMixin:
     def _thread_runs(self) -> ThreadRunService:
         return ThreadRunService(self.db, self.tenant_id)
 
@@ -92,31 +92,6 @@ class ChatTurnBaseMixin:
             return thread_title
         else:
             return None
-
-    async def _cancel_superseded_hitl_if_needed(self, request: ChatRequest) -> None:
-        """Cancel stale pending HITL when the user starts an unrelated chat turn."""
-        if not request.thread_id:
-            return
-
-        from apps.tenant_app_service.hitl.service import HitlApprovalService
-
-        service = HitlApprovalService(self.tenant_id, self.db)
-        cancelled = await service.cancel_superseded_pending_for_thread(request.thread_id)
-        if cancelled:
-            self.logger.info(
-                "Cancelled %s superseded pending HITL approval(s) for thread %s",
-                cancelled,
-                request.thread_id,
-            )
-
-    async def _reconcile_active_runs_before_new_turn(self, thread_id: str, agent_id: int) -> None:
-        """Close orphan agent runs so a new user message is not blocked."""
-        from apps.tenant_app_service.chat.application.runs.thread_run_service import ThreadRunService
-
-        await ThreadRunService(self.db, self.tenant_id).reconcile_before_new_turn(
-            thread_id,
-            agent_id,
-        )
 
     def _build_initial_agent_messages(self, lc_messages: list, request: ChatRequest) -> list:
         """Build agent initial state messages.

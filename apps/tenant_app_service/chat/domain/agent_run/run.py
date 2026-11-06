@@ -168,7 +168,7 @@ class AgentRun:
     def transition_to_completed(self, now: datetime) -> RunStatusUpdate | None:
         if self.status == AgentRunStatus.COMPLETED:
             return None
-        if self.status == AgentRunStatus.RUNNING:
+        if self.status in (AgentRunStatus.RUNNING, AgentRunStatus.AWAITING_HITL):
             return self._completed_update(now)
         raise ValidationError(
             f"Agent run cannot complete from status {self.status}",

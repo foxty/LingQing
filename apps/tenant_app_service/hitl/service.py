@@ -5,10 +5,7 @@ import json
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime, timedelta
 from typing import Any
-from uuid import uuid4
 
-from langchain_core.messages import AIMessage
-from langchain_core.runnables import RunnableConfig
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
@@ -16,7 +13,6 @@ from apps.shared.db.models import HitlApproval
 from apps.shared.utils.logger import get_logger
 
 from .domain import (
-    HITL_RESOLUTION_REJECTED,
     HITL_STATUS_APPROVED,
     HITL_STATUS_EXECUTED,
     HITL_STATUS_EXPIRED,
@@ -25,23 +21,6 @@ from .domain import (
     HitlResolveResult,
 )
 from .repository import HitlApprovalRepository
-from .utils import build_hitl_rejected_ai_message
-
-HITL_CANCEL_REASON_SUPERSEDED: str = "superseded_by_new_user_message"
-
-
-def _thread_run_service_for_session(db: AsyncSession, tenant_id: int):
-    """Construct ``ThreadRunService`` (patch target for unit tests)."""
-    from apps.tenant_app_service.chat.application.runs.thread_run_service import ThreadRunService
-
-    return ThreadRunService(db, tenant_id)
-
-
-def _agent_run_message_repository(db: AsyncSession):
-    """Construct run message repo (patch target for unit tests)."""
-    from apps.tenant_app_service.chat.infrastructure.persistence import AgentRunMessageRepository
-
-    return AgentRunMessageRepository(db)
 
 
 class HitlApprovalService:
@@ -113,19 +92,6 @@ class HitlApprovalService:
                 approval.updated_at = now
                 return await self.repository.save(approval)
         return approval
-
-    async def cancel_superseded_pending_for_thread(
-        self,
-        thread_id: str,
-        *,
-        reason: str = HITL_CANCEL_REASON_SUPERSEDED,
-    ) -> int:
-        """Cancel open pending approvals when the user starts an unrelated chat turn."""
-        return await self.repository.cancel_all_pending_by_thread(
-            self.tenant_id,
-            thread_id,
-            reason=reason,
-        )
 
     async def get_approval(self, proposal_id: str) -> HitlApproval:
         approval = await self.repository.get_by_proposal_id(self.tenant_id, proposal_id)
@@ -219,12 +185,18 @@ class HitlApprovalService:
         approval.updated_at = datetime.now(UTC)
         return await self.repository.save(approval)
 
-    async def reject(self, proposal_id: str, version: int, user_id: int, comment: str | None = None) -> HitlResolveResult:
+    async def set_rejected(
+        self,
+        proposal_id: str,
+        version: int,
+        user_id: int,
+        comment: str | None = None,
+    ) -> HitlApproval:
+        """Persist rejected approval state only (run closure is chat application)."""
         approval = await self.get_approval(proposal_id)
 
         if approval.status == HITL_STATUS_REJECTED:
-            ack_message = await self._finalize_terminal_resolution(approval, HITL_RESOLUTION_REJECTED)
-            return self._to_resolve_result(approval, ack_message=ack_message)
+            return approval
 
         if approval.status != HITL_STATUS_PENDING:
             raise ValidationError(
@@ -248,137 +220,28 @@ class HitlApprovalService:
         approval.rejected_at = datetime.now(UTC)
         approval.version += 1
         approval.updated_at = datetime.now(UTC)
-        approval = await self.repository.save(approval)
-        ack_message = await self._finalize_terminal_resolution(approval, HITL_RESOLUTION_REJECTED)
-        return self._to_resolve_result(approval, ack_message=ack_message)
+        return await self.repository.save(approval)
+
+    async def reject(self, proposal_id: str, version: int, user_id: int, comment: str | None = None) -> HitlResolveResult:
+        from apps.tenant_app_service.hitl.application.reject_flow import execute_hitl_reject
+
+        return await execute_hitl_reject(
+            self.db,
+            self.tenant_id,
+            proposal_id=proposal_id,
+            version=version,
+            user_id=user_id,
+            comment=comment,
+        )
 
     @staticmethod
-    def _to_resolve_result(approval: HitlApproval, *, ack_message: str | None) -> HitlResolveResult:
+    def to_resolve_result(approval: HitlApproval, *, ack_message: str | None) -> HitlResolveResult:
         return HitlResolveResult(
             proposal_id=approval.proposal_id,
             status=approval.status,
             version=approval.version,
             needs_agent_resume=False,
             ack_message=ack_message,
-        )
-
-    def _build_persistence_config(self, approval: HitlApproval) -> RunnableConfig:
-        from apps.tenant_app_service.agents.context import (
-            create_agent_runtime_context,
-            create_agent_runtime_tenant_context,
-        )
-        from apps.tenant_app_service.agents.domain import AgentUserContext
-
-        tenant_ctx = create_agent_runtime_tenant_context(
-            tenant_id=self.tenant_id,
-            tenant_name="",
-            config={},
-        )
-        user_ctx = AgentUserContext(
-            user_id=approval.requested_by,
-            username="",
-            role="user",
-            tenant_id=self.tenant_id,
-            tenant_name="",
-        )
-        runtime_ctx = create_agent_runtime_context(
-            tenant_context=tenant_ctx,
-            user_context=user_ctx,
-            agent_id=approval.agent_id,
-            agent_name="",
-            thread_id=approval.thread_id,
-            session_id=approval.session_id or "",
-        )
-        return {
-            "configurable": {
-                "thread_id": approval.thread_id,
-                "runtime": runtime_ctx.model_dump(),
-            }
-        }
-
-    async def _finalize_terminal_resolution(self, approval: HitlApproval, resolution: str) -> str | None:
-        """Persist a user-facing AI ack for terminal HITL; tool rows stay immutable."""
-        if resolution != HITL_RESOLUTION_REJECTED:
-            raise ValidationError(f"unsupported terminal resolution: {resolution}")
-
-        tool_name = approval.tool_name or "tool"
-        ai_content = build_hitl_rejected_ai_message(tool_name)
-
-        if not approval.session_id:
-            self.logger.warning(
-                "Terminal HITL resolution missing anchor session for proposal_id=%s",
-                approval.proposal_id,
-            )
-            return ai_content
-
-        run_finalize = _thread_run_service_for_session(self.db, self.tenant_id)
-        run = await run_finalize.get_run_by_session_id(approval.session_id)
-        if not run:
-            self.logger.warning(
-                "Terminal HITL resolution missing agent run for session_id=%s proposal_id=%s",
-                approval.session_id,
-                approval.proposal_id,
-            )
-            return ai_content
-
-        run_message_repo = _agent_run_message_repository(self.db)
-        for message in await run_message_repo.get_messages_by_session(approval.session_id):
-            if message.type == "ai" and message.content == ai_content:
-                await run_finalize.mark_run_completed(run.id)
-                await run_finalize.finalize_run_for_main(run.id)
-                self._schedule_thread_rollup_after_terminal_run(
-                    session_id=approval.session_id,
-                    thread_id=approval.thread_id,
-                    run_id=run.id,
-                )
-                return None
-
-        ai_message = AIMessage(
-            id=str(uuid4()),
-            content=ai_content,
-            additional_kwargs={"session_id": approval.session_id},
-        )
-        config = self._build_persistence_config(approval)
-        config["configurable"]["run_id"] = run.id
-        from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
-        from apps.tenant_app_service.chat.infrastructure.adapters.agent_run_port_adapter import (
-            chat_agent_run_port_for_run,
-        )
-
-        scope = AgentRunScope(
-            tenant_id=self.tenant_id,
-            thread_id=approval.thread_id,
-            run_id=run.id,
-            agent_id=approval.agent_id,
-        )
-        run_port = chat_agent_run_port_for_run(
-            tenant_id=self.tenant_id,
-            agent_id=approval.agent_id,
-            run_id=run.id,
-        )
-        await run_port.persist_run_messages(scope, [ai_message], config, deduplicate=True)
-        await run_finalize.mark_run_completed(run.id)
-        await run_finalize.finalize_run_for_main(run.id)
-        self._schedule_thread_rollup_after_terminal_run(
-            session_id=approval.session_id,
-            thread_id=approval.thread_id,
-            run_id=run.id,
-        )
-        return ai_content
-
-    def _schedule_thread_rollup_after_terminal_run(
-        self,
-        *,
-        session_id: str,
-        thread_id: str,
-        run_id: str,
-    ) -> None:
-        from apps.tenant_app_service.chat.turn_service import ChatTurnService
-
-        ChatTurnService(self.tenant_id, self.db).schedule_session_end(
-            session_id=session_id,
-            thread_id=thread_id,
-            run_id=run_id,
         )
 
     async def mark_executed(self, proposal_id: str, success: bool, error: str | None = None) -> None:

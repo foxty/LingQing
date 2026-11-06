@@ -11,10 +11,10 @@ export const AGENT_RUN_STATUS = {
 
 export type AgentRunStatus = (typeof AGENT_RUN_STATUS)[keyof typeof AGENT_RUN_STATUS]
 
+/** Executing runs only — ``awaiting_hitl`` is paused; use ``pending_hitl`` on active-run poll. */
 export const ACTIVE_AGENT_RUN_STATUSES: readonly AgentRunStatus[] = [
   AGENT_RUN_STATUS.QUEUED,
   AGENT_RUN_STATUS.RUNNING,
-  AGENT_RUN_STATUS.AWAITING_HITL,
 ]
 
 export interface TriggerAgentRunSummary {

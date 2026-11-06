@@ -6,7 +6,7 @@ import pytest
 
 from apps.shared.core.exceptions import ThreadBusyError
 from apps.tenant_app_service.chat.domain import AgentRunStatus
-from apps.tenant_app_service.chat.turn_admission import (
+from apps.tenant_app_service.chat.application.turn.admission import (
     assert_thread_accepts_new_user_turn,
     guard_thread_turn_start,
     thread_advisory_lock_keys,
@@ -37,16 +37,16 @@ async def test_try_acquire_thread_turn_xact_lock_raises_when_not_acquired():
 @pytest.mark.asyncio
 async def test_assert_thread_accepts_new_user_turn_raises_when_busy():
     db = AsyncMock()
+    blocking = MagicMock(
+        id="run-1",
+        status=AgentRunStatus.RUNNING,
+        session_id="sess-1",
+    )
     with patch(
-        "apps.tenant_app_service.chat.turn_admission.ThreadRunService.get_active_run",
-        AsyncMock(
-            return_value=MagicMock(
-                run_id="run-1",
-                run_status=AgentRunStatus.RUNNING,
-                session_id="sess-1",
-            )
-        ),
-    ):
+        "apps.tenant_app_service.chat.application.turn.admission.ThreadRunService",
+    ) as svc_cls:
+        svc_cls.return_value.any_active_runs = AsyncMock(return_value=True)
+        svc_cls.return_value.get_active_runs = AsyncMock(return_value=[blocking])
         with pytest.raises(ThreadBusyError) as exc_info:
             await assert_thread_accepts_new_user_turn(
                 db,
@@ -62,11 +62,11 @@ async def test_assert_thread_accepts_new_user_turn_raises_when_busy():
 async def test_guard_thread_turn_start_skips_busy_check_for_hitl():
     db = AsyncMock()
     with patch(
-        "apps.tenant_app_service.chat.turn_admission.try_acquire_thread_turn_xact_lock",
+        "apps.tenant_app_service.chat.application.turn.admission.try_acquire_thread_turn_xact_lock",
         AsyncMock(),
     ) as lock_mock:
         with patch(
-            "apps.tenant_app_service.chat.turn_admission.assert_thread_accepts_new_user_turn",
+            "apps.tenant_app_service.chat.application.turn.admission.assert_thread_accepts_new_user_turn",
             AsyncMock(),
         ) as busy_mock:
             await guard_thread_turn_start(

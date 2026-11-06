@@ -2,7 +2,7 @@
 
 **Project:** LingQing — Enterprise AI Agent Platform (LangGraph, FastAPI, React)
 
-**Document map:** [Core Principles](#core-principles) · [Backend](#backend-guidelines) (layers, DB, exceptions, API) · [Frontend](#frontend-guidelines) · [Testing & CI](#testing--ci) · [Common Pitfalls](#common-pitfalls) · [Agent Workflow](#agent-workflow) (final check, git, PR, output)
+**Document map:** [Core Principles](#core-principles) · [Backend](#backend-guidelines) (layers, DB, exceptions, API) · [Frontend](#frontend-guidelines) · [Testing & CI](#testing--ci) · [Testing guide](docs/testing-guide.md) (pyramid, **layer → test type**, commands) · [Common Pitfalls](#common-pitfalls) · [Agent Workflow](#agent-workflow) (final check, git, PR, output)
 
 ## Core Principles
 
@@ -172,11 +172,14 @@ _When to promote a file to a package:_
 
 ## Testing & CI
 
+**Normative testing strategy (pyramid, architecture layer → unit vs integration, examples):** [docs/testing-guide.md](docs/testing-guide.md) — especially [Where tests live (by architecture layer)](docs/testing-guide.md#where-tests-live-by-architecture-layer).
+
 - **Local fast path:** `npm run test:unit` (pre-push runs this + contract checks).
 - **Full backend:** `uv run pytest tests/ -v` (CI Backend job).
 - **Integration:** `uv run pytest tests/integration/ -v` (requires Docker).
-- See `docs/testing-guide.md` and `tests/README.md`.
 - CI workflow: `.github/workflows/ci.yml` (backend + both frontends in parallel).
+
+**Agent rule (summary):** domain → unit, no I/O mocks; `application/*_flow` orchestrators → integration + real DB; session `*_service.py` → unit with repo/port mocks; routers/hooks → unit at the HTTP/transport boundary. Do not duplicate long testing rules here — use the guide.
 
 ### Test data (all agents)
 
@@ -241,7 +244,7 @@ _Review the diff against sections above — not style preferences. Check each bo
 
 **Tests**
 
-- [ ] **Coverage** — [Testing & CI](#testing--ci): new behavior → focused unit tests (happy path + relevant edge); bug fixes → regression test when feasible without Docker.
+- [ ] **Coverage** — [Testing guide — by layer](docs/testing-guide.md#where-tests-live-by-architecture-layer): right tier for the code (orchestrator → integration; domain → unit); regression when feasible.
 - [ ] **Test data** — [Test data (all agents)](#test-data-all-agents): synthetic only; no production identifiers in fixtures.
 - [ ] **Executed** — run pytest/vitest (or lint/typecheck) on touched areas when feasible before claiming done.
 - [ ] **Gaps** — if tests skipped, state what is missing and what would cover it.

@@ -14,13 +14,15 @@ class AgentRunStatus(StrEnum):
     CANCELLED = "cancelled"
 
 
-ACTIVE_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
+# Executing now (busy / in-flight). ``awaiting_hitl`` is paused — not active for admission or poll.
+EXECUTING_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
     {
         AgentRunStatus.QUEUED,
         AgentRunStatus.RUNNING,
-        AgentRunStatus.AWAITING_HITL,
     }
 )
+
+ACTIVE_AGENT_RUN_STATUSES: frozenset[str] = EXECUTING_AGENT_RUN_STATUSES
 
 TERMINAL_AGENT_RUN_STATUSES: frozenset[str] = frozenset(
     {

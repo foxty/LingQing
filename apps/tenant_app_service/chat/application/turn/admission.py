@@ -1,7 +1,7 @@
 """Turn admission: per-thread concurrency (Postgres advisory lock + busy gate).
 
-**Layer:** Infrastructure helper used inside prepare transactions — not HTTP application flow.
-**Callers:** ``ChatTurnService.prepare_*`` via ``guard_thread_turn_start``.
+**Layer:** Application helper used inside prepare transactions — not HTTP presentation.
+**Callers:** ``prepare_chat_turn`` via ``guard_thread_turn_start``.
 """
 
 from __future__ import annotations
@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.exceptions import ThreadBusyError
 from apps.tenant_app_service.chat.application.runs.thread_run_service import ThreadRunService
-from apps.tenant_app_service.chat.domain import ACTIVE_AGENT_RUN_STATUSES
 
 
 def thread_advisory_lock_keys(tenant_id: int, thread_id: str) -> tuple[int, int]:
@@ -49,22 +48,19 @@ async def assert_thread_accepts_new_user_turn(
     thread_id: str,
     agent_id: int,
 ) -> None:
-    """Raise when the thread already has an active agent run."""
-    snapshot = await ThreadRunService(db, tenant_id).get_active_run(
-        thread_id=thread_id,
-        agent_id=agent_id,
-        repair=True,
-    )
-    if not snapshot.run_status or snapshot.run_status not in ACTIVE_AGENT_RUN_STATUSES:
+    """Raise when the thread already has an executing agent run."""
+    runs = ThreadRunService(db, tenant_id)
+    if not await runs.any_active_runs(thread_id=thread_id, agent_id=agent_id, repair=True):
         return
+    blocking = (await runs.get_active_runs(thread_id=thread_id, agent_id=agent_id, repair=True))[0]
     raise ThreadBusyError(
         "An agent run is already in progress for this thread. Wait for it to finish, then try again.",
         details={
             "code": "THREAD_BUSY",
             "reason": "active_agent_run",
-            "run_id": snapshot.run_id,
-            "run_status": snapshot.run_status,
-            "session_id": snapshot.session_id,
+            "run_id": blocking.id,
+            "run_status": blocking.status,
+            "session_id": blocking.session_id,
         },
     )
 

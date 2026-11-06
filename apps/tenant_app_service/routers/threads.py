@@ -490,15 +490,15 @@ async def cancel_thread_agent_run(
     db: AsyncSession = Depends(get_db),
 ):
     """Cancel an in-flight agent run (user Stop). Idempotent when already cancelled."""
-    chat_service = ThreadService(current_user.tenant_id, db)
+    from apps.tenant_app_service.chat.application.runs.cancel_flow import execute_cancel_agent_run
 
-    thread = await chat_service.get_thread(thread_id)
-    if not thread:
-        raise ResourceNotFoundError(f"Thread {thread_id} not found")
-    _assert_user_owns_thread(thread, current_user)
-
-    run_service = ThreadRunService(db, current_user.tenant_id)
-    cancelled = await run_service.cancel_agent_run(thread_id=thread_id, run_id=run_id)
+    cancelled = await execute_cancel_agent_run(
+        db,
+        current_user.tenant_id,
+        thread_id=thread_id,
+        run_id=run_id,
+        user_id=current_user.id,
+    )
     return CancelAgentRunResponse(run_id=cancelled.id, status="cancelled")
 
 

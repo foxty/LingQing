@@ -34,6 +34,8 @@ class SlackMessageKey(enum.StrEnum):
     CHAT_GENERIC_FAILURE = "chat_generic_failure"
     THREAD_BUSY = "thread_busy"
     THINKING_PLACEHOLDER = "thinking_placeholder"
+    REQUEST_CANCELED = "request_canceled"
+    REQUEST_ALREADY_FINISHED = "request_already_finished"
     EMPTY_REPLY_FALLBACK = "empty_reply_fallback"
 
 
@@ -81,6 +83,8 @@ _CATALOG: dict[str, dict[SlackMessageKey, str]] = {
             "I'm still working on your previous message in this thread. Please wait a moment, then try again."
         ),
         SlackMessageKey.THINKING_PLACEHOLDER: "🤔 …",
+        SlackMessageKey.REQUEST_CANCELED: "Request canceled.",
+        SlackMessageKey.REQUEST_ALREADY_FINISHED: "This request already finished.",
         SlackMessageKey.EMPTY_REPLY_FALLBACK: ("The model returned no visible text. Please try again."),
     },
 }

@@ -2,7 +2,7 @@
 
 Persist human rows, create/update ``agent_runs``, promotion, active-run poll/repair,
 invoke-outcome lifecycle. No LangGraph streaming.
-**Callers:** ``ChatTurnService``, ``turn_admission``, ``ThreadService`` (read paths).
+**Callers:** ``ChatTurnService``, turn admission, ``ThreadService`` (read paths).
 """
 
 from __future__ import annotations
@@ -16,6 +16,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.db.models import ChatThread
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.langgraph_invoke import AgentInvokeOutcome
+from apps.tenant_app_service.chat.application.runs.closure import RunClosureRollup, apply_run_closure
+from apps.tenant_app_service.chat.application.runs.invoke_closure import closure_outcome_from_invoke
 from apps.tenant_app_service.chat.domain import (
     ACTIVE_AGENT_RUN_STATUSES,
     AgentRun,
@@ -25,6 +27,7 @@ from apps.tenant_app_service.chat.domain import (
     find_promotable_final_ai_row,
     sort_timeline_trigger_anchored,
 )
+from apps.tenant_app_service.chat.domain.agent_run.closure import RunClosureOutcome
 from apps.tenant_app_service.chat.domain.agent_run.transitions import RunStatusUpdate
 from apps.tenant_app_service.chat.domain.ports.agent_run import AgentRunRepositoryPort
 from apps.tenant_app_service.chat.infrastructure.persistence.agent_run_message_repository import (
@@ -137,7 +140,11 @@ class ThreadRunService:
         await self._persist_status_update(run_id, run.transition_to_failed(datetime.now(UTC)))
 
     async def cancel_agent_run(self, *, thread_id: str, run_id: str) -> AgentRunState:
-        """Cancel an in-flight run (user Stop). Idempotent when already cancelled."""
+        """Cancel an in-flight run (user Stop). Idempotent when already cancelled.
+
+        Sets authoritative ``CANCELLED`` status here; stream teardown uses
+        ``apply_run_closure(CANCELLED)`` which does not promote partial output.
+        """
         from apps.shared.core.exceptions import ValidationError
         from apps.tenant_app_service.chat.agent_run_execution_registry import cancel_local
 
@@ -243,7 +250,11 @@ class ThreadRunService:
 
         run = AgentRun.from_state(run_row)
         if run.skips_finalize_promotion():
-            return
+            if run.status != AgentRunStatus.AWAITING_HITL:
+                return
+            run_rows = await self.run_message_repo.list_for_run(run_id)
+            if find_promotable_final_ai_row(run_rows) is None:
+                return
 
         if not await self.main_repo.get_promoted_ai_for_run(run_id):
             run_rows = await self.run_message_repo.list_for_run(run_id)
@@ -265,7 +276,7 @@ class ThreadRunService:
                         final_message=lc_message,
                     )
 
-        if run.should_mark_completed_after_finalize():
+        if run.should_mark_completed_after_finalize() or run.status == AgentRunStatus.AWAITING_HITL:
             await self.mark_run_completed(run_id)
 
     async def get_timeline(self, thread_id: str) -> list[ThreadMainMessageDomain]:
@@ -315,6 +326,46 @@ class ThreadRunService:
             return None
         return HumanMessage(id=domain.message_id, content=domain.content)
 
+    async def get_active_runs(
+        self,
+        *,
+        thread_id: str,
+        agent_id: int,
+        repair: bool = True,
+    ) -> list[AgentRunState]:
+        """Executing runs (``queued`` / ``running``), newest first. Paused HITL runs are excluded."""
+        runs = list(await self.run_repo.list_active_for_thread_agent(thread_id, agent_id))
+        if not runs:
+            latest = await self.run_repo.get_latest_for_thread_agent(thread_id, agent_id)
+            if latest and latest.status in ACTIVE_AGENT_RUN_STATUSES:
+                runs = [latest]
+
+        if not repair:
+            return runs
+
+        repaired: list[AgentRunState] = []
+        for run in runs:
+            run = await self.repair_run_if_needed(run)
+            if run.status in ACTIVE_AGENT_RUN_STATUSES:
+                repaired.append(run)
+        return repaired
+
+    async def any_active_runs(
+        self,
+        *,
+        thread_id: str,
+        agent_id: int,
+        repair: bool = True,
+    ) -> bool:
+        """True when the thread has at least one executing agent run."""
+        return bool(
+            await self.get_active_runs(
+                thread_id=thread_id,
+                agent_id=agent_id,
+                repair=repair,
+            )
+        )
+
     async def get_active_run(
         self,
         *,
@@ -322,18 +373,13 @@ class ThreadRunService:
         agent_id: int,
         repair: bool = True,
     ) -> ActiveRunResponse:
-        """Blocking run snapshot for poll/admission; ``session_id`` is observability only."""
-        runs = await self.run_repo.list_active_for_thread_agent(thread_id, agent_id)
+        """Poll snapshot: newest executing run + pending HITL (paused runs are not ``active``)."""
+        runs = await self.get_active_runs(
+            thread_id=thread_id,
+            agent_id=agent_id,
+            repair=repair,
+        )
         run = runs[0] if runs else None
-        if run is None:
-            latest = await self.run_repo.get_latest_for_thread_agent(thread_id, agent_id)
-            if latest and latest.status in ACTIVE_AGENT_RUN_STATUSES:
-                run = latest
-
-        if run and repair:
-            run = await self.repair_run_if_needed(run)
-            if run.status not in ACTIVE_AGENT_RUN_STATUSES:
-                run = None
 
         pending_hitl = None
         pending_row = await HitlApprovalRepository(self.db).get_latest_pending_by_thread(
@@ -361,20 +407,19 @@ class ThreadRunService:
             pending_hitl=pending_hitl,
         )
 
-    async def on_invoke_outcome(self, run_id: str | None, outcome: AgentInvokeOutcome) -> None:
-        if not run_id:
-            return
-        if outcome == AgentInvokeOutcome.INTERRUPTED_FOR_HITL:
-            logger.info("Agent run paused at HITL checkpoint run_id=%s", run_id)
-            return
-        if outcome == AgentInvokeOutcome.CANCELLED:
-            logger.info("Agent run invoke ended cancelled run_id=%s", run_id)
-            return
-        if outcome == AgentInvokeOutcome.FAILED:
-            await self.mark_run_failed(run_id)
-            return
-        if outcome == AgentInvokeOutcome.COMPLETED:
-            await self.finalize_run_for_main(run_id)
+    async def on_invoke_outcome(
+        self,
+        run_id: str | None,
+        outcome: AgentInvokeOutcome,
+        *,
+        rollup: RunClosureRollup | None = None,
+    ) -> None:
+        await apply_run_closure(
+            self,
+            run_id=run_id,
+            outcome=closure_outcome_from_invoke(outcome),
+            rollup=rollup,
+        )
 
     async def on_resume_started(self, run_id: str) -> bool:
         """Claim ``awaiting_hitl`` before checkpoint resume stream."""
@@ -398,7 +443,11 @@ class ThreadRunService:
         now = datetime.now(UTC)
         run_rows = await self.run_message_repo.list_for_run(run.id)
         if find_promotable_final_ai_row(run_rows):
-            await self.finalize_run_for_main(run.id)
+            await apply_run_closure(
+                self,
+                run_id=run.id,
+                outcome=RunClosureOutcome.COMPLETED,
+            )
             refreshed = await self.run_repo.get_run(self.tenant_id, run.id)
             return refreshed or run
 
@@ -427,4 +476,11 @@ class ThreadRunService:
             run = await self.repair_run_if_needed(run)
             close_update = AgentRun.from_state(run).transition_reconcile_close(now)
             if close_update is not None:
-                await self._persist_status_update(run.id, close_update)
+                await apply_run_closure(
+                    self,
+                    run_id=run.id,
+                    outcome=RunClosureOutcome.RECONCILED_BEFORE_NEW_TURN,
+                )
+                refreshed = await self.run_repo.get_run(self.tenant_id, run.id)
+                if refreshed:
+                    run = refreshed

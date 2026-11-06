@@ -87,7 +87,7 @@ def _noop_thread_turn_guard():
 def chat_service():
     db = MagicMock()
     with patch(
-        "apps.tenant_app_service.chat.application.turn.base.ThreadService.get_thread",
+        "apps.tenant_app_service.chat.application.turn.turn_helpers.ThreadService.get_thread",
         AsyncMock(return_value=SimpleNamespace(agent_id=-1)),
     ):
         service = ChatTurnService(tenant_id=1, db=db)
@@ -134,14 +134,6 @@ def test_build_initial_agent_messages_excludes_human_for_normal_send(chat_servic
 
 
 @pytest.mark.asyncio
-async def test_cancel_superseded_hitl_on_normal_send(chat_service, chat_request):
-    with patch("apps.tenant_app_service.hitl.service.HitlApprovalService") as svc_cls:
-        svc_cls.return_value.cancel_superseded_pending_for_thread = AsyncMock(return_value=1)
-        await chat_service._cancel_superseded_hitl_if_needed(chat_request)
-        svc_cls.return_value.cancel_superseded_pending_for_thread.assert_awaited_once_with(chat_request.thread_id)
-
-
-@pytest.mark.asyncio
 async def test_chat_stream_persists_before_session_started(chat_service, chat_request, current_user):
     call_order: list[str] = []
     background_started = asyncio.Event()
@@ -173,10 +165,12 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
             "_build_runtime_config",
             return_value={"configurable": {"thread_id": chat_request.thread_id}},
         ),
-        patch.object(chat_service, "_cancel_superseded_hitl_if_needed", AsyncMock()),
-        patch.object(chat_service, "_reconcile_active_runs_before_new_turn", AsyncMock()),
         patch(
-            "apps.tenant_app_service.chat.application.turn.prepare_complete.ThreadRunService.send_human_and_create_runs",
+            "apps.tenant_app_service.chat.application.turn.prepare_complete.execute_reconcile_before_new_turn",
+            AsyncMock(),
+        ),
+        patch(
+            "apps.tenant_app_service.chat.application.turn.turn_helpers.ThreadRunService.send_human_and_create_runs",
             side_effect=track_send,
         ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
@@ -185,7 +179,7 @@ async def test_chat_stream_persists_before_session_started(chat_service, chat_re
             side_effect=fake_run_agent_and_emit,
         ),
         patch(
-            "apps.tenant_app_service.chat.application.turn.prepare_complete.ThreadRunService.mark_run_running",
+            "apps.tenant_app_service.chat.application.turn.turn_helpers.ThreadRunService.mark_run_running",
             AsyncMock(),
         ),
     ):
@@ -223,10 +217,12 @@ async def test_chat_stream_sse_disconnect_leaves_background_running(chat_service
             "_build_runtime_config",
             return_value={"configurable": {"thread_id": chat_request.thread_id}},
         ),
-        patch.object(chat_service, "_cancel_superseded_hitl_if_needed", AsyncMock()),
-        patch.object(chat_service, "_reconcile_active_runs_before_new_turn", AsyncMock()),
         patch(
-            "apps.tenant_app_service.chat.application.turn.prepare_complete.ThreadRunService.send_human_and_create_runs",
+            "apps.tenant_app_service.chat.application.turn.prepare_complete.execute_reconcile_before_new_turn",
+            AsyncMock(),
+        ),
+        patch(
+            "apps.tenant_app_service.chat.application.turn.turn_helpers.ThreadRunService.send_human_and_create_runs",
             AsyncMock(return_value=_mock_send_human_and_runs()),
         ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
@@ -235,7 +231,7 @@ async def test_chat_stream_sse_disconnect_leaves_background_running(chat_service
             side_effect=fake_run_agent_and_emit,
         ),
         patch(
-            "apps.tenant_app_service.chat.application.turn.prepare_complete.ThreadRunService.mark_run_running",
+            "apps.tenant_app_service.chat.application.turn.turn_helpers.ThreadRunService.mark_run_running",
             AsyncMock(),
         ),
     ):
@@ -281,10 +277,12 @@ async def test_chat_stream_delivers_background_events(chat_service, chat_request
             "_build_runtime_config",
             return_value={"configurable": {"thread_id": chat_request.thread_id}},
         ),
-        patch.object(chat_service, "_cancel_superseded_hitl_if_needed", AsyncMock()),
-        patch.object(chat_service, "_reconcile_active_runs_before_new_turn", AsyncMock()),
         patch(
-            "apps.tenant_app_service.chat.application.turn.prepare_complete.ThreadRunService.send_human_and_create_runs",
+            "apps.tenant_app_service.chat.application.turn.prepare_complete.execute_reconcile_before_new_turn",
+            AsyncMock(),
+        ),
+        patch(
+            "apps.tenant_app_service.chat.application.turn.turn_helpers.ThreadRunService.send_human_and_create_runs",
             AsyncMock(return_value=_mock_send_human_and_runs()),
         ),
         patch.object(chat_service, "create_thread_title_if_1st_message", AsyncMock(return_value=None)),
@@ -293,7 +291,7 @@ async def test_chat_stream_delivers_background_events(chat_service, chat_request
             side_effect=fake_run_agent_and_emit,
         ),
         patch(
-            "apps.tenant_app_service.chat.application.turn.prepare_complete.ThreadRunService.mark_run_running",
+            "apps.tenant_app_service.chat.application.turn.turn_helpers.ThreadRunService.mark_run_running",
             AsyncMock(),
         ),
     ):
@@ -403,9 +401,9 @@ def test_user_stream_error_sse_payload_includes_kind_and_code():
 def test_stream_event_to_sse_token():
     chunk = SimpleNamespace(content="hello")
     event = {"event": "on_chat_model_stream", "data": {"chunk": chunk}, "tags": []}
-    from apps.tenant_app_service.chat.turn_service import ChatTurnService
+    from apps.tenant_app_service.chat.application.turn.stream_turn import StreamTurnUseCase
 
-    sse = ChatTurnService._stream_event_to_sse(event)
+    sse = StreamTurnUseCase.stream_event_to_sse(event)
     assert sse is not None
     payload = json.loads(sse.removeprefix("data: ").strip())
     assert payload["type"] == "token"

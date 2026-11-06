@@ -82,6 +82,7 @@ class AgentRunRepository:
         return _to_state(row) if row else None
 
     async def list_active_for_thread_agent(self, thread_id: str, agent_id: int) -> list[AgentRunState]:
+        """``queued`` / ``running`` rows for a thread+agent (newest first). Excludes ``awaiting_hitl``."""
         result = await self.db.execute(
             select(AgentRunRow)
             .where(

@@ -7,12 +7,14 @@ from uuid import uuid4
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.context import create_thread_id, extract_runtime_context
 from apps.tenant_app_service.agents.metrics import session_tracker
-from apps.tenant_app_service.chat.application.runs.thread_run_service import ThreadRunService
+from apps.tenant_app_service.chat.application.turn.admission import guard_thread_turn_start
+from apps.tenant_app_service.chat.application.turn.reconcile_before_turn_flow import (
+    execute_reconcile_before_new_turn,
+)
 from apps.tenant_app_service.chat.schemas import ChatRequest, ChatResponse, Message
 from apps.tenant_app_service.chat.streaming import (
     PreparedChatStream,
 )
-from apps.tenant_app_service.chat.turn_admission import guard_thread_turn_start
 
 
 class ChatTurnPrepareCompleteMixin:
@@ -38,8 +40,6 @@ class ChatTurnPrepareCompleteMixin:
             current_user.id,
             request.thread_id,
         )
-
-        await self._cancel_superseded_hitl_if_needed(request)
 
         run_id: str | None = None
         trigger_message_id: str | None = None
@@ -69,7 +69,12 @@ class ChatTurnPrepareCompleteMixin:
 
         effective_thread_id = request.thread_id or config["configurable"]["thread_id"]
         if request.thread_id:
-            await self._reconcile_active_runs_before_new_turn(effective_thread_id, agent_id)
+            await execute_reconcile_before_new_turn(
+                self.db,
+                self.tenant_id,
+                thread_id=effective_thread_id,
+                agent_id=agent_id,
+            )
         if request.thread_id:
             await guard_thread_turn_start(
                 self.db,
@@ -245,11 +250,19 @@ class ChatTurnPrepareCompleteMixin:
                 await self._thread_runs().mark_run_failed_unless_cancelled(prepared.run_id)
             raise InternalServiceError(f"Error invoking agent: {str(e)}") from e
         finally:
-            if prepared.run_id:
-                if not await self._run_is_cancelled_in_db(prepared.run_id):
-                    await ThreadRunService(self.db, self.tenant_id).finalize_run_for_main(prepared.run_id)
-            self.schedule_session_end(
-                session_id=session_id,
-                thread_id=request.thread_id or runtime_ctx.thread_id,
+            from apps.tenant_app_service.chat.application.runs.closure import RunClosureRollup, apply_run_closure
+            from apps.tenant_app_service.chat.domain.agent_run.closure import RunClosureOutcome
+
+            closure_outcome = RunClosureOutcome.COMPLETED
+            if prepared.run_id and await self._run_is_cancelled_in_db(prepared.run_id):
+                closure_outcome = RunClosureOutcome.CANCELLED
+            await apply_run_closure(
+                self._thread_runs(),
                 run_id=prepared.run_id,
+                outcome=closure_outcome,
+                rollup=RunClosureRollup(
+                    session_id=session_id,
+                    thread_id=request.thread_id or runtime_ctx.thread_id,
+                    run_id=prepared.run_id,
+                ),
             )

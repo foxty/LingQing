@@ -468,6 +468,7 @@ async def test_finalize_run_for_main_skips_awaiting_hitl():
         updated_at=datetime.now(UTC),
     )
     service.run_repo.get_run = AsyncMock(return_value=run)
+    service.run_message_repo.list_for_run = AsyncMock(return_value=[])
     service.promote_final_ai = AsyncMock()
     service.mark_run_completed = AsyncMock()
     await service.finalize_run_for_main("run-1")
@@ -522,16 +523,20 @@ async def test_prepare_skips_legacy_human_persist_for_normal_send():
 
     service = ChatTurnService(1, db)
     service._resolve_agent_id = AsyncMock(return_value=1)
-    service._cancel_superseded_hitl_if_needed = AsyncMock()
     service._get_agent_graph = AsyncMock(return_value=(MagicMock(get_name=MagicMock(return_value="Agent")), None))
     service._convert_to_langchain_messages = MagicMock(return_value=[])
     service._inject_message_attachments = AsyncMock(return_value=[])
     service.get_tenant_domain = AsyncMock(return_value=MagicMock(config=MagicMock(to_dict=MagicMock(return_value={}))))
     service._build_runtime_config = MagicMock(return_value={"configurable": {"thread_id": "thread-1"}})
     service.create_thread_title_if_1st_message = AsyncMock(return_value=None)
-    service._reconcile_active_runs_before_new_turn = AsyncMock()
 
-    with patch("apps.tenant_app_service.chat.application.turn.prepare_complete.guard_thread_turn_start", AsyncMock()):
+    with (
+        patch(
+            "apps.tenant_app_service.chat.application.turn.prepare_complete.execute_reconcile_before_new_turn",
+            AsyncMock(),
+        ),
+        patch("apps.tenant_app_service.chat.application.turn.prepare_complete.guard_thread_turn_start", AsyncMock()),
+    ):
         with (
             patch.object(
                 ThreadRunService,
