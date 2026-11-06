@@ -1,4 +1,8 @@
-"""Shared pagination schemas and utilities."""
+"""Shared **response** shape for paginated API endpoints.
+
+Use ``apps.shared.utils.pagination.PaginationRequest`` for offset/limit
+calculation and page clamping in application/infrastructure code.
+"""
 
 from typing import Generic, TypeVar
 

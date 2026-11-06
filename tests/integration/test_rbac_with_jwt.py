@@ -326,12 +326,17 @@ class TestRBACTenantManagement:
 
     @pytest.mark.asyncio
     async def test_user_management_admin_only(self, rbac_test_setup: dict):
-        """Only admin can manage users."""
+        """List users is allowed for tenant settings readers; write paths stay admin-only."""
         client = TestClient(app)
 
         # Viewer should be denied
         viewer_headers = make_auth_headers(rbac_test_setup["tokens"]["viewer"])
         response = client.get("/tenants/users", headers=viewer_headers)
+        assert response.status_code == 403
+
+        # Member lacks tenant.settings:read and users.manage — denied
+        member_headers = make_auth_headers(rbac_test_setup["tokens"]["member"])
+        response = client.get("/tenants/users", headers=member_headers)
         assert response.status_code == 403
 
         # Admin should be allowed

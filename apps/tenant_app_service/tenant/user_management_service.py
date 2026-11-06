@@ -13,6 +13,7 @@ from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import DuplicateResourceError, ResourceNotFoundError, ValidationError
 from apps.shared.db.models import TenantMembership, User
 from apps.shared.utils.logger import get_logger
+from apps.shared.utils.pagination import PaginationRequest
 from apps.tenant_app_service.auth.domain import (
     MembershipStatus,
     UserRole,
@@ -20,7 +21,7 @@ from apps.tenant_app_service.auth.domain import (
 )
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.tenant.repository import TenantRepository
-from apps.tenant_app_service.tenant.schemas import TenantUserDTO
+from apps.tenant_app_service.tenant.schemas import TenantUserDTO, TenantUserListResponse
 
 logger = get_logger(__name__)
 
@@ -40,23 +41,51 @@ class TenantUserManagementService(TenantAwareService):
         self.tenant_repo = TenantRepository(db)
         self.user_repo = UserRepository(db)
 
-    async def list_users(self) -> list[TenantUserDTO]:
-        """List users within a tenant.
+    async def list_users(
+        self,
+        *,
+        page: int = 1,
+        page_size: int = 10,
+        query: str | None = None,
+    ) -> TenantUserListResponse:
+        """List users within a tenant with optional search and pagination.
+
+        Args:
+            page: Page number (1-indexed)
+            page_size: Page size (max 100 at router)
+            query: Optional search by username substring or user id (numeric)
 
         Returns:
-            List of TenantUserDTO
+            Paginated list plus tenant-wide aggregates for admin UI.
         """
         tenant = await self.tenant_repo.get_by_id(self.tenant_id)
         if not tenant:
             raise ResourceNotFoundError("Tenant not found")
 
-        result = await self.db.execute(
-            select(User, TenantMembership)
-            .join(TenantMembership, TenantMembership.user_id == User.id)
-            .where(TenantMembership.tenant_id == self.tenant_id)
+        total_tenant_members = await self.user_repo.count_tenant_memberships(self.tenant_id)
+        active_admin_count = await self.user_repo.count_active_admins_in_tenant(self.tenant_id)
+        total = await self.user_repo.count_users_in_tenant_filtered(self.tenant_id, query)
+
+        if total == 0:
+            return TenantUserListResponse(
+                items=[],
+                total=0,
+                page=max(1, page),
+                page_size=page_size,
+                total_pages=0,
+                total_tenant_members=total_tenant_members,
+                active_admin_count=active_admin_count,
+            )
+
+        window = PaginationRequest.with_total(page=page, page_size=page_size, total=total)
+
+        rows = await self.user_repo.list_users_in_tenant_page(
+            self.tenant_id,
+            offset=window.offset,
+            limit=window.page_size,
+            search_query=query,
         )
-        rows = result.all()
-        return [
+        items = [
             TenantUserDTO(
                 id=user.id,
                 username=user.username,
@@ -68,6 +97,16 @@ class TenantUserManagementService(TenantAwareService):
             )
             for user, membership in rows
         ]
+
+        return TenantUserListResponse(
+            items=items,
+            total=total,
+            page=window.page,
+            page_size=window.page_size,
+            total_pages=window.total_pages,
+            total_tenant_members=total_tenant_members,
+            active_admin_count=active_admin_count,
+        )
 
     async def create_user(
         self,

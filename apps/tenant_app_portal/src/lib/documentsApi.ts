@@ -5,22 +5,15 @@
 
 import api from './api'
 import type { ApiDocument } from '@/types'
+import type { PaginatedListResponse } from '@/lib/paginatedList'
 
 /** Derive a browser URL for a Google Drive source file. */
 export function driveFileViewUrl(externalFileId: string): string {
   return `https://drive.google.com/file/d/${externalFileId}/view`
 }
 
-/**
- * Paginated response from API
- */
-export interface PaginatedResponse<T> {
-  items: T[]
-  total: number
-  page: number
-  page_size: number
-  total_pages: number
-}
+/** Paginated response envelope (shared with other list APIs). */
+export type PaginatedResponse<T> = PaginatedListResponse<T>
 
 /**
  * Get documents with pagination

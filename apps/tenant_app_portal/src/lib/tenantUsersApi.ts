@@ -1,4 +1,5 @@
 import api from './api'
+import type { PaginatedListResponse } from '@/lib/paginatedList'
 
 export type TenantUserRole = 'admin' | 'member' | 'viewer'
 
@@ -27,8 +28,21 @@ export interface TenantUserUpdateRequest {
   role: TenantUserRole
 }
 
-export async function listTenantUsers(): Promise<TenantUser[]> {
-  const response = await api.get<TenantUser[]>('/tenants/users')
+export interface TenantUserListParams {
+  page?: number
+  page_size?: number
+  /** Search by username (substring, case-insensitive) or exact numeric user id */
+  query?: string
+}
+
+/** User list uses the shared paginated envelope plus tenant-wide aggregates. */
+export type TenantUserListResponse = PaginatedListResponse<TenantUser> & {
+  total_tenant_members: number
+  active_admin_count: number
+}
+
+export async function listTenantUsers(params?: TenantUserListParams): Promise<TenantUserListResponse> {
+  const response = await api.get<TenantUserListResponse>('/tenants/users', { params })
   return response.data
 }
 

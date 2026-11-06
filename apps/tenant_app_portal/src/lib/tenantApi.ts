@@ -75,14 +75,6 @@ export interface TokenUsageEventsResponse {
   rows: TokenUsageEventRecord[]
 }
 
-/**
- * Placeholder: Get tenant users (coming soon)
- */
-export async function getTenantUsers(): Promise<{ message: string; feature: string }> {
-  const response = await api.get('/tenants/users')
-  return response.data
-}
-
 export interface TenantTokenFilterParams {
   days?: number
   user_id?: number

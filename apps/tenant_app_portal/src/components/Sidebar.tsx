@@ -44,6 +44,11 @@ export default function Sidebar({ sidebarCollapsed, onToggleSidebar, isActive }:
         includeAppearance: hasAny([PERMISSIONS.TENANT_SETTINGS_WRITE]),
         includeDocumentSources: hasAny(actionRules.canManageDocumentSources()),
         includeSystemJobs: hasAny([PERMISSIONS.TENANT_ADMIN]),
+        includeUsers: hasAny([
+          PERMISSIONS.TENANT_ADMIN,
+          PERMISSIONS.TENANT_SETTINGS_READ,
+          PERMISSIONS.USERS_MANAGE,
+        ]),
       }),
     [hasAny, t]
   )

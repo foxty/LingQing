@@ -8,11 +8,13 @@ Commands:
     list              List all tenants
     show              Show tenant info with user count
     seed-tags         Seed default tags for a tenant
+    seed-members      Create many member-role users (local dev / UX testing)
 
 Usage:
     python tenant_cli.py create --name "My Company" --slug "my-company"
     python tenant_cli.py list
     python tenant_cli.py show --slug demo
+    uv run --env-file .env.local python scripts/tenant_cli.py seed-members --tenant demo --count 100
 """
 # ruff: noqa: T201
 
@@ -27,6 +29,7 @@ from typing import Any
 project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.insert(0, project_root)
 
+from apps.shared.core.exceptions import DuplicateResourceError, ValidationError  # noqa: E402
 from apps.shared.core.tag_seed import seed_default_tags  # noqa: E402
 from apps.shared.data_source import (  # noqa: E402
     AssetMetadataRepository,
@@ -234,6 +237,51 @@ async def seed_tags_for_tenant(tenant_slug: str) -> None:
             raise
 
 
+async def seed_member_users(
+    tenant_slug: str,
+    count: int,
+    password: str,
+    username_prefix: str,
+) -> None:
+    """Create synthetic member users (e.g. member1..memberN) for local UX testing."""
+    print("\n" + "=" * 70)
+    print(f"👥 Seeding {count} member user(s) for tenant slug: {tenant_slug}")
+    print("=" * 70 + "\n")
+
+    postgres_executor = PostgreSQLProvisioningExecutor()
+
+    async with app_db_session() as session:
+        provisioning_service = TenantProvisioningService(session, postgres_executor)
+        tenant = await provisioning_service.get_tenant_by_slug(tenant_slug)
+        if not tenant:
+            print(f"❌ Tenant '{tenant_slug}' not found", file=sys.stderr)
+            sys.exit(1)
+        tenant_id = tenant["id"]
+        print(f"Tenant: {tenant.get('name')!r} (id={tenant_id})\n")
+
+    created = 0
+    skipped = 0
+
+    for i in range(1, count + 1):
+        username = f"{username_prefix}{i}"
+        async with app_db_session() as session:
+            user_service = TenantUserManagementService(tenant_id=tenant_id, db=session)
+            try:
+                await user_service.create_user(username=username, password=password, role="member")
+                created += 1
+                print(f"   ✓ {username}")
+            except DuplicateResourceError:
+                skipped += 1
+                print(f"   ⏭️  {username} (already exists)")
+            except ValidationError as exc:
+                print(f"❌ Validation failed for {username}: {exc.message}", file=sys.stderr)
+                sys.exit(1)
+
+    print("\n" + "=" * 70)
+    print(f"Done. Created: {created}, skipped (duplicate): {skipped}")
+    print("=" * 70 + "\n")
+
+
 def validate_slug(slug: str) -> bool:
     """Validate tenant slug format.
 
@@ -268,6 +316,9 @@ Examples:
   # Show tenant details (with user count)
   python tenant_cli.py show --slug demo
 
+  # Seed many member users (local dev — uses .env.local DB)
+  uv run --env-file .env.local python scripts/tenant_cli.py seed-members --tenant demo --count 100
+
 Slug Requirements:
   - Lowercase letters, numbers, and hyphens only
   - Must start with a letter
@@ -297,6 +348,30 @@ Slug Requirements:
     seed_tags_parser = subparsers.add_parser("seed-tags", help="Seed default tags for a tenant")
     seed_tags_parser.add_argument("--tenant", type=str, required=True, help="Tenant slug")
 
+    seed_members_parser = subparsers.add_parser(
+        "seed-members",
+        help="Create many synthetic member users (local dev / long-list UX testing)",
+    )
+    seed_members_parser.add_argument("--tenant", type=str, required=True, help="Tenant slug")
+    seed_members_parser.add_argument(
+        "--count",
+        type=int,
+        default=100,
+        help="How many users to create (default: 100)",
+    )
+    seed_members_parser.add_argument(
+        "--prefix",
+        type=str,
+        default="member",
+        help="Username prefix; usernames are {prefix}1 .. {prefix}N (default: member)",
+    )
+    seed_members_parser.add_argument(
+        "--password",
+        type=str,
+        default="DevPass1a",
+        help="Shared password for seeded users — must be 8+ chars with upper, lower, digit (default: DevPass1a)",
+    )
+
     args = parser.parse_args()
 
     if not args.command:
@@ -325,6 +400,25 @@ Slug Requirements:
 
     elif args.command == "seed-tags":
         asyncio.run(seed_tags_for_tenant(args.tenant))
+
+    elif args.command == "seed-members":
+        if not validate_slug(args.tenant):
+            print("❌ Error: Invalid tenant slug format", file=sys.stderr)
+            sys.exit(1)
+        if args.count < 1 or args.count > 5000:
+            print("❌ Error: --count must be between 1 and 5000", file=sys.stderr)
+            sys.exit(1)
+        if not args.prefix.strip():
+            print("❌ Error: --prefix must not be empty", file=sys.stderr)
+            sys.exit(1)
+        asyncio.run(
+            seed_member_users(
+                tenant_slug=args.tenant,
+                count=args.count,
+                password=args.password,
+                username_prefix=args.prefix.strip(),
+            )
+        )
 
 
 if __name__ == "__main__":

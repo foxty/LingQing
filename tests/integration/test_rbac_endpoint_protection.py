@@ -97,7 +97,11 @@ PROTECTED_ENDPOINTS = [
     ("GET", "/llm-config/registry/defaults", Permissions.TENANT_SETTINGS_READ),
     ("PUT", "/llm-config/registry/defaults", Permissions.TENANT_SETTINGS_WRITE),
     # Tenant Management Endpoints
-    ("GET", "/tenants/users", Permissions.USERS_MANAGE),
+    (
+        "GET",
+        "/tenants/users",
+        [Permissions.TENANT_ADMIN, Permissions.USERS_MANAGE, Permissions.TENANT_SETTINGS_READ],
+    ),
     ("POST", "/tenants/users", Permissions.USERS_MANAGE),
     ("PUT", "/tenants/users/{user_id}", Permissions.USERS_MANAGE),
     ("POST", "/tenants/users/{user_id}/deactivate", Permissions.USERS_MANAGE),

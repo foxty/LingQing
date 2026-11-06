@@ -47,7 +47,8 @@ function ProtectedRoute({
 }: {
   children: React.ReactNode
   withLayout?: boolean
-  permission?: string
+  /** Single permission or any-of list (user needs at least one). */
+  permission?: string | string[]
 }) {
   const { user, loading, hasPermission } = useAuth()
   const { t } = useTranslation()
@@ -68,8 +69,11 @@ function ProtectedRoute({
   // Permission-gated route: redirect to the safe landing instead of rendering
   // a page whose API calls will 403. Dashboards is always reachable (shared
   // artifacts are viewable without the gated permission).
-  if (permission && !hasPermission(permission)) {
-    return <Navigate to="/artifacts/dashboards" replace />
+  if (permission) {
+    const required = Array.isArray(permission) ? permission : [permission]
+    if (!required.some((p) => hasPermission(p))) {
+      return <Navigate to="/artifacts/dashboards" replace />
+    }
   }
 
   return withLayout ? <Layout>{children}</Layout> : <>{children}</>
@@ -308,7 +312,17 @@ function App() {
             element={<SettingsDocumentSourcesTab />}
           />
           <Route path="sso" element={<Navigate to="/settings/identity" replace />} />
-          <Route path="users" element={<SettingsUsersTab />} />
+          <Route
+            path="users"
+            element={
+              <ProtectedRoute
+                withLayout={false}
+                permission={[PERMISSIONS.TENANT_ADMIN, PERMISSIONS.TENANT_SETTINGS_READ, PERMISSIONS.USERS_MANAGE]}
+              >
+                <SettingsUsersTab />
+              </ProtectedRoute>
+            }
+          />
           <Route path="usage" element={<SettingsUsageTab />} />
           <Route path="system-jobs" element={<SettingsSystemJobsTab />} />
           <Route path="subscription" element={<SettingsSubscriptionTab />} />
