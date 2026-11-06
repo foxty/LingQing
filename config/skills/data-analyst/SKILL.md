@@ -21,19 +21,19 @@ tools:
   - name: search_data_assets
     limit: 10
   - name: search_documents
-    limit: 5
+    limit: 10
   - name: retrieve_resource_context
-    limit: 5
+    limit: 10
   - name: run_sql_query_on_datasource
-    limit: 15
+    limit: 30
   - name: create_chart_from_sql
     limit: 10
   - name: create_chart_from_structured_data
     limit: 10
   - name: create_chart_grid_from_sql
-    limit: 4
+    limit: 10
   - name: create_chart_grid_from_structured_data
-    limit: 4
+    limit: 10
 ---
 
 ## Responsibilities
