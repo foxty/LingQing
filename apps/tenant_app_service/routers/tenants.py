@@ -1,6 +1,6 @@
 """Tenants router."""
 
-from fastapi import APIRouter, Depends, File, UploadFile
+from fastapi import APIRouter, Depends, File, Query, UploadFile
 from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,6 +20,7 @@ from apps.tenant_app_service.tenant.portal_branding_service import PortalBrandin
 from apps.tenant_app_service.tenant.schemas import (
     TenantUserCreateRequest,
     TenantUserDTO,
+    TenantUserListResponse,
     TenantUserResetPasswordRequest,
     TenantUserUpdateRequest,
 )
@@ -105,22 +106,35 @@ async def get_portal_logo(
 # ============ User Management Endpoints ============
 
 
-@router.get("/users", response_model=list[TenantUserDTO])
+@router.get("/users", response_model=TenantUserListResponse)
 async def list_tenant_users(
-    current_user: UserDTO = Depends(require_permission(Permissions.USERS_MANAGE)),
+    page: int = Query(1, ge=1, description="Page number (1-indexed)"),
+    page_size: int = Query(10, ge=1, le=100, description="Items per page"),
+    query: str | None = Query(None, description="Search by username (substring) or user id (exact)"),
+    current_user: UserDTO = Depends(
+        require_permission(
+            (Permissions.TENANT_ADMIN, Permissions.USERS_MANAGE, Permissions.TENANT_SETTINGS_READ)
+        )
+    ),
     db: AsyncSession = Depends(get_db),
 ):
     """List tenant users.
 
+    Readable with ``tenant.admin``, ``users.manage``, or ``tenant.settings:read`` (e.g. usage filters);
+    mutations stay ``users.manage``.
+
     Args:
+        page: Page number (1-indexed)
+        page_size: Items per page (max 100)
+        query: Optional search string
         current_user: Current authenticated user (permission required)
         db: Database session
 
     Returns:
-        List of users
+        Paginated list of users plus tenant-wide aggregates
     """
     service = TenantUserManagementService(tenant_id=current_user.tenant_id, db=db)
-    return await service.list_users()
+    return await service.list_users(page=page, page_size=page_size, query=query)
 
 
 @router.post("/users", response_model=TenantUserDTO)

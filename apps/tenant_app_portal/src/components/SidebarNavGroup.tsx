@@ -135,9 +135,21 @@ export function getSettingsNavItems(
     includeAppearance?: boolean
     includeDocumentSources?: boolean
     includeSystemJobs?: boolean
+    /** Show Users nav when caller can list users (settings read or user admin). */
+    includeUsers?: boolean
   } = {}
 ): SidebarNavItem[] {
-  const items: SidebarNavItem[] = [
+  const items: SidebarNavItem[] = []
+
+  if (options.includeAppearance) {
+    items.push({
+      to: '/settings/appearance',
+      label: t('settings.appearance'),
+      matchPrefixes: ['/settings/appearance'],
+    })
+  }
+
+  items.push(
     { to: '/settings/models', label: t('settings.models'), matchPrefixes: ['/settings/models'] },
     { to: '/settings/tags', label: t('settings.tags'), matchPrefixes: ['/settings/tags'] },
     { to: '/settings/abac', label: t('settings.abac'), matchPrefixes: ['/settings/abac'] },
@@ -145,32 +157,32 @@ export function getSettingsNavItems(
       to: '/settings/identity',
       label: t('settings.identity'),
       matchPrefixes: ['/settings/identity', '/settings/sso'],
-    },
-    { to: '/settings/users', label: t('settings.users'), matchPrefixes: ['/settings/users'] },
-    { to: '/settings/usage', label: t('settings.usage'), matchPrefixes: ['/settings/usage'] },
-  ]
+    }
+  )
 
-  if (options.includeAppearance) {
-    items.unshift({
-      to: '/settings/appearance',
-      label: t('settings.appearance'),
-      matchPrefixes: ['/settings/appearance'],
+  if (options.includeDocumentSources) {
+    items.push({
+      to: '/settings/document-sources',
+      label: t('settings.documentSources'),
+      matchPrefixes: ['/settings/document-sources'],
     })
   }
+
+  if (options.includeUsers) {
+    items.push({
+      to: '/settings/users',
+      label: t('settings.users'),
+      matchPrefixes: ['/settings/users'],
+    })
+  }
+
+  items.push({ to: '/settings/usage', label: t('settings.usage'), matchPrefixes: ['/settings/usage'] })
 
   if (options.includeSystemJobs) {
     items.push({
       to: '/settings/system-jobs',
       label: t('settings.systemJobs'),
       matchPrefixes: ['/settings/system-jobs'],
-    })
-  }
-
-  if (options.includeDocumentSources) {
-    items.splice(5, 0, {
-      to: '/settings/document-sources',
-      label: t('settings.documentSources'),
-      matchPrefixes: ['/settings/document-sources'],
     })
   }
 

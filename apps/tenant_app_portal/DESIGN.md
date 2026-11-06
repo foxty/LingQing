@@ -152,6 +152,8 @@ Record operations. Two layouts only — **list index** and **list detail**.
 
 Label above field; 13px help under field. Group related fields; compact numerics; no full-bleed 40px inputs. Secrets masked in control with reveal/replace. Save primary; Test outline with in-form result (§5).
 
+**Validation and errors:** state domain rules (password policy, format limits, etc.) in **12–13px muted help** under the relevant fields where the user needs them — keep product copy in i18n, not in this file. **Client:** validate before submit; surface field problems **inline** (destructive border + optional warning icon + message under the control, e.g. `Input` `errorMsg`) — not a toast for the same mistake (§5). **Server:** map FastAPI `detail` / field errors back to controls when possible; use **destructive `Alert`** at the **top of the form or dialog** for errors that are not tied to a single field. One channel per outcome (§5).
+
 ### Settings stack
 
 In-page section nav only (tabs/compact list). Policy row: title, consequence, control right. Incomplete/risky counts use `--warn`. One `--card` section chrome: `text-lg` title, muted description, optional header action, body in same card — never loose title + separate card. `text-2xl` reserved for KPI values (Detail metrics) and list index headers only.
@@ -189,7 +191,7 @@ On top of §4 surfaces — not layout types.
 
 | Situation | Channel |
 |---|---|
-| Field invalid (client) | Inline under control — 13px `text-destructive`, border `--destructive` |
+| Field invalid (client) | Inline under control — 13px `text-destructive`, border `--destructive`; optional warning icon in-field (`Input` with `errorMsg`) |
 | Form submit rejected (server) | `Alert destructive` top of form/dialog |
 | Connection / diagnostic test | Inline next to control — not toast-only |
 | Mutation success | Toast via `useNotification` |

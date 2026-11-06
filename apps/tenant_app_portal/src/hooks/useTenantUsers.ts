@@ -1,6 +1,7 @@
-import { useCallback, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 
+import { tenantUsersListQueryKey } from '@/lib/tenantUsersQueryKeys'
 import {
   createTenantUser,
   deactivateTenantUser,
@@ -10,158 +11,154 @@ import {
   updateTenantUserRole,
   type TenantUser,
   type TenantUserCreateRequest,
+  type TenantUserListResponse,
   type TenantUserUpdateRequest,
 } from '@/lib/tenantUsersApi'
 import { setUserBreakGlass } from '@/lib/ssoApi'
+import { PERMISSIONS } from '@/lib/permissionRules'
 import { useAuth } from './useAuth'
 
+const TENANT_USERS_DROPDOWN_PAGE_SIZE = 500
+
 export function useTenantUsersList() {
-  const { user } = useAuth()
+  const { user, hasAny } = useAuth()
+  const canListUsers = hasAny([
+    PERMISSIONS.TENANT_ADMIN,
+    PERMISSIONS.TENANT_SETTINGS_READ,
+    PERMISSIONS.USERS_MANAGE,
+  ])
 
   return useQuery({
-    queryKey: ['tenant-users', user?.tenantId],
-    queryFn: listTenantUsers,
-    enabled: !!user,
+    queryKey: [...tenantUsersListQueryKey(user?.tenantId), 'dropdown', TENANT_USERS_DROPDOWN_PAGE_SIZE],
+    queryFn: () =>
+      listTenantUsers({ page: 1, page_size: TENANT_USERS_DROPDOWN_PAGE_SIZE }).then((res) => res.items),
+    enabled: !!user && canListUsers,
     retry: 1,
   })
 }
 
+function applyRowPatchToResponsePages(
+  queryClient: ReturnType<typeof useQueryClient>,
+  tenantId: number | undefined,
+  userId: number,
+  patch: Partial<TenantUser>
+) {
+  queryClient.setQueriesData<TenantUserListResponse>(
+    { queryKey: tenantUsersListQueryKey(tenantId), exact: false },
+    (old) => {
+      if (!old?.items?.length) {
+        return old
+      }
+      const idx = old.items.findIndex((u) => u.id === userId)
+      if (idx < 0) {
+        return old
+      }
+      const nextItems = [...old.items]
+      nextItems[idx] = { ...nextItems[idx], ...patch }
+      return { ...old, items: nextItems }
+    }
+  )
+}
+
 export function useTenantUsers() {
-  const [users, setUsers] = useState<TenantUser[]>([])
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const queryClient = useQueryClient()
+  const { user } = useAuth()
+  const tenantId = user?.tenantId
 
-  const fetchUsers = useCallback(async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const response = await listTenantUsers()
-      setUsers(response)
-      return response
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to fetch users'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const invalidateTenantUsers = useCallback(() => {
+    return queryClient.invalidateQueries({ queryKey: tenantUsersListQueryKey(tenantId) })
+  }, [queryClient, tenantId])
 
-  const addUser = useCallback(async (payload: TenantUserCreateRequest) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const created = await createTenantUser(payload)
-      setUsers((prev) => [...prev, created])
-      return created
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to create user'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const fetchUsers = useCallback(() => {
+    return queryClient.refetchQueries({ queryKey: tenantUsersListQueryKey(tenantId) })
+  }, [queryClient, tenantId])
 
-  const deactivateUser = useCallback(async (userId: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      await deactivateTenantUser(userId)
-      setUsers((prev) =>
-        prev.map((user) =>
-          user.id === userId
-            ? {
-                ...user,
-                membership_status: 'inactive',
-              }
-            : user
-        )
-      )
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to deactivate user'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const addUserMutation = useMutation({
+    mutationFn: createTenantUser,
+    onSuccess: () => invalidateTenantUsers(),
+  })
 
-  const recoverUserMembership = useCallback(async (userId: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      await recoverTenantUser(userId)
-      setUsers((prev) =>
-        prev.map((user) =>
-          user.id === userId
-            ? {
-                ...user,
-                membership_status: 'active',
-              }
-            : user
-        )
-      )
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to recover user'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const deactivateUserMutation = useMutation({
+    mutationFn: deactivateTenantUser,
+    onSuccess: (_, userId) => {
+      applyRowPatchToResponsePages(queryClient, tenantId, userId, { membership_status: 'inactive' })
+      invalidateTenantUsers()
+    },
+  })
 
-  const resetPassword = useCallback(async (userId: number, newPassword: string) => {
-    setLoading(true)
-    setError(null)
-    try {
-      await resetTenantUserPassword(userId, { new_password: newPassword })
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to reset password'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const recoverUserMutation = useMutation({
+    mutationFn: recoverTenantUser,
+    onSuccess: (_, userId) => {
+      applyRowPatchToResponsePages(queryClient, tenantId, userId, { membership_status: 'active' })
+      invalidateTenantUsers()
+    },
+  })
 
-  const updateUserRole = useCallback(async (userId: number, payload: TenantUserUpdateRequest) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const updated = await updateTenantUserRole(userId, payload)
-      setUsers((prev) => prev.map((user) => (user.id === userId ? updated : user)))
-      return updated
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to update user role'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const resetPasswordMutation = useMutation({
+    mutationFn: ({ userId, payload }: { userId: number; payload: { new_password: string } }) =>
+      resetTenantUserPassword(userId, payload),
+  })
 
-  const setBreakGlass = useCallback(async (userId: number, isBreakGlass: boolean) => {
-    setLoading(true)
-    setError(null)
-    try {
-      await setUserBreakGlass(userId, isBreakGlass)
-      setUsers((prev) =>
-        prev.map((user) => (user.id === userId ? { ...user, is_break_glass: isBreakGlass } : user))
-      )
-    } catch (err: any) {
-      const errorMsg = err.response?.data?.detail || 'Failed to update break-glass'
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [])
+  const updateUserRoleMutation = useMutation({
+    mutationFn: ({ userId, payload }: { userId: number; payload: TenantUserUpdateRequest }) =>
+      updateTenantUserRole(userId, payload),
+    onSuccess: (updated) => {
+      applyRowPatchToResponsePages(queryClient, tenantId, updated.id, updated)
+      invalidateTenantUsers()
+    },
+  })
+
+  const setBreakGlassMutation = useMutation({
+    mutationFn: ({ userId, isBreakGlass }: { userId: number; isBreakGlass: boolean }) =>
+      setUserBreakGlass(userId, isBreakGlass),
+    onSuccess: (_, { userId, isBreakGlass }) => {
+      applyRowPatchToResponsePages(queryClient, tenantId, userId, { is_break_glass: isBreakGlass })
+      invalidateTenantUsers()
+    },
+  })
+
+  const addUser = useCallback(
+    async (payload: TenantUserCreateRequest) => addUserMutation.mutateAsync(payload),
+    [addUserMutation]
+  )
+
+  const deactivateUser = useCallback(
+    async (userId: number) => deactivateUserMutation.mutateAsync(userId),
+    [deactivateUserMutation]
+  )
+
+  const recoverUserMembership = useCallback(
+    async (userId: number) => recoverUserMutation.mutateAsync(userId),
+    [recoverUserMutation]
+  )
+
+  const resetPassword = useCallback(
+    async (userId: number, newPassword: string) =>
+      resetPasswordMutation.mutateAsync({ userId, payload: { new_password: newPassword } }),
+    [resetPasswordMutation]
+  )
+
+  const updateUserRole = useCallback(
+    async (userId: number, payload: TenantUserUpdateRequest) =>
+      updateUserRoleMutation.mutateAsync({ userId, payload }),
+    [updateUserRoleMutation]
+  )
+
+  const setBreakGlass = useCallback(
+    async (userId: number, isBreakGlass: boolean) =>
+      setBreakGlassMutation.mutateAsync({ userId, isBreakGlass }),
+    [setBreakGlassMutation]
+  )
+
+  const mutationsPending =
+    addUserMutation.isPending ||
+    deactivateUserMutation.isPending ||
+    recoverUserMutation.isPending ||
+    resetPasswordMutation.isPending ||
+    updateUserRoleMutation.isPending ||
+    setBreakGlassMutation.isPending
 
   return {
-    users,
-    loading,
-    error,
     fetchUsers,
     addUser,
     deactivateUser,
@@ -169,5 +166,6 @@ export function useTenantUsers() {
     resetPassword,
     updateUserRole,
     setBreakGlass,
+    mutationsPending,
   }
 }

@@ -15,6 +15,7 @@ interface SettingsListToolbarSearch {
   placeholder: string
   onQueryChange: (value: string) => void
   onClear: () => void
+  disabled?: boolean
 }
 
 interface SettingsListToolbarProps {
@@ -38,14 +39,16 @@ export default function SettingsListToolbar({
   const PrimaryIcon = primaryAction?.icon ?? Plus
 
   return (
-    <div className={`flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between ${className ?? ''}`}>
+    <div className={`flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-3 ${className ?? ''}`}>
       {search ? (
-        <div className="relative w-full sm:w-72">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <div className="relative min-w-0 w-full sm:max-w-xs sm:flex-1">
+          <Search className="pointer-events-none absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
           <Input
             placeholder={search.placeholder}
             value={search.query}
             onChange={(e) => search.onQueryChange(e.target.value)}
+            disabled={search.disabled}
+            aria-label={search.placeholder}
             className="h-9 pl-8"
           />
           {search.query ? (
@@ -63,16 +66,17 @@ export default function SettingsListToolbar({
         <div className="flex-1" />
       )}
 
-      <div className="flex shrink-0 items-center justify-end gap-2">
+      <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
         {onRefresh && refreshLabel ? (
-          <Button variant="outline" className="h-11" onClick={onRefresh} disabled={refreshing}>
+          <Button variant="outline" size="sm" className="h-9" onClick={onRefresh} disabled={refreshing}>
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshLabel}
           </Button>
         ) : null}
         {primaryAction && !primaryAction.hidden ? (
           <Button
-            className="h-11"
+            size="sm"
+            className="h-9"
             onClick={primaryAction.onClick}
             disabled={primaryAction.disabled}
           >

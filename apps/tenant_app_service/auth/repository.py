@@ -3,12 +3,31 @@
 from datetime import UTC, datetime
 
 import bcrypt
-from sqlalchemy import select
+from sqlalchemy import func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.base_repository import BaseRepository
 from apps.shared.db.models import TenantMembership, User, UserCredential
-from apps.tenant_app_service.auth.domain import MembershipStatus, UserAccountStatus
+from apps.tenant_app_service.auth.domain import MembershipStatus, UserAccountStatus, UserRole
+
+
+def _escape_ilike(term: str) -> str:
+    """Escape LIKE wildcards for ILIKE with backslash escape."""
+    return term.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+def username_or_id_search_filter(raw_q: str | None):
+    """Filter rows by username substring and/or exact user id when query is all digits."""
+    if not raw_q:
+        return None
+    q = raw_q.strip()
+    if not q:
+        return None
+    pattern = f"%{_escape_ilike(q)}%"
+    username_cond = User.username.ilike(pattern, escape="\\")
+    if q.isdigit():
+        return or_(username_cond, User.id == int(q))
+    return username_cond
 
 
 class UserRepository(BaseRepository[User]):
@@ -311,6 +330,71 @@ class UserRepository(BaseRepository[User]):
                 return candidate
             suffix += 1
             candidate = f"{base}{suffix}"
+
+    async def count_tenant_memberships(self, tenant_id: int) -> int:
+        """Count all user memberships for a tenant."""
+        result = await self.db.execute(
+            select(func.count())
+            .select_from(User)
+            .join(TenantMembership, TenantMembership.user_id == User.id)
+            .where(TenantMembership.tenant_id == tenant_id)
+        )
+        return result.scalar_one()
+
+    async def count_active_admins_in_tenant(self, tenant_id: int) -> int:
+        """Count active admin users in a tenant (membership active, user role admin)."""
+        result = await self.db.execute(
+            select(func.count())
+            .select_from(User)
+            .join(TenantMembership, TenantMembership.user_id == User.id)
+            .where(
+                TenantMembership.tenant_id == tenant_id,
+                TenantMembership.status == MembershipStatus.ACTIVE,
+                User.role == UserRole.ADMIN,
+            )
+        )
+        return result.scalar_one()
+
+    async def count_users_in_tenant_filtered(self, tenant_id: int, search_query: str | None) -> int:
+        """Count users matching optional username/id search within tenant."""
+        tenant_scope = TenantMembership.tenant_id == tenant_id
+        search_filter = username_or_id_search_filter(search_query)
+        filtered_subq = (
+            select(User.id)
+            .join(TenantMembership, TenantMembership.user_id == User.id)
+            .where(tenant_scope)
+        )
+        if search_filter is not None:
+            filtered_subq = filtered_subq.where(search_filter)
+
+        result = await self.db.execute(select(func.count()).select_from(filtered_subq.subquery()))
+        return result.scalar_one()
+
+    async def list_users_in_tenant_page(
+        self,
+        tenant_id: int,
+        *,
+        offset: int,
+        limit: int,
+        search_query: str | None,
+    ) -> list[tuple[User, TenantMembership]]:
+        """List one page of users with membership rows, ordered by user id."""
+        tenant_scope = TenantMembership.tenant_id == tenant_id
+        search_filter = username_or_id_search_filter(search_query)
+
+        stmt = (
+            select(User, TenantMembership)
+            .join(TenantMembership, TenantMembership.user_id == User.id)
+            .where(tenant_scope)
+            .order_by(User.id.asc())
+            .offset(offset)
+            .limit(limit)
+        )
+        if search_filter is not None:
+            stmt = stmt.where(search_filter)
+
+        result = await self.db.execute(stmt)
+        return list(result.all())
 
     async def create_jit_member(
         self,

@@ -4,10 +4,32 @@ Shared tenant types: ``apps.shared.schemas.tenant`` — e.g.
 ``from apps.shared.schemas.tenant import TenantDTO, TenantConfigDTO``
 """
 
+import re
 from datetime import datetime
-from typing import Literal
+from typing import Annotated, Literal
 
-from pydantic import BaseModel, Field
+from pydantic import AfterValidator, BaseModel, Field, field_validator
+
+from apps.shared.schemas.pagination import PaginatedResponse
+
+# Loose RFC-style check; avoids optional `email-validator` for `EmailStr`.
+_EMAIL_FORMAT_RE = re.compile(r"^[^\s@]+@[^\s@]+\.[^\s@]+$")
+
+
+def _validate_tenant_user_password(password: str) -> str:
+    """Enforce native password policy for tenant admin user flows."""
+    if len(password) < 8:
+        raise ValueError("Password must be at least 8 characters long")
+    if not re.search(r"[A-Z]", password):
+        raise ValueError("Password must contain at least one uppercase letter")
+    if not re.search(r"[a-z]", password):
+        raise ValueError("Password must contain at least one lowercase letter")
+    if not re.search(r"\d", password):
+        raise ValueError("Password must contain at least one number")
+    return password
+
+
+TenantUserPassword = Annotated[str, AfterValidator(_validate_tenant_user_password)]
 
 
 class ModelInfoDTO(BaseModel):
@@ -133,19 +155,52 @@ class TenantUserDTO(BaseModel):
     is_break_glass: bool = False
 
 
+class TenantUserListResponse(PaginatedResponse[TenantUserDTO]):
+    """Paginated tenant user list for admin settings (extends shared envelope)."""
+
+    total_tenant_members: int = Field(
+        ...,
+        ge=0,
+        description="All memberships in tenant (ignores search)",
+    )
+    active_admin_count: int = Field(
+        ...,
+        ge=0,
+        description="Active admins in tenant (for role/deactivate invariants)",
+    )
+
+
 class TenantUserCreateRequest(BaseModel):
     """Create tenant user request."""
 
-    username: str
-    password: str
+    username: str = Field(..., min_length=1, description="Login username")
+    password: TenantUserPassword = Field(
+        ...,
+        description="Password (min 8 chars, uppercase, lowercase, number)",
+    )
     role: Literal["admin", "member", "viewer"]
     email: str | None = None
+
+    @field_validator("email", mode="before")
+    @classmethod
+    def _normalize_optional_email(cls, value: object) -> str | None:
+        """Accept omit/empty as None; validate non-empty strings without extra deps."""
+        if value is None:
+            return None
+        if not isinstance(value, str):
+            raise TypeError("email must be a string or null")
+        candidate = value.strip()
+        if not candidate:
+            return None
+        if not _EMAIL_FORMAT_RE.match(candidate):
+            raise ValueError("Enter a valid email address")
+        return candidate.lower()
 
 
 class TenantUserResetPasswordRequest(BaseModel):
     """Reset tenant user password request."""
 
-    new_password: str
+    new_password: TenantUserPassword
 
 
 class TenantUserUpdateRequest(BaseModel):
