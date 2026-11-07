@@ -6,7 +6,7 @@ but the decision semantics are tested here: an event is a duplicate iff
 the webhook router's dedupe call site cannot silently change behavior.
 """
 
-from apps.tenant_app_service.agent_ingress.slack.domain import SlackMessageEvent
+from apps.tenant_app_service.agent_ingress.slack.domain import SlackMessageEvent, slack_message_dedupe_key
 
 
 def _event(event_id: str, user_id: str = "U123", channel_id: str = "D123") -> SlackMessageEvent:
@@ -20,8 +20,22 @@ def _event(event_id: str, user_id: str = "U123", channel_id: str = "D123") -> Sl
     )
 
 
-def test_event_id_is_the_dedupe_key():
-    """Two events with the same id are the same event regardless of text."""
+def test_message_channel_and_ts_is_ingress_dedupe_key():
+    event = _event("Ev_outer_1", channel_id="C1")
+    same_delivery = SlackMessageEvent(
+        event_id="Ev_outer_2",
+        team_id="T123",
+        user_id="U1",
+        channel_id="C1",
+        text="<@B>",
+        ts=event.ts,
+        source="app_mention",
+    )
+    assert slack_message_dedupe_key(event) == slack_message_dedupe_key(same_delivery)
+
+
+def test_event_id_is_the_parsed_event_field():
+    """Envelope event_id is stored on SlackMessageEvent but dedupe uses channel:ts."""
     e1 = _event("Ev1", user_id="U1", channel_id="D1")
     e1_with_different_text = SlackMessageEvent(
         event_id="Ev1",

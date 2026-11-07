@@ -368,6 +368,16 @@ def slack_event_team_mismatch(*, configured_team_id: str | None, event_team_id: 
     return bool(configured_team_id and event_team_id and event_team_id != configured_team_id)
 
 
+def slack_message_dedupe_key(event: SlackMessageEvent) -> str:
+    """Stable dedupe id for a single user message.
+
+    Slack often emits both ``app_mention`` and ``message`` callbacks for one @bot
+    post with different envelope ``event_id`` values. Channel id + message ``ts``
+    identify the delivery; envelope ids only identify the HTTP callback.
+    """
+    return f"{event.channel_id}:{event.ts}"
+
+
 def decide_slack_ingress_admission(
     *,
     endpoint_enabled: bool,
