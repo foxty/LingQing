@@ -12,6 +12,7 @@ export interface SlackIntegration {
   signing_secret_configured: boolean
   default_agent_id: number
   enabled: boolean
+  channel_chat_enabled: boolean
   endpoint_key: string
   events_url: string
   interactions_url: string
@@ -27,6 +28,7 @@ export interface UpdateAgentSlackIntegrationRequest {
   bot_token?: string
   signing_secret?: string
   enabled?: boolean
+  channel_chat_enabled?: boolean
 }
 
 export interface SlackTestConnectionResponse {
@@ -85,8 +87,12 @@ export async function disableAgentSlackIntegration(agentId: number): Promise<Sla
   return res.data
 }
 
-export async function testAgentSlackConnection(agentId: number): Promise<SlackTestConnectionResponse> {
-  const res = await api.post<SlackTestConnectionResponse>(`/agents/${agentId}/integrations/slack/test`)
+export async function testAgentSlackConnection(
+  agentId: number
+): Promise<SlackTestConnectionResponse> {
+  const res = await api.post<SlackTestConnectionResponse>(
+    `/agents/${agentId}/integrations/slack/test`
+  )
   return res.data
 }
 

@@ -13,7 +13,11 @@ from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.db.models import AgentIngressEndpoint
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, SlackWebClient
-from apps.tenant_app_service.agent_ingress.slack.domain import build_slack_app_manifest, slack_auth_metadata
+from apps.tenant_app_service.agent_ingress.slack.domain import (
+    build_slack_app_manifest,
+    channel_chat_enabled,
+    slack_auth_metadata,
+)
 from apps.tenant_app_service.agent_ingress.slack.dtos import (
     CreateAgentSlackIntegrationRequest,
     SlackIntegrationResponse,
@@ -177,6 +181,7 @@ class SlackAdminService:
             team_name=new_team_name,
             app_id=new_app_id,
             bot_user_id=new_bot_user_id,
+            channel_chat_enabled=request.channel_chat_enabled,
         )
         if new_team_id:
             team_source = await self._ensure_team_identity_source(
@@ -294,6 +299,7 @@ class SlackAdminService:
             signing_secret_configured=bool((endpoint.credentials_encrypted or {}).get("signing_secret")),
             default_agent_id=endpoint.agent_id,
             enabled=endpoint.enabled,
+            channel_chat_enabled=channel_chat_enabled(endpoint.platform_config),
             endpoint_key=endpoint.endpoint_key,
             events_url=self._events_url(endpoint.endpoint_key),
             interactions_url=self._interactions_url(endpoint.endpoint_key),

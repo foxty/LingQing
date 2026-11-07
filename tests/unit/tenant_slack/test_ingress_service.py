@@ -256,3 +256,62 @@ async def test_get_or_create_thread_rebinds_when_chat_thread_deleted():
         chat_thread_id="2_4_1_new",
         agent_id=1,
     )
+
+
+@pytest.mark.asyncio
+async def test_handle_message_skips_channel_mention_when_channel_chat_disabled():
+    endpoint = MagicMock()
+    endpoint.enabled = True
+    endpoint.platform_config = {"channel_chat_enabled": False}
+
+    service = SlackIngressService(db=MagicMock())
+    service.identity_service = MagicMock()
+    service.identity_service.resolve_slack_user = AsyncMock()
+
+    with patch.object(service, "_get_endpoint", new=AsyncMock(return_value=endpoint)):
+        await service.handle_message(
+            _message_event(channel_type="channel", source="app_mention", text="<@UBOT> hi"),
+            endpoint_id=1,
+        )
+
+    service.identity_service.resolve_slack_user.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_handle_message_allows_dm_when_channel_chat_disabled():
+    endpoint = MagicMock()
+    endpoint.enabled = True
+    endpoint.tenant_id = 2
+    endpoint.platform_config = {"channel_chat_enabled": False}
+
+    service = SlackIngressService(db=MagicMock())
+    service.repo = MagicMock()
+    service.repo.decrypt_bot_token = MagicMock(return_value="xoxb-test")
+    service.identity_service = MagicMock()
+    service.identity_service.resolve_slack_user = AsyncMock(return_value=None)
+    service._post_ephemeral = AsyncMock()
+
+    with patch.object(service, "_get_endpoint", new=AsyncMock(return_value=endpoint)):
+        await service.handle_message(_message_event(), endpoint_id=1)
+
+    service.identity_service.resolve_slack_user.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_notify_channel_chat_disabled_posts_thread_reply():
+    endpoint = MagicMock()
+    service = SlackIngressService(db=MagicMock())
+    service.repo = MagicMock()
+    service.repo.decrypt_bot_token = MagicMock(return_value="xoxb-test")
+    service.client = MagicMock()
+    service.client.chat_post_message = AsyncMock(return_value={"ts": "2.0"})
+    service._post_ephemeral = AsyncMock()
+    event = _message_event(channel_type="channel", source="app_mention", ts="1.0")
+
+    with patch.object(service, "_get_endpoint", new=AsyncMock(return_value=endpoint)):
+        await service.notify_channel_chat_disabled(event, endpoint_id=1)
+
+    service.client.chat_post_message.assert_awaited_once()
+    assert "direct messages" in service.client.chat_post_message.await_args.kwargs["text"]
+    assert service.client.chat_post_message.await_args.kwargs["thread_ts"] == "1.0"
+    service._post_ephemeral.assert_not_awaited()

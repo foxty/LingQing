@@ -11,7 +11,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import AgentIngressEndpoint, IngressThreadLink, SlackProcessedEvent
 from apps.shared.utils.field_cipher import FieldCipher
-from apps.tenant_app_service.agent_ingress.slack.domain import slack_endpoint_scope_key
+from apps.tenant_app_service.agent_ingress.slack.domain import CHANNEL_CHAT_CONFIG_KEY, slack_endpoint_scope_key
 
 PLATFORM_SLACK = "slack"
 _SLACK_SECRET_FIELDS = {"bot_token", "signing_secret"}
@@ -147,6 +147,7 @@ class SlackRepository:
         team_name: str | None = None,
         app_id: str | None = None,
         bot_user_id: str | None = None,
+        channel_chat_enabled: bool | None = None,
     ) -> AgentIngressEndpoint:
         credentials = dict(endpoint.credentials_encrypted or {})
         if bot_token:
@@ -168,8 +169,12 @@ class SlackRepository:
             platform_config["app_id"] = app_id
         if bot_user_id is not None:
             platform_config["bot_user_id"] = bot_user_id
-        if team_id is not None or team_name is not None or app_id is not None or bot_user_id is not None:
+        if channel_chat_enabled is not None:
+            platform_config[CHANNEL_CHAT_CONFIG_KEY] = channel_chat_enabled
+        identity_changed = team_id is not None or team_name is not None or app_id is not None or bot_user_id is not None
+        if identity_changed or channel_chat_enabled is not None:
             endpoint.platform_config = platform_config
+        if identity_changed:
             endpoint.external_scope_key = slack_endpoint_scope_key(
                 team_id=platform_config.get("team_id"),
                 app_id=platform_config.get("app_id"),
