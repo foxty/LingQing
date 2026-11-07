@@ -30,7 +30,6 @@ from apps.tenant_app_service.agent_ingress.slack.domain import (
     parse_slack_ingress_event,
     slack_event_team_mismatch,
     slack_mapping_thread_ts,
-    slack_message_dedupe_key,
     slack_reply_thread_ts,
     strip_bot_mention,
 )
@@ -136,9 +135,11 @@ class SlackIngressService:
                 configured_team_id=configured_team_id,
                 event_team_id=preview.team_id,
             ):
-                already_processed = await self.repo.is_event_processed(
+                already_processed = await self.repo.is_message_already_processed(
                     endpoint.tenant_id,
-                    slack_message_dedupe_key(preview),
+                    message=preview,
+                    delivery_event_id=event_id,
+                    inner_event_type=inner_event.get("type"),
                 )
 
         admission = decide_slack_ingress_admission(

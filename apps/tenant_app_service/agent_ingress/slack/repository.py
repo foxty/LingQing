@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import AgentIngressEndpoint, IngressThreadLink, SlackProcessedEvent
 from apps.shared.utils.field_cipher import FieldCipher
-from apps.tenant_app_service.agent_ingress.slack.domain import CHANNEL_CHAT_CONFIG_KEY, slack_endpoint_scope_key
+from apps.tenant_app_service.agent_ingress.slack.domain import (
+    CHANNEL_CHAT_CONFIG_KEY,
+    SlackMessageEvent,
+    slack_endpoint_scope_key,
+)
 
 PLATFORM_SLACK = "slack"
 _SLACK_SECRET_FIELDS = {"bot_token", "signing_secret"}
@@ -291,11 +295,32 @@ class SlackRepository:
 
     # ---------- Event dedupe ----------
 
-    async def is_event_processed(self, tenant_id: int, event_id: str) -> bool:
+    async def is_message_already_processed(
+        self,
+        tenant_id: int,
+        *,
+        message: SlackMessageEvent,
+        delivery_event_id: str | None,
+        inner_event_type: str | None,
+    ) -> bool:
+        """Claim this Slack message delivery; return True if it was already handled.
+
+        Dedupe identity is ``(tenant_id, slack_channel_id, message_ts)``. The
+        envelope ``delivery_event_id`` and optional audit fields are stored on
+        first claim only.
+        """
         stmt = (
             pg_insert(SlackProcessedEvent)
-            .values(tenant_id=tenant_id, event_id=event_id)
-            .on_conflict_do_nothing(index_elements=["tenant_id", "event_id"])
+            .values(
+                tenant_id=tenant_id,
+                delivery_event_id=delivery_event_id,
+                slack_channel_id=message.channel_id,
+                message_ts=message.ts,
+                thread_ts=message.thread_ts,
+                inner_event_type=inner_event_type,
+                slack_user_id=message.user_id,
+            )
+            .on_conflict_do_nothing(index_elements=["tenant_id", "slack_channel_id", "message_ts"])
             .returning(SlackProcessedEvent.id)
         )
         result = await self.db.execute(stmt)

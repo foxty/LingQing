@@ -2711,17 +2711,31 @@ class IngressThreadLink(Base):
 
 
 class SlackProcessedEvent(Base):
-    """Idempotency store for Slack Events API callbacks."""
+    """Idempotency store for handled Slack message deliveries (not a full event archive)."""
 
     __tablename__ = "slack_processed_events"
     __table_args__ = (
-        UniqueConstraint("tenant_id", "event_id", name="uq_slack_processed_event"),
+        UniqueConstraint(
+            "tenant_id",
+            "slack_channel_id",
+            "message_ts",
+            name="uq_slack_processed_message",
+        ),
         Index("idx_slack_processed_events_created", "created_at"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
-    event_id: Mapped[str] = mapped_column(String(50), nullable=False, comment="Slack event id")
+    delivery_event_id: Mapped[str | None] = mapped_column(
+        String(64), nullable=True, comment="Slack Events API envelope event_id (Ev…)"
+    )
+    slack_channel_id: Mapped[str] = mapped_column(String(64), nullable=False, comment="Slack channel or DM id")
+    message_ts: Mapped[str] = mapped_column(String(32), nullable=False, comment="Slack message ts")
+    thread_ts: Mapped[str | None] = mapped_column(String(32), nullable=True, comment="Slack thread root ts when set")
+    inner_event_type: Mapped[str | None] = mapped_column(
+        String(32), nullable=True, comment="Inner event type (message, app_mention, …)"
+    )
+    slack_user_id: Mapped[str | None] = mapped_column(String(64), nullable=True, comment="Slack user id (audit)")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,
