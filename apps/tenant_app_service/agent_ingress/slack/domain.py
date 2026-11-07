@@ -11,7 +11,9 @@ import hashlib
 import hmac
 import re
 import time
+from collections.abc import Mapping
 from dataclasses import dataclass
+from typing import Any
 
 from apps.tenant_app_service.agent_ingress.slack.messages import (
     SLACK_EMPTY_REPLY_FALLBACK,
@@ -29,6 +31,44 @@ class SlackEventType(enum.StrEnum):
 
 
 SHARED_CHANNEL_TYPES: frozenset[str] = frozenset({"channel", "group", "mpim"})
+CHANNEL_CHAT_CONFIG_KEY = "channel_chat_enabled"
+_CHANNEL_CHAT_OFF = frozenset({"false", "0", "no", "off"})
+_CHANNEL_CHAT_ON = frozenset({"true", "1", "yes", "on"})
+
+
+def channel_chat_enabled(platform_config: Mapping[str, Any] | None) -> bool:
+    """Whether this bot answers channel, private-channel, and group-DM @mentions.
+
+    A missing key keeps the historical behavior: shared-channel chat stays on.
+    """
+    if not isinstance(platform_config, Mapping) or CHANNEL_CHAT_CONFIG_KEY not in platform_config:
+        return True
+    value = platform_config[CHANNEL_CHAT_CONFIG_KEY]
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in _CHANNEL_CHAT_OFF:
+            return False
+        if normalized in _CHANNEL_CHAT_ON:
+            return True
+    return True
+
+
+def event_uses_channel_chat(event: SlackMessageEvent) -> bool:
+    """True for channel, private-channel, and group-DM turns.
+
+    Direct messages stay on the DM path. ``app_mention`` is the shared-channel
+    path; Slack often omits ``channel_type`` on that event.
+    """
+    if event.channel_type == "im" or event.source == "dm":
+        return False
+    return event.source in {"app_mention", "thread_reply"} or event.channel_type in SHARED_CHANNEL_TYPES
+
+
+def channel_chat_blocks_event(event: SlackMessageEvent, platform_config: Mapping[str, Any] | None) -> bool:
+    """True when this event is a shared-channel turn and that mode is off."""
+    return event_uses_channel_chat(event) and not channel_chat_enabled(platform_config)
 
 
 @dataclass(frozen=True)
@@ -57,6 +97,26 @@ class SlackMessageEvent:
     channel_type: str | None = None
     source: str = "dm"
     bot_user_id: str | None = None
+
+
+class SlackIngressAdmissionOutcome(enum.StrEnum):
+    """Whether an ``event_callback`` inner event should be handled."""
+
+    INTEGRATION_DISABLED = "integration_disabled"
+    IGNORED = "ignored"
+    TEAM_MISMATCH = "team_mismatch"
+    DUPLICATE = "duplicate"
+    CHANNEL_CHAT_DISABLED = "channel_chat_disabled"
+    ACCEPTED = "accepted"
+
+
+@dataclass(frozen=True)
+class SlackIngressAdmission:
+    """Pure admission decision for one Slack Events API callback."""
+
+    outcome: SlackIngressAdmissionOutcome
+    message_event: SlackMessageEvent | None = None
+    ignore_reason: str | None = None
 
 
 def verify_slack_signature(
@@ -187,7 +247,7 @@ def is_processable_message_event(event: dict) -> bool:
         return False
     text = event.get("text") or ""
     if not text.strip():
-        return False
+        return event.get("type") == SlackEventType.APP_MENTION
     return True
 
 
@@ -220,6 +280,47 @@ def parse_message_event(event: dict, event_id: str | None = None) -> SlackMessag
     )
 
 
+def parse_mention_only_channel_message_event(event: dict, event_id: str | None = None) -> SlackMessageEvent | None:
+    """Accept channel ``message`` events that @mention the bot with no other text.
+
+    Slack sometimes delivers mention-only posts as ``message`` without a matching
+    ``app_mention``. Messages that include text after the mention are ignored
+    here so ``app_mention`` remains the single path for agent turns.
+    """
+    if event.get("type") != SlackEventType.MESSAGE:
+        return None
+    if event.get("channel_type") == "im":
+        return None
+    channel_type = event.get("channel_type")
+    if channel_type and channel_type not in SHARED_CHANNEL_TYPES and channel_type != "channel":
+        return None
+    if event.get("thread_ts"):
+        return None
+    if not is_processable_message_event(event):
+        return None
+    text = event.get("text") or ""
+    if not message_has_leading_user_mention(text):
+        return None
+    if strip_bot_mention(text).strip():
+        return None
+    user_id = event.get("user") or ""
+    channel_id = event.get("channel") or ""
+    ts = event.get("ts") or ""
+    if not (user_id and channel_id and ts):
+        return None
+    return SlackMessageEvent(
+        event_id=event_id or event.get("event_id") or ts,
+        team_id=event.get("team") or "",
+        user_id=user_id,
+        channel_id=channel_id,
+        text=text,
+        ts=ts,
+        thread_ts=None,
+        channel_type=channel_type,
+        source="app_mention",
+    )
+
+
 def parse_app_mention_event(event: dict, event_id: str | None = None) -> SlackMessageEvent | None:
     """Extract a SlackMessageEvent from an app_mention payload."""
     if event.get("type") != SlackEventType.APP_MENTION:
@@ -242,6 +343,89 @@ def parse_app_mention_event(event: dict, event_id: str | None = None) -> SlackMe
         thread_ts=event.get("thread_ts"),
         channel_type=event.get("channel_type"),
         source="app_mention",
+    )
+
+
+def parse_slack_ingress_event(event: dict, *, event_id: str | None) -> SlackMessageEvent | None:
+    """Normalize a Slack event sub-object the ingress layer may act on.
+
+    Accepts DMs (``message.im``), channel ``app_mention``, and mention-only
+    channel ``message`` deliveries. Thread follow-ups without @bot stay ignored.
+    """
+    event_type = event.get("type")
+    if event_type == SlackEventType.MESSAGE:
+        dm = parse_message_event(event, event_id=event_id)
+        if dm is not None:
+            return dm
+        return parse_mention_only_channel_message_event(event, event_id=event_id)
+    if event_type == SlackEventType.APP_MENTION:
+        return parse_app_mention_event(event, event_id=event_id)
+    return None
+
+
+def slack_event_team_mismatch(*, configured_team_id: str | None, event_team_id: str) -> bool:
+    """True when the callback's workspace does not match the configured Slack team."""
+    return bool(configured_team_id and event_team_id and event_team_id != configured_team_id)
+
+
+def decide_slack_ingress_admission(
+    *,
+    endpoint_enabled: bool,
+    platform_config: Mapping[str, Any] | None,
+    configured_team_id: str | None,
+    inner_event: dict,
+    event_id: str | None,
+    already_processed: bool,
+) -> SlackIngressAdmission:
+    """Classify an ``event_callback`` inner event without I/O (dedupe supplied by caller)."""
+    message_event = parse_slack_ingress_event(inner_event, event_id=event_id)
+
+    if not endpoint_enabled:
+        if message_event is not None:
+            return SlackIngressAdmission(
+                outcome=SlackIngressAdmissionOutcome.INTEGRATION_DISABLED,
+                message_event=message_event,
+            )
+        return SlackIngressAdmission(
+            outcome=SlackIngressAdmissionOutcome.IGNORED,
+            ignore_reason=describe_ignored_event(inner_event),
+        )
+
+    if message_event is None:
+        return SlackIngressAdmission(
+            outcome=SlackIngressAdmissionOutcome.IGNORED,
+            ignore_reason=describe_ignored_event(inner_event),
+        )
+
+    if slack_event_team_mismatch(
+        configured_team_id=configured_team_id,
+        event_team_id=message_event.team_id,
+    ):
+        return SlackIngressAdmission(
+            outcome=SlackIngressAdmissionOutcome.TEAM_MISMATCH,
+            message_event=message_event,
+        )
+
+    if channel_chat_blocks_event(message_event, platform_config):
+        if already_processed:
+            return SlackIngressAdmission(
+                outcome=SlackIngressAdmissionOutcome.DUPLICATE,
+                message_event=message_event,
+            )
+        return SlackIngressAdmission(
+            outcome=SlackIngressAdmissionOutcome.CHANNEL_CHAT_DISABLED,
+            message_event=message_event,
+        )
+
+    if already_processed:
+        return SlackIngressAdmission(
+            outcome=SlackIngressAdmissionOutcome.DUPLICATE,
+            message_event=message_event,
+        )
+
+    return SlackIngressAdmission(
+        outcome=SlackIngressAdmissionOutcome.ACCEPTED,
+        message_event=message_event,
     )
 
 

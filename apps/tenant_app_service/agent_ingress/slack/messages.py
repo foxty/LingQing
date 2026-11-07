@@ -15,6 +15,7 @@ class SlackMessageKey(enum.StrEnum):
     """Stable keys for Slack user-visible strings."""
 
     INTEGRATION_DISABLED = "integration_disabled"
+    CHANNEL_CHAT_DISABLED = "channel_chat_disabled"
     SLACK_VERIFY_FAILED = "slack_verify_failed"
     CHAT_PERMISSION_DENIED = "chat_permission_denied"
     EMPTY_MENTION_MESSAGE = "empty_mention_message"
@@ -43,6 +44,9 @@ _CATALOG: dict[str, dict[SlackMessageKey, str]] = {
     "en": {
         SlackMessageKey.INTEGRATION_DISABLED: (
             "This agent's Slack integration is currently disabled. Contact your admin to re-enable it in LingQing."
+        ),
+        SlackMessageKey.CHANNEL_CHAT_DISABLED: (
+            "This bot only answers direct messages. Channel and group chat is turned off for this agent."
         ),
         SlackMessageKey.SLACK_VERIFY_FAILED: ("Could not reach Slack to verify your account. Please try again."),
         SlackMessageKey.CHAT_PERMISSION_DENIED: ("You don't have permission to chat with the agent."),
@@ -147,6 +151,7 @@ def slack_chat_error_message(exc: Exception, *, locale: str = DEFAULT_LOCALE) ->
 
 
 SLACK_INTEGRATION_DISABLED_MESSAGE = slack_user_message(SlackMessageKey.INTEGRATION_DISABLED)
+SLACK_CHANNEL_CHAT_DISABLED_MESSAGE = slack_user_message(SlackMessageKey.CHANNEL_CHAT_DISABLED)
 SLACK_SCHEDULED_FAILURE_MESSAGE = slack_user_message(SlackMessageKey.CHAT_GENERIC_FAILURE)
 SLACK_THINKING_PLACEHOLDER = slack_user_message(SlackMessageKey.THINKING_PLACEHOLDER)
 SLACK_EMPTY_REPLY_FALLBACK = slack_user_message(SlackMessageKey.EMPTY_REPLY_FALLBACK)

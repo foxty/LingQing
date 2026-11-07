@@ -7,6 +7,7 @@ from uuid import uuid4
 
 import pytest
 
+from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 from tests.slack.fake_slack import make_slack_signature_headers
 from tests.slack.slack_event_factory import (
     make_app_mention_event,
@@ -14,6 +15,15 @@ from tests.slack.slack_event_factory import (
     make_event_callback_payload,
     make_message_event,
 )
+
+
+async def _set_channel_chat_enabled(setup: dict, *, enabled: bool) -> None:
+    async with setup["session_factory"]() as session:
+        repo = SlackRepository(session)
+        endpoint = await repo.get_endpoint_by_key(setup["endpoint_keys"]["tenant_a"])
+        assert endpoint is not None
+        await repo.update_endpoint(endpoint, channel_chat_enabled=enabled)
+        await session.commit()
 
 
 async def _wait_for_slack_side_effect(check, *, timeout_seconds: float = 8.0) -> None:
@@ -32,6 +42,143 @@ async def _wait_for_slack_side_effect(check, *, timeout_seconds: float = 8.0) ->
 
 
 class TestSlackChannelWebhook:
+    @pytest.mark.asyncio
+    async def test_channel_chat_disabled_posts_notice_and_dedupes(self, slack_test_setup):
+        client = slack_test_setup["client"]
+        tenant = slack_test_setup["tenants"]["tenant_a"]
+        signing_secret = slack_test_setup["secrets"]["tenant_a"]
+        fake = slack_test_setup["fake_slack"]
+        await _set_channel_chat_enabled(slack_test_setup, enabled=False)
+
+        slack_user = f"U_cc_off_{uuid4().hex[:8]}"
+        channel_id = f"C_cc_off_{uuid4().hex[:8]}"
+        fake.register_user(slack_user, email=tenant["admin"].email)
+        fake.posted_messages.clear()
+
+        event = make_app_mention_event(
+            user_id=slack_user,
+            channel_id=channel_id,
+            text="<@UBOT> hello",
+            team_id="T_TENANT_A",
+            ts="1700000000.000800",
+        )
+        event_id = f"Ev_cc_off_{slack_user}"
+        payload = make_event_callback_payload(event=event, event_id=event_id, team_id="T_TENANT_A")
+        body = json.dumps(payload)
+        headers = make_slack_signature_headers(signing_secret=signing_secret, body=body)
+        url = f"/ingress/{slack_test_setup['endpoint_keys']['tenant_a']}/events"
+
+        resp1 = await client.post(url, content=body, headers=headers)
+        assert resp1.status_code == 200
+        assert resp1.json()["status"] == "ignored"
+
+        async def _assert_channel_chat_notice() -> None:
+            assert len(fake.posted_messages) == 1
+            assert "direct messages" in fake.posted_messages[0]["text"].lower()
+            assert fake.posted_messages[0]["thread_ts"] == "1700000000.000800"
+
+        await _wait_for_slack_side_effect(_assert_channel_chat_notice)
+
+        resp2 = await client.post(url, content=body, headers=headers)
+        assert resp2.status_code == 200
+        assert resp2.json()["status"] == "duplicate"
+        await asyncio.sleep(0.3)
+        assert len(fake.posted_messages) == 1
+
+    @pytest.mark.asyncio
+    async def test_channel_chat_off_dedupes_app_mention_and_message_mirror(self, slack_test_setup):
+        """Slack sends app_mention + message for one @bot; only one disabled notice."""
+        client = slack_test_setup["client"]
+        tenant = slack_test_setup["tenants"]["tenant_a"]
+        signing_secret = slack_test_setup["secrets"]["tenant_a"]
+        fake = slack_test_setup["fake_slack"]
+        await _set_channel_chat_enabled(slack_test_setup, enabled=False)
+
+        slack_user = f"U_mirror_{uuid4().hex[:8]}"
+        channel_id = f"C_mirror_{uuid4().hex[:8]}"
+        message_ts = "1700000000.000802"
+        fake.register_user(slack_user, email=tenant["admin"].email)
+        fake.posted_messages.clear()
+        url = f"/ingress/{slack_test_setup['endpoint_keys']['tenant_a']}/events"
+
+        mention = make_app_mention_event(
+            user_id=slack_user,
+            channel_id=channel_id,
+            text="",
+            team_id="T_TENANT_A",
+            ts=message_ts,
+        )
+        mirror_message = make_message_event(
+            user_id=slack_user,
+            channel_id=channel_id,
+            text="<@UBOT>",
+            team_id="T_TENANT_A",
+            channel_type="channel",
+            ts=message_ts,
+        )
+        mention_body = json.dumps(
+            make_event_callback_payload(event=mention, event_id=f"Ev_am_{slack_user}", team_id="T_TENANT_A")
+        )
+        message_body = json.dumps(
+            make_event_callback_payload(event=mirror_message, event_id=f"Ev_msg_{slack_user}", team_id="T_TENANT_A")
+        )
+        headers_mention = make_slack_signature_headers(signing_secret=signing_secret, body=mention_body)
+        headers_message = make_slack_signature_headers(signing_secret=signing_secret, body=message_body)
+
+        resp1 = await client.post(url, content=mention_body, headers=headers_mention)
+        resp2 = await client.post(url, content=message_body, headers=headers_message)
+        assert resp1.status_code == 200 and resp1.json()["status"] == "ignored"
+        assert resp2.status_code == 200 and resp2.json()["status"] == "duplicate"
+
+        async def _assert_single_notice() -> None:
+            assert len(fake.posted_messages) == 1
+            assert "direct messages" in fake.posted_messages[0]["text"].lower()
+
+        await _wait_for_slack_side_effect(_assert_single_notice)
+
+    @pytest.mark.asyncio
+    async def test_mention_only_channel_message_prompts_for_text(self, slack_test_setup):
+        """Slack sometimes delivers @bot-only posts as channel ``message``, not ``app_mention``."""
+        client = slack_test_setup["client"]
+        tenant = slack_test_setup["tenants"]["tenant_a"]
+        signing_secret = slack_test_setup["secrets"]["tenant_a"]
+        fake = slack_test_setup["fake_slack"]
+        slack_user = f"U_mo_{uuid4().hex[:8]}"
+        channel_id = f"C_mo_{uuid4().hex[:8]}"
+        message_ts = "1700000000.000850"
+        fake.register_user(slack_user, email=tenant["admin"].email)
+        fake.posted_messages.clear()
+
+        event = make_message_event(
+            user_id=slack_user,
+            channel_id=channel_id,
+            text="<@UBOT>",
+            team_id="T_TENANT_A",
+            channel_type="channel",
+            ts=message_ts,
+        )
+        payload = make_event_callback_payload(
+            event=event,
+            event_id=f"Ev_mo_{slack_user}",
+            team_id="T_TENANT_A",
+        )
+        body = json.dumps(payload)
+        headers = make_slack_signature_headers(signing_secret=signing_secret, body=body)
+        resp = await client.post(
+            f"/ingress/{slack_test_setup['endpoint_keys']['tenant_a']}/events",
+            content=body,
+            headers=headers,
+        )
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "ok"
+
+        async def _assert_empty_mention_notice() -> None:
+            assert fake.posted_messages
+            assert any("message after mentioning" in m["text"].lower() for m in fake.posted_messages)
+            assert fake.posted_messages[0]["thread_ts"] == message_ts
+
+        await _wait_for_slack_side_effect(_assert_empty_mention_notice)
+
     @pytest.mark.asyncio
     async def test_app_mention_in_channel_accepted(self, slack_committed_chat_setup):
         client = slack_committed_chat_setup["client"]

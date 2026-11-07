@@ -23,6 +23,10 @@ class UpdateAgentSlackIntegrationRequest(BaseModel):
     bot_token: str | None = Field(default=None, description="New bot token; empty/None keeps previous")
     signing_secret: str | None = Field(default=None, description="New signing secret; empty/None keeps previous")
     enabled: bool | None = None
+    channel_chat_enabled: bool | None = Field(
+        default=None,
+        description="Answer @mentions in channels, private channels, and group DMs. Omit to leave unchanged.",
+    )
 
 
 class SlackIntegrationResponse(BaseModel):
@@ -39,6 +43,7 @@ class SlackIntegrationResponse(BaseModel):
     signing_secret_configured: bool
     default_agent_id: int
     enabled: bool
+    channel_chat_enabled: bool = True
     endpoint_key: str
     events_url: str
     interactions_url: str

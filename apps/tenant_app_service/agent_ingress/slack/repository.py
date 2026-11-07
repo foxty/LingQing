@@ -11,7 +11,11 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import AgentIngressEndpoint, IngressThreadLink, SlackProcessedEvent
 from apps.shared.utils.field_cipher import FieldCipher
-from apps.tenant_app_service.agent_ingress.slack.domain import slack_endpoint_scope_key
+from apps.tenant_app_service.agent_ingress.slack.domain import (
+    CHANNEL_CHAT_CONFIG_KEY,
+    SlackMessageEvent,
+    slack_endpoint_scope_key,
+)
 
 PLATFORM_SLACK = "slack"
 _SLACK_SECRET_FIELDS = {"bot_token", "signing_secret"}
@@ -147,6 +151,7 @@ class SlackRepository:
         team_name: str | None = None,
         app_id: str | None = None,
         bot_user_id: str | None = None,
+        channel_chat_enabled: bool | None = None,
     ) -> AgentIngressEndpoint:
         credentials = dict(endpoint.credentials_encrypted or {})
         if bot_token:
@@ -168,8 +173,12 @@ class SlackRepository:
             platform_config["app_id"] = app_id
         if bot_user_id is not None:
             platform_config["bot_user_id"] = bot_user_id
-        if team_id is not None or team_name is not None or app_id is not None or bot_user_id is not None:
+        if channel_chat_enabled is not None:
+            platform_config[CHANNEL_CHAT_CONFIG_KEY] = channel_chat_enabled
+        identity_changed = team_id is not None or team_name is not None or app_id is not None or bot_user_id is not None
+        if identity_changed or channel_chat_enabled is not None:
             endpoint.platform_config = platform_config
+        if identity_changed:
             endpoint.external_scope_key = slack_endpoint_scope_key(
                 team_id=platform_config.get("team_id"),
                 app_id=platform_config.get("app_id"),
@@ -286,11 +295,32 @@ class SlackRepository:
 
     # ---------- Event dedupe ----------
 
-    async def is_event_processed(self, tenant_id: int, event_id: str) -> bool:
+    async def is_message_already_processed(
+        self,
+        tenant_id: int,
+        *,
+        message: SlackMessageEvent,
+        delivery_event_id: str | None,
+        inner_event_type: str | None,
+    ) -> bool:
+        """Claim this Slack message delivery; return True if it was already handled.
+
+        Dedupe identity is ``(tenant_id, slack_channel_id, message_ts)``. The
+        envelope ``delivery_event_id`` and optional audit fields are stored on
+        first claim only.
+        """
         stmt = (
             pg_insert(SlackProcessedEvent)
-            .values(tenant_id=tenant_id, event_id=event_id)
-            .on_conflict_do_nothing(index_elements=["tenant_id", "event_id"])
+            .values(
+                tenant_id=tenant_id,
+                delivery_event_id=delivery_event_id,
+                slack_channel_id=message.channel_id,
+                message_ts=message.ts,
+                thread_ts=message.thread_ts,
+                inner_event_type=inner_event_type,
+                slack_user_id=message.user_id,
+            )
+            .on_conflict_do_nothing(index_elements=["tenant_id", "slack_channel_id", "message_ts"])
             .returning(SlackProcessedEvent.id)
         )
         result = await self.db.execute(stmt)

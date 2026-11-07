@@ -5,6 +5,9 @@ Portal admin config lives in ``admin_service``; HTTP webhooks in ``ingress_route
 
 from __future__ import annotations
 
+import asyncio
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -18,8 +21,14 @@ from apps.tenant_app_service.agent_ingress.slack.access import is_eligible_slack
 from apps.tenant_app_service.agent_ingress.slack.chat_turn_runner import run_slack_chat_turn
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort, SlackWebClient
 from apps.tenant_app_service.agent_ingress.slack.domain import (
+    SlackEventType,
+    SlackIngressAdmissionOutcome,
     SlackMessageEvent,
+    channel_chat_blocks_event,
+    decide_slack_ingress_admission,
     ensure_slack_reply_text,
+    parse_slack_ingress_event,
+    slack_event_team_mismatch,
     slack_mapping_thread_ts,
     slack_reply_thread_ts,
     strip_bot_mention,
@@ -29,7 +38,16 @@ from apps.tenant_app_service.agent_ingress.slack.feedback_delivery import (
     resolve_feedback_message_id,
 )
 from apps.tenant_app_service.agent_ingress.slack.identity_service import SlackIdentityService
+from apps.tenant_app_service.agent_ingress.slack.ingress_results import (
+    SlackEventsIngressResult,
+    SlackInteractivityIngressResult,
+)
+from apps.tenant_app_service.agent_ingress.slack.interactivity_service import (
+    SlackInteractivityService,
+    parse_interactivity_payload,
+)
 from apps.tenant_app_service.agent_ingress.slack.messages import (
+    SLACK_CHANNEL_CHAT_DISABLED_MESSAGE,
     SLACK_INTEGRATION_DISABLED_MESSAGE,
     SlackMessageKey,
     slack_chat_error_message,
@@ -38,6 +56,10 @@ from apps.tenant_app_service.agent_ingress.slack.messages import (
 )
 from apps.tenant_app_service.agent_ingress.slack.repository import SlackRepository
 from apps.tenant_app_service.agent_ingress.slack.run_control_blocks import build_thinking_placeholder_blocks
+from apps.tenant_app_service.agent_ingress.slack.webhook_auth import (
+    SlackWebhookAuthFailure,
+    authenticate_slack_webhook,
+)
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.token import JwtTokenIssuer
 from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
@@ -63,6 +85,164 @@ class SlackIngressService:
         self.identity_service = identity_service or SlackIdentityService(db, client=client)
         self.token_issuer = token_issuer or JwtTokenIssuer()
 
+    async def process_events_webhook(
+        self,
+        *,
+        endpoint_key: str,
+        payload: dict[str, Any],
+        body_text: str,
+        slack_timestamp: str,
+        slack_signature: str,
+    ) -> SlackEventsIngressResult:
+        """Resolve endpoint, verify signature, and handle an Events API POST."""
+        auth = await authenticate_slack_webhook(
+            self.repo,
+            endpoint_key=endpoint_key,
+            body_text=body_text,
+            slack_timestamp=slack_timestamp,
+            slack_signature=slack_signature,
+        )
+        if isinstance(auth, SlackWebhookAuthFailure):
+            return SlackEventsIngressResult.auth_failed(auth)
+
+        return await self.process_events_api_callback(
+            endpoint=auth,
+            payload=payload,
+            endpoint_label=endpoint_key,
+        )
+
+    async def process_events_api_callback(
+        self,
+        *,
+        endpoint: AgentIngressEndpoint,
+        payload: dict[str, Any],
+        endpoint_label: str,
+    ) -> SlackEventsIngressResult:
+        """Admit an Events API payload, run side effects, return ingress result (no HTTP)."""
+        payload_type = payload.get("type") or "unknown"
+        inner_event = payload.get("event") or {}
+        event_id = payload.get("event_id")
+
+        if payload_type == SlackEventType.URL_VERIFICATION:
+            logger.info("Slack url_verification challenge received %s", endpoint_label)
+            return SlackEventsIngressResult.url_verification(payload.get("challenge") or "")
+
+        configured_team_id = self.repo.slack_team_id(endpoint)
+        already_processed = False
+        if endpoint.enabled:
+            preview = parse_slack_ingress_event(inner_event, event_id=event_id)
+            if preview and not slack_event_team_mismatch(
+                configured_team_id=configured_team_id,
+                event_team_id=preview.team_id,
+            ):
+                already_processed = await self.repo.is_message_already_processed(
+                    endpoint.tenant_id,
+                    message=preview,
+                    delivery_event_id=event_id,
+                    inner_event_type=inner_event.get("type"),
+                )
+
+        admission = decide_slack_ingress_admission(
+            endpoint_enabled=endpoint.enabled,
+            platform_config=endpoint.platform_config,
+            configured_team_id=configured_team_id,
+            inner_event=inner_event,
+            event_id=event_id,
+            already_processed=already_processed,
+        )
+
+        message_event = admission.message_event
+        outcome = admission.outcome
+
+        if outcome == SlackIngressAdmissionOutcome.INTEGRATION_DISABLED and message_event:
+            logger.info(
+                "Slack webhook disabled %s event_id=%s user_id=%s",
+                endpoint_label,
+                message_event.event_id,
+                message_event.user_id,
+            )
+            await self.db.commit()
+            await self.notify_disabled(message_event, endpoint.id)
+        elif outcome == SlackIngressAdmissionOutcome.IGNORED:
+            logger.info(
+                "Slack webhook ignored %s event_id=%s reason=%s",
+                endpoint_label,
+                event_id,
+                admission.ignore_reason or "unknown",
+            )
+        elif outcome == SlackIngressAdmissionOutcome.TEAM_MISMATCH and message_event:
+            logger.warning(
+                "Slack team_id mismatch: event=%s configured=%s %s",
+                message_event.team_id,
+                configured_team_id,
+                endpoint_label,
+            )
+        elif outcome == SlackIngressAdmissionOutcome.CHANNEL_CHAT_DISABLED and message_event:
+            logger.info(
+                "Slack channel chat disabled %s event_id=%s user_id=%s source=%s",
+                endpoint_label,
+                message_event.event_id,
+                message_event.user_id,
+                message_event.source,
+            )
+            await self.db.commit()
+            await self.notify_channel_chat_disabled(message_event, endpoint.id)
+        elif outcome == SlackIngressAdmissionOutcome.DUPLICATE and message_event:
+            logger.info(
+                "Slack duplicate event %s for tenant %s, acking",
+                message_event.event_id,
+                endpoint.tenant_id,
+            )
+        elif outcome == SlackIngressAdmissionOutcome.ACCEPTED and message_event:
+            logger.info(
+                "Slack webhook accepted tenant=%s %s event_id=%s user_id=%s",
+                endpoint.tenant_id,
+                endpoint_label,
+                message_event.event_id,
+                message_event.user_id,
+            )
+            await self.db.commit()
+            asyncio.create_task(self.run_handle_message_background(message_event, endpoint.id))
+
+        return SlackEventsIngressResult.from_admission(admission)
+
+    async def process_interactions_webhook(
+        self,
+        *,
+        endpoint_key: str,
+        body_text: str,
+        slack_timestamp: str,
+        slack_signature: str,
+    ) -> SlackInteractivityIngressResult:
+        """Resolve endpoint, verify signature, and handle an interactivity POST."""
+        auth = await authenticate_slack_webhook(
+            self.repo,
+            endpoint_key=endpoint_key,
+            body_text=body_text,
+            slack_timestamp=slack_timestamp,
+            slack_signature=slack_signature,
+        )
+        if isinstance(auth, SlackWebhookAuthFailure):
+            return SlackInteractivityIngressResult.auth_failed(auth)
+
+        payload = parse_interactivity_payload(body_text)
+        if not payload:
+            return SlackInteractivityIngressResult.invalid_payload()
+
+        response_body = await SlackInteractivityService(self.db).handle_payload(payload, auth)
+        return SlackInteractivityIngressResult.handled(response_body)
+
+    @staticmethod
+    async def run_handle_message_background(event: SlackMessageEvent, endpoint_id: int) -> None:
+        from apps.shared.db.session import app_db_session
+
+        try:
+            async with app_db_session() as bg_db:
+                ingress = SlackIngressService(bg_db)
+                await ingress.handle_message(event, endpoint_id)
+        except Exception:
+            logger.exception("Slack ingress background task failed for endpoint %s", endpoint_id)
+
     async def notify_disabled(self, event: SlackMessageEvent, endpoint_id: int) -> None:
         endpoint = await self._get_endpoint(endpoint_id)
         if not endpoint:
@@ -70,10 +250,49 @@ class SlackIngressService:
         bot_token = self.repo.decrypt_bot_token(endpoint)
         await self._post_ephemeral(bot_token, event, SLACK_INTEGRATION_DISABLED_MESSAGE)
 
+    async def notify_channel_chat_disabled(self, event: SlackMessageEvent, endpoint_id: int) -> None:
+        """Tell the mentioner that channel chat is off.
+
+        Use a thread reply for channel @mentions: ``chat.postEphemeral`` is only
+        visible to one user and is easy to miss in the main channel view.
+        """
+        endpoint = await self._get_endpoint(endpoint_id)
+        if not endpoint:
+            return
+        bot_token = self.repo.decrypt_bot_token(endpoint)
+        text = SLACK_CHANNEL_CHAT_DISABLED_MESSAGE
+        thread_ts = slack_reply_thread_ts(
+            channel_type=event.channel_type,
+            thread_ts=event.thread_ts,
+            message_ts=event.ts,
+        )
+        try:
+            await self.client.chat_post_message(
+                bot_token=bot_token,
+                channel=event.channel_id,
+                text=text,
+                thread_ts=thread_ts,
+            )
+        except Exception:
+            logger.exception(
+                "Failed to post channel-chat-disabled reply channel=%s user=%s",
+                event.channel_id,
+                event.user_id,
+            )
+            await self._post_ephemeral(bot_token, event, text)
+
     async def handle_message(self, event: SlackMessageEvent, endpoint_id: int) -> None:
         endpoint = await self._get_endpoint(endpoint_id)
         if not endpoint or not endpoint.enabled:
             logger.info("Slack ingress endpoint disabled or missing id=%s", endpoint_id)
+            return
+        if channel_chat_blocks_event(event, endpoint.platform_config):
+            logger.info(
+                "Slack channel chat disabled endpoint=%s event_id=%s source=%s",
+                endpoint_id,
+                event.event_id,
+                event.source,
+            )
             return
 
         tenant_id = endpoint.tenant_id
@@ -123,7 +342,11 @@ class SlackIngressService:
 
         message_text = strip_bot_mention(event.text, event.bot_user_id) if event.source == "app_mention" else event.text
         if not message_text.strip():
-            await self._post_ephemeral(bot_token, event, slack_user_message(SlackMessageKey.EMPTY_MENTION_MESSAGE))
+            await self._post_user_notice(
+                bot_token,
+                event,
+                slack_user_message(SlackMessageKey.EMPTY_MENTION_MESSAGE),
+            )
             return
 
         reply_thread_ts = slack_reply_thread_ts(
@@ -236,6 +459,27 @@ class SlackIngressService:
     async def _get_endpoint(self, endpoint_id: int) -> AgentIngressEndpoint | None:
         result = await self.db.execute(select(AgentIngressEndpoint).where(AgentIngressEndpoint.id == endpoint_id))
         return result.scalar_one_or_none()
+
+    async def _post_user_notice(self, bot_token: str, event: SlackMessageEvent, text: str) -> None:
+        """User-visible feedback in shared channels; ephemeral in DMs."""
+        if event.channel_type == "im":
+            await self._post_ephemeral(bot_token, event, text)
+            return
+        thread_ts = slack_reply_thread_ts(
+            channel_type=event.channel_type,
+            thread_ts=event.thread_ts,
+            message_ts=event.ts,
+        )
+        try:
+            await self.client.chat_post_message(
+                bot_token=bot_token,
+                channel=event.channel_id,
+                text=text,
+                thread_ts=thread_ts,
+            )
+        except Exception:
+            logger.exception("Failed to post Slack thread notice channel=%s user=%s", event.channel_id, event.user_id)
+            await self._post_ephemeral(bot_token, event, text)
 
     async def _post_ephemeral(self, bot_token: str, event: SlackMessageEvent, text: str) -> None:
         try:
