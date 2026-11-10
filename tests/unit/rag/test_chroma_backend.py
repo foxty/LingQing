@@ -2,12 +2,14 @@
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 from langchain_core.documents import Document
 
 from apps.config import parse_chroma_http_url
 from apps.shared.infra.rag.chroma_backend import (
     HttpChromaBackend,
+    _apply_chroma_http_client_timeout,
     get_vector_backend,
 )
 
@@ -125,3 +127,44 @@ async def test_delete_collection_delegates_to_client(monkeypatch):
         assert backend._vectorstore is None
 
     mock_vs._client.delete_collection.assert_called_once_with(name="tenant_123")
+
+
+@pytest.mark.asyncio
+async def test_similarity_search_initializes_vectorstore_off_event_loop(monkeypatch):
+    monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_COLLECTION_PREFIX", "tenant_")
+    monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_URL", "http://localhost:8000")
+    monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_HTTP_TIMEOUT_SECONDS", 60)
+
+    mock_vs = MagicMock()
+    mock_vs.asimilarity_search = AsyncMock(return_value=[])
+
+    async def run_in_thread(fn, *args, **kwargs):
+        return fn(*args, **kwargs)
+
+    with (
+        patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient"),
+        patch("apps.shared.infra.rag.chroma_backend.Chroma", return_value=mock_vs),
+        patch(
+            "apps.shared.infra.rag.chroma_backend.asyncio.to_thread",
+            side_effect=run_in_thread,
+        ) as mock_to_thread,
+    ):
+        backend = HttpChromaBackend(tenant_id=5)
+        await backend.similarity_search("query", k=2)
+
+    mock_to_thread.assert_awaited()
+    init_calls = [c for c in mock_to_thread.await_args_list if c.args and c.args[0] == backend._initialize_vectorstore]
+    assert init_calls, "expected _initialize_vectorstore to run via asyncio.to_thread"
+
+
+def test_apply_chroma_http_client_timeout_patches_httpx_session(monkeypatch):
+    monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_HTTP_TIMEOUT_SECONDS", 45)
+
+    session = httpx.Client(timeout=None)
+    server = MagicMock(_session=session)
+    mock_vs = MagicMock(_client=MagicMock(_server=server))
+
+    _apply_chroma_http_client_timeout(mock_vs)
+
+    assert session.timeout.connect == 45.0
+    assert session.timeout.read == 45.0

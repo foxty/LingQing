@@ -392,7 +392,7 @@ fi
 
 DATA_ROOT_HOST_PATH="$(read_env_value ".env" DATA_ROOT_HOST_PATH)"
 if [[ -n "$DATA_ROOT_HOST_PATH" ]]; then
-    mkdir -p "$DATA_ROOT_HOST_PATH/egress"
+    mkdir -p "$DATA_ROOT_HOST_PATH/egress" "$DATA_ROOT_HOST_PATH/chroma"
     # backend-app runs as uid 1000 (appuser); bind mount must be writable in-container
     if ! chown 1000:1000 "$DATA_ROOT_HOST_PATH" 2>/dev/null; then
         if sudo -n chown 1000:1000 "$DATA_ROOT_HOST_PATH" 2>/dev/null; then
