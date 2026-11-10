@@ -17,7 +17,7 @@ from apps.tenant_app_service.message_feedback.schemas import (
     SubmitFeedbackRequest,
     ThreadFeedbackMapResponse,
 )
-from apps.tenant_app_service.message_feedback.service import MessageFeedbackService
+from apps.tenant_app_service.message_feedback.service import MessageFeedbackService, iter_feedback_export_csv
 
 router = APIRouter(tags=["message-feedback"])
 
@@ -126,18 +126,17 @@ async def export_feedback(
     from_dt: str | None = Query(None, alias="from"),
     to_dt: str | None = Query(None, alias="to"),
     current_user: UserDTO = Depends(require_permission(_ANALYSIS_PERMISSIONS)),
-    db: AsyncSession = Depends(get_db),
 ):
-    service = MessageFeedbackService(current_user.tenant_id, db)
-    csv_content = await service.export_feedback_csv(
-        agent_id=agent_id,
-        rating=rating,
-        source=source,
-        from_dt=_parse_dt(from_dt),
-        to_dt=_parse_dt(to_dt),
-    )
+    # Do not use Depends(get_db): streaming must not hold a session across slow client reads.
     return StreamingResponse(
-        iter([csv_content]),
+        iter_feedback_export_csv(
+            current_user.tenant_id,
+            agent_id=agent_id,
+            rating=rating,
+            source=source,
+            from_dt=_parse_dt(from_dt),
+            to_dt=_parse_dt(to_dt),
+        ),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=message_feedback.csv"},
     )

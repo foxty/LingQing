@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from fastapi import FastAPI
@@ -100,19 +100,21 @@ class TestMessageFeedbackRouter:
         resp = member_client.get("/feedback/stats")
         assert resp.status_code == 403
 
-    def test_export_delegates_to_service(self, app, client, mock_feedback_service):
-        mock_feedback_service.export_feedback_csv = AsyncMock(return_value="id,thread_id\n1,t1\n")
+    def test_export_delegates_to_service(self, app, client, monkeypatch):
+        calls: list[int] = []
+
+        async def _fake_csv_stream(tenant_id: int, **_kwargs):
+            calls.append(tenant_id)
+            yield b"id,thread_id\n1,t1\n"
+
+        monkeypatch.setattr(message_feedback, "iter_feedback_export_csv", _fake_csv_stream)
 
         async def _admin_user():
             return UserDTO(id=1, username="admin", role="admin", tenant_id=1, tenant_name="t1")
 
-        async def _fake_db():
-            yield object()
-
         app.dependency_overrides[get_current_user] = _admin_user
-        app.dependency_overrides[get_db] = _fake_db
 
         resp = client.get("/feedback/export")
         assert resp.status_code == 200
         assert "text/csv" in resp.headers.get("content-type", "")
-        mock_feedback_service.export_feedback_csv.assert_awaited_once()
+        assert calls == [1]

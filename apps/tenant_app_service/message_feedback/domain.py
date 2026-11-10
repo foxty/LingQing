@@ -14,12 +14,18 @@ FeedbackRating = Literal["positive", "negative"]
 FeedbackSource = Literal["portal", "slack"]
 
 
-def truncate_preview(text: str | None, *, max_len: int = 200) -> str | None:
-    """Return trimmed text truncated with ellipsis when over max_len."""
+def normalize_message_content(text: str | None) -> str | None:
+    """Return stripped message text, or None when empty."""
     if not text:
         return None
     stripped = text.strip()
-    if not stripped:
+    return stripped if stripped else None
+
+
+def truncate_preview(text: str | None, *, max_len: int = 200) -> str | None:
+    """Return trimmed text truncated with ellipsis when over max_len."""
+    stripped = normalize_message_content(text)
+    if stripped is None:
         return None
     if len(stripped) <= max_len:
         return stripped
@@ -36,6 +42,7 @@ class FeedbackTargetMessage:
     session_id: str | None
     agent_id: int | None
     content: str | None = None
+    trigger_message_id: str | None = None
 
 
 @dataclass

@@ -58,7 +58,9 @@ i18n.addResourceBundle(
       rating: 'Rating',
       source: 'Source',
       comment: 'Comment',
-      preview: 'AI preview',
+      qaPreview: 'Q&A',
+      questionAbbr: 'Q',
+      answerAbbr: 'A',
       createdAt: 'Created',
       noData: 'No feedback yet',
       noDataHint: 'Ratings appear here after users respond to agent messages in the portal or Slack.',
@@ -94,7 +96,9 @@ i18n.addResourceBundle(
       rating: '评分',
       source: '来源',
       comment: '备注',
-      preview: 'AI 摘要',
+      qaPreview: '问答',
+      questionAbbr: '问',
+      answerAbbr: '答',
       createdAt: '时间',
       noData: '暂无反馈',
       noDataHint: '用户在门户或 Slack 中对智能体消息评价后，会显示在这里。',
@@ -116,6 +120,70 @@ export type AgentFeedbackPanelProps = {
 
 function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`
+}
+
+type FeedbackQaCellProps = {
+  humanPreview?: string | null
+  aiPreview?: string | null
+  questionLabel: string
+  answerLabel: string
+}
+
+function FeedbackQaCell({ humanPreview, aiPreview, questionLabel, answerLabel }: FeedbackQaCellProps) {
+  const human = humanPreview?.trim() ?? ''
+  const ai = aiPreview?.trim() ?? ''
+  if (!human && !ai) {
+    return <span className="text-muted-foreground">—</span>
+  }
+
+  const body = (
+    <div className="min-w-0 space-y-0.5 text-muted-foreground">
+      {human ? (
+        <p className="truncate">
+          <span className="font-medium text-foreground/80">{questionLabel}:</span> {human}
+        </p>
+      ) : null}
+      {ai ? (
+        <p className="truncate">
+          <span className="font-medium text-foreground/80">{answerLabel}:</span> {ai}
+        </p>
+      ) : null}
+    </div>
+  )
+
+  const hasLongText = human.length > 80 || ai.length > 80
+  if (!hasLongText) {
+    return body
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button type="button" className="w-full min-w-0 cursor-default text-left focus:outline-none">
+          {body}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        className="max-h-72 max-w-md overflow-y-auto text-left text-xs leading-relaxed"
+      >
+        <div className="space-y-3">
+          {human ? (
+            <div>
+              <p className="font-medium text-foreground">{questionLabel}</p>
+              <p className="whitespace-pre-wrap break-words">{human}</p>
+            </div>
+          ) : null}
+          {ai ? (
+            <div>
+              <p className="font-medium text-foreground">{answerLabel}</p>
+              <p className="whitespace-pre-wrap break-words">{ai}</p>
+            </div>
+          ) : null}
+        </div>
+      </TooltipContent>
+    </Tooltip>
+  )
 }
 
 export default function AgentFeedbackPanel({
@@ -311,19 +379,28 @@ export default function AgentFeedbackPanel({
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card">
           <TooltipProvider delayDuration={200}>
-            <Table className="table-fixed w-full">
+            <div className="overflow-x-auto">
+              <Table className="table-fixed w-full min-w-[52rem]">
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
                   <TableHead className="h-10 w-28">{t('agentFeedback.rating')}</TableHead>
                   <TableHead className="h-10 w-24">{t('agentFeedback.source')}</TableHead>
                   {showAgentColumn ? (
-                    <TableHead className="h-10 w-32">{t('agentFeedback.agent')}</TableHead>
+                    <TableHead className="h-10 w-28">{t('agentFeedback.agent')}</TableHead>
                   ) : null}
-                  <TableHead className="h-10 w-32">{t('agentFeedback.user')}</TableHead>
-                  <TableHead className="h-10 min-w-[10rem]">{t('agentFeedback.preview')}</TableHead>
-                  <TableHead className="h-10 min-w-[8rem]">{t('agentFeedback.comment')}</TableHead>
-                  <TableHead className="h-10 w-12 text-center">{t('agentFeedback.thread')}</TableHead>
-                  <TableHead className="h-10 w-40">{t('agentFeedback.createdAt')}</TableHead>
+                  <TableHead className="h-10 w-28">{t('agentFeedback.user')}</TableHead>
+                  <TableHead
+                    className={
+                      showAgentColumn
+                        ? 'h-10 w-[30%] min-w-[9rem]'
+                        : 'h-10 w-[34%] min-w-[9rem]'
+                    }
+                  >
+                    {t('agentFeedback.qaPreview')}
+                  </TableHead>
+                  <TableHead className="h-10 w-28">{t('agentFeedback.comment')}</TableHead>
+                  <TableHead className="h-10 w-14 text-center">{t('agentFeedback.thread')}</TableHead>
+                  <TableHead className="h-10 w-44 whitespace-nowrap">{t('agentFeedback.createdAt')}</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -352,13 +429,18 @@ export default function AgentFeedbackPanel({
                       </TableCell>
                     ) : null}
                     <TableCell className="max-w-0 truncate">{item.username ?? item.user_id}</TableCell>
-                    <TableCell className="max-w-0 truncate text-muted-foreground">
-                      {item.ai_message_preview ?? ''}
+                    <TableCell className="max-w-0 align-top">
+                      <FeedbackQaCell
+                        humanPreview={item.human_message_preview}
+                        aiPreview={item.ai_message_preview}
+                        questionLabel={t('agentFeedback.questionAbbr')}
+                        answerLabel={t('agentFeedback.answerAbbr')}
+                      />
                     </TableCell>
                     <TableCell className="max-w-0 truncate text-muted-foreground">
                       {item.comment ?? ''}
                     </TableCell>
-                    <TableCell className="w-12 text-center">
+                    <TableCell className="w-14 text-center">
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Link
@@ -374,13 +456,14 @@ export default function AgentFeedbackPanel({
                         </TooltipContent>
                       </Tooltip>
                     </TableCell>
-                    <TableCell className="whitespace-nowrap text-sm tabular-nums text-muted-foreground">
+                    <TableCell className="w-44 whitespace-nowrap text-sm tabular-nums text-muted-foreground">
                       {formatDate(item.created_at, { locale: dateLocale, fallback: '' })}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            </div>
           </TooltipProvider>
           {listQuery.data?.has_more ? (
             <div className="flex justify-center border-t p-4">
