@@ -49,7 +49,10 @@ start_app() {
     case "$APP_MODULE" in
         tenant_app_service)
             echo "Starting Unified Backend..."
-            exec uv run --no-dev uvicorn apps.tenant_app_service.server:app --host 0.0.0.0 --port 8000 --no-access-log
+            workers="${UVICORN_WORKERS:-1}"
+            echo "Uvicorn workers: ${workers}"
+            exec uv run --no-dev uvicorn apps.tenant_app_service.server:app \
+                --host 0.0.0.0 --port 8000 --workers "${workers}" --no-access-log
         ;;
         tenant_manager_service)
             echo "Starting Tenant Manager Service..."

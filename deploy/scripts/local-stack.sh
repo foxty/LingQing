@@ -138,10 +138,12 @@ resolve_infra_services() {
 
 infra_up() {
     (cd "$PROJECT_ROOT" && npm run -s link-dev-skills)
+    ensure_data_root_paths "$ENV_FILE_DEV"
     resolve_infra_services "$ENV_FILE_DEV"
     run_compose_dev build sandbox-runner-image egress-proxy
     ensure_sandbox_runner_image
     run_compose_dev up -d "${INFRA_SERVICES[@]}"
+    wait_for_chroma lingqing-chroma 45
     POSTGRES_CONTAINER=lingqing-postgres db_init
     run_compose_dev ps "${INFRA_SERVICES[@]}"
     local pg_port
@@ -185,10 +187,13 @@ infra_down() {
 
 stack_up() {
     ensure_e2e_env
+    ensure_data_root_paths "$ENV_FILE_E2E"
     resolve_infra_services "$ENV_FILE_E2E"
     run_compose_e2e build backend-base backend-app-image egress-proxy
     run_compose_e2e build sandbox-runner-image sandbox-controller
     run_compose_e2e up -d "${INFRA_SERVICES[@]}"
+    POSTGRES_CONTAINER=lingqing-e2e-postgres wait_for_postgres
+    wait_for_chroma lingqing-e2e-chroma 90
     POSTGRES_CONTAINER=lingqing-e2e-postgres db_init
     run_compose_e2e build gateway-service
     run_compose_e2e up -d "${APP_SERVICES[@]}"
@@ -210,6 +215,43 @@ read_env_or_default() {
     else
         echo "$default_value"
     fi
+}
+
+ensure_data_root_paths() {
+    local env_file="$1"
+    local data_root
+    data_root="$(read_env_or_default DATA_ROOT_HOST_PATH '' "$env_file")"
+    if [[ -z "$data_root" ]]; then
+        echo "ERROR: DATA_ROOT_HOST_PATH must be set in ${env_file}"
+        return 1
+    fi
+    mkdir -p "${data_root}/chroma" "${data_root}/egress"
+    print_ok "data root ready: ${data_root} (chroma/, egress/)"
+}
+
+chroma_heartbeat_in_container() {
+    local container="$1"
+    docker exec "$container" bash -c \
+        'timeout 5s bash -c '\''exec 3<>/dev/tcp/127.0.0.1/8000 &&
+          printf "GET /api/v2/heartbeat HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n" >&3 &&
+          head -n 1 <&3 | grep -q "200"'\''' \
+        >/dev/null 2>&1
+}
+
+wait_for_chroma() {
+    local container="$1"
+    local max_retries="${2:-60}"
+    local i
+    for i in $(seq 1 "$max_retries"); do
+        local health
+        health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' "$container" 2>/dev/null || true)"
+        if [[ "$health" == "healthy" ]] || chroma_heartbeat_in_container "$container"; then
+            return 0
+        fi
+        sleep 2
+    done
+    echo "ERROR: chroma did not become healthy in time (container=${container})"
+    return 1
 }
 
 wait_for_postgres() {
@@ -452,12 +494,14 @@ run_smoke() {
         failed=1
     fi
     
-    if docker exec lingqing-e2e-chroma python -c \
-    "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/heartbeat')" \
-    >/dev/null 2>&1; then
-        print_ok "chroma /api/v1/heartbeat -> ok (in-container)"
+    local chroma_health
+    chroma_health="$(docker inspect -f '{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}' lingqing-e2e-chroma 2>/dev/null || true)"
+    if [[ "$chroma_health" == "healthy" ]]; then
+        print_ok "chroma docker health -> healthy"
+    elif chroma_heartbeat_in_container lingqing-e2e-chroma; then
+        print_ok "chroma /api/v2/heartbeat -> ok (in-container)"
     else
-        print_fail "chroma /api/v1/heartbeat (in-container)"
+        print_fail "chroma health (status=${chroma_health:-unknown})"
         failed=1
     fi
     

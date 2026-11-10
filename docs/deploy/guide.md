@@ -214,7 +214,7 @@ Login: `admin@demo` / `admin` — change immediately in production.
 - [ ] `TENANT_APP_DB_SSL_MODE=require` (and manager DB if separate)
 - [ ] `APP_PUBLIC_URL` and `MANAGER_PUBLIC_URL` set in `.env`
 - [ ] Change default `admin` / `admin` password
-- [ ] Backups for Postgres + `DATA_ROOT_HOST_PATH`
+- [ ] Backups for Postgres + `DATA_ROOT_HOST_PATH` (include `chroma/` for vector DB files)
 - [ ] LLM keys configured per tenant in Settings
 - [ ] Firewall: only 443/80 public
 
