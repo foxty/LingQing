@@ -122,6 +122,43 @@ function formatPercent(value: number): string {
   return `${(value * 100).toFixed(1)}%`
 }
 
+type FeedbackTruncatedTextCellProps = {
+  text?: string | null
+  tooltipThreshold?: number
+}
+
+function FeedbackTruncatedTextCell({ text, tooltipThreshold = 40 }: FeedbackTruncatedTextCellProps) {
+  const value = text?.trim() ?? ''
+  if (!value) {
+    return null
+  }
+
+  const line = <p className="truncate">{value}</p>
+
+  if (value.length <= tooltipThreshold) {
+    return <div className="min-w-0 text-muted-foreground">{line}</div>
+  }
+
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          className="w-full min-w-0 cursor-default text-left text-muted-foreground focus:outline-none"
+        >
+          {line}
+        </button>
+      </TooltipTrigger>
+      <TooltipContent
+        side="top"
+        className="max-h-72 max-w-md overflow-y-auto text-left text-xs leading-relaxed"
+      >
+        <p className="whitespace-pre-wrap break-words">{value}</p>
+      </TooltipContent>
+    </Tooltip>
+  )
+}
+
 type FeedbackQaCellProps = {
   humanPreview?: string | null
   aiPreview?: string | null
@@ -437,8 +474,8 @@ export default function AgentFeedbackPanel({
                         answerLabel={t('agentFeedback.answerAbbr')}
                       />
                     </TableCell>
-                    <TableCell className="max-w-0 truncate text-muted-foreground">
-                      {item.comment ?? ''}
+                    <TableCell className="max-w-0 align-top">
+                      <FeedbackTruncatedTextCell text={item.comment} />
                     </TableCell>
                     <TableCell className="w-14 text-center">
                       <Tooltip>

@@ -13,6 +13,7 @@ import {
 import { Textarea } from '@/components/ui/textarea'
 import { useNotification } from '@/hooks/useNotification'
 import { useClearMessageFeedback, useSubmitMessageFeedback } from '@/hooks/useMessageFeedback'
+import { FEEDBACK_COMMENT_MAX_LENGTH } from '@/lib/feedbackApi'
 import type { MessageFeedback } from '@/types'
 
 i18n.addResourceBundle(
@@ -24,6 +25,7 @@ i18n.addResourceBundle(
       feedbackNotHelpful: 'Not helpful',
       feedbackCommentTitle: 'What was wrong?',
       feedbackCommentPlaceholder: 'Optional — tell us what was incorrect or unhelpful',
+      feedbackCommentCharCount: '{{count}} / {{max}}',
       feedbackSubmit: 'Submit',
       feedbackSkip: 'Skip',
       feedbackFailed: 'Failed to save feedback',
@@ -42,6 +44,7 @@ i18n.addResourceBundle(
       feedbackNotHelpful: '无帮助',
       feedbackCommentTitle: '哪里不对？',
       feedbackCommentPlaceholder: '可选 — 说明错误或不足之处',
+      feedbackCommentCharCount: '{{count}} / {{max}}',
       feedbackSubmit: '提交',
       feedbackSkip: '跳过',
       feedbackFailed: '保存反馈失败',
@@ -160,10 +163,21 @@ export default function MessageFeedbackButtons({
           </DialogHeader>
           <Textarea
             value={comment}
-            onChange={(event) => setComment(event.target.value)}
+            onChange={(event) => setComment(event.target.value.slice(0, FEEDBACK_COMMENT_MAX_LENGTH))}
             placeholder={t('workbench.feedbackCommentPlaceholder')}
             rows={4}
+            maxLength={FEEDBACK_COMMENT_MAX_LENGTH}
+            aria-describedby="feedback-comment-length"
           />
+          <p
+            id="feedback-comment-length"
+            className="text-right text-xs tabular-nums text-muted-foreground"
+          >
+            {t('workbench.feedbackCommentCharCount', {
+              count: comment.length,
+              max: FEEDBACK_COMMENT_MAX_LENGTH,
+            })}
+          </p>
           <DialogFooter>
             <Button variant="outline" onClick={() => setCommentOpen(false)}>
               {t('workbench.feedbackSkip')}

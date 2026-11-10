@@ -1,6 +1,9 @@
 import api from './api'
 import type { MessageFeedback } from '@/types'
 
+/** Keep in sync with apps/tenant_app_service/message_feedback/domain.py */
+export const FEEDBACK_COMMENT_MAX_LENGTH = 1000
+
 export interface FeedbackStats {
   positive_count: number
   negative_count: number

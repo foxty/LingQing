@@ -9,6 +9,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError, ValidationError
+from apps.tenant_app_service.message_feedback.domain import FEEDBACK_COMMENT_MAX_LENGTH
 from apps.tenant_app_service.message_feedback.domain import (
     FEEDBACK_RATING_POSITIVE,
     FEEDBACK_SOURCE_PORTAL,
@@ -17,6 +18,27 @@ from apps.tenant_app_service.message_feedback import service as feedback_service
 from apps.tenant_app_service.message_feedback.service import MessageFeedbackService, iter_feedback_export_csv
 
 _THREAD_GET = "apps.tenant_app_service.message_feedback.service.ThreadService.get_thread"
+
+
+@pytest.mark.asyncio
+async def test_upsert_feedback_rejects_comment_over_max_length():
+    db = AsyncMock()
+    with patch(_THREAD_GET, new_callable=AsyncMock) as get_thread:
+        get_thread.return_value = MagicMock(user_id=10)
+        service = MessageFeedbackService(tenant_id=1, db=db)
+        service.repository = MagicMock()
+        ai_message = MagicMock()
+        ai_message.thread_id = "thread_a"
+        service.repository.get_ai_message = AsyncMock(return_value=ai_message)
+
+        with pytest.raises(ValidationError):
+            await service.upsert_feedback(
+                thread_id="thread_a",
+                message_id="msg_a",
+                user_id=10,
+                rating=FEEDBACK_RATING_POSITIVE,
+                comment="x" * (FEEDBACK_COMMENT_MAX_LENGTH + 1),
+            )
 
 
 @pytest.mark.asyncio

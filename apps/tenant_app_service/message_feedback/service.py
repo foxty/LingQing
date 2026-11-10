@@ -20,6 +20,7 @@ from apps.tenant_app_service.message_feedback.domain import (
     FeedbackSource,
     FeedbackTargetMessage,
     MessageFeedbackDomain,
+    normalize_feedback_comment,
     normalize_message_content,
     truncate_preview,
 )
@@ -119,7 +120,7 @@ class MessageFeedbackService:
             agent_id=agent_id,
             user_id=user_id,
             rating=rating,
-            comment=comment.strip() if comment else None,
+            comment=normalize_feedback_comment(comment),
             source=source,
             external_ref=external_ref,
             now=now,
@@ -224,7 +225,7 @@ class MessageFeedbackService:
             self.tenant_id,
             message_id,
             user_id,
-            comment.strip() if comment else None,
+            normalize_feedback_comment(comment),
             now,
         )
         if domain is None:

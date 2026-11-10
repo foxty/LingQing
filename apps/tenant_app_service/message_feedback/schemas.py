@@ -5,10 +5,12 @@ from typing import Literal
 
 from pydantic import BaseModel, Field
 
+from apps.tenant_app_service.message_feedback.domain import FEEDBACK_COMMENT_MAX_LENGTH
+
 
 class SubmitFeedbackRequest(BaseModel):
     rating: Literal["positive", "negative"]
-    comment: str | None = Field(None, max_length=2000)
+    comment: str | None = Field(None, max_length=FEEDBACK_COMMENT_MAX_LENGTH)
 
 
 class FeedbackResponse(BaseModel):

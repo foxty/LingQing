@@ -4,6 +4,10 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Final, Literal
 
+from apps.shared.core.exceptions import ValidationError
+
+FEEDBACK_COMMENT_MAX_LENGTH: Final = 1000
+
 FEEDBACK_RATING_POSITIVE: Final = "positive"
 FEEDBACK_RATING_NEGATIVE: Final = "negative"
 
@@ -12,6 +16,18 @@ FEEDBACK_SOURCE_SLACK: Final = "slack"
 
 FeedbackRating = Literal["positive", "negative"]
 FeedbackSource = Literal["portal", "slack"]
+
+
+def normalize_feedback_comment(text: str | None) -> str | None:
+    """Strip and enforce max length for optional user feedback comments."""
+    if not text:
+        return None
+    stripped = text.strip()
+    if not stripped:
+        return None
+    if len(stripped) > FEEDBACK_COMMENT_MAX_LENGTH:
+        raise ValidationError(f"Comment must be at most {FEEDBACK_COMMENT_MAX_LENGTH} characters")
+    return stripped
 
 
 def normalize_message_content(text: str | None) -> str | None:

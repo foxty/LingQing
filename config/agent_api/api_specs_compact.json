@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-06T14:55:31.746044+00:00",
+  "generated_at": "2026-11-10T04:05:23.312112+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -7405,7 +7405,7 @@
             "anyOf": [
               {
                 "type": "string",
-                "maxLength": 2000
+                "maxLength": 1000
               },
               {
                 "type": "null"
