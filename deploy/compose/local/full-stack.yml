@@ -244,7 +244,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - APP_MODULE=tenant_app_service
-      - UVICORN_WORKERS=${UVICORN_WORKERS:-1}
+      - UVICORN_WORKERS=${UVICORN_WORKERS:-2}
       - DATA_ROOT_PATH=/app/data
       - DOCUMENT_PARSER=${DOCUMENT_PARSER:-docling}
       - DOCLING_SERVICE_URL=${DOCLING_SERVICE_URL:-http://docling-serve:5001}
