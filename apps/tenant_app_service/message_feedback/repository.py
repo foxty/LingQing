@@ -18,6 +18,7 @@ from apps.shared.db.models import (
 from apps.tenant_app_service.message_feedback.domain import (
     FeedbackTargetMessage,
     MessageFeedbackDomain,
+    normalize_message_content,
     truncate_preview,
 )
 
@@ -261,12 +262,13 @@ class MessageFeedbackRepository:
                     session_id=row.session_id,
                     agent_id=row.agent_id,
                     content=row.content,
+                    trigger_message_id=row.trigger_message_id,
                 )
 
         missing = [mid for mid in unique_ids if mid not in found]
         if missing:
             run_result = await self.db.execute(
-                select(AgentRunMessage)
+                select(AgentRunMessage, AgentRun.trigger_message_id)
                 .join(AgentRun, AgentRunMessage.run_id == AgentRun.id)
                 .where(
                     AgentRun.tenant_id == tenant_id,
@@ -274,7 +276,7 @@ class MessageFeedbackRepository:
                     AgentRunMessage.message_id.in_(missing),
                 )
             )
-            for row in run_result.scalars():
+            for row, trigger_message_id in run_result.all():
                 if row.message_id and row.message_id not in found:
                     found[row.message_id] = FeedbackTargetMessage(
                         id=row.id,
@@ -283,15 +285,56 @@ class MessageFeedbackRepository:
                         session_id=row.session_id,
                         agent_id=row.agent_id,
                         content=row.content,
+                        trigger_message_id=trigger_message_id,
                     )
 
         return found
+
+    async def get_human_contents_by_triggers(
+        self,
+        tenant_id: int,
+        trigger_keys: list[tuple[str, str]],
+        *,
+        max_len: int = 200,
+        truncate: bool = True,
+    ) -> dict[tuple[str, str], str | None]:
+        """Load human main-timeline content by (thread_id, human message_id)."""
+        pairs = {(thread_id, human_message_id) for thread_id, human_message_id in trigger_keys if human_message_id}
+        if not pairs:
+            return {}
+
+        thread_ids = {thread_id for thread_id, _ in pairs}
+        human_ids = {human_message_id for _, human_message_id in pairs}
+        result = await self.db.execute(
+            select(
+                ThreadMainMessage.thread_id,
+                ThreadMainMessage.message_id,
+                ThreadMainMessage.content,
+            )
+            .join(ChatThread, ThreadMainMessage.thread_id == ChatThread.id)
+            .where(
+                ChatThread.tenant_id == tenant_id,
+                ThreadMainMessage.thread_id.in_(thread_ids),
+                ThreadMainMessage.message_id.in_(human_ids),
+                ThreadMainMessage.type == "human",
+            )
+        )
+        contents: dict[tuple[str, str], str | None] = {}
+        for thread_id, message_id, content in result.all():
+            key = (thread_id, message_id)
+            if key in pairs and key not in contents:
+                if truncate:
+                    contents[key] = truncate_preview(content, max_len=max_len)
+                else:
+                    contents[key] = normalize_message_content(content)
+        return contents
 
     async def get_human_previews_for_sessions(
         self,
         session_keys: list[tuple[str, str | None]],
         *,
         max_len: int = 200,
+        truncate: bool = True,
     ) -> dict[tuple[str, str], str | None]:
         pairs = {(thread_id, session_id) for thread_id, session_id in session_keys if session_id}
         if not pairs:
@@ -318,7 +361,10 @@ class MessageFeedbackRepository:
                 continue
             key = (thread_id, session_id)
             if key in pairs and key not in previews:
-                previews[key] = truncate_preview(content, max_len=max_len)
+                if truncate:
+                    previews[key] = truncate_preview(content, max_len=max_len)
+                else:
+                    previews[key] = normalize_message_content(content)
         return previews
 
     async def get_human_preview_for_session(

@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from typing import Literal
 
+from apps.tenant_app_service.message_feedback.domain import FEEDBACK_COMMENT_MAX_LENGTH
+
 FeedbackRating = Literal["positive", "negative"] | None
 
 ACTION_FEEDBACK_POSITIVE = "feedback_positive"
@@ -116,7 +118,7 @@ def build_feedback_comment_modal(*, message_id: str, trigger_id: str) -> dict:
                         "type": "plain_text_input",
                         "action_id": "comment_input",
                         "multiline": True,
-                        "max_length": 2000,
+                        "max_length": FEEDBACK_COMMENT_MAX_LENGTH,
                     },
                 }
             ],

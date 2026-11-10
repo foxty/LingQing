@@ -2,13 +2,14 @@
 
 from __future__ import annotations
 
-import csv
-import io
+from collections.abc import AsyncIterator
 from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError, ValidationError
+from apps.shared.db.session import app_db_session
+from apps.shared.utils.structured_export import CsvTableExporter
 from apps.tenant_app_service.chat.thread_service import ThreadService
 from apps.tenant_app_service.message_feedback.domain import (
     FEEDBACK_RATING_NEGATIVE,
@@ -19,6 +20,8 @@ from apps.tenant_app_service.message_feedback.domain import (
     FeedbackSource,
     FeedbackTargetMessage,
     MessageFeedbackDomain,
+    normalize_feedback_comment,
+    normalize_message_content,
     truncate_preview,
 )
 from apps.tenant_app_service.message_feedback.repository import MessageFeedbackRepository, feedback_row_to_domain
@@ -30,6 +33,23 @@ from apps.tenant_app_service.message_feedback.schemas import (
     FeedbackStatsResponse,
     ThreadFeedbackMapResponse,
 )
+
+
+def _resolve_human_message(
+    *,
+    thread_id: str,
+    session_id: str | None,
+    ai_message: FeedbackTargetMessage | None,
+    human_by_trigger: dict[tuple[str, str], str | None],
+    human_by_session: dict[tuple[str, str], str | None],
+) -> str | None:
+    if ai_message and ai_message.trigger_message_id:
+        hit = human_by_trigger.get((ai_message.thread_id, ai_message.trigger_message_id))
+        if hit:
+            return hit
+    if session_id:
+        return human_by_session.get((thread_id, session_id))
+    return None
 
 
 def _to_response(domain: MessageFeedbackDomain) -> FeedbackResponse:
@@ -100,7 +120,7 @@ class MessageFeedbackService:
             agent_id=agent_id,
             user_id=user_id,
             rating=rating,
-            comment=comment.strip() if comment else None,
+            comment=normalize_feedback_comment(comment),
             source=source,
             external_ref=external_ref,
             now=now,
@@ -205,7 +225,7 @@ class MessageFeedbackService:
             self.tenant_id,
             message_id,
             user_id,
-            comment.strip() if comment else None,
+            normalize_feedback_comment(comment),
             now,
         )
         if domain is None:
@@ -269,13 +289,26 @@ class MessageFeedbackService:
         message_ids = [row.message_id for row, _ in rows]
         session_keys = [(row.thread_id, row.session_id) for row, _ in rows]
         ai_by_id = await self.repository.get_ai_messages_by_ids(self.tenant_id, message_ids)
-        human_previews = await self.repository.get_human_previews_for_sessions(session_keys)
+        trigger_keys = [
+            (ai.thread_id, ai.trigger_message_id)
+            for ai in ai_by_id.values()
+            if ai.trigger_message_id
+        ]
+        human_by_trigger = await self.repository.get_human_contents_by_triggers(
+            self.tenant_id,
+            trigger_keys,
+        )
+        human_by_session = await self.repository.get_human_previews_for_sessions(session_keys)
 
         items: list[FeedbackListItem] = []
         for row, username in rows:
             ai_message = ai_by_id.get(row.message_id)
-            human_preview = (
-                human_previews.get((row.thread_id, row.session_id)) if row.session_id else None
+            human_preview = _resolve_human_message(
+                thread_id=row.thread_id,
+                session_id=row.session_id,
+                ai_message=ai_message,
+                human_by_trigger=human_by_trigger,
+                human_by_session=human_by_session,
             )
             items.append(
                 FeedbackListItem(
@@ -297,70 +330,76 @@ class MessageFeedbackService:
         next_cursor = items[-1].id if items and has_more else None
         return FeedbackListResponse(items=items, next_cursor=next_cursor, has_more=has_more)
 
-    async def export_feedback_csv(
+    async def _append_feedback_export_page(
         self,
+        exporter: CsvTableExporter,
         *,
-        agent_id: int | None = None,
-        rating: str | None = None,
-        source: str | None = None,
-        from_dt: datetime | None = None,
-        to_dt: datetime | None = None,
-    ) -> str:
-        all_items: list[FeedbackListItem] = []
-        cursor: int | None = None
-        while True:
-            page = await self.list_feedback(
-                agent_id=agent_id,
-                rating=rating,
-                source=source,
-                from_dt=from_dt,
-                to_dt=to_dt,
-                cursor=cursor,
-                limit=200,
-            )
-            all_items.extend(page.items)
-            if not page.has_more or page.next_cursor is None:
-                break
-            cursor = page.next_cursor
-
-        buffer = io.StringIO()
-        writer = csv.writer(buffer)
-        writer.writerow(
-            [
-                "id",
-                "thread_id",
-                "session_id",
-                "message_id",
-                "agent_id",
-                "user_id",
-                "username",
-                "rating",
-                "comment",
-                "source",
-                "human_message_preview",
-                "ai_message_preview",
-                "created_at",
-            ]
+        agent_id: int | None,
+        rating: str | None,
+        source: str | None,
+        from_dt: datetime | None,
+        to_dt: datetime | None,
+        cursor: int | None,
+    ) -> tuple[list, bool]:
+        rows, has_more = await self.repository.list_paginated(
+            self.tenant_id,
+            agent_id=agent_id,
+            rating=rating,
+            source=source,
+            from_dt=from_dt,
+            to_dt=to_dt,
+            cursor=cursor,
+            limit=200,
         )
-        for item in all_items:
-            writer.writerow(
+        if not rows:
+            return rows, False
+
+        message_ids = [row.message_id for row, _ in rows]
+        session_keys = [(row.thread_id, row.session_id) for row, _ in rows]
+        ai_by_id = await self.repository.get_ai_messages_by_ids(self.tenant_id, message_ids)
+        trigger_keys = [
+            (ai.thread_id, ai.trigger_message_id)
+            for ai in ai_by_id.values()
+            if ai.trigger_message_id
+        ]
+        human_by_trigger = await self.repository.get_human_contents_by_triggers(
+            self.tenant_id,
+            trigger_keys,
+            truncate=False,
+        )
+        human_by_session = await self.repository.get_human_previews_for_sessions(
+            session_keys,
+            truncate=False,
+        )
+
+        for row, username in rows:
+            ai_message = ai_by_id.get(row.message_id)
+            human_message = _resolve_human_message(
+                thread_id=row.thread_id,
+                session_id=row.session_id,
+                ai_message=ai_message,
+                human_by_trigger=human_by_trigger,
+                human_by_session=human_by_session,
+            )
+            exporter.append_row(
                 [
-                    item.id,
-                    item.thread_id,
-                    item.session_id or "",
-                    item.message_id,
-                    item.agent_id,
-                    item.user_id,
-                    item.username or "",
-                    item.rating,
-                    item.comment or "",
-                    item.source,
-                    item.human_message_preview or "",
-                    item.ai_message_preview or "",
-                    item.created_at.isoformat(),
+                    row.id,
+                    row.thread_id,
+                    row.session_id or "",
+                    row.message_id,
+                    row.agent_id,
+                    row.user_id,
+                    username or "",
+                    row.rating,
+                    row.comment or "",
+                    row.source,
+                    human_message or "",
+                    normalize_message_content(ai_message.content if ai_message else None) or "",
+                    row.created_at.isoformat(),
                 ]
             )
-        return buffer.getvalue()
+
+        return rows, has_more
 
     async def resolve_message_context(
         self,
@@ -377,3 +416,64 @@ class MessageFeedbackService:
             ai_message.session_id,
             ai_message.id,
         )
+
+
+FEEDBACK_EXPORT_HEADERS: tuple[str, ...] = (
+    "id",
+    "thread_id",
+    "session_id",
+    "message_id",
+    "agent_id",
+    "user_id",
+    "username",
+    "rating",
+    "comment",
+    "source",
+    "human_message",
+    "ai_message",
+    "created_at",
+)
+
+
+async def iter_feedback_export_csv(
+    tenant_id: int,
+    *,
+    agent_id: int | None = None,
+    rating: str | None = None,
+    source: str | None = None,
+    from_dt: datetime | None = None,
+    to_dt: datetime | None = None,
+) -> AsyncIterator[bytes]:
+    """Stream feedback CSV; one short-lived DB session per page (not held across client I/O)."""
+    exporter = CsvTableExporter()
+    exporter.write_header(FEEDBACK_EXPORT_HEADERS)
+    header_chunk = exporter.flush_chunk()
+    if header_chunk:
+        yield header_chunk
+
+    cursor: int | None = None
+    while True:
+        rows: list = []
+        has_more = False
+        async with app_db_session() as db:
+            service = MessageFeedbackService(tenant_id, db)
+            rows, has_more = await service._append_feedback_export_page(
+                exporter,
+                agent_id=agent_id,
+                rating=rating,
+                source=source,
+                from_dt=from_dt,
+                to_dt=to_dt,
+                cursor=cursor,
+            )
+
+        if not rows:
+            break
+
+        page_chunk = exporter.flush_chunk()
+        if page_chunk:
+            yield page_chunk
+
+        if not has_more:
+            break
+        cursor = rows[-1][0].id
