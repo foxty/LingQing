@@ -50,8 +50,8 @@ app_db_engine = create_async_engine(
     echo=False,  # Set to True for SQL debugging
     future=True,
     pool_pre_ping=True,
-    pool_size=5,
-    max_overflow=10,
+    pool_size=10,
+    max_overflow=50,
     pool_recycle=3600,
     connect_args={
         "timeout": 10,  # Connection timeout in seconds
