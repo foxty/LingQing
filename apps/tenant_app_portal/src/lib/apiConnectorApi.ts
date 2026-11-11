@@ -44,6 +44,7 @@ export interface ApiConnectorUpdateRequest {
   name?: string
   description?: string
   base_url?: string
+  credential_mode?: 'shared' | 'user'
   auth_type?: ApiConnectorAuthType
   auth_config?: Record<string, any>
   rate_policy?: Record<string, any>

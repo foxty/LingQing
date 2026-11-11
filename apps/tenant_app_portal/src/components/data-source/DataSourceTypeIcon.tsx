@@ -12,23 +12,22 @@ function typeLabel(type: string): string {
 }
 
 export default function DataSourceTypeIcon({ type, managed = false, className }: Props) {
+  const iconClass = cn('h-4 w-4 shrink-0 text-muted-foreground', className)
+
   if (managed) {
     return (
-      <Building2
-        className={cn('h-4 w-4 shrink-0 text-muted-foreground', className)}
-        aria-label={typeLabel('platform')}
-        title="Platform managed"
-      />
+      <span className="inline-flex shrink-0" title="Platform managed">
+        <Building2 className={iconClass} aria-hidden />
+      </span>
     )
   }
 
   const Icon = type === 'snowflake' ? Snowflake : type === 'databricks' ? Layers : Database
+  const label = typeLabel(type)
 
   return (
-    <Icon
-      className={cn('h-4 w-4 shrink-0 text-muted-foreground', className)}
-      aria-label={typeLabel(type)}
-      title={typeLabel(type)}
-    />
+    <span className="inline-flex shrink-0" title={label}>
+      <Icon className={iconClass} aria-hidden />
+    </span>
   )
 }
