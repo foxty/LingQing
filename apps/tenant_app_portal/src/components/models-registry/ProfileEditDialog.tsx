@@ -1,5 +1,7 @@
+import { catalogModelHasReasoningControl } from '@/components/models-registry/utils'
 import ConnectionTestFeedback, { type ConnectionTestResult } from '@/components/ConnectionTestFeedback'
 import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import {
@@ -21,14 +23,18 @@ import {
 } from '@/components/ui/select'
 import { getApiErrorMessage } from '@/lib/api'
 import {
+  catalogModelsForProvider,
+  CUSTOM_CATALOG_MODEL_KEY,
   testRegistryProfileConnection,
   updateRegistryProfile,
+  type CatalogProvider,
   type LLMModelProfile,
+  type LLMProvider,
   type ModelReasoningConfig,
 } from '@/lib/llmConfigApi'
 import { cn } from '@/lib/utils'
 import { AlertCircle, Loader2, Plus, Trash2 } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { modelsRegistryKey, registerModelsRegistryI18n } from './i18n'
 import {
@@ -40,10 +46,26 @@ import {
   type ReasoningOptionDraft,
 } from './utils'
 
+function initialCatalogModelKey(
+  profile: LLMModelProfile,
+  catalogModels: { key: string; model_id: string }[]
+): string {
+  if (profile.catalog_model_key) {
+    return profile.catalog_model_key
+  }
+  if (profile.source === 'custom') {
+    return CUSTOM_CATALOG_MODEL_KEY
+  }
+  const match = catalogModels.find((model) => model.model_id === profile.model_id)
+  return match?.key ?? CUSTOM_CATALOG_MODEL_KEY
+}
+
 interface ProfileEditDialogProps {
   open: boolean
   onOpenChange: (open: boolean) => void
   profile: LLMModelProfile | null
+  provider: LLMProvider | null
+  catalog: CatalogProvider[]
   onSaved: () => Promise<void> | void
 }
 
@@ -51,11 +73,15 @@ export default function ProfileEditDialog({
   open,
   onOpenChange,
   profile,
+  provider,
+  catalog,
   onSaved,
 }: ProfileEditDialogProps) {
   registerModelsRegistryI18n()
   const { t } = useTranslation()
   const [name, setName] = useState('')
+  const [catalogModelKey, setCatalogModelKey] = useState('')
+  const [modelId, setModelId] = useState('')
   const [temperature, setTemperature] = useState('')
   const [maxTokens, setMaxTokens] = useState('')
   const [topP, setTopP] = useState('')
@@ -69,6 +95,16 @@ export default function ProfileEditDialog({
   const [connectionTestResult, setConnectionTestResult] = useState<ConnectionTestResult | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  const catalogModels = useMemo(() => {
+    if (!profile || !provider) {
+      return []
+    }
+    return catalogModelsForProvider(provider, catalog, profile.category)
+  }, [profile, provider, catalog])
+
+  const useCatalogPicker = catalogModels.length > 0
+  const isCustomModel = catalogModelKey === CUSTOM_CATALOG_MODEL_KEY || !useCatalogPicker
+
   useEffect(() => {
     if (!open || !profile) {
       return
@@ -76,6 +112,8 @@ export default function ProfileEditDialog({
     setError(null)
     setConnectionTestResult(null)
     setName(profile.name)
+    setModelId(profile.model_id)
+    setCatalogModelKey(initialCatalogModelKey(profile, catalogModels))
     const params = profile.params ?? {}
     setTemperature(params.temperature != null ? String(params.temperature) : '')
     setMaxTokens(params.max_tokens != null ? String(params.max_tokens) : '')
@@ -83,7 +121,7 @@ export default function ProfileEditDialog({
     setSupportsThinking(profile.reasoning_config?.supports_thinking === true)
     setReasoningOptions(profileReasoningOptionDrafts(profile))
     setDefaultThinkingEffort(profileDefaultThinkingEffort(profile))
-  }, [open, profile?.id])
+  }, [open, profile?.id, catalogModels])
 
   const reasoningOptionRows = reasoningOptions
     .map((row) => {
@@ -139,6 +177,16 @@ export default function ProfileEditDialog({
     return result
   }
 
+  const buildIdentityPayload = () => {
+    const trimmedModelId = modelId.trim()
+    const custom = isCustomModel
+    return {
+      model_id: trimmedModelId,
+      catalog_model_key: custom ? null : catalogModelKey || null,
+      source: custom ? 'custom' : 'preset',
+    }
+  }
+
   const validateReasoning = (): string | null => {
     if (profile?.category !== 'llm' || !supportsThinking) {
       return null
@@ -150,8 +198,23 @@ export default function ProfileEditDialog({
     return null
   }
 
+  const validateModelId = (): string | null => {
+    if (!modelId.trim()) {
+      return t(modelsRegistryKey('modelIdRequired'))
+    }
+    if (!isCustomModel && !catalogModelKey.trim()) {
+      return t(modelsRegistryKey('selectModel'))
+    }
+    return null
+  }
+
   const persistProfile = async (resetFromCatalog: boolean): Promise<boolean> => {
     if (!profile) {
+      return false
+    }
+    const modelError = validateModelId()
+    if (modelError) {
+      setError(modelError)
       return false
     }
     if (!resetFromCatalog) {
@@ -164,6 +227,7 @@ export default function ProfileEditDialog({
     setError(null)
     await updateRegistryProfile(profile.id, {
       name: name.trim(),
+      ...buildIdentityPayload(),
       params: resetFromCatalog ? undefined : buildParams(),
       reasoning_config: resetFromCatalog ? undefined : buildReasoningConfig(),
       reset_runtime_from_catalog: resetFromCatalog,
@@ -253,6 +317,8 @@ export default function ProfileEditDialog({
     setConnectionTestResult(null)
   }
 
+  const canSave = name.trim() && modelId.trim() && !busy && !testingConnection
+
   if (!profile) {
     return null
   }
@@ -262,7 +328,14 @@ export default function ProfileEditDialog({
       <DialogContent className="flex max-h-[90vh] w-[calc(100%-2rem)] max-w-2xl flex-col gap-0 overflow-hidden p-0 sm:w-full">
         <DialogHeader className="space-y-1.5 px-6 py-4 text-left">
           <DialogTitle>{t(modelsRegistryKey('editModelProfile'))}</DialogTitle>
-          <DialogDescription className="font-mono text-xs">{profile.model_id}</DialogDescription>
+          <DialogDescription className="flex flex-wrap items-center gap-2 text-xs">
+            <span className="text-muted-foreground">{t(modelsRegistryKey('profileIdHint'), { id: profile.id })}</span>
+            <Badge variant="outline" className="font-normal">
+              {profile.category === 'embedding'
+                ? t(modelsRegistryKey('categoryEmbedding'))
+                : t(modelsRegistryKey('categoryLlm'))}
+            </Badge>
+          </DialogDescription>
         </DialogHeader>
 
         <div className="flex-1 space-y-5 overflow-y-auto px-6 pb-4">
@@ -284,6 +357,68 @@ export default function ProfileEditDialog({
               }}
             />
           </div>
+
+          {useCatalogPicker ? (
+            <div className="space-y-2">
+              <Label>{t(modelsRegistryKey('selectModel'))}</Label>
+              <Select
+                value={catalogModelKey || undefined}
+                onValueChange={(value) => {
+                  if (value === CUSTOM_CATALOG_MODEL_KEY) {
+                    setCatalogModelKey(CUSTOM_CATALOG_MODEL_KEY)
+                    setModelId('')
+                    clearTestOnFieldChange()
+                    return
+                  }
+                  const model = catalogModels.find((item) => item.key === value)
+                  setCatalogModelKey(value)
+                  if (model?.model_id) {
+                    setModelId(model.model_id)
+                  }
+                  clearTestOnFieldChange()
+                }}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder={t(modelsRegistryKey('selectModel'))} />
+                </SelectTrigger>
+                <SelectContent>
+                  {catalogModels.map((model) => (
+                    <SelectItem key={model.key} value={model.key}>
+                      {model.name} ({model.model_id})
+                      {catalogModelHasReasoningControl(model)
+                        ? ` · ${t(modelsRegistryKey('badgeReasoningControl'))}`
+                        : ''}
+                    </SelectItem>
+                  ))}
+                  <SelectItem value={CUSTOM_CATALOG_MODEL_KEY}>{t(modelsRegistryKey('customModel'))}</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          {isCustomModel ? (
+            <div className="space-y-2">
+              <Label htmlFor="profile-edit-model-id">{t(modelsRegistryKey('modelId'))}</Label>
+              <Input
+                id="profile-edit-model-id"
+                className="font-mono text-sm"
+                value={modelId}
+                onChange={(event) => {
+                  setModelId(event.target.value)
+                  if (useCatalogPicker) {
+                    setCatalogModelKey(CUSTOM_CATALOG_MODEL_KEY)
+                  }
+                  clearTestOnFieldChange()
+                }}
+              />
+              <p className="text-xs text-muted-foreground">{t(modelsRegistryKey('customModelHint'))}</p>
+            </div>
+          ) : modelId ? (
+            <div className="space-y-1">
+              <Label>{t(modelsRegistryKey('modelId'))}</Label>
+              <p className="font-mono text-sm text-muted-foreground">{modelId}</p>
+            </div>
+          ) : null}
 
           <div className="grid grid-cols-3 gap-3">
             <div className="space-y-2">
@@ -446,7 +581,7 @@ export default function ProfileEditDialog({
             <Button
               type="button"
               variant="outline"
-              disabled={busy || testingConnection || !name.trim()}
+              disabled={!canSave}
               onClick={() => void testConnection()}
             >
               {testingConnection ? (
@@ -458,11 +593,7 @@ export default function ProfileEditDialog({
                 t(modelsRegistryKey('test'))
               )}
             </Button>
-            <Button
-              type="button"
-              disabled={busy || testingConnection || !name.trim()}
-              onClick={() => void save(false)}
-            >
+            <Button type="button" disabled={!canSave} onClick={() => void save(false)}>
               {busy ? (
                 <>
                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
