@@ -92,7 +92,7 @@ class IntegrationCredentialResolver:
         resource_type: str,
         resource_id: int,
     ) -> tuple[str, UserIntegrationCredential | None]:
-        from apps.shared.external_systems.credentials.dtos import (
+        from apps.shared.external_systems.domain.types import (
             USER_CONNECTION_CONNECTED,
             USER_CONNECTION_EXPIRED,
             USER_CONNECTION_NOT_CONNECTED,
