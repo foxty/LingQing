@@ -610,3 +610,39 @@ async def test_update_profile_reset_runtime_from_catalog(async_db_session):
     assert opts[0]["value"] == "low"
     assert reset.provider_config == {"thinking_request_mode": "reasoning_effort"}
 
+
+async def test_update_profile_changes_model_id_on_same_profile_id(async_db_session):
+    tenant = await _seed_tenant(async_db_session)
+    service = LLMProviderConfigService(tenant.id, async_db_session)
+
+    provider = await service.create_provider(
+        CreateLLMProviderRequest(
+            display_name="Provider",
+            api_base="https://api.example.com/v1",
+            api_key="plain-secret",
+        )
+    )
+    profile = await service.create_profile(
+        CreateLLMModelProfileRequest(
+            provider_id=provider.id,
+            name="Primary",
+            category=ModelProfileCategory.LLM,
+            model_id="gpt-old",
+            catalog_model_key=None,
+            source="custom",
+        )
+    )
+
+    await service.update_profile(
+        profile.id,
+        UpdateLLMModelProfileRequest(
+            model_id="gpt-new",
+            catalog_model_key=None,
+            source="custom",
+        ),
+    )
+    resolved = await service.resolve_profile(profile.id)
+    assert resolved.profile_id == profile.id
+    assert resolved.model_id == "gpt-new"
+    assert resolved.catalog_model_key is None
+

@@ -260,7 +260,7 @@ class LLMModelProfileRepository:
         model_id: str | None = None,
         params: dict | None | object = _UNSET,
         reasoning_config: dict | None | object = _UNSET,
-        catalog_model_key: str | None = None,
+        catalog_model_key: str | None | object = _UNSET,
         source: ModelProfileSource | None = None,
     ) -> LLMModelProfileDomain:
         result = await self.db.execute(
@@ -281,8 +281,8 @@ class LLMModelProfileRepository:
             row.params = params  # type: ignore[assignment]
         if reasoning_config is not _UNSET:
             row.reasoning_config = reasoning_config  # type: ignore[assignment]
-        if catalog_model_key is not None:
-            row.catalog_model_key = catalog_model_key
+        if catalog_model_key is not _UNSET:
+            row.catalog_model_key = catalog_model_key  # type: ignore[assignment]
         if source is not None:
             row.source = source.value
         row.updated_at = datetime.now(UTC)

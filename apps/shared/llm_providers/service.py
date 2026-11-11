@@ -180,14 +180,26 @@ class LLMProviderConfigService:
         profile = await self._require_profile(profile_id)
         source = ModelProfileSource(request.source) if request.source else None
 
+        profile_for_catalog = profile
+        if request.model_id is not None:
+            profile_for_catalog = replace(profile_for_catalog, model_id=request.model_id)
+        if "catalog_model_key" in request.model_fields_set:
+            profile_for_catalog = replace(
+                profile_for_catalog, catalog_model_key=request.catalog_model_key
+            )
+
+        catalog_model_key: object = _UNSET
+        if "catalog_model_key" in request.model_fields_set:
+            catalog_model_key = request.catalog_model_key
+
         params: dict[str, Any] | None | object = _UNSET
         reasoning_config: dict[str, Any] | None | object = _UNSET
         if request.reset_runtime_from_catalog:
             provider = await self._require_provider(profile.provider_id)
             preset_key = provider.preset_key.strip() if provider.preset_key and provider.preset_key.strip() else None
-            params = seed_params_from_catalog(profile, provider_preset_key=preset_key)
+            params = seed_params_from_catalog(profile_for_catalog, provider_preset_key=preset_key)
             reasoning_config = normalize_reasoning_config(
-                seed_reasoning_config_from_catalog(profile, provider_preset_key=preset_key)
+                seed_reasoning_config_from_catalog(profile_for_catalog, provider_preset_key=preset_key)
             )
             await self._provider_repo.update_provider(
                 provider,
@@ -207,7 +219,7 @@ class LLMProviderConfigService:
             model_id=request.model_id,
             params=params,
             reasoning_config=reasoning_config,
-            catalog_model_key=request.catalog_model_key,
+            catalog_model_key=catalog_model_key,
             source=source,
         )
         return self._profile_to_dto(updated)

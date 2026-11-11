@@ -443,6 +443,8 @@ export default function SettingsProviderDetailPage() {
           }
         }}
         profile={editingProfile}
+        provider={provider}
+        catalog={catalog}
         onSaved={async () => {
           showSuccess(t(modelsRegistryKey('profileSaved')))
           await loadAll()
