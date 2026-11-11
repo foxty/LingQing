@@ -176,6 +176,8 @@ Automated browser E2E is planned; today use the full Docker stack and smoke chec
 ```bash
 cp deploy/env/.env.template deploy/env/.env.e2e
 # .env.e2e: TENANT_APP_DB_HOST=postgres, TENANT_APP_DB_PORT=5432; host ports fixed in full-stack.yml
+# Chroma persists under DATA_ROOT_HOST_PATH/chroma (stack-up creates it; ensure DATA_ROOT_HOST_PATH is set).
+./deploy/scripts/local-stack.sh build-e2e
 ./deploy/scripts/local-stack.sh stack-up
 ./deploy/scripts/local-stack.sh smoke
 TENANT_APP_DB_HOST=localhost TENANT_APP_DB_PORT=5433 npm run migrate-db:ta

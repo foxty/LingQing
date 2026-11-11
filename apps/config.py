@@ -185,6 +185,8 @@ class EnvConfig:
     CHROMA_MODE: Literal["embedded", "http"] = os.getenv("CHROMA_MODE", "embedded").lower()
     CHROMA_URL: str = os.getenv("CHROMA_URL", "")
     CHROMA_COLLECTION_PREFIX: str = os.getenv("CHROMA_COLLECTION_PREFIX", "tenant_")
+    # HTTP Chroma: per-request timeout (seconds). 0 disables asyncio.wait_for and httpx patch (not recommended).
+    CHROMA_HTTP_TIMEOUT_SECONDS: int = int(os.getenv("CHROMA_HTTP_TIMEOUT_SECONDS", "60"))
 
     @classmethod
     def chroma_http_client_kwargs(cls) -> dict[str, str | int | bool]:
@@ -241,6 +243,9 @@ class EnvConfig:
                         errors.append("CHROMA_URL must include a positive port when CHROMA_MODE=http")
                 except ValueError as exc:
                     errors.append(str(exc))
+
+        if cls.CHROMA_HTTP_TIMEOUT_SECONDS < 0:
+            errors.append("CHROMA_HTTP_TIMEOUT_SECONDS must be >= 0")
 
         if cls.AGENT_SANDBOX_DEFAULT_TIMEOUT_SECONDS <= 0:
             errors.append("AGENT_SANDBOX_DEFAULT_TIMEOUT_SECONDS must be a positive integer")

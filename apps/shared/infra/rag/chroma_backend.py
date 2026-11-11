@@ -5,15 +5,34 @@ Embedding configuration is handled by the service layer (RAGManager callers).
 """
 
 import asyncio
-from typing import Any
+from collections.abc import Awaitable, Coroutine
+from typing import Any, TypeVar
 
 import chromadb
+import httpx
 from langchain_chroma import Chroma
 from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 
 from apps.config import EnvConfig
 from apps.shared.infra.rag.backend import MetadataFilter, VectorGetResult, VectorRecord, VectorStoreBackend
+
+_T = TypeVar("_T")
+
+
+def _chroma_http_timeout_seconds() -> float:
+    return float(EnvConfig.CHROMA_HTTP_TIMEOUT_SECONDS)
+
+
+def _apply_chroma_http_client_timeout(vectorstore: Chroma) -> None:
+    """Patch chromadb FastAPI client's httpx session (upstream default is timeout=None)."""
+    timeout = _chroma_http_timeout_seconds()
+    if timeout <= 0:
+        return
+    server = getattr(vectorstore._client, "_server", None)
+    session = getattr(server, "_session", None)
+    if session is not None:
+        session.timeout = httpx.Timeout(timeout)
 
 
 class BaseChromaBackend(VectorStoreBackend):
@@ -42,6 +61,7 @@ class BaseChromaBackend(VectorStoreBackend):
                 self.collection_name,
             )
         self._vectorstore: Chroma | None = None
+        self._vectorstore_lock = asyncio.Lock()
 
     def _build_common_kwargs(self) -> dict[str, Any]:
         kwargs: dict[str, Any] = {}
@@ -52,15 +72,36 @@ class BaseChromaBackend(VectorStoreBackend):
     def _create_vectorstore(self) -> Chroma:
         raise NotImplementedError()
 
-    def _ensure_vectorstore(self) -> Chroma:
-        """Create the Chroma client on first vector operation.
-
-        chromadb.HttpClient heartbeats with httpx timeout=None, so constructing
-        it in __init__ can hang unit tests (and startup) when the server is down.
-        """
+    def _initialize_vectorstore(self) -> Chroma:
+        """Create the vectorstore (blocking). Must run in a worker thread, not on the asyncio loop."""
         if self._vectorstore is None:
             self._vectorstore = self._create_vectorstore()
+            _apply_chroma_http_client_timeout(self._vectorstore)
         return self._vectorstore
+
+    def _ensure_vectorstore(self) -> Chroma:
+        """Synchronous accessor for tests and thread-pool callers."""
+        return self._initialize_vectorstore()
+
+    async def _aget_vectorstore(self) -> Chroma:
+        if self._vectorstore is not None:
+            return self._vectorstore
+        async with self._vectorstore_lock:
+            if self._vectorstore is not None:
+                return self._vectorstore
+            timeout = _chroma_http_timeout_seconds()
+            if timeout > 0:
+                return await asyncio.wait_for(
+                    asyncio.to_thread(self._initialize_vectorstore),
+                    timeout=timeout,
+                )
+            return await asyncio.to_thread(self._initialize_vectorstore)
+
+    async def _await_with_chroma_timeout(self, coro: Coroutine[Any, Any, _T] | Awaitable[_T]) -> _T:
+        timeout = _chroma_http_timeout_seconds()
+        if timeout > 0:
+            return await asyncio.wait_for(coro, timeout=timeout)
+        return await coro
 
     async def add_records(self, records: list[VectorRecord]) -> None:
         documents = [
@@ -70,12 +111,12 @@ class BaseChromaBackend(VectorStoreBackend):
             )
             for record in records
         ]
-        vectorstore = self._ensure_vectorstore()
+        vectorstore = await self._aget_vectorstore()
         # Batch to avoid embedding API batch size limits (e.g., DashScope max 10)
         batch_size = self.EMBEDDING_BATCH_SIZE
         for i in range(0, len(documents), batch_size):
             batch = documents[i : i + batch_size]
-            await vectorstore.aadd_documents(batch)
+            await self._await_with_chroma_timeout(vectorstore.aadd_documents(batch))
             self._logger.debug(
                 "Added batch %d/%d (%d docs) for tenant_id=%s",
                 i // batch_size + 1,
@@ -90,11 +131,13 @@ class BaseChromaBackend(VectorStoreBackend):
         k: int,
         filter_dict: MetadataFilter | None = None,
     ) -> list[VectorRecord]:
-        vectorstore = self._ensure_vectorstore()
+        vectorstore = await self._aget_vectorstore()
         if filter_dict is None:
-            docs = await vectorstore.asimilarity_search(query, k=k)
+            docs = await self._await_with_chroma_timeout(vectorstore.asimilarity_search(query, k=k))
         else:
-            docs = await vectorstore.asimilarity_search(query, k=k, filter=filter_dict)
+            docs = await self._await_with_chroma_timeout(
+                vectorstore.asimilarity_search(query, k=k, filter=filter_dict)
+            )
 
         return [
             {
@@ -115,7 +158,12 @@ class BaseChromaBackend(VectorStoreBackend):
             kwargs["limit"] = limit
         if include is not None:
             kwargs["include"] = include
-        raw_results = await asyncio.to_thread(self._ensure_vectorstore().get, **kwargs)
+        vectorstore = await self._aget_vectorstore()
+
+        async def _get() -> dict[str, Any]:
+            return await asyncio.to_thread(vectorstore.get, **kwargs)
+
+        raw_results = await self._await_with_chroma_timeout(_get())
 
         ids = raw_results.get("ids") or []
         documents = raw_results.get("documents") or []
@@ -141,12 +189,12 @@ class BaseChromaBackend(VectorStoreBackend):
         where: MetadataFilter | None = None,
         ids: list[str] | None = None,
     ) -> None:
-        vectorstore = self._ensure_vectorstore()
+        vectorstore = await self._aget_vectorstore()
         if ids is not None:
-            await vectorstore.adelete(ids=ids)
+            await self._await_with_chroma_timeout(vectorstore.adelete(ids=ids))
             return
         if where is not None:
-            await asyncio.to_thread(vectorstore.delete, where=where)
+            await self._await_with_chroma_timeout(asyncio.to_thread(vectorstore.delete, where=where))
             return
         raise ValueError("Either where or ids must be provided to delete vectors")
 
@@ -161,8 +209,11 @@ class BaseChromaBackend(VectorStoreBackend):
             self.tenant_id,
             self.collection_name,
         )
-        client = self._ensure_vectorstore()._client
-        await asyncio.to_thread(client.delete_collection, name=self.collection_name)
+        vectorstore = await self._aget_vectorstore()
+        client = vectorstore._client
+        await self._await_with_chroma_timeout(
+            asyncio.to_thread(client.delete_collection, name=self.collection_name)
+        )
         self._vectorstore = None
         self._logger.info(
             "Collection deleted for tenant_id=%s, collection_name=%s",
