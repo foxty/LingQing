@@ -25,9 +25,13 @@ env:
 
 jobs:
   validate:
-    name: Validate semver tag
+    name: Validate tag and release notes (before images)
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.ref }}
+
       - name: Validate semver tag
         run: |
           TAG="${GITHUB_REF_NAME}"
@@ -36,6 +40,18 @@ jobs:
             exit 1
           fi
           echo "Publishing version: $TAG"
+
+      - name: Validate release notes match tag
+        env:
+          STRICT_RELEASE_NOTES: "1"
+        run: |
+          chmod +x ./deploy/scripts/assemble-github-release-body.sh
+          ./deploy/scripts/assemble-github-release-body.sh \
+            "${{ github.ref_name }}" \
+            /tmp/release-body-validate.md \
+            "${{ github.repository }}" \
+            "${{ env.REGISTRY_URL }}"
+          echo "Release notes OK for ${{ github.ref_name }}"
 
   publish-images:
     name: Build and push images
@@ -63,6 +79,17 @@ jobs:
             "${{ github.repository }}"
           cp deploy/scripts/remote/host-deploy.sh dist/bootstrap.sh
 
+      - name: Assemble GitHub Release notes
+        env:
+          STRICT_RELEASE_NOTES: "1"
+        run: |
+          chmod +x ./deploy/scripts/assemble-github-release-body.sh
+          ./deploy/scripts/assemble-github-release-body.sh \
+            "${{ github.ref_name }}" \
+            dist/release-body.md \
+            "${{ github.repository }}" \
+            "${{ env.REGISTRY_URL }}"
+
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
@@ -71,34 +98,7 @@ jobs:
           files: |
             dist/lingqing-deploy-*.tar.gz
             dist/bootstrap.sh
-          body: |
-            ## Deploy on your VM (no repo clone)
-
-            Same bundle for prod or staging — use on **separate VMs**; only `.env` differs.
-
-            ```bash
-            VERSION=${{ github.ref_name }}
-            curl -fsSL "https://github.com/${{ github.repository }}/releases/download/${VERSION}/lingqing-deploy-${VERSION}.tar.gz" | tar -xz
-            cd "lingqing-deploy-${VERSION}"
-            cp .env.template .env && $EDITOR .env
-            ./bootstrap.sh --version "${VERSION}" --registry ${{ env.REGISTRY_URL }}
-            ```
-
-            Full guide: [docs/deploy/guide.md](https://github.com/${{ github.repository }}/blob/main/docs/deploy/guide.md)
-
-            ## Images
-
-            | Image | Tag |
-            | --- | --- |
-            | `${{ env.REGISTRY_URL }}/backend-app` | `${{ github.ref_name }}` |
-            | `${{ env.REGISTRY_URL }}/frontend` | `${{ github.ref_name }}` |
-            | `${{ env.REGISTRY_URL }}/sandbox-controller` | `${{ github.ref_name }}` |
-            | `${{ env.REGISTRY_URL }}/sandbox-runner` | `${{ github.ref_name }}` |
-            | `${{ env.REGISTRY_URL }}/egress-proxy` | `${{ github.ref_name }}` |
-
-            ## Daily staging builds
-
-            For bleeding-edge staging between releases, use `daily` or pin `daily-YYYY-MM-DD` — see [deploy guide → Daily staging images](https://github.com/${{ github.repository }}/blob/main/docs/deploy/guide.md#daily-staging-images).
+          body_path: dist/release-body.md
 
       - name: Publish summary
         run: |

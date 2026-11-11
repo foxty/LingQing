@@ -2,7 +2,7 @@
 
 **Project:** LingQing — Enterprise AI Agent Platform (LangGraph, FastAPI, React)
 
-**Document map:** [Core Principles](#core-principles) · [Backend](#backend-guidelines) (layers, DB, exceptions, API) · [Frontend](#frontend-guidelines) · [Testing & CI](#testing--ci) · [Testing guide](docs/testing-guide.md) (pyramid, **layer → test type**, commands) · [Common Pitfalls](#common-pitfalls) · [Agent Workflow](#agent-workflow) (final check, git, PR, output)
+**Document map:** [Core Principles](#core-principles) · [Backend](#backend-guidelines) (layers, DB, exceptions, API) · [Frontend](#frontend-guidelines) · [Testing & CI](#testing--ci) · [Testing guide](docs/testing-guide.md) (pyramid, **layer → test type**, commands) · [Common Pitfalls](#common-pitfalls) · [Agent Workflow](#agent-workflow) (final check, git, PR, output, [release notes](#release-notes-agents))
 
 ## Core Principles
 
@@ -226,6 +226,15 @@ _Process, mandatory pre-done review, git/PR (only when asked), and reply format.
 - Create TODO plan for multi-step tasks; give brief updates.
 - **Before finishing any task that changes code** (and again before a user-requested commit), run the **Final check** below. Fix violations in scope; call out gaps explicitly if the user did not ask to fix them.
 - **Security (all code):** secrets via `EnvConfig`; tenant isolation in services/repos; least privilege and redacted logs — see [Core Principles](#core-principles) and [Common Pitfalls](#common-pitfalls).
+
+### Release notes (agents)
+
+When asked to draft or update release notes:
+
+- **Draft:** edit `docs/release-notes/UNRELEASED.md` (work-in-progress since the last shipped tag).
+- **Version file:** when the user names a version (e.g. `v0.2.0`), add or update `docs/release-notes/vX.Y.Z.md` — match the tag in the **title** (first lines).
+- **Shape:** follow `docs/release-notes/_TEMPLATE.md` (Highlights, Added/Fixed/Changed, Upgrade notes). Group changes from `git log <latest-v-tag>..HEAD --no-merges` when helpful; use PR refs `(#N)` only.
+- Do not change frozen `docs/release-notes/v*.md` for **older** shipped versions unless the user asks.
 
 ### Final check (required)
 
