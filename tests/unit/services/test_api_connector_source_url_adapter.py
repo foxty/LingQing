@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.shared.api_connector.schema_parser import SchemaSourceResolver
-from apps.shared.api_connector.source_url_adapter import OpenApiSourceUrlAdapter
+from apps.shared.external_systems.api_connector.schema_parser import SchemaSourceResolver
+from apps.shared.external_systems.api_connector.source_url_adapter import OpenApiSourceUrlAdapter
 from apps.shared.core.exceptions import ValidationError
 
 
@@ -49,7 +49,7 @@ async def test_openapi_url_returns_clear_error_when_payload_is_html(monkeypatch)
         async def __aexit__(self, exc_type, exc, tb):
             return False
 
-    monkeypatch.setattr("apps.shared.api_connector.schema_parser.aiohttp.ClientSession", _FakeSession)
+    monkeypatch.setattr("apps.shared.external_systems.api_connector.schema_parser.aiohttp.ClientSession", _FakeSession)
 
     with pytest.raises(ValidationError, match="HTML page"):
         await SchemaSourceResolver.resolve(

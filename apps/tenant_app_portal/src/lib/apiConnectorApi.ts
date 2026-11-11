@@ -22,6 +22,8 @@ export interface ApiConnector {
   schema_metadata: Record<string, any>
   schema_last_synced_at: string | null
   status: string
+  credential_mode?: 'shared' | 'user'
+  user_connection_status?: 'not_connected' | 'connected' | 'expired' | null
   created_at: string
   updated_at: string
 }
@@ -30,6 +32,7 @@ export interface ApiConnectorCreateRequest {
   name: string
   description?: string
   base_url: string
+  credential_mode?: 'shared' | 'user'
   auth_type: ApiConnectorAuthType
   auth_config: Record<string, any>
   rate_policy: Record<string, any>
@@ -249,6 +252,58 @@ export async function callApiOperation(
   const response = await api.post<ApiOperationCallResponse>(
     API_ENDPOINTS.apiConnectorCallOperation(operationUid),
     { parameters }
+  )
+  return response.data
+}
+
+export interface UserIntegrationConnection {
+  resource_type: string
+  resource_id: number
+  status: 'not_connected' | 'connected' | 'expired'
+  account_label?: string | null
+  auth_type?: string | null
+  expires_at?: string | null
+  secrets_public?: Record<string, string>
+  secret_keys_configured?: string[]
+}
+
+export interface UserIntegrationConnectionUpsert {
+  auth_type: string
+  secrets: Record<string, string>
+  account_label?: string | null
+}
+
+export async function getMyApiConnectorConnection(
+  connectorId: number
+): Promise<UserIntegrationConnection> {
+  const response = await api.get<UserIntegrationConnection>(
+    `/api-connectors/${connectorId}/connections/me`
+  )
+  return response.data
+}
+
+export async function upsertMyApiConnectorConnection(
+  connectorId: number,
+  body: UserIntegrationConnectionUpsert
+): Promise<UserIntegrationConnection> {
+  const response = await api.put<UserIntegrationConnection>(
+    `/api-connectors/${connectorId}/connections/me`,
+    body
+  )
+  return response.data
+}
+
+export async function deleteMyApiConnectorConnection(connectorId: number): Promise<void> {
+  await api.delete(`/api-connectors/${connectorId}/connections/me`)
+}
+
+export async function testMyApiConnectorConnection(
+  connectorId: number,
+  body?: UserIntegrationConnectionUpsert
+): Promise<{ success: boolean; message: string }> {
+  const response = await api.post<{ success: boolean; message: string }>(
+    `/api-connectors/${connectorId}/connections/me/test`,
+    body ?? undefined
   )
   return response.data
 }

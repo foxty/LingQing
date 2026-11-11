@@ -49,6 +49,12 @@ class AuthorizationError(DomainException):
     pass
 
 
+class IntegrationNotConnectedError(DomainException):
+    """User-mode integration has no active user credential binding (422)."""
+
+    pass
+
+
 class InternalServiceError(DomainException):
     """Internal service error (500)."""
 

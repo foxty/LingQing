@@ -6,6 +6,7 @@ import CSVUploadDialog from '@/components/CSVUploadDialog'
 import PaginationBar from '@/components/PaginationBar'
 import SelectAssetsDialog from '@/components/SelectAssetsDialog'
 import SyncStatusIndicator from '@/components/SyncStatusIndicator'
+import ListDetailInlineNotice from '@/components/ListDetailInlineNotice'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { useAuth } from '@/hooks/useAuth'
+import { actionRules } from '@/lib/permissionRules'
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { useAssets } from '@/hooks/useDataSources'
 import { useNotification } from '@/hooks/useNotification'
@@ -37,9 +39,9 @@ import {
   type AssetMetadata,
   type DataSource,
 } from '@/lib/dataSourceApi'
-import { Info, MoreHorizontal, RefreshCw, Table2, Trash2, Upload } from 'lucide-react'
+import { Info, MoreHorizontal, RefreshCw, Table2, Trash2, TriangleAlert, Upload } from 'lucide-react'
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 
@@ -94,6 +96,14 @@ i18n.addResourceBundle('en', 'translation', {
     batchDeleteWarning: 'This action will permanently delete the selected assets.',
     willDelete: 'Will delete: {{items}}',
     confirmBatchDeleteButton: 'Delete {{count}} assets',
+    sharedCredentialsNote:
+      'This data source uses shared tenant credentials. To connect with your own database login, ask an admin to set credential mode to User on the data source.',
+    userCredentialsNotConnectedTitle: 'Warehouse login required',
+    userCredentialsNotConnected:
+      'Agents and SQL will not run until you connect. In <0>Data Sources</0>, use <1>Connect</1> in the Actions column for this source.',
+    userCredentialsExpiredTitle: 'Warehouse login expired',
+    userCredentialsExpired:
+      'Reconnect in <0>Data Sources</0> via <1>Reconnect</1> in the Actions column, then save new credentials.',
   }
 }, true, true)
 
@@ -148,6 +158,14 @@ i18n.addResourceBundle('zh', 'translation', {
     batchDeleteWarning: '此操作将永久删除所选资产。',
     willDelete: '将删除：{{items}}',
     confirmBatchDeleteButton: '删除{{count}}个资产',
+    sharedCredentialsNote:
+      '此数据源使用租户共享凭证。如需使用个人数据库账号，请管理员将凭证模式设为「用户」。',
+    userCredentialsNotConnectedTitle: '需要连接仓库登录',
+    userCredentialsNotConnected:
+      '连接个人登录前，智能体与 SQL 无法使用此源。请在<0>数据源</0>列表操作列点击<1>连接</1>。',
+    userCredentialsExpiredTitle: '仓库登录已过期',
+    userCredentialsExpired:
+      '请在<0>数据源</0>列表操作列点击<1>重新连接</1>并保存新凭证。',
   }
 }, true, true)
 
@@ -155,7 +173,8 @@ export default function DataAssetsPage() {
   const { t } = useTranslation()
   const { dataSourceId } = useParams<{ dataSourceId: string }>()
   const navigate = useNavigate()
-  const { loading: authLoading } = useAuth()
+  const { loading: authLoading, hasAny } = useAuth()
+  const canWriteAssets = hasAny(actionRules.canEditDataSource())
   const { showSuccess, showError } = useNotification()
 
   const {
@@ -394,6 +413,17 @@ export default function DataAssetsPage() {
   const displayTotal = total
   const displayTotalPages = totalPages
   const displayPage = currentPage
+  const connectionStatus = dataSource.user_connection_status ?? 'not_connected'
+  const userCredentialAccessLink = (
+    <Link
+      key="ds-list"
+      to="/data-sources"
+      className="font-medium text-foreground underline underline-offset-2"
+    />
+  )
+  const isUserCredentialMode = (dataSource.credential_mode ?? 'shared') === 'user'
+  const showConnectionWarn =
+    isUserCredentialMode && connectionStatus !== 'connected'
 
   return (
     <div className="space-y-4">
@@ -402,16 +432,45 @@ export default function DataAssetsPage() {
         onParentNavigate={() => navigate('/data-sources')}
         title={dataSource.name}
         meta={
-          <>
-            {t('dataAssets.title')}
-            {' · '}
-            {dataSource.type.toUpperCase()}
-            {dataSource.managed ? (
-              <Badge variant="secondary" className="ml-2">
-                {t('dataAssets.platformManaged')}
-              </Badge>
+          <div className="space-y-3 pt-1">
+            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
+              <span>
+                {t('dataAssets.title')}
+                {' · '}
+                {dataSource.type.toUpperCase()}
+              </span>
+              {dataSource.managed ? (
+                <Badge variant="secondary" className="font-normal">
+                  {t('dataAssets.platformManaged')}
+                </Badge>
+              ) : null}
+            </div>
+            {showConnectionWarn ? (
+              <ListDetailInlineNotice
+                tone="warn"
+                icon={<TriangleAlert className="text-amber-700 dark:text-amber-400" aria-hidden />}
+                title={t(
+                  connectionStatus === 'expired'
+                    ? 'dataAssets.userCredentialsExpiredTitle'
+                    : 'dataAssets.userCredentialsNotConnectedTitle'
+                )}
+              >
+                <Trans
+                  i18nKey={
+                    connectionStatus === 'expired'
+                      ? 'dataAssets.userCredentialsExpired'
+                      : 'dataAssets.userCredentialsNotConnected'
+                  }
+                  components={[userCredentialAccessLink, <span key="action" className="font-medium text-foreground" />]}
+                />
+              </ListDetailInlineNotice>
             ) : null}
-          </>
+            {!isUserCredentialMode && !dataSource.managed ? (
+              <ListDetailInlineNotice tone="info" icon={<Info className="text-muted-foreground" aria-hidden />}>
+                {t('dataAssets.sharedCredentialsNote')}
+              </ListDetailInlineNotice>
+            ) : null}
+          </div>
         }
       />
 
@@ -421,20 +480,22 @@ export default function DataAssetsPage() {
         onSearchQueryChange={setSearchQuery}
         onClearSearchQuery={() => setSearchQuery('')}
         primaryAction={
-          dataSource.managed
-            ? {
-                label: t('dataAssets.uploadCsv'),
-                onClick: () => setUploadDialogOpen(true),
-                icon: Upload,
-              }
-            : {
-                label: t('dataAssets.addAsset'),
-                onClick: () => setSelectAssetsDialogOpen(true),
-                icon: Upload,
-              }
+          canWriteAssets
+            ? dataSource.managed
+              ? {
+                  label: t('dataAssets.uploadCsv'),
+                  onClick: () => setUploadDialogOpen(true),
+                  icon: Upload,
+                }
+              : {
+                  label: t('dataAssets.addAsset'),
+                  onClick: () => setSelectAssetsDialogOpen(true),
+                  icon: Upload,
+                }
+            : undefined
         }
         batchAction={
-          selectedAssets.length > 0
+          canWriteAssets && selectedAssets.length > 0
             ? {
                 label: t('dataAssets.deleteSelected', { count: selectedAssets.length }),
                 onClick: handleBatchDeleteClick,
@@ -458,7 +519,7 @@ export default function DataAssetsPage() {
           <p className="text-sm text-muted-foreground">
             {searchQuery ? t('dataAssets.noMatchingAssets') : t('dataAssets.noDataAssets')}
           </p>
-          {!searchQuery && dataSource.managed && (
+          {!searchQuery && dataSource.managed && canWriteAssets && (
             <Button onClick={() => setUploadDialogOpen(true)} className="mt-4" variant="outline">
               <Upload className="w-4 h-4 mr-2" />
               {t('dataAssets.uploadFirstCsv')}
@@ -472,14 +533,16 @@ export default function DataAssetsPage() {
             <Table>
               <TableHeader>
                 <TableRow className="hover:bg-transparent">
-                  <TableHead className="h-10 w-[50px]">
-                    <Checkbox
-                      checked={isAllSelected}
-                      onCheckedChange={handleSelectAll}
-                      aria-label="Select all assets"
-                      className={isIndeterminate ? 'data-[state=checked]:bg-muted-foreground' : ''}
-                    />
-                  </TableHead>
+                  {canWriteAssets ? (
+                    <TableHead className="h-10 w-[50px]">
+                      <Checkbox
+                        checked={isAllSelected}
+                        onCheckedChange={handleSelectAll}
+                        aria-label="Select all assets"
+                        className={isIndeterminate ? 'data-[state=checked]:bg-muted-foreground' : ''}
+                      />
+                    </TableHead>
+                  ) : null}
                   <TableHead className="h-10 w-[200px]">{t('dataAssets.assetNameCol')}</TableHead>
                   <TableHead className="h-10 w-[100px]">{t('dataAssets.typeCol')}</TableHead>
                   <TableHead className="h-10 w-[80px]">{t('dataAssets.rowCountCol')}</TableHead>
@@ -489,21 +552,25 @@ export default function DataAssetsPage() {
                   <TableHead className="h-10 w-[140px]">{t('dataAssets.updatedCol')}</TableHead>
                   <TableHead className="h-10 w-[120px]">{t('dataAssets.metaSyncCol')}</TableHead>
                   <TableHead className="h-10 w-[120px]">{t('dataAssets.vectorSyncCol')}</TableHead>
-                  <TableHead className="h-10 w-[80px] text-right">{t('common.action')}</TableHead>
+                  {canWriteAssets ? (
+                    <TableHead className="h-10 w-[80px] text-right">{t('common.action')}</TableHead>
+                  ) : null}
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {assets.map((asset) => (
                   <TableRow key={asset.id}>
-                    <TableCell className="py-2.5">
-                      <Checkbox
-                        checked={selectedAssets.includes(asset.asset_name)}
-                        onCheckedChange={(checked: boolean) =>
-                          handleSelectAsset(asset.asset_name, checked)
-                        }
-                        aria-label={`Select ${asset.asset_name}`}
-                      />
-                    </TableCell>
+                    {canWriteAssets ? (
+                      <TableCell className="py-2.5">
+                        <Checkbox
+                          checked={selectedAssets.includes(asset.asset_name)}
+                          onCheckedChange={(checked: boolean) =>
+                            handleSelectAsset(asset.asset_name, checked)
+                          }
+                          aria-label={`Select ${asset.asset_name}`}
+                        />
+                      </TableCell>
+                    ) : null}
                     <TableCell className="py-2.5">
                       <button
                         onClick={() => handleViewSchema(asset)}
@@ -528,40 +595,42 @@ export default function DataAssetsPage() {
                     </TableCell>
                     <TableCell className="py-2.5 text-sm">{renderMetadataSyncStatus(asset)}</TableCell>
                     <TableCell className="py-2.5 text-sm">{renderVectorSyncStatus(asset)}</TableCell>
-                    <TableCell className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            className="h-11 w-11 p-0"
-                            aria-label={t('dataAssets.rowActions')}
-                          >
-                            <MoreHorizontal className="w-4 h-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                          {!dataSource.managed ? (
-                            <DropdownMenuItem
-                              disabled={syncingAssetIds.has(asset.id)}
-                              onClick={() => handleSyncAsset(asset)}
+                    {canWriteAssets ? (
+                      <TableCell className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              className="h-11 w-11 p-0"
+                              aria-label={t('dataAssets.rowActions')}
                             >
-                              <RefreshCw
-                                className={`w-4 h-4 mr-2 ${syncingAssetIds.has(asset.id) ? 'animate-spin' : ''}`}
-                              />
-                              {t('dataAssets.syncMetadata')}
+                              <MoreHorizontal className="w-4 h-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end">
+                            {!dataSource.managed ? (
+                              <DropdownMenuItem
+                                disabled={syncingAssetIds.has(asset.id)}
+                                onClick={() => handleSyncAsset(asset)}
+                              >
+                                <RefreshCw
+                                  className={`w-4 h-4 mr-2 ${syncingAssetIds.has(asset.id) ? 'animate-spin' : ''}`}
+                                />
+                                {t('dataAssets.syncMetadata')}
+                              </DropdownMenuItem>
+                            ) : null}
+                            {!dataSource.managed ? <DropdownMenuSeparator /> : null}
+                            <DropdownMenuItem
+                              className="text-destructive focus:text-destructive"
+                              onClick={() => handleDeleteClick(asset)}
+                            >
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              {t('dataAssets.deleteAsset')}
                             </DropdownMenuItem>
-                          ) : null}
-                          {!dataSource.managed ? <DropdownMenuSeparator /> : null}
-                          <DropdownMenuItem
-                            className="text-destructive focus:text-destructive"
-                            onClick={() => handleDeleteClick(asset)}
-                          >
-                            <Trash2 className="w-4 h-4 mr-2" />
-                            {t('dataAssets.deleteAsset')}
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </TableCell>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </TableCell>
+                    ) : null}
                   </TableRow>
                 ))}
               </TableBody>
@@ -597,6 +666,7 @@ export default function DataAssetsPage() {
           onOpenChange={setSchemaDialogOpen}
           asset={selectedAsset}
           onUpdated={handleAssetUpdated}
+          readOnly={!canWriteAssets}
         />
       )}
 

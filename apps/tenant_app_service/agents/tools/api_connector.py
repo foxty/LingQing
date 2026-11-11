@@ -8,10 +8,10 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 from pydantic import BaseModel, Field
 
-from apps.shared.api_connector.execution import ApiConnectorExecutionService
-from apps.shared.api_connector.schemas import ApiOperationCallParameters
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.api_connector.schemas import ApiOperationCallParameters
+from apps.shared.external_systems.application.wiring import api_connector_execution_service
 from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
 
@@ -213,7 +213,7 @@ async def api_connector(
             user_role=runtime.user.role,
         )
 
-        from apps.shared.api_connector.service import ApiConnectorService
+        from apps.shared.external_systems.api_connector.service import ApiConnectorService
 
         service = ApiConnectorService(tenant_id=runtime.user.tenant_id, db_session=session)
 
@@ -249,7 +249,7 @@ async def api_connector(
                 )
                 if connector.id not in allowed_ids:
                     return ToolResult.error_result("Access denied to API operation", code="API_CONNECTOR_FORBIDDEN")
-            exec_service = ApiConnectorExecutionService(tenant_id=runtime.user.tenant_id, db_session=session)
+            exec_service = api_connector_execution_service(runtime.user.tenant_id, session)
             result = await exec_service.execute_operation_by_id_for_actor(
                 operation_id=operation_id,
                 actor=actor,

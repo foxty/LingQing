@@ -8,8 +8,8 @@ instead of directly accessing repositories.
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.base_service import TenantAwareService
-from apps.shared.data_source.repository import AssetMetadataRepository
 from apps.shared.document import DBDocumentRepository
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agent_catalog.repository import AgentCatalogRepository
 from apps.tenant_app_service.tenant.repository import TenantRepository

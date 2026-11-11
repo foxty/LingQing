@@ -11,14 +11,14 @@ from pathlib import Path
 
 from sqlalchemy import select
 
-from apps.shared.data_source import (
+from apps.shared.db.models import TempTableMetadata
+from apps.shared.db.session import app_db_session
+from apps.shared.external_systems.data_source import (
     AssetMetadataRepository,
     DataSourceRepository,
     DataSourceService,
     TempTableRepository,
 )
-from apps.shared.db.models import TempTableMetadata
-from apps.shared.db.session import app_db_session
 from apps.shared.tasks.domain import TaskExecutionContext
 from apps.shared.tasks.system.handler_result import (
     SystemTaskHandlerResult,

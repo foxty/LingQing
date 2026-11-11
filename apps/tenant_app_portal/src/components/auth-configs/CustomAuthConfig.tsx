@@ -22,6 +22,12 @@ interface CustomAuthConfigData {
 interface CustomAuthConfigProps {
   config: CustomAuthConfigData
   submitting: boolean
+  fieldErrors?: Partial<
+    Record<
+      'loginEndpoint' | 'loginPayloadTemplate' | 'tokenExtraction' | 'requestHeaders' | 'extraConfig',
+      string
+    >
+  >
   onChange: (config: CustomAuthConfigData) => void
 }
 
@@ -34,7 +40,7 @@ interface CustomAuthConfigProps {
  *
  * Features automatic token caching and refresh.
  */
-export function CustomAuthConfig({ config, submitting, onChange }: CustomAuthConfigProps) {
+export function CustomAuthConfig({ config, submitting, fieldErrors, onChange }: CustomAuthConfigProps) {
   const [jsonErrors, setJsonErrors] = useState<Record<string, boolean>>({
     loginPayloadTemplate: false,
     tokenExtraction: false,
@@ -105,6 +111,7 @@ export function CustomAuthConfig({ config, submitting, onChange }: CustomAuthCon
           onChange={(e) => updateField('loginEndpoint', e.target.value)}
           placeholder="/api/auth/login or /Kingdee.BOS.WebApi.ServicesStub.AuthService.LoginByAppSecret.common.kdsvc"
           disabled={submitting}
+          errorMsg={fieldErrors?.loginEndpoint}
         />
         <p className="text-xs text-muted-foreground">
           The path to your login API. Will be combined with Base URL.
@@ -155,9 +162,11 @@ Example 2 (Kingdee array format):
             jsonErrors.loginPayloadTemplate ? 'border-red-500 focus-visible:ring-red-500' : ''
           }
         />
-        {jsonErrors.loginPayloadTemplate && (
-          <p className="text-xs text-red-600 font-medium">⚠️ Invalid JSON format</p>
-        )}
+        {fieldErrors?.loginPayloadTemplate ? (
+          <p className="text-xs text-destructive">{fieldErrors.loginPayloadTemplate}</p>
+        ) : jsonErrors.loginPayloadTemplate ? (
+          <p className="text-xs text-destructive font-medium">Invalid JSON format</p>
+        ) : null}
         <div className="text-xs text-muted-foreground space-y-1">
           <p>📝 Define the JSON structure for your login request.</p>
           <p>
@@ -198,9 +207,11 @@ Example 3 (Array response):
           disabled={submitting}
           className={jsonErrors.tokenExtraction ? 'border-red-500 focus-visible:ring-red-500' : ''}
         />
-        {jsonErrors.tokenExtraction && (
-          <p className="text-xs text-red-600 font-medium">⚠️ Invalid JSON format</p>
-        )}
+        {fieldErrors?.tokenExtraction ? (
+          <p className="text-xs text-destructive">{fieldErrors.tokenExtraction}</p>
+        ) : jsonErrors.tokenExtraction ? (
+          <p className="text-xs text-destructive font-medium">Invalid JSON format</p>
+        ) : null}
         <div className="text-xs text-muted-foreground space-y-1">
           <p>🎯 Tell the system where to find tokens in the login response.</p>
           <p>
@@ -247,9 +258,11 @@ Example 3 (Multiple headers):
           disabled={submitting}
           className={jsonErrors.requestHeaders ? 'border-red-500 focus-visible:ring-red-500' : ''}
         />
-        {jsonErrors.requestHeaders && (
-          <p className="text-xs text-red-600 font-medium">⚠️ Invalid JSON format</p>
-        )}
+        {fieldErrors?.requestHeaders ? (
+          <p className="text-xs text-destructive">{fieldErrors.requestHeaders}</p>
+        ) : jsonErrors.requestHeaders ? (
+          <p className="text-xs text-destructive font-medium">Invalid JSON format</p>
+        ) : null}
         <div className="text-xs text-muted-foreground space-y-1">
           <p>📨 These headers will be added to EVERY API request after login.</p>
           <p>
@@ -296,9 +309,11 @@ Example 3 (Simple):
           disabled={submitting}
           className={jsonErrors.extraConfig ? 'border-red-500 focus-visible:ring-red-500' : ''}
         />
-        {jsonErrors.extraConfig && (
-          <p className="text-xs text-red-600 font-medium">⚠️ Invalid JSON format</p>
-        )}
+        {fieldErrors?.extraConfig ? (
+          <p className="text-xs text-destructive">{fieldErrors.extraConfig}</p>
+        ) : jsonErrors.extraConfig ? (
+          <p className="text-xs text-destructive font-medium">Invalid JSON format</p>
+        ) : null}
         <div className="text-xs text-muted-foreground space-y-1">
           <p>🔑 Your actual credential values (will be encrypted and stored securely).</p>
           <p>🔄 These values replace the {'{placeholders}'} in Login Payload Template.</p>

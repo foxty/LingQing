@@ -15,9 +15,9 @@ from uuid import uuid4
 from jose import jwt
 
 from apps.config import EnvConfig, get_settings
-from apps.shared.data_source.adapters import db_data_source_to_domain
 from apps.shared.db.models import ScheduledTask, TaskRun
 from apps.shared.db.session import app_db_session
+from apps.shared.external_systems.data_source.adapters import db_data_source_to_domain
 from apps.shared.notification import NotificationEvent, NotificationService
 from apps.shared.sandbox.client import SandboxClient, SandboxExecutionContext
 from apps.shared.tasks.adapters import db_task_to_domain
@@ -681,7 +681,7 @@ class ScheduledTaskExecutionService:
         Raises:
             ValueError: If task config is invalid or app/data source not found
         """
-        from apps.shared.data_source.repository import DataSourceRepository
+        from apps.shared.external_systems.data_source.repository import DataSourceRepository
         from apps.shared.live_app.repository import LiveAppRepository
         from apps.shared.live_app.workspace import _bootstrap_python_sdk, get_app_path
 

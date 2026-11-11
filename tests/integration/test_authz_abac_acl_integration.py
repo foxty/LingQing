@@ -3,14 +3,14 @@
 import pytest
 from sqlalchemy import select
 
-from apps.shared.api_connector.domain import RatePolicyDomain
-from apps.shared.api_connector.service import ApiConnectorService
+from apps.shared.external_systems.api_connector.domain import RatePolicyDomain
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
 from apps.shared.authz.authz_query_builder import evaluate_resource_action
 from apps.shared.authz.service import AbacPolicyService
 from apps.shared.core.exceptions import AuthorizationError
-from apps.shared.data_source.asset_metadata_service import AssetMetadataService
-from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
-from apps.shared.data_source.service import DataSourceService
+from apps.shared.external_systems.data_source.asset_metadata_service import AssetMetadataService
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository, DataSourceRepository
+from apps.shared.external_systems.data_source.service import DataSourceService
 from apps.shared.db.models import (
     AbacPolicy,
     AclGrant,

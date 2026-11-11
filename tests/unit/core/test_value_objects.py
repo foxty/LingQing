@@ -53,3 +53,22 @@ def test_databricks_connection_requires_warehouse_or_http_path():
             password="dapi-token",
             extra_params={},
         )
+
+
+def test_byot_connection_template_allows_host_and_database_only():
+    connection = DatabaseConnectionVO(
+        host="localhost",
+        port=5432,
+        database="lq_tenant_app",
+    )
+    assert connection.host == "localhost"
+    assert connection.database == "lq_tenant_app"
+    assert connection.password is None
+
+
+def test_byot_connection_template_from_dict():
+    connection = DatabaseConnectionVO.from_dict(
+        {"host": "localhost", "port": 5432, "database": "app", "readOnly": True}
+    )
+    assert connection.database == "app"
+    assert connection.username is None

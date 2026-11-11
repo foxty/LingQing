@@ -17,6 +17,7 @@ i18n.addResourceBundle(
         connectFailed: 'Connection failed',
         completeRequiredFields: 'Fill in all required connection fields before testing.',
         hint: 'Enter your Databricks connection details. Required fields are marked with *. After saving, search for tables across catalogs and schemas.',
+        hintUserMode: 'Workspace and warehouse only. Put the access token under Sync login.',
       },
     },
   },
@@ -39,6 +40,7 @@ i18n.addResourceBundle(
         connectFailed: '连接失败',
         completeRequiredFields: '请先填写所有必填连接字段再测试。',
         hint: '输入 Databricks 连接详情。必填字段标有 *。保存后可按目录、模式或表名搜索。',
+        hintUserMode: '仅需工作区与仓库；访问令牌填在下方同步账号。',
       },
     },
   },
@@ -53,11 +55,18 @@ import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import type { FieldErrors, UseFormRegister } from 'react-hook-form'
 import * as z from 'zod'
+import { dsFieldLabelClass, dsFieldRowClass } from '@/components/data-source/formLayout'
 
 // Schema definition for Databricks connections
 export const databricksConnectionSchema = z.object({
   host: z.string().min(1, 'Server hostname is required'),
   password: z.string().min(1, 'Access token is required'),
+  warehouse_id: z.string().min(1, 'Warehouse ID is required'),
+  http_path: z.string().optional(),
+})
+
+export const databricksUserTemplateSchema = z.object({
+  host: z.string().min(1, 'Server hostname is required'),
   warehouse_id: z.string().min(1, 'Warehouse ID is required'),
   http_path: z.string().optional(),
 })
@@ -76,12 +85,26 @@ export function buildDatabricksConfig(data: any): Record<string, any> {
   return config
 }
 
+export function buildDatabricksUserTemplateConfig(data: any): Record<string, any> {
+  const config: Record<string, any> = {
+    readOnly: true,
+  }
+  if (data.host) config.host = data.host
+  config.extra_params = {
+    warehouse_id: data.warehouse_id,
+    ...(data.http_path && { http_path: data.http_path }),
+  }
+  return config
+}
+
 interface DatabricksConnectionFormProps {
   register: UseFormRegister<any>
   errors?: FieldErrors
   disabled?: boolean
   onFieldChange?: () => void
   getFormData?: () => any
+  showTestConnection?: boolean
+  credentialMode?: 'shared' | 'user'
 }
 
 export default function DatabricksConnectionForm({
@@ -90,8 +113,11 @@ export default function DatabricksConnectionForm({
   disabled = false,
   onFieldChange,
   getFormData,
+  showTestConnection = true,
+  credentialMode = 'shared',
 }: DatabricksConnectionFormProps) {
   const { t } = useTranslation()
+  const isUserCredentialMode = credentialMode === 'user'
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionTested, setConnectionTested] = useState(false)
   const [connectionSuccess, setConnectionSuccess] = useState(false)
@@ -168,29 +194,29 @@ export default function DatabricksConnectionForm({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="space-y-2.5">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="host" className="min-w-fit">
-            {t('components.databricksForm.serverHostname')}{' '}
-            <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="host"
-            {...register('host')}
-            placeholder="adb-1234567890123456.7.azuredatabricks.net"
-            disabled={disabled}
-            className="h-8 text-sm flex-1"
-            onChange={(e) => {
-              register('host').onChange(e)
-              resetConnectionStatus()
-            }}
-            errorMsg={errors?.host?.message as string}
-          />
-        </div>
+    <div className="space-y-2.5">
+      <div className={dsFieldRowClass}>
+        <Label htmlFor="host" className={dsFieldLabelClass}>
+          {t('components.databricksForm.serverHostname')}{' '}
+          <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="host"
+          {...register('host')}
+          placeholder="adb-1234567890123456.7.azuredatabricks.net"
+          disabled={disabled}
+          className="h-8 text-sm w-full min-w-0"
+          onChange={(e) => {
+            register('host').onChange(e)
+            resetConnectionStatus()
+          }}
+          errorMsg={errors?.host?.message as string}
+        />
+      </div>
 
-        <div className="flex items-center gap-2">
-          <Label htmlFor="password" className="min-w-fit">
+      {!isUserCredentialMode ? (
+        <div className={dsFieldRowClass}>
+          <Label htmlFor="password" className={dsFieldLabelClass}>
             {t('components.databricksForm.accessToken')} <span className="text-destructive">*</span>
           </Label>
           <Input
@@ -199,7 +225,7 @@ export default function DatabricksConnectionForm({
             {...register('password')}
             placeholder="dapi••••••••••••••••"
             disabled={disabled}
-            className="h-8 text-sm flex-1"
+            className="h-8 text-sm w-full min-w-0"
             onChange={(e) => {
               register('password').onChange(e)
               resetConnectionStatus()
@@ -207,76 +233,84 @@ export default function DatabricksConnectionForm({
             errorMsg={errors?.password?.message as string}
           />
         </div>
-
-        <div className="flex items-center gap-2">
-          <Label htmlFor="warehouse_id" className="min-w-fit">
-            Warehouse ID <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="warehouse_id"
-            {...register('warehouse_id')}
-            placeholder="abc123def456"
-            disabled={disabled}
-            className="h-8 text-sm flex-1"
-            onChange={(e) => {
-              register('warehouse_id').onChange(e)
-              resetConnectionStatus()
-            }}
-            errorMsg={errors?.warehouse_id?.message as string}
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Label htmlFor="http_path" className="min-w-fit">
-            {t('components.databricksForm.httpPath')}
-          </Label>
-          <Input
-            id="http_path"
-            {...register('http_path')}
-            placeholder="/sql/1.0/warehouses/abc123def456"
-            disabled={disabled}
-            className="h-8 text-sm flex-1"
-            onChange={(e) => {
-              register('http_path').onChange(e)
-              resetConnectionStatus()
-            }}
-            errorMsg={errors?.http_path?.message as string}
-          />
-        </div>
-      </div>
-
-      {/* Test Connection Button */}
-      <div className="pt-2">
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={handleTestConnection}
-          disabled={disabled || testingConnection}
-          className="h-9 w-full"
-        >
-          {testingConnection ? (
-            <>
-              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-              {t('components.databricksForm.testing')}
-            </>
-          ) : (
-            t('components.databricksForm.testConnection')
-          )}
-        </Button>
-      </div>
-
-      {connectionTested ? (
-        <ConnectionTestFeedback
-          className="text-xs"
-          result={{ ok: connectionSuccess, message: connectionMessage }}
-          successFallback={t('components.databricksForm.connectSuccess')}
-          failureFallback={t('components.databricksForm.connectFailed')}
-        />
       ) : null}
 
-      {/* Help Text */}
-      <p className="text-xs text-muted-foreground pt-1">{t('components.databricksForm.hint')}</p>
+      <div className={dsFieldRowClass}>
+        <Label htmlFor="warehouse_id" className={dsFieldLabelClass}>
+          Warehouse ID <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="warehouse_id"
+          {...register('warehouse_id')}
+          placeholder="abc123def456"
+          disabled={disabled}
+          className="h-8 text-sm w-full min-w-0"
+          onChange={(e) => {
+            register('warehouse_id').onChange(e)
+            resetConnectionStatus()
+          }}
+          errorMsg={errors?.warehouse_id?.message as string}
+        />
+      </div>
+
+      <div className={dsFieldRowClass}>
+        <Label htmlFor="http_path" className={dsFieldLabelClass}>
+          {t('components.databricksForm.httpPath')}
+        </Label>
+        <Input
+          id="http_path"
+          {...register('http_path')}
+          placeholder="/sql/1.0/warehouses/abc123def456"
+          disabled={disabled}
+          className="h-8 text-sm w-full min-w-0"
+          onChange={(e) => {
+            register('http_path').onChange(e)
+            resetConnectionStatus()
+          }}
+          errorMsg={errors?.http_path?.message as string}
+        />
+      </div>
+
+      {showTestConnection ? (
+        <>
+          <div className="pt-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={handleTestConnection}
+              disabled={disabled || testingConnection}
+              className="h-9 w-full"
+            >
+              {testingConnection ? (
+                <>
+                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  {t('components.databricksForm.testing')}
+                </>
+              ) : (
+                t('components.databricksForm.testConnection')
+              )}
+            </Button>
+          </div>
+
+          {connectionTested ? (
+            <ConnectionTestFeedback
+              className="text-xs"
+              result={{ ok: connectionSuccess, message: connectionMessage }}
+              successFallback={t('components.databricksForm.connectSuccess')}
+              failureFallback={t('components.databricksForm.connectFailed')}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      <p className="text-xs text-muted-foreground pt-1">
+        {isUserCredentialMode
+          ? t('components.databricksForm.hintUserMode', {
+              defaultValue: 'Workspace and warehouse only. Access token goes in Sync login below.',
+            })
+          : t('components.databricksForm.hint')}
+      </p>
     </div>
   )
 }

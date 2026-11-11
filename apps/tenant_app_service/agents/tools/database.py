@@ -11,10 +11,10 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
 from apps.shared.core.exceptions import AuthorizationError, ValidationError
-from apps.shared.data_source import DataSourceService
-from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.data_source import DataSourceService
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository, DataSourceRepository
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
@@ -60,7 +60,7 @@ async def list_data_sources(config: RunnableConfig) -> ToolResult:
         config: Runtime config
 
     Returns:
-        JSON list with data_source_id, name, type, managed, description
+        JSON list with data_source_id, name, type, managed, credential_mode, user_connection_status, description
     """
     runtime = extract_runtime_context(config)
     tenant_id = runtime.user.tenant_id
@@ -97,6 +97,8 @@ async def list_data_sources(config: RunnableConfig) -> ToolResult:
                         "name": ds.name,
                         "type": ds.type,
                         "managed": ds.managed,
+                        "credential_mode": ds.credential_mode,
+                        "user_connection_status": ds.user_connection_status,
                         "description": ds.to_llm_text(),
                     }
                 )

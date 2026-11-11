@@ -18,13 +18,13 @@ from langchain_core.embeddings import Embeddings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.data_source.repository import AssetMetadataRepository
 from apps.shared.db.models import Document as DocumentModel
 from apps.shared.document.manifest import get_storage_uri, is_manifest_pointer, read_blocks_json
 from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
 from apps.shared.domain.types import (
     SearchableResourceType,
 )
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository
 from apps.shared.infra.rag.index_payload import IndexRecordPayload, IndexUpsertPayload
 from apps.shared.infra.rag.metadata_keys import (
     META_CHUNK_INDEX,

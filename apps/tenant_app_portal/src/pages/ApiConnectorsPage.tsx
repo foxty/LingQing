@@ -1,7 +1,12 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
+import IntegrationCredentialsCell, {
+  integrationConnectionActionLabel,
+  showPerUserConnectionAction,
+} from '@/components/IntegrationCredentialsCell'
+import MyIntegrationConnectionDialog from '@/components/MyIntegrationConnectionDialog'
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import AddApiConnectorDialog from '@/components/AddApiConnectorDialog'
@@ -112,6 +117,8 @@ export default function ApiConnectorsPage() {
   const [editingConnector, setEditingConnector] = useState<ApiConnector | null>(null)
   const [sharingConnector, setSharingConnector] = useState<ApiConnector | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false)
+  const [connectConnector, setConnectConnector] = useState<ApiConnector | null>(null)
   const deleteConfirm = useConfirmation<ApiConnector>()
   const { tagKeys, tagsMap: connectorTagsMap, setTagsForResource: setConnectorTags } =
     useResourceListTags(TAG_RESOURCE_TYPES.API_CONNECTOR, connectors, canReadTags)
@@ -138,6 +145,12 @@ export default function ApiConnectorsPage() {
 
   const openConnectorManagement = (connectorId: number) => {
     navigate(`/api-connectors/${connectorId}`)
+  }
+
+  const openConnectDialog = (connector: ApiConnector, e: MouseEvent) => {
+    e.stopPropagation()
+    setConnectConnector(connector)
+    setConnectDialogOpen(true)
   }
 
   const openEditConnectorForm = (connector: ApiConnector) => {
@@ -213,10 +226,11 @@ export default function ApiConnectorsPage() {
                     <TableHead className="h-10">{t('apiConnectors.nameCol')}</TableHead>
                     <TableHead className="h-10 w-32">{t('apiConnectors.ownerCol')}</TableHead>
                     <TableHead className="h-10">{t('apiConnectors.baseUrlCol')}</TableHead>
+                    <TableHead className="h-10 w-[8.5rem]">{t('integrationCredentials.columnTitle')}</TableHead>
                     <TableHead className="h-10 w-28">{t('apiConnectors.authCol')}</TableHead>
                     <TableHead className="h-10 w-36">{t('apiConnectors.schemaCol')}</TableHead>
                     <TableHead className="h-10 w-40">{t('apiConnectors.lastSyncCol')}</TableHead>
-                    <TableHead className="h-10 w-24 text-right">{t('common.action')}</TableHead>
+                    <TableHead className="h-10 w-14 text-right">{t('common.action')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -242,6 +256,12 @@ export default function ApiConnectorsPage() {
                         {connector.base_url}
                       </TableCell>
                       <TableCell className="py-2.5">
+                        <IntegrationCredentialsCell
+                          credentialMode={(connector.credential_mode ?? 'shared') as 'shared' | 'user'}
+                          userConnectionStatus={connector.user_connection_status ?? 'not_connected'}
+                        />
+                      </TableCell>
+                      <TableCell className="py-2.5">
                         <Badge variant="outline">{connector.auth_type}</Badge>
                       </TableCell>
                       <TableCell className="py-2.5 text-sm">
@@ -252,6 +272,22 @@ export default function ApiConnectorsPage() {
                       </TableCell>
                       <TableCell className="py-2.5 text-right">
                         <ContainerRowActions
+                          connection={
+                            showPerUserConnectionAction(
+                              connector.credential_mode,
+                              false,
+                              connector.auth_type
+                            )
+                              ? {
+                                  label: integrationConnectionActionLabel(
+                                    t,
+                                    connector.user_connection_status ?? 'not_connected'
+                                  ),
+                                  status: connector.user_connection_status ?? 'not_connected',
+                                  onClick: (e) => openConnectDialog(connector, e),
+                                }
+                              : undefined
+                          }
                           onShare={() => setSharingConnector(connector)}
                           shareTitle={t('apiConnectors.share')}
                           tags={
@@ -328,6 +364,22 @@ export default function ApiConnectorsPage() {
         isDangerous
         onConfirm={handleDeleteConnector}
         onCancel={deleteConfirm.close}
+      />
+
+      <MyIntegrationConnectionDialog
+        kind="api_connector"
+        open={connectDialogOpen}
+        onOpenChange={(open) => {
+          setConnectDialogOpen(open)
+          if (!open) {
+            setConnectConnector(null)
+            void fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam)
+          }
+        }}
+        apiConnector={connectConnector}
+        onConnectionChanged={() => {
+          void fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam)
+        }}
       />
 
       {sharingConnector && (

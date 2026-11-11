@@ -18,10 +18,10 @@ from typing import List
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.core.exceptions import ResourceNotFoundError
-from apps.shared.data_source.adapters import db_data_source_to_domain
-from apps.shared.data_source.domain import DataSourceDomain
-from apps.shared.data_source.repository import DataSourceRepository
 from apps.shared.db.session import app_db_session
+from apps.shared.external_systems.data_source.adapters import db_data_source_to_domain
+from apps.shared.external_systems.data_source.domain import DataSourceDomain
+from apps.shared.external_systems.data_source.repository import DataSourceRepository
 from apps.shared.infra.analytics_db import get_db_manager_for_datasource
 from apps.shared.utils.logger import get_logger
 

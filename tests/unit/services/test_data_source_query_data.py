@@ -7,7 +7,7 @@ import pandas as pd
 import pytest
 
 from apps.shared.core.exceptions import AuthorizationError, ValidationError
-from apps.shared.data_source.service import DataSourceService
+from apps.shared.external_systems.data_source.service import DataSourceService
 from apps.shared.domain.actor import ActorContext
 
 
@@ -41,7 +41,7 @@ def _service_with_asset_lookup(
 
 def _patch_query_execution(monkeypatch, service: DataSourceService, df: pd.DataFrame) -> _FakeDBManager:
     fake_manager = _FakeDBManager(df)
-    monkeypatch.setattr(service, "get_db_manager", AsyncMock(return_value=fake_manager))
+    monkeypatch.setattr(service, "get_db_manager_for_actor", AsyncMock(return_value=fake_manager))
     monkeypatch.setattr(service, "require_read_access_for_actor", AsyncMock(return_value=SimpleNamespace()))
     return fake_manager
 

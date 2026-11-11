@@ -32,6 +32,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
         TenantAppPermissions.REPORTS_WRITE,
         TenantAppPermissions.SCHEDULED_TASKS_WRITE,
         TenantAppPermissions.API_CONNECTORS_CREATE,
+        TenantAppPermissions.API_CONNECTORS_READ,
         TenantAppPermissions.API_CONNECTORS_MANAGE,
         TenantAppPermissions.SKILLS_READ,
         TenantAppPermissions.SKILLS_MANAGE,
@@ -52,6 +53,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
         TenantAppPermissions.REPORTS_WRITE,
         TenantAppPermissions.SCHEDULED_TASKS_WRITE,
         TenantAppPermissions.API_CONNECTORS_CREATE,
+        TenantAppPermissions.API_CONNECTORS_READ,
         TenantAppPermissions.SKILLS_READ,
         TenantAppPermissions.AGENTS_READ,
         TenantAppPermissions.AGENTS_WRITE,
@@ -63,6 +65,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
         TenantAppPermissions.TAGS_READ,
         TenantAppPermissions.SKILLS_READ,
         TenantAppPermissions.AGENTS_READ,
+        TenantAppPermissions.API_CONNECTORS_READ,
     },
 }
 

@@ -23,6 +23,7 @@ interface BearerAuthConfigProps {
   token: string
   isAuthConfigured: boolean
   submitting: boolean
+  tokenError?: string
   onTokenChange: (value: string) => void
 }
 
@@ -33,6 +34,7 @@ interface BearerAuthConfigProps {
 export function BearerAuthConfig({
   token,
   submitting,
+  tokenError,
   onTokenChange,
 }: BearerAuthConfigProps) {
   const { t } = useTranslation()
@@ -46,6 +48,7 @@ export function BearerAuthConfig({
         onChange={(e) => onTokenChange(e.target.value)}
         placeholder={t('components.authConfigs.bearerPlaceholder')}
         disabled={submitting}
+        errorMsg={tokenError}
       />
     </div>
   )

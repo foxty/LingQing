@@ -5,7 +5,7 @@ Tests the domain model's ability to generate searchable text for RAG indexing.
 
 from datetime import datetime, timezone
 
-from apps.shared.data_source.domain import AssetMetadataDomain
+from apps.shared.external_systems.data_source.domain import AssetMetadataDomain
 from apps.shared.domain.value_objects import AssetMetaVO, ColumnVO, DataType
 
 

@@ -14,10 +14,10 @@ import pandas as pd
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
 
-from apps.shared.data_source import DataSourceService
-from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.data_source import DataSourceService
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository, DataSourceRepository
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
@@ -301,13 +301,9 @@ async def join_cross_datasource(
 
             logger.info(f"Stored join result in workspace: '{temp_table_name}' ({total_rows} rows)")
 
-            await register_temp_table(
-                session=session,
-                tenant_id=tenant_id,
-                thread_id=thread_id,
-                data_source_id=analytics_db.id,
-                table_name=temp_table_name,
-                meta_info={
+            # BYOT egress: join materialization lands in shared managed DB. If _temp_ tables are
+            # whitelisted for SQL re-query later, enforce thread-scoped TempTableMetadata reads.
+            join_meta: dict = {
                     "type": "cross_datasource_join",
                     "left_ds_id": left_data_source_id,
                     "left_ds_name": left_ds.name,
@@ -317,6 +313,18 @@ async def join_cross_datasource(
                     "row_count": total_rows,
                     "columns": result_df.columns.tolist(),
                     "created_at": datetime.now(UTC).isoformat(),
+            }
+            if left_ds.credential_mode == "user" or right_ds.credential_mode == "user":
+                join_meta["fetched_by_user_id"] = user_id
+
+            await register_temp_table(
+                session=session,
+                tenant_id=tenant_id,
+                thread_id=thread_id,
+                data_source_id=analytics_db.id,
+                table_name=temp_table_name,
+                meta_info={
+                    **join_meta,
                 },
             )
 
