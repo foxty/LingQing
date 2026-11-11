@@ -231,10 +231,11 @@ _Process, mandatory pre-done review, git/PR (only when asked), and reply format.
 
 When asked to draft or update release notes:
 
-- **Draft:** edit `docs/release-notes/UNRELEASED.md` (work-in-progress since the last shipped tag).
-- **Version file:** when the user names a version (e.g. `v0.2.0`), add or update `docs/release-notes/vX.Y.Z.md` — match the tag in the **title** (first lines).
-- **Shape:** follow `docs/release-notes/_TEMPLATE.md` (Highlights, Added/Fixed/Changed, Upgrade notes). Group changes from `git log <latest-v-tag>..HEAD --no-merges` when helpful; use PR refs `(#N)` only.
-- Do not change frozen `docs/release-notes/v*.md` for **older** shipped versions unless the user asks.
+- **One file per target tag:** `docs/release-notes/vX.Y.Z.md` only (e.g. `v0.2.0.md`). The user must name the semver (or confirm it); if unclear, ask before editing.
+- **Never** add or edit `docs/release-notes/UNRELEASED.md` — do not create duplicate drafts alongside `vX.Y.Z.md`.
+- **Title:** first lines must include the exact tag string (e.g. `# LingQing v0.2.0`) so the filename and content match.
+- **Shape:** follow `docs/release-notes/_TEMPLATE.md` (Highlights, Added/Fixed/Changed, Upgrade notes). Group changes from `git log <latest-shipped-v-tag>..HEAD --no-merges` when helpful; use PR refs `(#N)` only.
+- Do not change frozen `docs/release-notes/v*.md` for **older** shipped tags unless the user asks. After a version ships, start the **next** release as a new `vX.Y.Z.md`, not `UNRELEASED.md`.
 
 ### Final check (required)
 
