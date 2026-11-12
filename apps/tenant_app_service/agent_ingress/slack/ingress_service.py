@@ -34,6 +34,7 @@ from apps.tenant_app_service.agent_ingress.slack.domain import (
     strip_bot_mention,
 )
 from apps.tenant_app_service.agent_ingress.slack.feedback_delivery import (
+    SlackTurnDelivery,
     post_slack_reply_with_feedback,
     resolve_feedback_message_id,
 )
@@ -428,15 +429,18 @@ class SlackIngressService:
             session_id=session_id,
             thread_id=thread_id,
         )
-        delivery_kwargs = dict(
+        turn_delivery = SlackTurnDelivery(
+            channel_id=event.channel_id,
+            thread_ts=reply_thread_ts,
+            reply_text=reply_text,
+            message_id=message_id,
+            update_ts=thinking_ts,
+            turn_started_at=turn.turn_started_at,
+        )
+        delivery_kwargs = turn_delivery.reply_kwargs(
             client=self.client,
             bot_token=bot_token,
-            channel_id=event.channel_id,
-            text=reply_text,
-            message_id=message_id,
-            thread_ts=reply_thread_ts,
             db_session=self.db,
-            update_ts=thinking_ts,
             portal_origin=settings.PORTAL_ORIGIN,
             api_origin=settings.TENANT_APP_API_ORIGIN,
             slack_user_id=event.user_id,

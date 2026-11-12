@@ -42,6 +42,7 @@ class ChatTurnPrepareCompleteMixin:
         )
 
         run_id: str | None = None
+        run_created_at = None
         trigger_message_id: str | None = None
         invoke_index = 0
         session_id = str(uuid4())
@@ -92,6 +93,7 @@ class ChatTurnPrepareCompleteMixin:
 
                 raise ResourceNotFoundError(f"Agent run {request.run_id} not found")
             run_id = existing_run.id
+            run_created_at = existing_run.created_at
             trigger_message_id = existing_run.trigger_message_id
             invoke_index = existing_run.invoke_index
             session_id = existing_run.session_id
@@ -108,6 +110,7 @@ class ChatTurnPrepareCompleteMixin:
             matching = next((r for r in runs if r.agent_id == agent_id), runs[0] if runs else None)
             if matching:
                 run_id = matching.id
+                run_created_at = matching.created_at
                 trigger_message_id = matching.trigger_message_id
                 invoke_index = matching.invoke_index
                 session_id = matching.session_id
@@ -141,6 +144,7 @@ class ChatTurnPrepareCompleteMixin:
             initial_messages=self._build_initial_agent_messages(lc_messages, request),
             thread_title=thread_title,
             run_id=run_id,
+            run_created_at=run_created_at,
             trigger_message_id=trigger_message_id,
             invoke_index=invoke_index,
         )

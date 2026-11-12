@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
+from datetime import datetime
 
 from apps.shared.core.exceptions import DomainException, ThreadBusyError
 from apps.shared.schemas.user import UserDTO
@@ -35,6 +36,7 @@ class SlackCommittedChatTurnResult:
     session_id: str | None = None
     thinking_ts: str | None = None
     run_id: str | None = None
+    turn_started_at: datetime | None = None
 
 
 async def run_slack_committed_chat_turn(
@@ -55,6 +57,7 @@ async def run_slack_committed_chat_turn(
     session_id: str | None = None
     thinking_ts: str | None = None
     run_id: str | None = None
+    turn_started_at: datetime | None = None
     try:
         prepared = await prepare_chat_turn_committed(
             tenant_id,
@@ -63,10 +66,11 @@ async def run_slack_committed_chat_turn(
             access_token=access_token,
             log_label=log_label,
         )
+        run_id = prepared.run_id
+        turn_started_at = prepared.run_created_at if run_id else None
         thinking_ts = await post_thinking_placeholder(prepared)
         from apps.tenant_app_service.chat.agent_run_execution_registry import register, unregister
 
-        run_id = prepared.run_id
         current = asyncio.current_task()
         if run_id and current is not None:
             register(run_id, current)
@@ -91,6 +95,7 @@ async def run_slack_committed_chat_turn(
             session_id=session_id,
             thinking_ts=thinking_ts,
             run_id=run_id,
+            turn_started_at=turn_started_at,
         )
     except asyncio.CancelledError:
         logger.info("Slack chat turn task cancelled tenant=%s run_id=%s", tenant_id, run_id)
@@ -98,6 +103,7 @@ async def run_slack_committed_chat_turn(
             reply_text=slack_user_message(SlackMessageKey.REQUEST_CANCELED),
             thinking_ts=thinking_ts,
             run_id=run_id,
+            turn_started_at=turn_started_at,
         )
     except ThreadBusyError:
         raise
@@ -112,6 +118,7 @@ async def run_slack_committed_chat_turn(
             reply_text=slack_chat_error_message(exc),
             thinking_ts=thinking_ts,
             run_id=run_id,
+            turn_started_at=turn_started_at,
         )
     except Exception:
         logger.exception("Slack chat invocation failed for tenant %s user %s", tenant_id, user_dto.id)
@@ -119,4 +126,5 @@ async def run_slack_committed_chat_turn(
             reply_text=slack_user_message(SlackMessageKey.CHAT_GENERIC_FAILURE),
             thinking_ts=thinking_ts,
             run_id=run_id,
+            turn_started_at=turn_started_at,
         )

@@ -114,3 +114,50 @@ async def test_execute_agent_run_stop_already_finished_updates_thinking_message(
     assert service.client.chat_update.await_args.kwargs["text"] == slack_user_message(
         SlackMessageKey.REQUEST_ALREADY_FINISHED
     )
+    assert all(
+        block.get("block_id") != "turn_duration" for block in service.client.chat_update.await_args.kwargs["blocks"]
+    )
+
+
+@pytest.mark.asyncio
+async def test_execute_agent_run_stop_adds_duration_footer_without_changing_cancel_text():
+    db = MagicMock()
+    service = SlackInteractivityService(db=db)
+    service.repo = MagicMock()
+    service.repo.decrypt_bot_token = MagicMock(return_value="xoxb-test")
+    service.client = MagicMock()
+    service.client.chat_update = AsyncMock()
+    service.identity_service = MagicMock()
+
+    endpoint = MagicMock()
+    endpoint.tenant_id = 2
+
+    with (
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.interactivity_service.resolve_eligible_slack_user_id",
+            new=AsyncMock(return_value=4),
+        ),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.interactivity_service.cancel_slack_thread_run_by_run_id",
+            new=AsyncMock(),
+        ),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.interactivity_service.load_slack_turn_started_at",
+            new=AsyncMock(return_value=MagicMock()),
+        ),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.interactivity_service.elapsed_seconds_since",
+            return_value=90.16,
+        ),
+    ):
+        await service.execute_agent_run_stop(_stop_payload(), endpoint, "run-99")
+
+    canceled = slack_user_message(SlackMessageKey.REQUEST_CANCELED)
+    kwargs = service.client.chat_update.await_args.kwargs
+    section = next(block for block in kwargs["blocks"] if block["type"] == "section")
+    footer = next(block for block in kwargs["blocks"] if block.get("block_id") == "turn_duration")
+    assert section["text"]["text"] == canceled
+    assert footer["elements"][0]["text"] == "Took 1m 30.2s"
+    assert kwargs["text"] == f"{canceled}\nTook 1m 30.2s"
+    assert "U1" not in footer["elements"][0]["text"]
+    assert all(block.get("type") != "actions" for block in kwargs["blocks"])
