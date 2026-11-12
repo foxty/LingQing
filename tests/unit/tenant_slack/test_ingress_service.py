@@ -312,6 +312,8 @@ async def test_notify_channel_chat_disabled_posts_thread_reply():
         await service.notify_channel_chat_disabled(event, endpoint_id=1)
 
     service.client.chat_post_message.assert_awaited_once()
-    assert "direct messages" in service.client.chat_post_message.await_args.kwargs["text"]
+    notice = service.client.chat_post_message.await_args.kwargs["text"]
+    assert "direct messages" in notice
+    assert "Took " not in notice
     assert service.client.chat_post_message.await_args.kwargs["thread_ts"] == "1.0"
     service._post_ephemeral.assert_not_awaited()

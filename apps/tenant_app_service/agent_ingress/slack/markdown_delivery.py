@@ -8,6 +8,7 @@ only after the agent reply is complete.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any
 
 from slack_sdk.errors import SlackApiError
@@ -20,7 +21,6 @@ from apps.tenant_app_service.agent_ingress.slack.domain import (
     format_reply_for_slack,
     split_long_text,
 )
-from apps.tenant_app_service.agent_ingress.slack.feedback_blocks import append_feedback_actions
 from apps.tenant_app_service.agent_ingress.slack.markdown_blocks import (
     RenderRoute,
     SlackMarkdownPlan,
@@ -36,6 +36,10 @@ from apps.tenant_app_service.agent_ingress.slack.slack_image_fetcher import (
     ImageFetcher,
     default_image_fetcher,
     make_slack_image_fetcher,
+)
+from apps.tenant_app_service.agent_ingress.slack.turn_duration import (
+    SLACK_MAX_BLOCKS,
+    apply_turn_footer_to_outbound,
 )
 
 logger = get_logger(__name__)
@@ -96,8 +100,16 @@ async def deliver_markdown_to_slack(
     requester_user_id: int | None = None,
     requester_role: str | None = None,
     agent_id: int | None = None,
+    turn_started_at: datetime | None = None,
+    now: datetime | None = None,
 ) -> str | None:
-    """Render Markdown and post it. A block rejection retries once as mrkdwn."""
+    """Canonical entry for final agent Slack replies (markdown → blocks → post).
+
+    A block rejection retries once as mrkdwn. Pass ``turn_started_at`` (from
+    prepare) to add a duration footer on the last chunk; omit it for scheduled
+    deliveries and other non-turn sends. Thinking placeholders and ephemerals use
+    ``SlackClientPort`` directly, not this function.
+    """
     active = policy or SlackMarkdownPolicy()
     source = ensure_slack_reply_text(markdown)
     _ = agent_id  # reserved for delivery metadata; authz uses requester ACL only
@@ -121,6 +133,10 @@ async def deliver_markdown_to_slack(
         policy=active,
         image_fetcher=fetcher,
     )
+    messages = _reserve_trailing_blocks(
+        messages,
+        trailing=_trailing_block_count(message_id=message_id, include_duration_slot=turn_started_at is not None),
+    )
     try:
         return await _send_messages(
             client=client,
@@ -130,6 +146,8 @@ async def deliver_markdown_to_slack(
             message_id=message_id,
             thread_ts=thread_ts,
             update_ts=update_ts,
+            turn_started_at=turn_started_at,
+            now=now,
         )
     except SlackApiError as exc:
         if not _is_invalid_blocks(exc):
@@ -140,11 +158,14 @@ async def deliver_markdown_to_slack(
             "Inline chart images need files:read + files:write on the bot token.",
             detail.get("error") or detail,
         )
-        fallback = degraded_outbound_messages(
-            source,
-            portal_origin=portal_origin,
-            api_origin=api_origin,
-            policy=active,
+        fallback = _reserve_trailing_blocks(
+            degraded_outbound_messages(
+                source,
+                portal_origin=portal_origin,
+                api_origin=api_origin,
+                policy=active,
+            ),
+            trailing=_trailing_block_count(message_id=message_id, include_duration_slot=turn_started_at is not None),
         )
         try:
             return await _send_messages(
@@ -155,6 +176,8 @@ async def deliver_markdown_to_slack(
                 message_id=message_id,
                 thread_ts=thread_ts,
                 update_ts=update_ts,
+                turn_started_at=turn_started_at,
+                now=now,
             )
         except SlackApiError as retry_exc:
             if not _is_invalid_blocks(retry_exc):
@@ -163,10 +186,7 @@ async def deliver_markdown_to_slack(
                 "Slack rejected degraded blocks (%s); sending plain mrkdwn text only.",
                 _slack_response_dict(retry_exc).get("error") or retry_exc,
             )
-            plain = [
-                SlackOutboundMessage(text=message.text, blocks=[])
-                for message in fallback
-            ]
+            plain = [SlackOutboundMessage(text=message.text, blocks=[]) for message in fallback]
             return await _send_messages(
                 client=client,
                 bot_token=bot_token,
@@ -175,6 +195,8 @@ async def deliver_markdown_to_slack(
                 message_id=message_id,
                 thread_ts=thread_ts,
                 update_ts=update_ts,
+                turn_started_at=turn_started_at,
+                now=now,
             )
 
 
@@ -388,6 +410,38 @@ def _is_invalid_blocks(exc: SlackApiError) -> bool:
     return any("invalid slack file" in str(message).lower() for message in messages)
 
 
+def _trailing_block_count(*, message_id: str | None, include_duration_slot: bool) -> int:
+    return (1 if message_id else 0) + (1 if include_duration_slot else 0)
+
+
+def _reserve_trailing_blocks(
+    messages: list[SlackOutboundMessage],
+    *,
+    trailing: int,
+) -> list[SlackOutboundMessage]:
+    """Keep the last message inside Slack's 50-block limit after footer and actions."""
+    if trailing <= 0 or not messages:
+        return messages
+    budget = max(1, SLACK_MAX_BLOCKS - trailing)
+    prepared = list(messages)
+    while len(prepared[-1].blocks) > budget:
+        last = prepared[-1]
+        if len(last.blocks) <= 1:
+            break
+        moved = last.blocks[-1]
+        prepared[-1] = SlackOutboundMessage(
+            text=ensure_slack_reply_text(message_text(last.blocks[:-1])),
+            blocks=last.blocks[:-1],
+        )
+        prepared.append(
+            SlackOutboundMessage(
+                text=ensure_slack_reply_text(message_text([moved])),
+                blocks=[moved],
+            )
+        )
+    return prepared
+
+
 async def _send_messages(
     *,
     client: SlackClientPort,
@@ -397,14 +451,24 @@ async def _send_messages(
     message_id: str | None,
     thread_ts: str | None,
     update_ts: str | None,
+    turn_started_at: datetime | None = None,
+    now: datetime | None = None,
 ) -> str | None:
     posted_ts: str | None = None
     pending_update_ts = update_ts
     last_index = len(messages) - 1
     for index, message in enumerate(messages):
-        blocks: list[dict[str, Any]] | None = message.blocks
-        if message_id and index == last_index:
-            blocks = append_feedback_actions(message.blocks, message_id)
+        blocks: list[dict[str, Any]] | None = list(message.blocks)
+        text = message.text
+        is_last = index == last_index
+        if is_last:
+            text, blocks = apply_turn_footer_to_outbound(
+                text=text,
+                blocks=blocks or [],
+                turn_started_at=turn_started_at,
+                now=now,
+                message_id=message_id,
+            )
         if not blocks:
             blocks = None
         if pending_update_ts:
@@ -412,7 +476,7 @@ async def _send_messages(
                 bot_token=bot_token,
                 channel=channel_id,
                 ts=pending_update_ts,
-                text=message.text,
+                text=text,
                 blocks=blocks,
             )
             posted_ts = pending_update_ts
@@ -421,7 +485,7 @@ async def _send_messages(
             post_result = await client.chat_post_message(
                 bot_token=bot_token,
                 channel=channel_id,
-                text=message.text,
+                text=text,
                 thread_ts=thread_ts,
                 blocks=blocks,
             )

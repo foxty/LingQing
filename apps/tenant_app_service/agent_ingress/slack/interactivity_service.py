@@ -30,6 +30,12 @@ from apps.tenant_app_service.agent_ingress.slack.run_control_blocks import (
     ACTION_AGENT_RUN_STOP,
     build_run_status_blocks,
 )
+from apps.tenant_app_service.agent_ingress.slack.turn_duration import (
+    apply_turn_footer_to_outbound,
+    elapsed_seconds_since,
+    format_slack_turn_footer,
+    load_slack_turn_started_at,
+)
 from apps.tenant_app_service.message_feedback.domain import (
     FEEDBACK_RATING_NEGATIVE,
     FEEDBACK_RATING_POSITIVE,
@@ -209,11 +215,13 @@ class SlackInteractivityService:
                 run_id,
                 user_id,
             )
+            canceled = slack_user_message(SlackMessageKey.REQUEST_CANCELED)
             await self._update_thinking_message_after_stop(
                 bot_token,
                 channel,
                 payload,
-                slack_user_message(SlackMessageKey.REQUEST_CANCELED),
+                canceled,
+                duration_footer=await self._cancel_duration_footer(endpoint.tenant_id, run_id),
             )
         except ValidationError as exc:
             details = getattr(exc, "details", None) or {}
@@ -256,12 +264,18 @@ class SlackInteractivityService:
                 bot_token, channel, slack_user_id, payload, getattr(exc, "message", str(exc))
             )
 
+    async def _cancel_duration_footer(self, tenant_id: int, run_id: str) -> str | None:
+        started_at = await load_slack_turn_started_at(self.db, tenant_id, run_id)
+        return format_slack_turn_footer(elapsed_seconds_since(started_at))
+
     async def _update_thinking_message_after_stop(
         self,
         bot_token: str,
         channel: str | None,
         payload: dict[str, Any],
         text: str,
+        *,
+        duration_footer: str | None = None,
     ) -> None:
         if not channel or not text:
             return
@@ -271,12 +285,17 @@ class SlackInteractivityService:
         if not message_ts:
             return
         blocks = build_run_status_blocks(text=text)
+        delivered, blocks = apply_turn_footer_to_outbound(
+            text=text,
+            blocks=blocks,
+            footer_text=duration_footer,
+        )
         try:
             await self.client.chat_update(
                 bot_token=bot_token,
                 channel=channel,
                 ts=message_ts,
-                text=ensure_slack_reply_text(text),
+                text=ensure_slack_reply_text(delivered),
                 blocks=blocks,
             )
         except Exception:

@@ -6,6 +6,7 @@ import asyncio
 import json
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
+from datetime import datetime
 from typing import Any, Callable
 
 from apps.shared.core.exceptions import DomainException
@@ -110,6 +111,7 @@ class PreparedChatStream:
     initial_messages: list[Any]
     thread_title: str | None
     run_id: str | None = None
+    run_created_at: datetime | None = None
     trigger_message_id: str | None = None
     invoke_index: int = 0
 

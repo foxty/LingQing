@@ -2,6 +2,10 @@
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.tenant_app_service.agent_ingress.slack.client import SlackClientPort
@@ -13,6 +17,30 @@ from apps.tenant_app_service.chat.feedback_message_lookup import (
     resolve_latest_ai_message_id_for_session,
     update_message_metadata_for_feedback,
 )
+
+
+@dataclass(frozen=True)
+class SlackTurnDelivery:
+    """Per-turn fields for a final agent reply after prepare/complete."""
+
+    channel_id: str
+    thread_ts: str
+    reply_text: str
+    message_id: str | None
+    update_ts: str | None
+    turn_started_at: datetime | None
+
+    def reply_kwargs(self, **shared: Any) -> dict[str, Any]:
+        """Merge turn-specific args with caller context (client, tokens, origins, …)."""
+        return {
+            **shared,
+            "channel_id": self.channel_id,
+            "thread_ts": self.thread_ts,
+            "text": self.reply_text,
+            "message_id": self.message_id,
+            "update_ts": self.update_ts,
+            "turn_started_at": self.turn_started_at,
+        }
 
 
 async def resolve_feedback_message_id(
@@ -55,6 +83,7 @@ async def post_slack_reply_with_feedback(
     requester_user_id: int | None = None,
     requester_role: str | None = None,
     agent_id: int | None = None,
+    turn_started_at: datetime | None = None,
 ) -> str | None:
     """Render agent Markdown to Slack blocks and attach feedback on the last message."""
     posted_ts = await deliver_markdown_to_slack(
@@ -76,6 +105,7 @@ async def post_slack_reply_with_feedback(
         requester_user_id=requester_user_id,
         requester_role=requester_role,
         agent_id=agent_id,
+        turn_started_at=turn_started_at,
     )
 
     if message_id and posted_ts and db_session is not None:

@@ -13,6 +13,7 @@ def test_thinking_placeholder_includes_stop_action():
     btn = actions["elements"][0]
     assert btn["action_id"] == ACTION_AGENT_RUN_STOP
     assert btn["value"] == "run-1"
+    assert all(b.get("block_id") != "turn_duration" for b in blocks)
 
 
 def test_run_status_blocks_have_no_actions():

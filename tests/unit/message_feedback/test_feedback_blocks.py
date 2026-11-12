@@ -44,6 +44,24 @@ def test_append_feedback_actions_keeps_content_blocks():
     assert blocks[2]["block_id"] == "feedback_msg_test_004"
 
 
+def test_replace_feedback_actions_preserves_duration_footer():
+    footer = "Took 12.3s"
+    blocks = [
+        {"type": "section", "text": {"type": "mrkdwn", "text": "The answer"}},
+        {"type": "actions", "block_id": "feedback_msg_test_006", "elements": []},
+        {
+            "type": "context",
+            "block_id": "turn_duration",
+            "elements": [{"type": "plain_text", "text": footer, "emoji": False}],
+        },
+    ]
+    updated = replace_feedback_actions(blocks, "msg_test_006", current_rating="positive")
+    assert updated[0]["text"]["text"] == "The answer"
+    assert updated[1]["type"] == "actions"
+    assert updated[1]["elements"][0]["style"] == "primary"
+    assert updated[2]["elements"][0]["text"] == footer
+
+
 def test_replace_feedback_actions_preserves_table():
     blocks = [
         {"type": "section", "text": {"type": "mrkdwn", "text": "Intro"}},

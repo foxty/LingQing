@@ -143,8 +143,16 @@ class TestSlackRunStop:
         async def _assert_slack_and_db() -> None:
             assert fake.updated_messages, "expected thinking message chat.update after Stop"
             update = fake.updated_messages[-1]
-            assert update["text"] == slack_user_message(SlackMessageKey.REQUEST_CANCELED)
-            assert all(b.get("type") != "actions" for b in (update.get("blocks") or []))
+            canceled = slack_user_message(SlackMessageKey.REQUEST_CANCELED)
+            blocks = update.get("blocks") or []
+            section = next(block for block in blocks if block.get("type") == "section")
+            assert section["text"]["text"] == canceled
+            assert all(block.get("type") != "actions" for block in blocks)
+            footer_blocks = [block for block in blocks if block.get("block_id") == "turn_duration"]
+            assert len(footer_blocks) == 1
+            footer = footer_blocks[0]["elements"][0]["text"]
+            assert footer.startswith("Took ")
+            assert update["text"] == f"{canceled}\n{footer}"
 
             async with slack_test_setup["session_factory"]() as session:
                 run = await AgentRunRepository(session).get_run(tenant["tenant"].id, run_id)

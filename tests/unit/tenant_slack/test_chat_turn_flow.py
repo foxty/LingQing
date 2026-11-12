@@ -1,13 +1,19 @@
 """Unit tests for Slack committed chat turn orchestration."""
 
+import asyncio
+from datetime import UTC, datetime, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from apps.shared.core.exceptions import DomainException
-from apps.tenant_app_service.agent_ingress.slack.chat_turn_flow import run_slack_committed_chat_turn
-from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 from apps.shared.schemas.user import UserDTO
+from apps.tenant_app_service.agent_ingress.slack.chat_turn_flow import run_slack_committed_chat_turn
+from apps.tenant_app_service.agent_ingress.slack.turn_duration import (
+    elapsed_seconds_since,
+    format_slack_turn_footer,
+)
+from apps.tenant_app_service.chat.schemas import ChatRequest, SimpleMessage
 
 
 def _user() -> UserDTO:
@@ -86,3 +92,107 @@ async def test_run_slack_turn_maps_domain_exception_to_reply_text():
         )
 
     assert "denied" in result.reply_text.lower() or result.reply_text
+    assert result.run_id is None
+
+
+@pytest.mark.asyncio
+async def test_run_slack_turn_keeps_run_id_when_complete_fails():
+    run_created = datetime(2026, 1, 2, tzinfo=UTC)
+
+    async def fake_prepare(*_args, **_kwargs):
+        return MagicMock(run_id="run-started", session_id="s1", run_created_at=run_created)
+
+    async def post_thinking(_prepared):
+        return "ts-thinking"
+
+    with (
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.chat_turn_flow.prepare_chat_turn_committed",
+            fake_prepare,
+        ),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.chat_turn_flow.complete_chat_turn_committed",
+            AsyncMock(side_effect=DomainException("agent failed")),
+        ),
+    ):
+        result = await run_slack_committed_chat_turn(
+            1,
+            _request(),
+            _user(),
+            "token",
+            post_thinking_placeholder=post_thinking,
+        )
+
+    assert result.run_id == "run-started"
+    assert result.thinking_ts == "ts-thinking"
+    assert result.reply_text
+    assert result.turn_started_at == run_created
+
+
+@pytest.mark.asyncio
+async def test_run_slack_turn_records_start_time_when_prepare_creates_run():
+    run_created = datetime(2026, 1, 1, tzinfo=UTC)
+
+    async def fake_prepare(*_args, **_kwargs):
+        return MagicMock(run_id="run-1", session_id="s1", run_created_at=run_created)
+
+    async def fake_complete(*_args, **_kwargs):
+        return MagicMock(response=MagicMock(content="reply", message_id="m1", session_id="s1"))
+
+    with (
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.chat_turn_flow.prepare_chat_turn_committed",
+            fake_prepare,
+        ),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.chat_turn_flow.complete_chat_turn_committed",
+            fake_complete,
+        ),
+    ):
+        result = await run_slack_committed_chat_turn(
+            1,
+            _request(),
+            _user(),
+            "token",
+            post_thinking_placeholder=AsyncMock(return_value=None),
+        )
+
+    assert result.turn_started_at == run_created
+
+
+@pytest.mark.asyncio
+async def test_footer_includes_prepare_tail_not_just_complete_window():
+    """P2-1: run.created_at is fixed at creation; prepare tail must count toward the footer."""
+    run_created = datetime(2026, 1, 1, 12, 0, 0, tzinfo=UTC)
+    replied_at = run_created + timedelta(seconds=2.74)
+
+    async def fake_prepare(*_args, **_kwargs):
+        await asyncio.sleep(0.05)
+        return MagicMock(run_id="run-1", session_id="s1", run_created_at=run_created)
+
+    async def fake_complete(*_args, **_kwargs):
+        return MagicMock(response=MagicMock(content="ok", message_id="m1", session_id="s1"))
+
+    with (
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.chat_turn_flow.prepare_chat_turn_committed",
+            fake_prepare,
+        ),
+        patch(
+            "apps.tenant_app_service.agent_ingress.slack.chat_turn_flow.complete_chat_turn_committed",
+            fake_complete,
+        ),
+    ):
+        result = await run_slack_committed_chat_turn(
+            1,
+            _request(),
+            _user(),
+            "token",
+            post_thinking_placeholder=AsyncMock(return_value=None),
+        )
+
+    assert result.turn_started_at == run_created
+    footer = format_slack_turn_footer(elapsed_seconds_since(run_created, now=replied_at))
+    assert footer == "Took 2.7s"
+    wrong = format_slack_turn_footer(elapsed_seconds_since(replied_at - timedelta(seconds=0.2), now=replied_at))
+    assert footer != wrong
