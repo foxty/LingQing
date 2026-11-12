@@ -40,32 +40,9 @@ from apps.shared.tasks.system.jobs.document_parse import run_document_parse_jobs
 from apps.shared.tasks.system.jobs.vector_sync import cleanup_orphaned_vectors, sync_to_vector_db
 from apps.tenant_app_service.routers.documents import get_file_storage_dependency
 from apps.tenant_app_service.server import app
+from tests.stub_embeddings import StubEmbeddings
 
 pytestmark = pytest.mark.asyncio
-
-
-class KeywordEmbeddings(Embeddings):
-    """Deterministic embeddings for Chroma integration tests."""
-
-    _keywords = [
-        "alpha",
-        "beta",
-        "document",
-        "asset",
-        "operation",
-        "orders",
-        "shared",
-    ]
-
-    def _encode(self, text: str) -> list[float]:
-        lowered = text.lower()
-        return [float(lowered.count(keyword)) for keyword in self._keywords]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self._encode(text) for text in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._encode(text)
 
 
 async def _wait_until(assertion_coro, timeout_seconds: float = 8.0) -> None:
@@ -104,7 +81,7 @@ async def vector_sync_e2e_env(async_db_session: AsyncSession, tmp_path: Path, mo
     """
     host, port = chroma_http_endpoint
     prefix = f"it_e2e_{uuid.uuid4().hex}_tenant_"
-    embeddings = KeywordEmbeddings()
+    embeddings = StubEmbeddings()
 
     monkeypatch.setattr("apps.config.EnvConfig.DATA_ROOT_PATH", str(tmp_path))
     monkeypatch.setattr("apps.config.EnvConfig.FILE_STORAGE_TYPE", "local")
@@ -302,7 +279,9 @@ async def test_document_sync_to_vector_db_e2e(vector_sync_e2e_env):
 
     # Verify ResourceIndex created with pending status
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         pending_items = await index_service.list_pending_items()
         doc_pending = [item for item in pending_items if item.resource_id == document_id]
         assert len(doc_pending) == 1, "Document should have pending ResourceIndex"
@@ -325,7 +304,9 @@ async def test_document_sync_to_vector_db_e2e(vector_sync_e2e_env):
 
     # Verify ResourceIndex status updated
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         doc_index = await index_service.get_by_resource("document", document_id)
         assert doc_index.vector_status == VectorStatus.INDEXED
 
@@ -384,7 +365,9 @@ async def test_document_blocks_manifest_sync_to_vector_db_e2e(vector_sync_e2e_en
     await _parse_pending_documents(task_context)
 
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         doc_index = await index_service.get_by_resource("document", document_id)
         assert doc_index is not None
         assert doc_index.raw_content.get("storage_uri")
@@ -446,7 +429,9 @@ async def test_asset_sync_to_vector_db_e2e(vector_sync_e2e_env):
 
     # Verify ResourceIndex created
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         pending_items = await index_service.list_pending_items()
         asset_pending = [item for item in pending_items if item.resource_id == asset_id]
         assert len(asset_pending) == 1, "Asset should have pending ResourceIndex"
@@ -554,7 +539,9 @@ async def test_api_connector_sync_to_vector_db_e2e(vector_sync_e2e_env):
 
     # Verify ResourceIndex created
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         pending_items = await index_service.list_pending_items()
         op_pending = [item for item in pending_items if item.resource_id == operation_id]
         assert len(op_pending) == 1, "API operation should have pending ResourceIndex"
@@ -628,19 +615,25 @@ async def test_full_rebuild_mode_e2e(vector_sync_e2e_env):
 
     # Verify synced
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         doc_index = await index_service.get_by_resource("document", document_id)
         assert doc_index.vector_status == VectorStatus.INDEXED
 
     # Manually mark as stale to simulate embedding model change
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         await index_service.mark_all_vectors_stale()
         await session.commit()
 
     # Verify stale
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         doc_index = await index_service.get_by_resource("document", document_id)
         assert doc_index.vector_status == VectorStatus.STALE
 
@@ -650,7 +643,9 @@ async def test_full_rebuild_mode_e2e(vector_sync_e2e_env):
 
     # Verify re-synced
     async with session_factory() as session:
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         doc_index = await index_service.get_by_resource("document", document_id)
         assert doc_index.vector_status == VectorStatus.INDEXED
 
@@ -703,7 +698,9 @@ async def test_cleanup_orphaned_vectors_e2e(vector_sync_e2e_env):
     # Simulate orphan: delete from DB but NOT from vector store
     async with session_factory() as session:
         # Delete ResourceIndex directly (simulating partial failure)
-        index_service = ResourceIndexService(tenant_id=tenant_id, db_session=session)
+        index_service = ResourceIndexService(
+            tenant_id=tenant_id, db_session=session, embeddings=embeddings
+        )
         await index_service.delete("document", document_id)
         await session.commit()
 

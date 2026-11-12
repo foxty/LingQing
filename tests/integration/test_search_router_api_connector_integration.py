@@ -168,11 +168,13 @@ async def search_api_connector_env(async_db_session: AsyncSession):
 
         # Sync resource_index records to populate tokenized_content for FTS
         from apps.shared.search.indexing_service import ResourceIndexService
+        from tests.stub_embeddings import StubEmbeddings
 
-        indexing_svc_a = ResourceIndexService(tenant_id=tenant_a.id, db_session=seed_session)
+        stub = StubEmbeddings()
+        indexing_svc_a = ResourceIndexService(tenant_id=tenant_a.id, db_session=seed_session, embeddings=stub)
         await indexing_svc_a.sync_all_pending()
 
-        indexing_svc_b = ResourceIndexService(tenant_id=tenant_b.id, db_session=seed_session)
+        indexing_svc_b = ResourceIndexService(tenant_id=tenant_b.id, db_session=seed_session, embeddings=stub)
         await indexing_svc_b.sync_all_pending()
 
     user_ctx = {

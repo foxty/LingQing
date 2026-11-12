@@ -565,8 +565,28 @@ def fake_oidc_adapter(monkeypatch):
     return fake
 
 
+@pytest.fixture(autouse=True)
+def resolve_tenant_embeddings_stub(monkeypatch):
+    """Tenants in integration tests have no default embedding profile — stub the resolver."""
+    from sqlalchemy.ext.asyncio import AsyncSession
+
+    from tests.stub_embeddings import StubEmbeddings
+
+    stub = StubEmbeddings()
+
+    async def _resolve_tenant_embeddings(_tenant_id: int, _db: AsyncSession):
+        return stub
+
+    for patch_target in (
+        "apps.shared.llm_providers.embedding_resolver.resolve_tenant_embeddings",
+        "apps.shared.search.indexing_service.resolve_tenant_embeddings",
+        "apps.tenant_app_service.routers.search.resolve_tenant_embeddings",
+    ):
+        monkeypatch.setattr(patch_target, _resolve_tenant_embeddings)
+
+
 from tests.integration.helpers.committed_chat_setup import committed_chat_setup  # noqa: E402,F401
 
 # expose the shared helper for slack tests
 from tests.slack.fake_slack import FakeSlackClient  # noqa: E402,F401
-from tests.integration.search_quality_benchmark_shared import search_quality_benchmark_env  # noqa: E402,F401
+from tests.integration.search_integration_smoke_shared import search_integration_smoke_env  # noqa: E402,F401

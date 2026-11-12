@@ -1,12 +1,12 @@
 """Unit tests for Chroma vector backend implementations and contract wiring."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import httpx
 import pytest
-from langchain_core.documents import Document
-
 from apps.config import parse_chroma_http_url
+from apps.shared.core.exceptions import ValidationError
+from tests.stub_embeddings import StubEmbeddings
 from apps.shared.infra.rag.chroma_backend import (
     HttpChromaBackend,
     _apply_chroma_http_client_timeout,
@@ -24,68 +24,74 @@ def test_parse_chroma_http_url():
 def test_factory_returns_http_backend(monkeypatch):
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_MODE", "http")
 
+    stub = StubEmbeddings()
     with patch("apps.shared.infra.rag.chroma_backend.HttpChromaBackend") as mock_http_backend:
-        backend = get_vector_backend(tenant_id=99)
+        backend = get_vector_backend(tenant_id=99, embeddings=stub)
 
-    mock_http_backend.assert_called_once_with(tenant_id=99, embeddings=None)
+    mock_http_backend.assert_called_once_with(tenant_id=99, embeddings=stub)
     assert backend is mock_http_backend.return_value
+
+
+def test_get_vector_backend_rejects_missing_embeddings():
+    with pytest.raises(ValidationError, match="embedding model profile"):
+        get_vector_backend(tenant_id=1, embeddings=None)  # type: ignore[arg-type]
 
 
 def test_http_backend_init_does_not_construct_http_client():
     """Construction and describe() must not open a Chroma socket."""
-    backend = HttpChromaBackend(tenant_id=1)
-    assert backend._vectorstore is None
+    backend = HttpChromaBackend(tenant_id=1, embeddings=StubEmbeddings())
+    assert backend._collection is None
     assert backend.describe()["backend"] == "chroma-http"
-    assert backend._vectorstore is None
+    assert backend._collection is None
 
 
 def test_http_backend_builds_client_with_collection(monkeypatch):
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_URL", "http://chroma:8000")
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_COLLECTION_PREFIX", "tenant_")
 
-    with (
-        patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient") as mock_http_client,
-        patch("apps.shared.infra.rag.chroma_backend.Chroma") as mock_chroma,
-    ):
-        backend = HttpChromaBackend(tenant_id=42)
-        mock_http_client.assert_not_called()
-        mock_chroma.assert_not_called()
+    mock_collection = MagicMock()
+    mock_http_client = MagicMock()
+    mock_http_client.get_or_create_collection.return_value = mock_collection
+
+    with patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient", return_value=mock_http_client) as mock_ctor:
+        backend = HttpChromaBackend(tenant_id=42, embeddings=StubEmbeddings())
+        mock_ctor.assert_not_called()
         assert backend.describe()["backend"] == "chroma-http"
-        mock_http_client.assert_not_called()
 
-        backend._ensure_vectorstore()
+        backend._ensure_collection()
 
-        mock_http_client.assert_called_once()
-        http_client_call_kwargs = mock_http_client.call_args.kwargs
+        mock_ctor.assert_called_once()
+        http_client_call_kwargs = mock_ctor.call_args.kwargs
         assert http_client_call_kwargs["host"] == "chroma"
         assert http_client_call_kwargs["port"] == 8000
         assert http_client_call_kwargs["ssl"] is False
         assert "settings" in http_client_call_kwargs
-        assert http_client_call_kwargs["settings"] is not None
-        call_kwargs = mock_chroma.call_args[1]
-        assert call_kwargs["client"] is mock_http_client.return_value
-        assert call_kwargs["collection_name"] == "tenant_42"
+        get_collection_kwargs = mock_http_client.get_or_create_collection.call_args.kwargs
+        assert get_collection_kwargs["name"] == "tenant_42"
+        assert get_collection_kwargs["embedding_function"] is not None
 
 
 @pytest.mark.asyncio
-async def test_contract_methods_delegate_to_vectorstore(monkeypatch):
+async def test_contract_methods_delegate_to_collection(monkeypatch):
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_COLLECTION_PREFIX", "tenant_")
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_URL", "http://localhost:8000")
 
-    mock_vs = MagicMock()
-    mock_vs.aadd_documents = AsyncMock()
-    mock_vs.asimilarity_search = AsyncMock(return_value=[Document(page_content="ok", metadata={"tenant_id": 1})])
-    mock_vs.get = MagicMock(return_value={"documents": ["x"], "metadatas": [{"tenant_id": 1}], "ids": ["id-1"]})
-    mock_vs.delete = MagicMock()
-    mock_vs.adelete = AsyncMock()
+    mock_collection = MagicMock()
+    mock_collection.query.return_value = {
+        "documents": [["ok"]],
+        "metadatas": [[{"tenant_id": 1}]],
+    }
+    mock_collection.get.return_value = {
+        "ids": ["id-1"],
+        "documents": ["x"],
+        "metadatas": [{"tenant_id": 1}],
+    }
 
     mock_http_client = MagicMock()
+    mock_http_client.get_or_create_collection.return_value = mock_collection
 
-    with (
-        patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient", return_value=mock_http_client),
-        patch("apps.shared.infra.rag.chroma_backend.Chroma", return_value=mock_vs),
-    ):
-        backend = HttpChromaBackend(tenant_id=1)
+    with patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient", return_value=mock_http_client):
+        backend = HttpChromaBackend(tenant_id=1, embeddings=StubEmbeddings())
 
         records = [{"content": "x", "metadata": {"tenant_id": 1}}]
         await backend.add_records(records)
@@ -94,11 +100,21 @@ async def test_contract_methods_delegate_to_vectorstore(monkeypatch):
         await backend.delete(where={"tenant_id": 1})
         await backend.delete(ids=["a", "b"])
 
-    mock_vs.aadd_documents.assert_called_once()
-    mock_vs.asimilarity_search.assert_called_once_with("q", k=3, filter={"tenant_id": 1})
-    mock_vs.get.assert_called_once()
-    mock_vs.delete.assert_called_once_with(where={"tenant_id": 1})
-    mock_vs.adelete.assert_called_once_with(ids=["a", "b"])
+    mock_collection.add.assert_called_once()
+    add_kwargs = mock_collection.add.call_args.kwargs
+    assert add_kwargs["documents"] == ["x"]
+    assert add_kwargs["metadatas"] == [{"tenant_id": 1}]
+    assert len(add_kwargs["ids"]) == 1
+
+    mock_collection.query.assert_called_once_with(
+        query_texts=["q"],
+        n_results=3,
+        include=["documents", "metadatas"],
+        where={"tenant_id": 1},
+    )
+    mock_collection.get.assert_called_once()
+    mock_collection.delete.assert_any_call(where={"tenant_id": 1})
+    mock_collection.delete.assert_any_call(ids=["a", "b"])
     assert search_records == [{"content": "ok", "metadata": {"tenant_id": 1}}]
     assert get_result == {
         "ids": ["id-1"],
@@ -112,49 +128,47 @@ async def test_delete_collection_delegates_to_client(monkeypatch):
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_COLLECTION_PREFIX", "tenant_")
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_URL", "http://localhost:8000")
 
-    mock_vs = MagicMock()
-    mock_vs._client = MagicMock()
-    mock_vs._client.delete_collection = MagicMock()
-
+    mock_collection = MagicMock()
     mock_http_client = MagicMock()
+    mock_http_client.get_or_create_collection.return_value = mock_collection
 
-    with (
-        patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient", return_value=mock_http_client),
-        patch("apps.shared.infra.rag.chroma_backend.Chroma", return_value=mock_vs),
-    ):
-        backend = HttpChromaBackend(tenant_id=123)
+    with patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient", return_value=mock_http_client):
+        backend = HttpChromaBackend(tenant_id=123, embeddings=StubEmbeddings())
         await backend.delete_collection()
-        assert backend._vectorstore is None
+        assert backend._collection is None
 
-    mock_vs._client.delete_collection.assert_called_once_with(name="tenant_123")
+    mock_http_client.delete_collection.assert_called_once_with(name="tenant_123")
 
 
 @pytest.mark.asyncio
-async def test_similarity_search_initializes_vectorstore_off_event_loop(monkeypatch):
+async def test_similarity_search_initializes_collection_off_event_loop(monkeypatch):
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_COLLECTION_PREFIX", "tenant_")
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_URL", "http://localhost:8000")
     monkeypatch.setattr("apps.shared.infra.rag.chroma_backend.EnvConfig.CHROMA_HTTP_TIMEOUT_SECONDS", 60)
 
-    mock_vs = MagicMock()
-    mock_vs.asimilarity_search = AsyncMock(return_value=[])
+    mock_collection = MagicMock()
+    mock_collection.query.return_value = {"documents": [[]], "metadatas": [[]]}
+    mock_http_client = MagicMock()
+    mock_http_client.get_or_create_collection.return_value = mock_collection
 
     async def run_in_thread(fn, *args, **kwargs):
         return fn(*args, **kwargs)
 
     with (
-        patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient"),
-        patch("apps.shared.infra.rag.chroma_backend.Chroma", return_value=mock_vs),
+        patch("apps.shared.infra.rag.chroma_backend.chromadb.HttpClient", return_value=mock_http_client),
         patch(
             "apps.shared.infra.rag.chroma_backend.asyncio.to_thread",
             side_effect=run_in_thread,
         ) as mock_to_thread,
     ):
-        backend = HttpChromaBackend(tenant_id=5)
+        backend = HttpChromaBackend(tenant_id=5, embeddings=StubEmbeddings())
         await backend.similarity_search("query", k=2)
 
     mock_to_thread.assert_awaited()
-    init_calls = [c for c in mock_to_thread.await_args_list if c.args and c.args[0] == backend._initialize_vectorstore]
-    assert init_calls, "expected _initialize_vectorstore to run via asyncio.to_thread"
+    init_calls = [
+        c for c in mock_to_thread.await_args_list if c.args and c.args[0] == backend._initialize_collection
+    ]
+    assert init_calls, "expected _initialize_collection to run via asyncio.to_thread"
 
 
 def test_apply_chroma_http_client_timeout_patches_httpx_session(monkeypatch):
@@ -162,9 +176,9 @@ def test_apply_chroma_http_client_timeout_patches_httpx_session(monkeypatch):
 
     session = httpx.Client(timeout=None)
     server = MagicMock(_session=session)
-    mock_vs = MagicMock(_client=MagicMock(_server=server))
+    client = MagicMock(_server=server)
 
-    _apply_chroma_http_client_timeout(mock_vs)
+    _apply_chroma_http_client_timeout(client)
 
     assert session.timeout.connect == 45.0
     assert session.timeout.read == 45.0

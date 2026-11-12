@@ -9,11 +9,12 @@ from apps.shared.infra.llm.llm_model_resolver import create_embeddings
 from apps.shared.llm_providers.service import LLMProviderConfigService
 
 
-async def resolve_tenant_embeddings(tenant_id: int, db: AsyncSession) -> Embeddings | None:
-    """Return embeddings for the tenant default profile, or None when unset."""
+async def resolve_tenant_embeddings(tenant_id: int, db: AsyncSession) -> Embeddings:
+    """Return embeddings for the tenant default profile.
+
+    Raises:
+        ValidationError: When the tenant has no default embedding profile configured.
+    """
     service = LLMProviderConfigService(tenant_id, db)
-    defaults = await service.get_defaults()
-    if defaults.embedding_profile_id is None:
-        return None
-    resolved = await service.resolve_profile(defaults.embedding_profile_id)
+    resolved = await service.resolve_default_embedding_profile()
     return create_embeddings(resolved)

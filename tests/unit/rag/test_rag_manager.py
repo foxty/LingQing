@@ -6,6 +6,7 @@ import pytest
 from langchain_core.documents import Document
 
 from apps.shared.infra.rag.rag_manager import RAGManager
+from tests.stub_embeddings import StubEmbeddings
 
 
 @pytest.fixture
@@ -20,14 +21,14 @@ def mock_rag_manager():
         mock_backend.describe.return_value = {"backend": "mock-backend"}
         mock_factory.return_value = mock_backend
 
-        manager = RAGManager(tenant_id=1)
+        manager = RAGManager(tenant_id=1, embeddings=StubEmbeddings())
 
         yield manager, mock_backend, mock_factory
 
 
 def test_rag_manager_init_does_not_construct_chroma_client():
     """RAGManager() must not heartbeat Chroma; the HTTP client is lazy."""
-    manager = RAGManager(tenant_id=1)
+    manager = RAGManager(tenant_id=1, embeddings=StubEmbeddings())
     assert manager.tenant_id == 1
     assert manager._backend.describe()["backend"] == "chroma-http"
 

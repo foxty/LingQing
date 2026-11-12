@@ -1,21 +1,26 @@
 """Chroma backend implementations for the vector backend contract.
 
 This is an infrastructure layer that only handles vector storage operations.
-Embedding configuration is handled by the service layer (RAGManager callers).
+Embedding configuration is required from the service layer (tenant default embedding profile).
 """
 
+from __future__ import annotations
+
 import asyncio
-from collections.abc import Awaitable, Coroutine
+import uuid
+from collections.abc import Awaitable, Callable, Coroutine
 from typing import Any, TypeVar
 
 import chromadb
 import httpx
-from langchain_chroma import Chroma
-from langchain_core.documents import Document
+from chromadb.api import ClientAPI
+from chromadb.api.models.Collection import Collection
 from langchain_core.embeddings import Embeddings
 
 from apps.config import EnvConfig
+from apps.shared.core.exceptions import ValidationError
 from apps.shared.infra.rag.backend import MetadataFilter, VectorGetResult, VectorRecord, VectorStoreBackend
+from apps.shared.infra.rag.chroma_embedding import LangChainEmbeddingFunction
 
 _T = TypeVar("_T")
 
@@ -24,78 +29,91 @@ def _chroma_http_timeout_seconds() -> float:
     return float(EnvConfig.CHROMA_HTTP_TIMEOUT_SECONDS)
 
 
-def _apply_chroma_http_client_timeout(vectorstore: Chroma) -> None:
+def _apply_chroma_http_client_timeout(client: ClientAPI) -> None:
     """Patch chromadb FastAPI client's httpx session (upstream default is timeout=None)."""
     timeout = _chroma_http_timeout_seconds()
     if timeout <= 0:
         return
-    server = getattr(vectorstore._client, "_server", None)
+    server = getattr(client, "_server", None)
     session = getattr(server, "_session", None)
     if session is not None:
         session.timeout = httpx.Timeout(timeout)
 
 
-class BaseChromaBackend(VectorStoreBackend):
-    """Shared behavior for Chroma backends."""
+def _sanitize_metadata(metadata: dict[str, Any]) -> dict[str, str | int | float | bool]:
+    """Chroma accepts only primitive metadata values."""
+    sanitized: dict[str, str | int | float | bool] = {}
+    for key, value in metadata.items():
+        if value is None:
+            continue
+        if isinstance(value, (str, int, float, bool)):
+            sanitized[key] = value
+        else:
+            sanitized[key] = str(value)
+    return sanitized
+
+
+class HttpChromaBackend(VectorStoreBackend):
+    """Chroma vector store over HTTP (chromadb.HttpClient)."""
 
     # Max documents per embedding API call. DashScope-compatible APIs limit batch to 10.
     EMBEDDING_BATCH_SIZE = 10
 
-    def __init__(self, tenant_id: int, embeddings: Embeddings | None = None):
+    def __init__(self, tenant_id: int, embeddings: Embeddings):
+        if embeddings is None:
+            raise ValidationError("Default embedding model profile is not configured")
         self.tenant_id = tenant_id
         self.embeddings = embeddings
         self.collection_name = f"{EnvConfig.CHROMA_COLLECTION_PREFIX}{tenant_id}"
         from apps.shared.utils.logger import get_logger
 
         self._logger = get_logger(__name__)
-        if embeddings:
-            self._logger.info(
-                "ChromaBackend: initialized with custom embeddings for tenant_id=%s, collection=%s",
-                tenant_id,
-                self.collection_name,
-            )
-        else:
-            self._logger.info(
-                "ChromaBackend: initialized with default embeddings for tenant_id=%s, collection=%s",
-                tenant_id,
-                self.collection_name,
-            )
-        self._vectorstore: Chroma | None = None
-        self._vectorstore_lock = asyncio.Lock()
+        self._logger.info(
+            "ChromaBackend: initialized for tenant_id=%s, collection=%s",
+            tenant_id,
+            self.collection_name,
+        )
+        self._client: ClientAPI | None = None
+        self._collection: Collection | None = None
+        self._collection_lock = asyncio.Lock()
 
-    def _build_common_kwargs(self) -> dict[str, Any]:
-        kwargs: dict[str, Any] = {}
-        if self.embeddings:
-            kwargs["embedding_function"] = self.embeddings
-        return kwargs
+    def _initialize_collection(self) -> Collection:
+        """Create HttpClient and collection (blocking). Must run in a worker thread."""
+        if self._collection is not None:
+            return self._collection
 
-    def _create_vectorstore(self) -> Chroma:
-        raise NotImplementedError()
+        client_settings = chromadb.config.Settings(anonymized_telemetry=False)
+        client = chromadb.HttpClient(
+            **EnvConfig.chroma_http_client_kwargs(),
+            settings=client_settings,
+        )
+        _apply_chroma_http_client_timeout(client)
 
-    def _initialize_vectorstore(self) -> Chroma:
-        """Create the vectorstore (blocking). Must run in a worker thread, not on the asyncio loop."""
-        if self._vectorstore is None:
-            self._vectorstore = self._create_vectorstore()
-            _apply_chroma_http_client_timeout(self._vectorstore)
-        return self._vectorstore
+        collection = client.get_or_create_collection(
+            name=self.collection_name,
+            embedding_function=LangChainEmbeddingFunction(self.embeddings),
+        )
+        self._client = client
+        self._collection = collection
+        return self._collection
 
-    def _ensure_vectorstore(self) -> Chroma:
+    def _ensure_collection(self) -> Collection:
         """Synchronous accessor for tests and thread-pool callers."""
-        return self._initialize_vectorstore()
+        return self._initialize_collection()
 
-    async def _aget_vectorstore(self) -> Chroma:
-        if self._vectorstore is not None:
-            return self._vectorstore
-        async with self._vectorstore_lock:
-            if self._vectorstore is not None:
-                return self._vectorstore
+    async def _aget_collection(self) -> Collection:
+        if self._collection is not None:
+            return self._collection
+        async with self._collection_lock:
+            if self._collection is not None:
+                return self._collection
             timeout = _chroma_http_timeout_seconds()
             if timeout > 0:
                 return await asyncio.wait_for(
-                    asyncio.to_thread(self._initialize_vectorstore),
+                    asyncio.to_thread(self._initialize_collection),
                     timeout=timeout,
                 )
-            return await asyncio.to_thread(self._initialize_vectorstore)
+            return await asyncio.to_thread(self._initialize_collection)
 
     async def _await_with_chroma_timeout(self, coro: Coroutine[Any, Any, _T] | Awaitable[_T]) -> _T:
         timeout = _chroma_http_timeout_seconds()
@@ -103,24 +121,28 @@ class BaseChromaBackend(VectorStoreBackend):
             return await asyncio.wait_for(coro, timeout=timeout)
         return await coro
 
+    async def _run_collection_op(self, fn: Callable[..., _T], *args: Any, **kwargs: Any) -> _T:
+        await self._aget_collection()
+        return await self._await_with_chroma_timeout(asyncio.to_thread(fn, *args, **kwargs))
+
     async def add_records(self, records: list[VectorRecord]) -> None:
-        documents = [
-            Document(
-                page_content=record["content"],
-                metadata=record.get("metadata", {}),
-            )
-            for record in records
-        ]
-        vectorstore = await self._aget_vectorstore()
-        # Batch to avoid embedding API batch size limits (e.g., DashScope max 10)
+        collection = await self._aget_collection()
         batch_size = self.EMBEDDING_BATCH_SIZE
-        for i in range(0, len(documents), batch_size):
-            batch = documents[i : i + batch_size]
-            await self._await_with_chroma_timeout(vectorstore.aadd_documents(batch))
+        for i in range(0, len(records), batch_size):
+            batch = records[i : i + batch_size]
+            ids = [str(uuid.uuid4()) for _ in batch]
+            documents = [record["content"] for record in batch]
+            metadatas = [_sanitize_metadata(record.get("metadata", {})) for record in batch]
+            await self._run_collection_op(
+                collection.add,
+                ids=ids,
+                documents=documents,
+                metadatas=metadatas,
+            )
             self._logger.debug(
                 "Added batch %d/%d (%d docs) for tenant_id=%s",
                 i // batch_size + 1,
-                (len(documents) + batch_size - 1) // batch_size,
+                (len(records) + batch_size - 1) // batch_size,
                 len(batch),
                 self.tenant_id,
             )
@@ -131,20 +153,24 @@ class BaseChromaBackend(VectorStoreBackend):
         k: int,
         filter_dict: MetadataFilter | None = None,
     ) -> list[VectorRecord]:
-        vectorstore = await self._aget_vectorstore()
-        if filter_dict is None:
-            docs = await self._await_with_chroma_timeout(vectorstore.asimilarity_search(query, k=k))
-        else:
-            docs = await self._await_with_chroma_timeout(
-                vectorstore.asimilarity_search(query, k=k, filter=filter_dict)
-            )
+        collection = await self._aget_collection()
+        query_kwargs: dict[str, Any] = {
+            "query_texts": [query],
+            "n_results": k,
+            "include": ["documents", "metadatas"],
+        }
+        if filter_dict is not None:
+            query_kwargs["where"] = filter_dict
 
+        raw = await self._run_collection_op(collection.query, **query_kwargs)
+        documents = (raw.get("documents") or [[]])[0]
+        metadatas = (raw.get("metadatas") or [[]])[0]
         return [
             {
-                "content": doc.page_content,
-                "metadata": doc.metadata or {},
+                "content": doc or "",
+                "metadata": meta or {},
             }
-            for doc in docs
+            for doc, meta in zip(documents, metadatas)
         ]
 
     async def get(
@@ -153,17 +179,16 @@ class BaseChromaBackend(VectorStoreBackend):
         limit: int | None = None,
         include: list[str] | None = None,
     ) -> VectorGetResult:
+        collection = await self._aget_collection()
         kwargs: dict[str, Any] = {"where": where}
         if limit is not None:
             kwargs["limit"] = limit
         if include is not None:
-            kwargs["include"] = include
-        vectorstore = await self._aget_vectorstore()
+            chroma_include = [item for item in include if item != "ids"]
+            if chroma_include:
+                kwargs["include"] = chroma_include
 
-        async def _get() -> dict[str, Any]:
-            return await asyncio.to_thread(vectorstore.get, **kwargs)
-
-        raw_results = await self._await_with_chroma_timeout(_get())
+        raw_results = await self._run_collection_op(collection.get, **kwargs)
 
         ids = raw_results.get("ids") or []
         documents = raw_results.get("documents") or []
@@ -189,12 +214,12 @@ class BaseChromaBackend(VectorStoreBackend):
         where: MetadataFilter | None = None,
         ids: list[str] | None = None,
     ) -> None:
-        vectorstore = await self._aget_vectorstore()
+        collection = await self._aget_collection()
         if ids is not None:
-            await self._await_with_chroma_timeout(vectorstore.adelete(ids=ids))
+            await self._run_collection_op(collection.delete, ids=ids)
             return
         if where is not None:
-            await self._await_with_chroma_timeout(asyncio.to_thread(vectorstore.delete, where=where))
+            await self._run_collection_op(collection.delete, where=where)
             return
         raise ValueError("Either where or ids must be provided to delete vectors")
 
@@ -209,31 +234,20 @@ class BaseChromaBackend(VectorStoreBackend):
             self.tenant_id,
             self.collection_name,
         )
-        vectorstore = await self._aget_vectorstore()
-        client = vectorstore._client
+        await self._aget_collection()
+        client = self._client
+        if client is None:
+            raise RuntimeError("Chroma client not initialized")
         await self._await_with_chroma_timeout(
             asyncio.to_thread(client.delete_collection, name=self.collection_name)
         )
-        self._vectorstore = None
+        self._client = None
+        self._collection = None
         self._logger.info(
             "Collection deleted for tenant_id=%s, collection_name=%s",
             self.tenant_id,
             self.collection_name,
         )
-
-
-class HttpChromaBackend(BaseChromaBackend):
-    """Client/server Chroma backend using HttpClient."""
-
-    def _create_vectorstore(self) -> Chroma:
-        kwargs = self._build_common_kwargs()
-        client_settings = chromadb.config.Settings(anonymized_telemetry=False)
-        kwargs["client"] = chromadb.HttpClient(
-            **EnvConfig.chroma_http_client_kwargs(),
-            settings=client_settings,
-        )
-        kwargs["collection_name"] = self.collection_name
-        return Chroma(**kwargs)
 
     def describe(self) -> dict[str, Any]:
         return {
@@ -246,13 +260,13 @@ class HttpChromaBackend(BaseChromaBackend):
 
 def get_vector_backend(
     tenant_id: int,
-    embeddings: Embeddings | None = None,
+    embeddings: Embeddings,
 ) -> VectorStoreBackend:
     """Factory for vector backend implementations.
 
     Args:
         tenant_id: Tenant identifier
-        embeddings: Pre-created embeddings instance. If None, uses Chroma's default.
+        embeddings: Tenant-configured embedding client (required).
 
     Returns:
         VectorStoreBackend instance
