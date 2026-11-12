@@ -6,36 +6,11 @@ import uuid
 
 import pytest
 from langchain_core.documents import Document
-from langchain_core.embeddings import Embeddings
-
 from apps.shared.data_source.schemas import RAGSourceType
 from apps.shared.infra.rag.rag_manager import RAGManager
+from tests.keyword_embeddings import KeywordEmbeddings
 
 pytestmark = pytest.mark.asyncio
-
-
-class KeywordEmbeddings(Embeddings):
-    """Deterministic keyword-count embeddings for integration tests."""
-
-    _keywords = [
-        "alpha",
-        "beta",
-        "tenant1",
-        "tenant2",
-        "document",
-        "asset",
-        "shared",
-    ]
-
-    def _encode(self, text: str) -> list[float]:
-        lowered = text.lower()
-        return [float(lowered.count(keyword)) for keyword in self._keywords]
-
-    def embed_documents(self, texts: list[str]) -> list[list[float]]:
-        return [self._encode(text) for text in texts]
-
-    def embed_query(self, text: str) -> list[float]:
-        return self._encode(text)
 
 
 @pytest.fixture

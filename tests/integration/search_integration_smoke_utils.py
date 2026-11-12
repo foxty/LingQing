@@ -1,10 +1,6 @@
 from __future__ import annotations
 
-"""Shared utilities for search quality benchmark integration tests.
-
-This module centralizes common benchmark logic so API connector, document,
-and asset benchmark suites use the same schema checks and top-N assertions.
-"""
+"""Utilities for search integration smoke tests (pipeline regression, not embedding quality)."""
 
 import json
 import os
@@ -15,29 +11,35 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-SEARCH_QUALITY_MODES = ("fts", "vector", "hybrid")
-SEARCH_QUALITY_REPORT_PATH = Path("tests/integration/artifacts/search_quality_metrics.jsonl")
+SEARCH_INTEGRATION_SMOKE_MODES = ("fts", "vector", "hybrid")
+SEARCH_INTEGRATION_SMOKE_REPORT_PATH = Path(
+    "tests/integration/artifacts/search_integration_smoke.jsonl"
+)
 
 
-def get_search_quality_report_path() -> Path:
-    """Resolve artifact path, allowing override via env for CLI temporary runs."""
-    raw = os.getenv("SEARCH_QUALITY_REPORT_PATH", "").strip()
+def get_search_integration_smoke_report_path() -> Path:
+    """Resolve artifact path; override via env for CLI runs."""
+    raw = os.getenv("SEARCH_INTEGRATION_SMOKE_REPORT_PATH", "").strip()
+    if not raw:
+        raw = os.getenv("SEARCH_QUALITY_REPORT_PATH", "").strip()
     if raw:
         return Path(raw)
-    return SEARCH_QUALITY_REPORT_PATH
+    return SEARCH_INTEGRATION_SMOKE_REPORT_PATH
 
 
-def should_write_search_quality_report() -> bool:
-    """Return whether benchmark result rows should be persisted to artifact file."""
-    raw = os.getenv("SEARCH_QUALITY_WRITE_REPORT", "0").strip().lower()
+def should_write_search_integration_smoke_report() -> bool:
+    raw = os.getenv("SEARCH_INTEGRATION_SMOKE_WRITE_REPORT", "").strip().lower()
+    if not raw:
+        raw = os.getenv("SEARCH_QUALITY_WRITE_REPORT", "0").strip().lower()
     return raw not in {"0", "false", "no", "off"}
 
 
-def get_search_quality_modes() -> list[str]:
-    """Get benchmark modes from env var, defaulting to all modes in one run."""
-    raw = os.getenv("SEARCH_QUALITY_MODES", "fts,vector,hybrid")
+def get_search_integration_smoke_modes() -> list[str]:
+    raw = os.getenv("SEARCH_INTEGRATION_SMOKE_MODES", "")
+    if not raw:
+        raw = os.getenv("SEARCH_QUALITY_MODES", "fts,vector,hybrid")
     modes = [part.strip().lower() for part in raw.split(",") if part.strip()]
-    valid = [mode for mode in modes if mode in SEARCH_QUALITY_MODES]
+    valid = [mode for mode in modes if mode in SEARCH_INTEGRATION_SMOKE_MODES]
     return valid or ["fts"]
 
 
@@ -77,7 +79,7 @@ def resolve_top_n_for_mode(
     return top_n
 
 
-def write_search_quality_result(
+def write_search_integration_smoke_result(
     *,
     resource: str,
     mode: str,
@@ -88,11 +90,10 @@ def write_search_quality_result(
     found_rank: int | None,
     passed: bool,
 ) -> None:
-    """Append one row-level top-N result record for downstream analysis."""
-    if not should_write_search_quality_report():
+    if not should_write_search_integration_smoke_report():
         return
 
-    report_path = get_search_quality_report_path()
+    report_path = get_search_integration_smoke_report_path()
     report_path.parent.mkdir(parents=True, exist_ok=True)
     record = {
         "timestamp_utc": datetime.now(timezone.utc).isoformat(),
@@ -109,8 +110,12 @@ def write_search_quality_result(
         f.write(json.dumps(record, ensure_ascii=True) + "\n")
 
 
+# Backward-compatible aliases (deprecated)
+write_search_quality_result = write_search_integration_smoke_result
+get_search_quality_modes = get_search_integration_smoke_modes
+
+
 async def assert_column_exists(schema_session: AsyncSession, table_name: str, column_name: str) -> None:
-    """Fail fast if a required migration-provided column is missing."""
     exists = await schema_session.scalar(
         text(
             """
@@ -132,7 +137,6 @@ async def assert_column_exists(schema_session: AsyncSession, table_name: str, co
 
 
 async def assert_index_exists(schema_session: AsyncSession, index_name: str) -> None:
-    """Fail fast if a required migration-provided index is missing."""
     exists = await schema_session.scalar(
         text(
             """

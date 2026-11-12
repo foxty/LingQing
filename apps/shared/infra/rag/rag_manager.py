@@ -72,20 +72,19 @@ class RAGManager:
     - Physical storage is delegated to vector backend implementations
 
     Embedding Configuration:
-    - Supports configurable embedding models via tenant settings
-    - Falls back to Chroma's built-in embedding when no config is provided
+    - Requires tenant default embedding profile (see resolve_tenant_embeddings).
     """
 
     def __init__(
         self,
         tenant_id: int,
-        embeddings: Embeddings | None = None,
+        embeddings: Embeddings,
     ):
         """Initialize RAG Manager.
 
         Args:
             tenant_id: Unique identifier for the tenant (required).
-            embeddings: Pre-created Embeddings instance. If None, uses Chroma's default.
+            embeddings: Pre-created Embeddings instance from tenant LLM settings.
             text_splitter: Text splitter instance. If None, uses default.
         """
         self.tenant_id = tenant_id
@@ -130,19 +129,6 @@ class RAGManager:
             List of document chunks.
         """
         return self._split_documents(documents)
-
-    def _add_documents_to_vectorstore(self, documents: List[Document]) -> None:
-        """Add documents to the existing vector store.
-
-        Args:
-            documents: List of documents to add
-        """
-        # Kept for backward compatibility. Prefer add_chunks() async path.
-        raw_vectorstore = getattr(self._backend, "_vectorstore", None)
-        if raw_vectorstore is None:
-            raise RuntimeError("Sync add_documents path is unavailable for this backend")
-        raw_vectorstore.add_documents(documents)
-        logger.debug(f"Added {len(documents)} documents to vector backend")
 
     async def add_chunks(self, chunks: List[Document]) -> int:
         """Add pre-processed chunks to vector store.

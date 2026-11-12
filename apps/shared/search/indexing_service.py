@@ -14,6 +14,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from langchain_core.documents import Document
+from langchain_core.embeddings import Embeddings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -69,7 +70,7 @@ class ResourceIndexService:
         self,
         tenant_id: int,
         db_session: AsyncSession,
-        embeddings=None,
+        embeddings: Embeddings,
         file_storage: FileStorage | None = None,
     ):
         self.tenant_id = tenant_id

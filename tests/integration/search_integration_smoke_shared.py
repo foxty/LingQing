@@ -1,3 +1,5 @@
+"""Search integration smoke: /search pipeline + FTS/vector/hybrid wiring (not prod relevance)."""
+
 from __future__ import annotations
 
 import json
@@ -29,14 +31,15 @@ from apps.shared.schemas.user import UserDTO
 from apps.shared.search.schemas import ResourceIndexCreateDTO
 from apps.shared.search.search_service import SearchService
 from apps.tenant_app_service.server import app
-from tests.integration.search_quality_test_utils import (
+from tests.integration.search_integration_smoke_utils import (
     assert_column_exists,
     assert_index_exists,
     resolve_top_n_for_mode,
-    write_search_quality_result,
+    write_search_integration_smoke_result,
 )
+from tests.keyword_embeddings import KeywordEmbeddings
 
-BENCHMARK_DATA_PATH = Path(__file__).parent / "fixtures" / "search_quality_benchmark.json"
+FIXTURE_DATA_PATH = Path(__file__).parent / "fixtures" / "search_integration_smoke.json"
 
 
 @dataclass
@@ -48,8 +51,8 @@ class QueryTopNExpectation:
     top_n_by_mode: dict[str, Any] | None
 
 
-def _load_benchmark_data() -> dict[str, Any]:
-    with BENCHMARK_DATA_PATH.open("r", encoding="utf-8") as f:
+def _load_fixture_data() -> dict[str, Any]:
+    with FIXTURE_DATA_PATH.open("r", encoding="utf-8") as f:
         return json.load(f)
 
 
@@ -151,8 +154,21 @@ RESOURCE_SPECS: dict[str, dict[str, Any]] = {
 
 
 @pytest_asyncio.fixture
-async def search_quality_benchmark_env(async_db_session: AsyncSession):
-    benchmark = _load_benchmark_data()
+async def search_integration_smoke_env(async_db_session: AsyncSession, monkeypatch: pytest.MonkeyPatch):
+    """HTTP /search pipeline smoke: FTS + vector wiring (not production embedding quality)."""
+    keyword_embeddings = KeywordEmbeddings()
+
+    async def _resolve_tenant_embeddings(_tenant_id: int, _db: AsyncSession):
+        return keyword_embeddings
+
+    for patch_target in (
+        "apps.shared.llm_providers.embedding_resolver.resolve_tenant_embeddings",
+        "apps.shared.search.indexing_service.resolve_tenant_embeddings",
+        "apps.tenant_app_service.routers.search.resolve_tenant_embeddings",
+    ):
+        monkeypatch.setattr(patch_target, _resolve_tenant_embeddings)
+
+    benchmark = _load_fixture_data()
     api_benchmark = benchmark["api_connector"]
     doc_benchmark = benchmark["document"]
     asset_benchmark = benchmark["asset_metadata"]
@@ -185,13 +201,13 @@ async def search_quality_benchmark_env(async_db_session: AsyncSession):
 
     suffix = uuid4().hex[:8]
     async with test_session_local() as seed_session:
-        tenant = Tenant(name=f"search-quality-{suffix}", slug=f"search-quality-{suffix}", status="active")
+        tenant = Tenant(name=f"search-smoke-{suffix}", slug=f"search-smoke-{suffix}", status="active")
         seed_session.add(tenant)
         await seed_session.flush()
 
         user = User(
-            username=f"search_quality_user_{suffix}",
-            email=f"search_quality_{suffix}@test.local",
+            username=f"search_smoke_user_{suffix}",
+            email=f"search_smoke_{suffix}@test.local",
             hashed_password="hashed",
             role="admin",
             tenant_id=tenant.id,
@@ -202,9 +218,9 @@ async def search_quality_benchmark_env(async_db_session: AsyncSession):
 
         document_collection = DocumentCollection(
             tenant_id=tenant.id,
-            name="search-quality-benchmark",
+            name="search-integration-smoke",
             owner_id=user.id,
-            description="Benchmark document collection",
+            description="Integration smoke document collection",
         )
         seed_session.add(document_collection)
         await seed_session.flush()
@@ -213,7 +229,7 @@ async def search_quality_benchmark_env(async_db_session: AsyncSession):
         connector = await service.create_connector(
             owner_id=user.id,
             name="quality-connector",
-            description="connector for search quality benchmark",
+            description="connector for search integration smoke",
             base_url="https://8.8.8.8",
             auth_type="none",
             auth_config={},
@@ -241,7 +257,9 @@ async def search_quality_benchmark_env(async_db_session: AsyncSession):
 
         from apps.shared.search.indexing_service import ResourceIndexService
 
-        indexing_svc = ResourceIndexService(tenant_id=tenant.id, db_session=seed_session)
+        indexing_svc = ResourceIndexService(
+            tenant_id=tenant.id, db_session=seed_session, embeddings=keyword_embeddings
+        )
         await seed_session.commit()
         await indexing_svc.sync_all_pending()
 
@@ -388,7 +406,7 @@ async def search_quality_benchmark_env(async_db_session: AsyncSession):
         # Sync all ResourceIndex records to populate tokenized_content for FTS
         await indexing_svc.sync_all_pending()
 
-        rag_manager = RAGManager(tenant_id=tenant.id)
+        rag_manager = RAGManager(tenant_id=tenant.id, embeddings=keyword_embeddings)
         await rag_manager.clear_by_source_type(RAGSourceType.DOCUMENT.value)
         await rag_manager.clear_by_source_type(RAGSourceType.ASSET.value)
         from langchain_core.documents import Document as LangChainDocument
@@ -536,7 +554,7 @@ def execute_topn_cases(
                 break
 
         passed = found_rank is not None
-        write_search_quality_result(
+        write_search_integration_smoke_result(
             resource=resource,
             mode=search_mode,
             case_id=item.case_id,

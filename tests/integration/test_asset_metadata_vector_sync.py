@@ -137,7 +137,9 @@ async def actor_context(test_user: User, test_tenant: Tenant):
 @pytest_asyncio.fixture
 async def rag_manager(test_tenant: Tenant):
     """Create RAG manager for vector operations."""
-    return RAGManager(tenant_id=test_tenant.id)
+    from tests.stub_embeddings import StubEmbeddings
+
+    return RAGManager(tenant_id=test_tenant.id, embeddings=StubEmbeddings())
 
 
 async def _wait_until(condition_fn, timeout=10, interval=0.5):
@@ -165,7 +167,13 @@ class TestAssetMetadataUpdateVectorSync:
     ):
         """Verify that updating asset metadata creates/updates ResourceIndex record."""
         # Initial state: ResourceIndex should exist with initial content
-        index_service = ResourceIndexService(tenant_id=test_tenant.id, db_session=async_db_session)
+        from tests.stub_embeddings import StubEmbeddings
+
+        index_service = ResourceIndexService(
+            tenant_id=test_tenant.id,
+            db_session=async_db_session,
+            embeddings=StubEmbeddings(),
+        )
         initial_index = await index_service.get_by_resource(RAGSourceType.ASSET.value, test_asset.id)
         assert initial_index is not None
         assert initial_index.raw_content is not None
@@ -210,7 +218,13 @@ class TestAssetMetadataUpdateVectorSync:
     ):
         """Verify that sync deletes old vectors before adding new ones."""
         # Step 1: Create initial ResourceIndex and sync to vector DB
-        index_service = ResourceIndexService(tenant_id=test_tenant.id, db_session=async_db_session)
+        from tests.stub_embeddings import StubEmbeddings
+
+        index_service = ResourceIndexService(
+            tenant_id=test_tenant.id,
+            db_session=async_db_session,
+            embeddings=StubEmbeddings(),
+        )
         initial_index = await index_service.get_by_resource(RAGSourceType.ASSET.value, test_asset.id)
 
         # Manually trigger sync for initial content
@@ -293,7 +307,13 @@ class TestAssetMetadataUpdateVectorSync:
         rag_manager: RAGManager,
     ):
         """Verify that both FTS and Vector DB are updated and consistent."""
-        index_service = ResourceIndexService(tenant_id=test_tenant.id, db_session=async_db_session)
+        from tests.stub_embeddings import StubEmbeddings
+
+        index_service = ResourceIndexService(
+            tenant_id=test_tenant.id,
+            db_session=async_db_session,
+            embeddings=StubEmbeddings(),
+        )
 
         # Step 1: Initial sync
         task_context: TaskExecutionContext = {"tenant_id": test_tenant.id}
@@ -371,7 +391,13 @@ class TestAssetMetadataUpdateVectorSync:
         rag_manager: RAGManager,
     ):
         """Verify that multiple sequential updates don't accumulate duplicate vectors."""
-        index_service = ResourceIndexService(tenant_id=test_tenant.id, db_session=async_db_session)
+        from tests.stub_embeddings import StubEmbeddings
+
+        index_service = ResourceIndexService(
+            tenant_id=test_tenant.id,
+            db_session=async_db_session,
+            embeddings=StubEmbeddings(),
+        )
         task_context: TaskExecutionContext = {"tenant_id": test_tenant.id}
 
         # Initial sync
