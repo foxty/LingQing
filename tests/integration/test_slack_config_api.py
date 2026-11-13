@@ -131,6 +131,24 @@ class TestSlackConfigApi:
         assert body["bot_token_configured"] is False
 
     @pytest.mark.asyncio
+    async def test_prepare_concurrent_requests_are_idempotent(self, slack_test_setup):
+        import asyncio
+
+        client = slack_test_setup["client"]
+        token = slack_test_setup["tenants"]["tenant_a"]["token"]
+        agent_id = await _create_test_agent(client, token)
+        headers = make_auth_headers(token)
+        url = f"/agents/{agent_id}/integrations/slack/prepare"
+
+        resp_a, resp_b = await asyncio.gather(
+            client.post(url, headers=headers),
+            client.post(url, headers=headers),
+        )
+        assert resp_a.status_code == 200
+        assert resp_b.status_code == 200
+        assert resp_a.json()["endpoint_key"] == resp_b.json()["endpoint_key"]
+
+    @pytest.mark.asyncio
     async def test_download_manifest_without_integration_provisions_endpoint(self, slack_test_setup):
         client = slack_test_setup["client"]
         token = slack_test_setup["tenants"]["tenant_a"]["token"]

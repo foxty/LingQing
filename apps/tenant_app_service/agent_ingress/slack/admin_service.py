@@ -74,16 +74,7 @@ class SlackAdminService:
 
     async def ensure_provisioned_endpoint(self, tenant_id: int, agent_id: int) -> AgentIngressEndpoint:
         """Ensure an ingress endpoint row exists so manifest Events URL is stable."""
-        endpoint = await self.repo.get_endpoint_by_agent(tenant_id, agent_id)
-        if endpoint:
-            return endpoint
-        return await self.repo.create_endpoint(
-            tenant_id=tenant_id,
-            agent_id=agent_id,
-            bot_token="",
-            signing_secret="",
-            enabled=False,
-        )
+        return await self.repo.ensure_stub_endpoint(tenant_id=tenant_id, agent_id=agent_id)
 
     async def create_integration(
         self,

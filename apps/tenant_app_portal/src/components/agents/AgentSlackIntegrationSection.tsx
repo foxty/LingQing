@@ -17,6 +17,7 @@ import {
   disableAgentSlackIntegration,
   downloadAgentSlackAppManifest,
   enableAgentSlackIntegration,
+  getAgentSlackIntegration,
   prepareAgentSlackIntegration,
   testAgentSlackConnection,
   updateAgentSlackIntegration,
@@ -36,6 +37,8 @@ i18n.addResourceBundle(
         title: 'Slack',
         description: 'Connect a dedicated Slack app so users can DM or @mention this agent.',
         connect: 'Connect Slack',
+        connectSuccess: 'Slack connected for this agent',
+        connectFailed: 'Could not connect Slack',
         update: 'Save credentials',
         botToken: 'Bot User OAuth Token',
         signingSecret: 'Signing Secret',
@@ -53,20 +56,25 @@ i18n.addResourceBundle(
         channelChatDisabled: 'Channel and group chat disabled',
         channelChatSaveFailed: 'Could not update channel chat',
         ingress: 'Slack ingress',
-        ingressDesc: 'Messages from Slack are ignored while this is off.',
-        saveCredentialsFirst: 'Save credentials to turn Slack on.',
+        ingressDesc: 'When on, this agent handles Slack direct messages and events.',
+        channelChatRequiresIngress:
+          'Turn on Slack ingress before enabling channel and group chat.',
+        saveCredentialsFirst: 'Save credentials before you can turn on Slack ingress.',
         identityPending: 'Run Test connection to show the workspace, app, and bot.',
-        sectionSlackDesc: 'Who can reach this agent from Slack.',
+        sectionSlackDesc:
+          'Turn on message handling after the Slack app and credentials are configured above.',
         sectionApp: 'Slack app',
-        sectionAppDesc: "Create or open the Slack app, then save this agent's credentials.",
-        deleteIntegration: 'Remove Slack bot',
+        sectionAppDesc:
+          'Start here: create or open the Slack app, paste request URLs, then save credentials.',
+        deleteIntegration: 'Remove Slack app',
         downloadManifest: 'Download manifest',
         tokenInvalid: 'Bot token and signing secret are required',
         saveSuccess: 'Slack settings saved',
         saveFailed: 'Save failed',
         deleteSuccess: 'Slack bot removed',
         deleteFailed: 'Delete failed',
-        confirmDelete: 'Remove this agent Slack bot? Existing channel mappings will stop working.',
+        confirmDelete:
+          'Remove this Slack app from the agent? Slack traffic stops immediately. Reconnecting generates new request URLs—you must update your Slack app.',
         emptyTokenKeepsPrevious: 'Leave blank to keep the existing value.',
         statusConnected: 'Connected',
         statusDisabled: 'Disabled',
@@ -119,6 +127,8 @@ i18n.addResourceBundle(
         title: 'Slack',
         description: '为此智能体连接独立 Slack 应用，支持私信与频道 @mention。',
         connect: '连接 Slack',
+        connectSuccess: '已为此智能体连接 Slack',
+        connectFailed: '无法连接 Slack',
         update: '保存凭证',
         botToken: 'Bot User OAuth Token',
         signingSecret: 'Signing Secret',
@@ -135,20 +145,22 @@ i18n.addResourceBundle(
         channelChatDisabled: '已关闭频道与群聊',
         channelChatSaveFailed: '无法更新频道与群聊设置',
         ingress: 'Slack 入站',
-        ingressDesc: '关闭后，来自 Slack 的消息不会被处理。',
-        saveCredentialsFirst: '保存凭证后即可开启 Slack。',
+        ingressDesc: '开启后，该智能体将处理 Slack 私信与相关事件。',
+        channelChatRequiresIngress: '请先开启 Slack 入站，再开启频道与群聊。',
+        saveCredentialsFirst: '请先保存凭证，再开启 Slack 入站。',
         identityPending: '运行「测试连接」后显示工作区、应用和机器人。',
-        sectionSlackDesc: '谁可以从 Slack 联系此智能体。',
+        sectionSlackDesc: '在上方完成 Slack 应用与凭证后，再开启消息处理。',
         sectionApp: 'Slack 应用',
-        sectionAppDesc: '创建或打开 Slack 应用，然后保存此智能体的凭证。',
-        deleteIntegration: '移除 Slack 机器人',
+        sectionAppDesc: '从这里开始：创建或打开 Slack 应用，配置请求 URL，并保存凭证。',
+        deleteIntegration: '移除 Slack 应用',
         downloadManifest: '下载 Manifest',
         tokenInvalid: 'Bot Token 和 Signing Secret 为必填项',
         saveSuccess: 'Slack 配置已保存',
         saveFailed: '保存失败',
         deleteSuccess: 'Slack 机器人已移除',
         deleteFailed: '删除失败',
-        confirmDelete: '移除此智能体的 Slack 机器人？现有频道映射将失效。',
+        confirmDelete:
+          '移除此智能体的 Slack 应用？Slack 消息将立即停止。重新连接会生成新的请求 URL，需在 Slack 应用中更新。',
         emptyTokenKeepsPrevious: '留空则保留原值。',
         statusConnected: '已连接',
         statusDisabled: '已禁用',
@@ -213,6 +225,7 @@ export default function AgentSlackIntegrationSection({
   const [downloadingManifest, setDownloadingManifest] = useState(false)
   const [channelChatSaving, setChannelChatSaving] = useState(false)
   const [ingressSaving, setIngressSaving] = useState(false)
+  const [connecting, setConnecting] = useState(false)
   const [testResult, setTestResult] = useState<SlackTestConnectionResponse | null>(null)
   const [saveError, setSaveError] = useState<string | null>(null)
   const deleteConfirm = useConfirmation<SlackIntegration>()
@@ -220,7 +233,7 @@ export default function AgentSlackIntegrationSection({
   useEffect(() => {
     let active = true
     setLoading(true)
-    prepareAgentSlackIntegration(agentId)
+    getAgentSlackIntegration(agentId)
       .then((existing) => {
         if (active) setIntegration(existing)
       })
@@ -276,12 +289,27 @@ export default function AgentSlackIntegrationSection({
     }
   }
 
+  const connectSlack = async () => {
+    setConnecting(true)
+    try {
+      const provisioned = await prepareAgentSlackIntegration(agentId)
+      setIntegration(provisioned)
+      onChanged?.()
+      showSuccess(t('agents.slackIntegration.connectSuccess'))
+    } catch (error: unknown) {
+      showError(getApiErrorMessage(error, t('agents.slackIntegration.connectFailed')))
+    } finally {
+      setConnecting(false)
+    }
+  }
+
   const remove = async () => {
     deleteConfirm.setLoading(true)
     try {
       await deleteAgentSlackIntegration(agentId)
-      const refreshed = await prepareAgentSlackIntegration(agentId)
-      setIntegration(refreshed)
+      setIntegration(null)
+      setBotToken('')
+      setSigningSecret('')
       setTestResult(null)
       onChanged?.()
       showSuccess(t('agents.slackIntegration.deleteSuccess'))
@@ -369,8 +397,7 @@ export default function AgentSlackIntegrationSection({
       const result = await testAgentSlackConnection(agentId)
       setTestResult(result)
       if (result.ok) {
-        const refreshed = await prepareAgentSlackIntegration(agentId)
-        setIntegration(refreshed)
+        setIntegration(await getAgentSlackIntegration(agentId))
         onChanged?.()
       }
     } catch (error: unknown) {
@@ -382,14 +409,28 @@ export default function AgentSlackIntegrationSection({
   }
 
   const controlsLocked = !credentialsConfigured
+  const ingressOn = Boolean(integration?.enabled)
+  const channelChatLocked = controlsLocked || channelChatSaving || !ingressOn
+
+  if (!integration) {
+    return (
+      <div className={embedded ? 'space-y-4' : 'space-y-4 rounded-lg border p-4'}>
+        <p className="text-sm text-muted-foreground">{t('agents.slackIntegration.description')}</p>
+        <Button type="button" onClick={() => void connectSlack()} disabled={connecting}>
+          {connecting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+          {t('agents.slackIntegration.connect')}
+        </Button>
+      </div>
+    )
+  }
 
   return (
     <div className={embedded ? 'space-y-4' : 'space-y-4 rounded-lg border p-4'}>
       <p className="text-sm text-muted-foreground">{t('agents.slackIntegration.description')}</p>
 
       <SettingsSection
-        title={t('agents.slackIntegration.title')}
-        description={t('agents.slackIntegration.sectionSlackDesc')}
+        title={t('agents.slackIntegration.sectionApp')}
+        description={t('agents.slackIntegration.sectionAppDesc')}
       >
         <div className="space-y-4">
           {controlsLocked ? (
@@ -398,20 +439,123 @@ export default function AgentSlackIntegrationSection({
             </p>
           ) : null}
 
+          <div className="flex flex-wrap items-center gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={downloadingManifest}
+              onClick={async () => {
+                setDownloadingManifest(true)
+                try {
+                  await downloadAgentSlackAppManifest(agentId)
+                  setIntegration(await getAgentSlackIntegration(agentId))
+                  onChanged?.()
+                } catch {
+                  showError(t('agents.slackIntegration.downloadManifestFailed'))
+                } finally {
+                  setDownloadingManifest(false)
+                }
+              }}
+            >
+              {downloadingManifest ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : (
+                <Download className="mr-2 h-4 w-4" />
+              )}
+              {t('agents.slackIntegration.downloadManifest')}
+            </Button>
+            <a
+              href="https://api.slack.com/apps"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
+            >
+              api.slack.com/apps
+              <ExternalLink className="ml-1 h-3.5 w-3.5" />
+            </a>
+          </div>
+
+          <div className="space-y-3">
+            <CopyableEventsUrl
+              label={t('agents.slackIntegration.eventsUrl')}
+              value={integration.events_url}
+            />
+            <CopyableEventsUrl
+              label={t('agents.slackIntegration.interactionsUrl')}
+              value={integration.interactions_url}
+            />
+            <p className="text-xs text-muted-foreground">
+              {t('agents.slackIntegration.interactivityNote')}
+            </p>
+          </div>
+
+          <div className="grid gap-4 sm:grid-cols-2">
+            <CredentialField
+              id={`slack-bot-token-${agentId}`}
+              label={t('agents.slackIntegration.botToken')}
+              configured={Boolean(integration?.bot_token_configured)}
+              value={botToken}
+              emptyPlaceholder={t('agents.slackIntegration.botTokenPlaceholder')}
+              onChange={setBotToken}
+            />
+            <CredentialField
+              id={`slack-signing-secret-${agentId}`}
+              label={t('agents.slackIntegration.signingSecret')}
+              configured={Boolean(integration?.signing_secret_configured)}
+              value={signingSecret}
+              emptyPlaceholder={t('agents.slackIntegration.signingSecretPlaceholder')}
+              onChange={setSigningSecret}
+            />
+          </div>
+          {credentialsConfigured ? (
+            <p className="text-xs text-muted-foreground">
+              {t('agents.slackIntegration.emptyTokenKeepsPrevious')}
+            </p>
+          ) : null}
+          {saveError ? (
+            <Alert variant="destructive">
+              <AlertDescription>{saveError}</AlertDescription>
+            </Alert>
+          ) : null}
+          <div>
+            <Button type="button" onClick={() => void save()} disabled={saving}>
+              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+              {t('agents.slackIntegration.update')}
+            </Button>
+          </div>
+        </div>
+      </SettingsSection>
+
+      <SettingsSection
+        title={t('agents.slackIntegration.title')}
+        description={t('agents.slackIntegration.sectionSlackDesc')}
+      >
+        <div className="space-y-4">
+          {!controlsLocked && !ingressOn ? (
+            <Alert>
+              <AlertDescription>{t('agents.slackIntegration.disabledNotice')}</AlertDescription>
+            </Alert>
+          ) : null}
+
           <PolicyRow
             id={`slack-ingress-${agentId}`}
             label={t('agents.slackIntegration.ingress')}
             description={t('agents.slackIntegration.ingressDesc')}
-            checked={Boolean(integration?.enabled)}
-            disabled={controlsLocked || ingressSaving || !integration}
+            checked={ingressOn}
+            disabled={controlsLocked || ingressSaving}
             onCheckedChange={(checked) => void setIngress(checked)}
           />
           <PolicyRow
             id={`slack-channel-chat-${agentId}`}
             label={t('agents.slackIntegration.channelChat')}
-            description={t('agents.slackIntegration.channelChatDesc')}
-            checked={integration?.channel_chat_enabled !== false}
-            disabled={controlsLocked || channelChatSaving || !integration}
+            description={
+              !ingressOn && credentialsConfigured
+                ? t('agents.slackIntegration.channelChatRequiresIngress')
+                : t('agents.slackIntegration.channelChatDesc')
+            }
+            checked={integration.channel_chat_enabled !== false}
+            disabled={channelChatLocked}
             onCheckedChange={(checked) => void setChannelChat(checked)}
           />
 
@@ -449,109 +593,12 @@ export default function AgentSlackIntegrationSection({
         </div>
       </SettingsSection>
 
-      <SettingsSection
-        title={t('agents.slackIntegration.sectionApp')}
-        description={t('agents.slackIntegration.sectionAppDesc')}
-      >
-        <div className="space-y-4">
-          <div className="flex flex-wrap items-center gap-2">
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              disabled={downloadingManifest}
-              onClick={async () => {
-                setDownloadingManifest(true)
-                try {
-                  await downloadAgentSlackAppManifest(agentId)
-                  const refreshed = await prepareAgentSlackIntegration(agentId)
-                  setIntegration(refreshed)
-                  onChanged?.()
-                } catch {
-                  showError(t('agents.slackIntegration.downloadManifestFailed'))
-                } finally {
-                  setDownloadingManifest(false)
-                }
-              }}
-            >
-              {downloadingManifest ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <Download className="mr-2 h-4 w-4" />
-              )}
-              {t('agents.slackIntegration.downloadManifest')}
-            </Button>
-            <a
-              href="https://api.slack.com/apps"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
-            >
-              api.slack.com/apps
-              <ExternalLink className="ml-1 h-3.5 w-3.5" />
-            </a>
-          </div>
-
-          {integration ? (
-            <div className="space-y-3">
-              <CopyableEventsUrl
-                label={t('agents.slackIntegration.eventsUrl')}
-                value={integration.events_url}
-              />
-              <CopyableEventsUrl
-                label={t('agents.slackIntegration.interactionsUrl')}
-                value={integration.interactions_url}
-              />
-              <p className="text-xs text-muted-foreground">
-                {t('agents.slackIntegration.interactivityNote')}
-              </p>
-            </div>
-          ) : null}
-
-          <div className="grid gap-4 sm:grid-cols-2">
-            <CredentialField
-              id={`slack-bot-token-${agentId}`}
-              label={t('agents.slackIntegration.botToken')}
-              configured={Boolean(integration?.bot_token_configured)}
-              value={botToken}
-              emptyPlaceholder={t('agents.slackIntegration.botTokenPlaceholder')}
-              onChange={setBotToken}
-            />
-            <CredentialField
-              id={`slack-signing-secret-${agentId}`}
-              label={t('agents.slackIntegration.signingSecret')}
-              configured={Boolean(integration?.signing_secret_configured)}
-              value={signingSecret}
-              emptyPlaceholder={t('agents.slackIntegration.signingSecretPlaceholder')}
-              onChange={setSigningSecret}
-            />
-          </div>
-          {credentialsConfigured ? (
-            <p className="text-xs text-muted-foreground">
-              {t('agents.slackIntegration.emptyTokenKeepsPrevious')}
-            </p>
-          ) : null}
-          {saveError ? (
-            <Alert variant="destructive">
-              <AlertDescription>{saveError}</AlertDescription>
-            </Alert>
-          ) : null}
-          <div>
-            <Button type="button" onClick={save} disabled={saving}>
-              {saving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-              {t('agents.slackIntegration.update')}
-            </Button>
-          </div>
-        </div>
-      </SettingsSection>
-
       <Button
         type="button"
         variant="outline"
         size="sm"
         className="text-destructive hover:text-destructive"
-        disabled={!integration || !credentialsConfigured}
-        onClick={() => integration && deleteConfirm.open(integration)}
+        onClick={() => deleteConfirm.open(integration)}
       >
         <Trash2 className="mr-2 h-4 w-4" />
         {t('agents.slackIntegration.deleteIntegration')}

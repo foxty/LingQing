@@ -6,7 +6,6 @@ import {
   Bot,
   ChevronRight,
   MessageSquare,
-  MoreHorizontal,
   Plus,
   Settings,
   Share2,
@@ -21,13 +20,6 @@ import EmptyState from '@/components/EmptyState'
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import { useAuth } from '@/hooks/useAuth'
 import { useAgents, useDeleteAgent } from '@/hooks/useAgents'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
@@ -265,8 +257,8 @@ function AgentCatalogCard({
   onDelete: (event: MouseEvent) => void
 }) {
   const { t } = useTranslation()
-  const showOverflow =
-    (!agent.is_system && agent.can_manage) || (!agent.is_system && agent.can_write)
+  const showManageActions = !agent.is_system && agent.can_manage
+  const showWriteActions = !agent.is_system && agent.can_write
 
   return (
     <div
@@ -306,40 +298,38 @@ function AgentCatalogCard({
         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
       </div>
 
-      <div className="mt-4 flex items-center gap-2" onClick={(event) => event.stopPropagation()}>
+      <div
+        className="mt-4 flex flex-wrap items-center gap-2"
+        onClick={(event) => event.stopPropagation()}
+      >
         <Button size="sm" onClick={onChat}>
           <MessageSquare className="mr-2 h-4 w-4" />
           {t('agents.openChat')}
         </Button>
-        {showOverflow ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button size="sm" variant="outline" aria-label={t('agents.rowActions')}>
-                <MoreHorizontal className="h-4 w-4" />
+        {showManageActions || showWriteActions ? (
+          <>
+            <Button size="sm" variant="outline" onClick={onSettings}>
+              <Settings className="mr-2 h-4 w-4" />
+              {t('agents.settings')}
+            </Button>
+            {showManageActions ? (
+              <Button size="sm" variant="outline" onClick={onShare}>
+                <Share2 className="mr-2 h-4 w-4" />
+                {t('agents.share')}
               </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem onClick={onSettings}>
-                <Settings className="mr-2 h-4 w-4" />
-                {t('agents.settings')}
-              </DropdownMenuItem>
-              {!agent.is_system && agent.can_manage ? (
-                <DropdownMenuItem onClick={onShare}>
-                  <Share2 className="mr-2 h-4 w-4" />
-                  {t('agents.share')}
-                </DropdownMenuItem>
-              ) : null}
-              {!agent.is_system && agent.can_write ? (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem className="text-destructive focus:text-destructive" onClick={onDelete}>
-                    <Trash2 className="mr-2 h-4 w-4" />
-                    {t('agents.delete')}
-                  </DropdownMenuItem>
-                </>
-              ) : null}
-            </DropdownMenuContent>
-          </DropdownMenu>
+            ) : null}
+            {showWriteActions ? (
+              <Button
+                size="sm"
+                variant="outline"
+                className="text-destructive hover:text-destructive"
+                onClick={onDelete}
+              >
+                <Trash2 className="mr-2 h-4 w-4" />
+                {t('agents.delete')}
+              </Button>
+            ) : null}
+          </>
         ) : null}
       </div>
     </div>
