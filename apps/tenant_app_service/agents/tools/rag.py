@@ -248,7 +248,7 @@ async def _retrieve_asset(service: SearchService, resource_id: int) -> ToolResul
             code="INVALID_RESOURCE_ID",
         )
 
-    from apps.shared.data_source.asset_metadata_service import AssetMetadataService
+    from apps.shared.external_systems.data_source.asset_metadata_service import AssetMetadataService
 
     asset_service = AssetMetadataService(tenant_id=service.tenant_id, db_session=service.session)
 
@@ -282,7 +282,7 @@ async def _retrieve_asset(service: SearchService, resource_id: int) -> ToolResul
 
 
 async def _retrieve_api_operation(service: SearchService, resource_id: int) -> ToolResult:
-    from apps.shared.api_connector.service import ApiConnectorService
+    from apps.shared.external_systems.api_connector.service import ApiConnectorService
 
     connector_service = ApiConnectorService(tenant_id=service.tenant_id, db_session=service.session)
 

@@ -1,7 +1,9 @@
 import i18n from '@/i18n/config'
 import DatabricksConnectionForm, {
   buildDatabricksConfig,
+  buildDatabricksUserTemplateConfig,
   databricksConnectionSchema,
+  databricksUserTemplateSchema,
 } from '@/components/data-source/DatabricksConnectionForm'
 
 i18n.addResourceBundle(
@@ -20,7 +22,11 @@ i18n.addResourceBundle(
         namePlaceholder: 'My Data Source',
         description: 'Description',
         descPlaceholder: 'Optional description',
-        connectionConfig: 'Connection Configuration',
+        connectionConfig: 'Connection',
+        connectionConfigSharedHint: 'Everyone uses this login to query data and refresh table lists.',
+        connectionConfigUserTitle: 'Server',
+        connectionConfigUserHint:
+          'Where the database lives. Each person adds their own username and password on the Data Assets page.',
         updateSuccess: 'Data source {{name}} updated successfully',
         createSuccess: 'Data source created successfully',
         saveFailed: 'Failed to save data source',
@@ -28,6 +34,19 @@ i18n.addResourceBundle(
         cancelConfirmDesc: 'You have unsaved changes. Are you sure you want to discard them?',
         continueEditing: 'Continue Editing',
         discard: 'Discard',
+        credentialMode: 'Credential mode',
+        credentialModeSharedTitle: 'Shared',
+        credentialModeSharedSubtitle: 'One connection for the whole tenant',
+        credentialModeUserTitle: 'Per-user',
+        credentialModeUserSubtitle: 'Each member saves their own login',
+        credentialModeHelpShared: 'Fill in one connection below.',
+        credentialModeHelpUser:
+          'Set the server, then a sync login. Members connect with their own login on Data Assets.',
+        metadataSyncTitle: 'Sync login',
+        metadataSyncHelp: 'Lists tables and updates schemas. Not used when people run queries.',
+        metadataSyncUsername: 'Username',
+        metadataSyncPassword: 'Password',
+        metadataSyncToken: 'Access token',
       },
     },
   },
@@ -51,7 +70,10 @@ i18n.addResourceBundle(
         namePlaceholder: '我的数据源',
         description: '描述',
         descPlaceholder: '可选描述',
-        connectionConfig: '连接配置',
+        connectionConfig: '连接',
+        connectionConfigSharedHint: '所有人用下方账号查询并刷新表列表。',
+        connectionConfigUserTitle: '服务器',
+        connectionConfigUserHint: '数据库地址；成员在数据资产页各自填写账号密码。',
         updateSuccess: '数据源 {{name}} 更新成功',
         createSuccess: '数据源创建成功',
         saveFailed: '保存数据源失败',
@@ -59,6 +81,18 @@ i18n.addResourceBundle(
         cancelConfirmDesc: '你有未保存的更改，确定要放弃吗？',
         continueEditing: '继续编辑',
         discard: '放弃',
+        credentialMode: '凭证模式',
+        credentialModeSharedTitle: '共享',
+        credentialModeSharedSubtitle: '租户统一连接',
+        credentialModeUserTitle: '用户',
+        credentialModeUserSubtitle: '每人各自登录',
+        credentialModeHelpShared: '在下方填写一套连接信息。',
+        credentialModeHelpUser: '先填服务器，再填同步账号；成员在数据资产页使用自己的登录。',
+        metadataSyncTitle: '同步账号',
+        metadataSyncHelp: '用于列出台库表、更新表结构；不用于日常查询。',
+        metadataSyncUsername: '用户名',
+        metadataSyncPassword: '密码',
+        metadataSyncToken: '访问令牌',
       },
     },
   },
@@ -67,8 +101,18 @@ i18n.addResourceBundle(
 )
 import RDBMSConnectionForm, {
   buildRDBMSConfig,
+  buildRDBMSUserTemplateConfig,
   rdbmsConnectionSchema,
+  rdbmsUserTemplateConnectionSchema,
 } from '@/components/data-source/RDBMSConnectionForm'
+import DataSourceConnectionTests from '@/components/data-source/DataSourceConnectionTests'
+import DataSourceFormSectionHeader from '@/components/data-source/DataSourceFormSectionHeader'
+import {
+  dsFieldLabelClass,
+  dsFieldPairRowClass,
+  dsFieldRowClass,
+  dsFieldRowStartClass,
+} from '@/components/data-source/formLayout'
 import SelectAssetsDialog from '@/components/SelectAssetsDialog'
 import {
   AlertDialog,
@@ -94,9 +138,17 @@ import { Label } from '@/components/ui/label'
 import { useDataSources } from '@/hooks/useDataSources'
 import { useNotification } from '@/hooks/useNotification'
 import type { DataSource } from '@/lib/dataSourceApi'
+import {
+  hasStoredMetadataSyncPassword,
+  hasStoredSharedPassword,
+  isSavedSecretFormMask,
+  isStoredSecretPlaceholder,
+  SAVED_SECRET_FORM_MASK,
+  STORED_SECRET_PLACEHOLDER,
+} from '@/lib/storedSecrets'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Database, InfoIcon } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import * as z from 'zod'
@@ -117,6 +169,9 @@ const baseSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().optional(),
   type: z.enum(['postgres', 'mysql', 'databricks']),
+  credentialMode: z.enum(['shared', 'user']).default('shared'),
+  metadataSyncUsername: z.string().optional(),
+  metadataSyncPassword: z.string().optional(),
   readOnly: z.boolean().optional(),
   // Type-specific fields are stored but NOT validated at parent level
   // Each ConnectionForm handles its own validation
@@ -142,6 +197,7 @@ const getDefaultValues = (dataSource?: DataSource | null) => {
       name: '',
       description: '',
       type: 'postgres' as DataSourceType,
+      credentialMode: 'shared' as const,
       readOnly: true,
       // RDBMS fields
       host: '',
@@ -153,6 +209,8 @@ const getDefaultValues = (dataSource?: DataSource | null) => {
       // Databricks fields
       warehouse_id: '',
       http_path: '',
+      metadataSyncUsername: '',
+      metadataSyncPassword: '',
     }
   }
 
@@ -160,18 +218,46 @@ const getDefaultValues = (dataSource?: DataSource | null) => {
     name: dataSource.name,
     description: dataSource.description || '',
     type: dataSource.type as DataSourceType,
+    credentialMode: (dataSource.credential_mode ?? 'shared') as 'shared' | 'user',
     readOnly: dataSource.config?.readOnly ?? true,
     // RDBMS fields
     host: dataSource.config?.host || '',
     port: dataSource.config?.port || 5432,
     database: dataSource.config?.database || '',
     username: dataSource.config?.username || '',
-    password: dataSource.config?.password || '',
+    password: isStoredSecretPlaceholder(dataSource.config?.password)
+      ? SAVED_SECRET_FORM_MASK
+      : dataSource.config?.password || '',
     ssl: dataSource.config?.ssl || false,
     // Databricks fields
     warehouse_id: dataSource.config?.extra_params?.warehouse_id || '',
     http_path: dataSource.config?.extra_params?.http_path || '',
+    metadataSyncUsername: dataSource.config?.metadata_sync?.username || '',
+    metadataSyncPassword: isStoredSecretPlaceholder(dataSource.config?.metadata_sync?.password)
+      ? SAVED_SECRET_FORM_MASK
+      : dataSource.config?.metadata_sync?.password || '',
   }
+}
+
+function attachMetadataSyncConfig(
+  config: Record<string, any>,
+  data: { credentialMode: string; type: string; metadataSyncUsername?: string; metadataSyncPassword?: string },
+): Record<string, any> {
+  if (data.credentialMode !== 'user') {
+    return config
+  }
+  const sync: Record<string, string> = {}
+  if (data.type !== 'databricks' && data.metadataSyncUsername?.trim()) {
+    sync.username = data.metadataSyncUsername.trim()
+  }
+  if (data.metadataSyncPassword?.trim()) {
+    const pwd = data.metadataSyncPassword.trim()
+    sync.password = isSavedSecretFormMask(pwd) ? STORED_SECRET_PLACEHOLDER : pwd
+  }
+  if (Object.keys(sync).length === 0) {
+    return config
+  }
+  return { ...config, metadata_sync: { ...(config.metadata_sync || {}), ...sync } }
 }
 
 export default function AddDataSourceDialog({
@@ -195,6 +281,7 @@ export default function AddDataSourceDialog({
     register,
     handleSubmit,
     watch,
+    setValue,
     reset,
     formState: { errors, isSubmitting },
   } = useForm<FormData>({
@@ -225,6 +312,22 @@ export default function AddDataSourceDialog({
   }, [errors])
 
   const watchedType = watch('type') as DataSourceType
+  const watchedCredentialMode = watch('credentialMode')
+
+  const storedMetadataSyncPassword = useMemo(
+    () => (dataSource ? hasStoredMetadataSyncPassword(dataSource.config) : false),
+    [dataSource]
+  )
+  const storedSharedPassword = useMemo(
+    () => (dataSource ? hasStoredSharedPassword(dataSource.config) : false),
+    [dataSource]
+  )
+  const clearSavedSecretMask = (field: 'password' | 'metadataSyncPassword') => {
+    const current = watch(field)
+    if (isSavedSecretFormMask(current)) {
+      setValue(field, '', { shouldDirty: true })
+    }
+  }
 
   // Update form validation schema when type changes
   useEffect(() => {
@@ -296,8 +399,12 @@ export default function AddDataSourceDialog({
     const validationErrors: string[] = []
 
     try {
-      if (data.type === 'databricks') {
+      if (data.type === 'databricks' && data.credentialMode === 'user') {
+        await databricksUserTemplateSchema.parseAsync(formData)
+      } else if (data.type === 'databricks') {
         await databricksConnectionSchema.parseAsync(formData)
+      } else if (data.credentialMode === 'user') {
+        await rdbmsUserTemplateConnectionSchema.parseAsync(formData)
       } else {
         await rdbmsConnectionSchema.parseAsync(formData)
       }
@@ -317,10 +424,39 @@ export default function AddDataSourceDialog({
       // Delegate config building to respective form modules
       let config: Record<string, any>
 
-      if (data.type === 'databricks') {
+      if (data.type === 'databricks' && data.credentialMode === 'user') {
+        config = buildDatabricksUserTemplateConfig(data)
+      } else if (data.type === 'databricks') {
         config = buildDatabricksConfig(data)
+      } else if (data.credentialMode === 'user') {
+        config = buildRDBMSUserTemplateConfig(data)
       } else {
         config = buildRDBMSConfig(data)
+      }
+
+      config = attachMetadataSyncConfig(config, data)
+
+      if (data.credentialMode === 'user' && data.type !== 'databricks') {
+        const syncPwd = data.metadataSyncPassword?.trim() ?? ''
+        const syncPwdOk =
+          Boolean(syncPwd) &&
+          (!isSavedSecretFormMask(syncPwd) || storedMetadataSyncPassword)
+        if (!data.metadataSyncUsername?.trim() || !syncPwdOk) {
+          setConnectionValidationErrors(['Sync login username and password are required for per-user data sources.'])
+          setSaving(false)
+          return
+        }
+      }
+      if (data.credentialMode === 'user' && data.type === 'databricks') {
+        const syncToken = data.metadataSyncPassword?.trim() ?? ''
+        const syncTokenOk =
+          Boolean(syncToken) &&
+          (!isSavedSecretFormMask(syncToken) || storedMetadataSyncPassword)
+        if (!syncTokenOk) {
+          setConnectionValidationErrors(['Sync access token is required for per-user Databricks sources.'])
+          setSaving(false)
+          return
+        }
       }
 
       console.log('[AddDataSourceDialog] Config to save:', config)
@@ -334,6 +470,7 @@ export default function AddDataSourceDialog({
           name: data.name,
           description: data.description,
           config,
+          credential_mode: data.credentialMode,
         })
         showSuccess(t('components.addDataSourceDialog.updateSuccess', { name: dataSource.name }))
       } else {
@@ -345,6 +482,7 @@ export default function AddDataSourceDialog({
           managed: false,
           description: data.description,
           config,
+          credential_mode: data.credentialMode,
         })
         showSuccess(t('components.addDataSourceDialog.createSuccess'))
       }
@@ -407,7 +545,7 @@ export default function AddDataSourceDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleCloseWithConfirm}>
-        <DialogContent className="sm:max-w-[700px] max-h-[85vh] flex flex-col">
+        <DialogContent className="flex max-h-[85vh] min-h-0 flex-col sm:max-w-[700px]">
           <DialogHeader>
             <DialogTitle>
               {dataSource
@@ -422,7 +560,7 @@ export default function AddDataSourceDialog({
           </DialogHeader>
 
           <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
-            <div className="flex-1 overflow-auto py-3 space-y-4 px-0">
+            <div className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain py-3 pr-3 [scrollbar-gutter:stable]">
               {/* Data Source Type */}
               <div className="grid grid-cols-3 gap-2">
                 {(['postgres', 'mysql', 'databricks'] as const).map((type) => (
@@ -461,8 +599,8 @@ export default function AddDataSourceDialog({
                   {t('components.addDataSourceDialog.basicInfo')}
                 </h3>
 
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="name" className="min-w-fit">
+                <div className={dsFieldRowClass}>
+                  <Label htmlFor="name" className={dsFieldLabelClass}>
                     {t('components.addDataSourceDialog.name')}{' '}
                     <span className="text-destructive">*</span>
                   </Label>
@@ -471,13 +609,13 @@ export default function AddDataSourceDialog({
                     {...register('name')}
                     placeholder={t('components.addDataSourceDialog.namePlaceholder')}
                     disabled={isSubmitting}
-                    className="h-8 text-sm flex-1"
+                    className="h-8 text-sm w-full min-w-0"
                     errorMsg={errors.name?.message as string}
                   />
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Label htmlFor="description" className="min-w-fit">
+                <div className={dsFieldRowClass}>
+                  <Label htmlFor="description" className={dsFieldLabelClass}>
                     {t('components.addDataSourceDialog.description')}
                   </Label>
                   <Input
@@ -486,45 +624,180 @@ export default function AddDataSourceDialog({
                     placeholder={t('components.addDataSourceDialog.descPlaceholder')}
                     disabled={isSubmitting}
                     multiple
-                    className="text-sm flex-1"
+                    className="h-8 text-sm w-full min-w-0"
                     errorMsg={errors.description?.message as string}
                   />
                 </div>
+
+                <div className={dsFieldRowStartClass}>
+                  <Label className={`${dsFieldLabelClass} pt-2`}>
+                    {t('components.addDataSourceDialog.credentialMode')}
+                  </Label>
+                  <div className="min-w-0 space-y-1.5">
+                    <input type="hidden" {...register('credentialMode')} />
+                    <div className="grid grid-cols-2 gap-2">
+                      {(
+                        [
+                          {
+                            value: 'shared' as const,
+                            titleKey: 'credentialModeSharedTitle',
+                            subtitleKey: 'credentialModeSharedSubtitle',
+                          },
+                          {
+                            value: 'user' as const,
+                            titleKey: 'credentialModeUserTitle',
+                            subtitleKey: 'credentialModeUserSubtitle',
+                          },
+                        ] as const
+                      ).map((option) => {
+                        const selected = watchedCredentialMode === option.value
+                        return (
+                          <button
+                            key={option.value}
+                            type="button"
+                            disabled={isSubmitting}
+                            onClick={() =>
+                              setValue('credentialMode', option.value, { shouldDirty: true })
+                            }
+                            className={`rounded-lg border px-3 py-2 text-left transition-colors ${
+                              selected
+                                ? 'border-primary bg-primary/5 ring-1 ring-primary/20'
+                                : 'border-border hover:border-primary/40 hover:bg-muted/40'
+                            } ${isSubmitting ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer'}`}
+                          >
+                            <span className="block text-sm font-medium leading-tight">
+                              {t(`components.addDataSourceDialog.${option.titleKey}`)}
+                            </span>
+                            <span className="block text-xs text-muted-foreground mt-0.5 leading-snug">
+                              {t(`components.addDataSourceDialog.${option.subtitleKey}`)}
+                            </span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {watchedCredentialMode === 'user'
+                        ? t('components.addDataSourceDialog.credentialModeHelpUser')
+                        : t('components.addDataSourceDialog.credentialModeHelpShared')}
+                    </p>
+                  </div>
+                </div>
               </div>
 
-              {/* Connection Configuration */}
-              <div className="space-y-3">
-                <h3 className="text-sm font-semibold flex items-center gap-2">
-                  <Database className="w-4 h-4" />
-                  {t('components.addDataSourceDialog.connectionConfig')}
-                </h3>
+              <div className="space-y-5">
+                <div className="space-y-2.5">
+                  <DataSourceFormSectionHeader
+                    icon={Database}
+                    title={
+                      watchedCredentialMode === 'user'
+                        ? t('components.addDataSourceDialog.connectionConfigUserTitle')
+                        : t('components.addDataSourceDialog.connectionConfig')
+                    }
+                    description={
+                      watchedCredentialMode === 'user'
+                        ? t('components.addDataSourceDialog.connectionConfigUserHint')
+                        : t('components.addDataSourceDialog.connectionConfigSharedHint')
+                    }
+                  />
 
-                {connectionValidationErrors.length > 0 && (
-                  <div className="bg-destructive/10 border border-destructive/30 rounded p-3 text-xs text-destructive">
-                    <ul className="list-disc list-inside">
-                      {connectionValidationErrors.map((err, idx) => (
-                        <li key={idx}>{err}</li>
-                      ))}
-                    </ul>
+                  {connectionValidationErrors.length > 0 && (
+                    <div className="bg-destructive/10 border border-destructive/30 rounded p-3 text-xs text-destructive">
+                      <ul className="list-disc list-inside">
+                        {connectionValidationErrors.map((err, idx) => (
+                          <li key={idx}>{err}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {selectedType === 'databricks' ? (
+                    <DatabricksConnectionForm
+                      register={register}
+                      errors={errors}
+                      disabled={isSubmitting}
+                      getFormData={() => watch()}
+                      showTestConnection={false}
+                      credentialMode={watchedCredentialMode}
+                    />
+                  ) : (
+                    <RDBMSConnectionForm
+                      type={selectedType}
+                      register={register}
+                      errors={errors}
+                      disabled={isSubmitting}
+                      getFormData={() => watch()}
+                      credentialMode={watchedCredentialMode}
+                      showTestConnection={false}
+                      onClearSavedPassword={
+                        storedSharedPassword ? () => clearSavedSecretMask('password') : undefined
+                      }
+                    />
+                  )}
+                </div>
+
+                {watchedCredentialMode === 'user' ? (
+                  <div className="space-y-2.5 pt-2">
+                    <DataSourceFormSectionHeader
+                      title={t('components.addDataSourceDialog.metadataSyncTitle')}
+                      description={t('components.addDataSourceDialog.metadataSyncHelp')}
+                    />
+                    {selectedType !== 'databricks' ? (
+                      <div className={dsFieldPairRowClass}>
+                        <Label htmlFor="metadataSyncUsername" className={dsFieldLabelClass}>
+                          {t('components.addDataSourceDialog.metadataSyncUsername')}{' '}
+                          <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="metadataSyncUsername"
+                          {...register('metadataSyncUsername')}
+                          disabled={isSubmitting}
+                          className="h-8 text-sm w-full min-w-0"
+                          autoComplete="off"
+                        />
+                        <Label htmlFor="metadataSyncPassword" className={dsFieldLabelClass}>
+                          {t('components.addDataSourceDialog.metadataSyncPassword')}{' '}
+                          <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="metadataSyncPassword"
+                          type="password"
+                          {...register('metadataSyncPassword')}
+                          disabled={isSubmitting}
+                          onFocus={() => clearSavedSecretMask('metadataSyncPassword')}
+                          className="h-8 text-sm w-full min-w-0"
+                          autoComplete="off"
+                        />
+                      </div>
+                    ) : (
+                      <div className={dsFieldRowClass}>
+                        <Label htmlFor="metadataSyncPassword" className={dsFieldLabelClass}>
+                          {t('components.addDataSourceDialog.metadataSyncToken')}{' '}
+                          <span className="text-destructive">*</span>
+                        </Label>
+                        <Input
+                          id="metadataSyncPassword"
+                          type="password"
+                          {...register('metadataSyncPassword')}
+                          disabled={isSubmitting}
+                          onFocus={() => clearSavedSecretMask('metadataSyncPassword')}
+                          className="h-8 text-sm w-full min-w-0"
+                          autoComplete="off"
+                        />
+                      </div>
+                    )}
                   </div>
-                )}
+                ) : null}
 
-                {selectedType === 'databricks' ? (
-                  <DatabricksConnectionForm
-                    register={register}
-                    errors={errors}
-                    disabled={isSubmitting}
-                    getFormData={() => watch()}
-                  />
-                ) : (
-                  <RDBMSConnectionForm
-                    type={selectedType}
-                    register={register}
-                    errors={errors}
-                    disabled={isSubmitting}
-                    getFormData={() => watch()}
-                  />
-                )}
+                <DataSourceConnectionTests
+                  key={`${selectedType}-${watchedCredentialMode}`}
+                  type={selectedType}
+                  credentialMode={watchedCredentialMode}
+                  getFormData={() => watch()}
+                  disabled={isSubmitting || saving}
+                  dataSourceId={dataSource?.id}
+                  storedMetadataSyncPassword={storedMetadataSyncPassword}
+                  storedSharedPassword={storedSharedPassword}
+                />
               </div>
             </div>
 

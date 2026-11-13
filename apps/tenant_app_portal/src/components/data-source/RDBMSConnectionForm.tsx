@@ -50,6 +50,12 @@ import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import type { FieldErrors, UseFormRegister } from 'react-hook-form'
 import * as z from 'zod'
+import {
+  dsFieldLabelClass,
+  dsFieldPairRowClass,
+  dsFieldRowClass,
+} from '@/components/data-source/formLayout'
+import { isSavedSecretFormMask, STORED_SECRET_PLACEHOLDER } from '@/lib/storedSecrets'
 
 type DataSourceType = 'postgres' | 'mysql'
 
@@ -66,6 +72,16 @@ export const rdbmsConnectionSchema = z.object({
     .default(false),
 })
 
+export const rdbmsUserTemplateConnectionSchema = z.object({
+  host: z.string().min(1, 'Host is required'),
+  port: z.coerce.number().int().min(1, 'Port is required').max(65535, 'Invalid port'),
+  database: z.string().min(1, 'Database is required'),
+  ssl: z
+    .union([z.boolean(), z.string()])
+    .transform((val) => val === true || val === 'true')
+    .default(false),
+})
+
 // Helper to build RDBMS config from form data
 export function buildRDBMSConfig(data: any): Record<string, any> {
   const config: Record<string, any> = {
@@ -75,7 +91,21 @@ export function buildRDBMSConfig(data: any): Record<string, any> {
   if (data.port) config.port = data.port
   if (data.database) config.database = data.database
   if (data.username) config.username = data.username
-  if (data.password) config.password = data.password
+  if (data.password) {
+    const pwd = String(data.password).trim()
+    config.password = isSavedSecretFormMask(pwd) ? STORED_SECRET_PLACEHOLDER : pwd
+  }
+  if (data.ssl !== undefined) config.ssl = data.ssl
+  return config
+}
+
+export function buildRDBMSUserTemplateConfig(data: any): Record<string, any> {
+  const config: Record<string, any> = {
+    readOnly: true,
+  }
+  if (data.host) config.host = data.host
+  if (data.port) config.port = data.port
+  if (data.database) config.database = data.database
   if (data.ssl !== undefined) config.ssl = data.ssl
   return config
 }
@@ -96,6 +126,9 @@ interface RDBMSConnectionFormProps {
   disabled?: boolean
   onFieldChange?: () => void
   getFormData?: () => any
+  credentialMode?: 'shared' | 'user'
+  showTestConnection?: boolean
+  onClearSavedPassword?: () => void
 }
 
 export default function RDBMSConnectionForm({
@@ -105,8 +138,12 @@ export default function RDBMSConnectionForm({
   disabled = false,
   onFieldChange,
   getFormData,
+  credentialMode = 'shared',
+  showTestConnection = true,
+  onClearSavedPassword,
 }: RDBMSConnectionFormProps) {
   const { t } = useTranslation()
+  const isUserCredentialMode = credentialMode === 'user'
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionTested, setConnectionTested] = useState(false)
   const [connectionSuccess, setConnectionSuccess] = useState(false)
@@ -129,7 +166,8 @@ export default function RDBMSConnectionForm({
       !formData.port ||
       !formData.database ||
       !formData.username ||
-      !formData.password
+      !formData.password ||
+      isSavedSecretFormMask(formData.password)
     ) {
       setConnectionTestResult(false, t('components.rdbmsForm.completeRequiredFields'))
       return
@@ -183,55 +221,51 @@ export default function RDBMSConnectionForm({
   }
 
   return (
-    <div className="space-y-2">
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="host" className="min-w-fit">
-             {t('components.rdbmsForm.host')} <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="host"
-            {...register('host')}
-            placeholder="localhost"
-            disabled={disabled}
-            className="h-8 text-sm flex-1"
-            onChange={(e) => {
-              register('host').onChange(e)
-              resetConnectionStatus()
-            }}
-            errorMsg={errors?.host?.message as string}
-          />
-        </div>
-        <div className="flex items-center gap-2">
-          <Label htmlFor="port" className="min-w-fit">
-             {t('components.rdbmsForm.port')} <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="port"
-            type="number"
-            {...register('port')}
-            placeholder={type === 'postgres' ? '5432' : '3306'}
-            disabled={disabled}
-            className="h-8 text-sm flex-1"
-            onChange={(e) => {
-              register('port').onChange(e)
-              resetConnectionStatus()
-            }}
-            errorMsg={errors?.port?.message as string}
-          />
-        </div>
+    <div className="space-y-2.5">
+      <div className={dsFieldPairRowClass}>
+        <Label htmlFor="host" className={dsFieldLabelClass}>
+          {t('components.rdbmsForm.host')} <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="host"
+          {...register('host')}
+          placeholder="localhost"
+          disabled={disabled}
+          className="h-8 text-sm w-full min-w-0"
+          onChange={(e) => {
+            register('host').onChange(e)
+            resetConnectionStatus()
+          }}
+          errorMsg={errors?.host?.message as string}
+        />
+        <Label htmlFor="port" className={dsFieldLabelClass}>
+          {t('components.rdbmsForm.port')} <span className="text-destructive">*</span>
+        </Label>
+        <Input
+          id="port"
+          type="number"
+          {...register('port')}
+          placeholder={type === 'postgres' ? '5432' : '3306'}
+          disabled={disabled}
+          className="h-8 text-sm w-full min-w-0"
+          onChange={(e) => {
+            register('port').onChange(e)
+            resetConnectionStatus()
+          }}
+          errorMsg={errors?.port?.message as string}
+        />
       </div>
 
-      <div className="flex items-center gap-2">
-        <Label htmlFor="database" className="min-w-fit">
-           {t('components.rdbmsForm.database')} <span className="text-destructive">*</span>
+      <div className={dsFieldRowClass}>
+        <Label htmlFor="database" className={dsFieldLabelClass}>
+          {t('components.rdbmsForm.database')} <span className="text-destructive">*</span>
         </Label>
         <Input
           id="database"
           {...register('database')}
-              placeholder={t('components.rdbmsForm.databasePlaceholder')}
+          placeholder={t('components.rdbmsForm.databasePlaceholder')}
           disabled={disabled}
-          className="h-8 text-sm flex-1"
+          className="h-8 text-sm w-full min-w-0"
           onChange={(e) => {
             register('database').onChange(e)
             resetConnectionStatus()
@@ -240,38 +274,36 @@ export default function RDBMSConnectionForm({
         />
       </div>
 
-      <div className="grid grid-cols-2 gap-3">
-        <div className="flex items-center gap-2">
-          <Label htmlFor="username" className="min-w-fit">
-             {t('components.rdbmsForm.username')} <span className="text-destructive">*</span>
+      {!isUserCredentialMode ? (
+        <div className={dsFieldPairRowClass}>
+          <Label htmlFor="username" className={dsFieldLabelClass}>
+            {t('components.rdbmsForm.username')} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="username"
             {...register('username')}
-                placeholder={t('components.rdbmsForm.usernamePlaceholder')}
+            placeholder={t('components.rdbmsForm.usernamePlaceholder')}
             disabled={disabled}
             autoComplete="off"
-            className="h-8 text-sm flex-1"
+            className="h-8 text-sm w-full min-w-0"
             onChange={(e) => {
               register('username').onChange(e)
               resetConnectionStatus()
             }}
             errorMsg={errors?.username?.message as string}
           />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Label htmlFor="password" className="min-w-fit">
-             {t('components.rdbmsForm.password')} <span className="text-destructive">*</span>
+          <Label htmlFor="password" className={dsFieldLabelClass}>
+            {t('components.rdbmsForm.password')} <span className="text-destructive">*</span>
           </Label>
           <Input
             id="password"
             type="password"
             {...register('password')}
-              placeholder={t('components.rdbmsForm.password')}
+            placeholder={t('components.rdbmsForm.password')}
             disabled={disabled}
             autoComplete="off"
-            className="h-8 text-sm flex-1"
+            className="h-8 text-sm w-full min-w-0"
+            onFocus={() => onClearSavedPassword?.()}
             onChange={(e) => {
               register('password').onChange(e)
               resetConnectionStatus()
@@ -279,46 +311,52 @@ export default function RDBMSConnectionForm({
             errorMsg={errors?.password?.message as string}
           />
         </div>
+      ) : null}
+
+      <div className={dsFieldRowClass}>
+        <div className="col-start-2 flex items-center gap-2 min-w-0">
+          <Checkbox
+            id="ssl"
+            {...register('ssl')}
+            disabled={disabled}
+            onCheckedChange={() => resetConnectionStatus()}
+            errorMsg={errors?.ssl?.message as string}
+          />
+          <Label htmlFor="ssl" className="font-normal cursor-pointer text-sm">
+            {t('components.rdbmsForm.enableSsl')}
+          </Label>
+        </div>
       </div>
 
-      <div className="flex items-center space-x-2">
-        <Checkbox
-          id="ssl"
-          {...register('ssl')}
-          disabled={disabled}
-          onCheckedChange={() => resetConnectionStatus()}
-          errorMsg={errors?.ssl?.message as string}
-        />
-        <Label htmlFor="ssl" className="font-normal cursor-pointer text-sm">
-          {t('components.rdbmsForm.enableSsl')}
-        </Label>
-      </div>
+      {showTestConnection && !isUserCredentialMode ? (
+        <>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleTestConnection}
+            disabled={testingConnection || disabled}
+            className="h-9 w-full"
+          >
+            {testingConnection ? (
+              <>
+                <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
+                {t('components.rdbmsForm.testing')}
+              </>
+            ) : (
+              t('components.rdbmsForm.testConnection')
+            )}
+          </Button>
 
-      <Button
-        type="button"
-        variant="outline"
-        size="sm"
-        onClick={handleTestConnection}
-        disabled={testingConnection || disabled}
-        className="h-9 w-full"
-      >
-        {testingConnection ? (
-          <>
-            <Loader2 className="w-3 h-3 mr-1.5 animate-spin" />
-            {t('components.rdbmsForm.testing')}
-          </>
-        ) : (
-          t('components.rdbmsForm.testConnection')
-        )}
-      </Button>
-
-      {connectionTested ? (
-        <ConnectionTestFeedback
-          className="text-xs"
-          result={{ ok: connectionSuccess, message: connectionMessage }}
-          successFallback={t('components.rdbmsForm.connectSuccess')}
-          failureFallback={t('components.rdbmsForm.connectFailed')}
-        />
+          {connectionTested ? (
+            <ConnectionTestFeedback
+              className="text-xs"
+              result={{ ok: connectionSuccess, message: connectionMessage }}
+              successFallback={t('components.rdbmsForm.connectSuccess')}
+              failureFallback={t('components.rdbmsForm.connectFailed')}
+            />
+          ) : null}
+        </>
       ) : null}
     </div>
   )

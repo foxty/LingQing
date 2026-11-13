@@ -3,8 +3,8 @@
 import pytest
 
 from apps.shared.core.exceptions import AuthorizationError
-from apps.shared.data_source.asset_metadata_service import AssetMetadataService
-from apps.shared.data_source.repository import AssetMetadataRepository
+from apps.shared.external_systems.data_source.asset_metadata_service import AssetMetadataService
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository
 from apps.shared.db.models import User
 from apps.shared.domain.actor import ActorContext
 from tests.helpers.data_source_fixtures import (

@@ -1,6 +1,6 @@
 """Integration tests for real-world API connector scenarios (Kingdee ERP, etc.)."""
 
-from apps.shared.api_connector.domain import (
+from apps.shared.external_systems.api_connector.domain import (
     ApiConnectorDomain,
     CustomAuthConfig,
     RatePolicyDomain,

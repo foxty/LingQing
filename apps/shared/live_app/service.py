@@ -17,8 +17,8 @@ from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import InternalServiceError, ResourceNotFoundError, ValidationError
-from apps.shared.data_source.repository import DataSourceRepository
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.data_source.repository import DataSourceRepository
 from apps.shared.live_app.adapters import (
     db_live_app_to_domain,
     domain_live_app_list_to_dto,

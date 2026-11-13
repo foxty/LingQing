@@ -4,8 +4,8 @@ Provides unified interface for creating DB managers across different data source
 using a registry pattern for easy extensibility.
 """
 
-from apps.shared.data_source.domain import DataSourceDomain
 from apps.shared.domain.value_objects import DatabaseConnectionVO, DataSourceType
+from apps.shared.external_systems.data_source.domain import DataSourceDomain
 from apps.shared.infra.analytics_db.base_manager import AnalyticsDBManager
 from apps.shared.infra.analytics_db.databricks_manager import DatabricksManager
 from apps.shared.infra.analytics_db.errors import InvalidConfigurationError

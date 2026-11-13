@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.shared.api_connector.domain import RatePolicyDomain
-from apps.shared.api_connector.schemas import NoAuthConfigSchema
-from apps.shared.api_connector.service import ApiConnectorService
+from apps.shared.external_systems.api_connector.domain import RatePolicyDomain
+from apps.shared.external_systems.api_connector.schemas import NoAuthConfigSchema
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.db.models import Tenant, User
 from apps.shared.domain.actor import ActorContext
@@ -757,8 +757,8 @@ async def test_update_connector_preserves_original_secret_when_ui_sends_masked_v
         assert fetched.auth_config_masked["extra_config"]["app_secret"] == masked_secret
 
         # Step 5: Verify by executing (decrypt should get original, not masked)
-        from apps.shared.api_connector.adapters import connector_entity_to_domain
-        from apps.shared.api_connector.repository import ApiConnectorRepository
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+        from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository
 
         repo = ApiConnectorRepository(async_db_session)
         entity = await repo.get_by_id_and_tenant(created.id, tenant.id)
@@ -807,8 +807,8 @@ async def test_update_connector_allows_changing_secret_with_real_value(async_db_
         )
 
         # Verify the secret was actually changed
-        from apps.shared.api_connector.adapters import connector_entity_to_domain
-        from apps.shared.api_connector.repository import ApiConnectorRepository
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+        from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository
 
         repo = ApiConnectorRepository(async_db_session)
         entity = await repo.get_by_id_and_tenant(created.id, tenant.id)
@@ -881,8 +881,8 @@ async def test_update_connector_mixed_masked_and_real_values(async_db_session, m
         )
 
         # Verify mixed behavior
-        from apps.shared.api_connector.adapters import connector_entity_to_domain
-        from apps.shared.api_connector.repository import ApiConnectorRepository
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+        from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository
 
         repo = ApiConnectorRepository(async_db_session)
         entity = await repo.get_by_id_and_tenant(created.id, tenant.id)

@@ -5,7 +5,7 @@ from datetime import datetime, timezone
 import pytest
 
 # Load data_source before analytics_db so package init does not cycle.
-import apps.shared.data_source.service  # noqa: F401
+import apps.shared.external_systems.data_source.service  # noqa: F401
 from apps.shared.domain.value_objects import DatabaseConnectionVO
 from apps.shared.infra.analytics_db.databricks_manager import DatabricksManager
 

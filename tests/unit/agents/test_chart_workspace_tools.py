@@ -187,12 +187,15 @@ async def test_create_materialized_view_uses_query_data_and_writes(monkeypatch, 
             self.tenant_id = tenant_id
 
         async def get_data_source_for_actor(self, *, data_source_id, actor, **kwargs):
-            return type("DS", (), {"name": "managed_ds", "managed": True})()
+            return type("DS", (), {"name": "managed_ds", "managed": True, "credential_mode": "shared"})()
 
         async def query_data_for_actor(self, **kwargs):
             return pd.DataFrame([{"id": 1}])
 
         async def get_db_manager(self, data_source_id):
+            return _FakeDBManager()
+
+        async def get_db_manager_for_actor(self, data_source_id, actor):
             return _FakeDBManager()
 
     async def _fake_register_temp_table(**kwargs):
@@ -249,7 +252,11 @@ async def test_join_cross_datasource_uses_query_data_for_both_sides(monkeypatch,
             pass
 
         async def get_data_source_for_actor(self, *, data_source_id, actor, **kwargs):
-            return type("DS", (), {"name": f"ds_{data_source_id}", "managed": False})()
+            return type(
+                "DS",
+                (),
+                {"name": f"ds_{data_source_id}", "managed": False, "credential_mode": "shared"},
+            )()
 
         async def query_data_for_actor(self, **kwargs):
             calls.append(kwargs)
@@ -258,6 +265,9 @@ async def test_join_cross_datasource_uses_query_data_for_both_sides(monkeypatch,
             return pd.DataFrame([{"id": 1, "name": "Acme"}])
 
         async def get_db_manager(self, data_source_id):
+            return _FakeDBManager()
+
+        async def get_db_manager_for_actor(self, data_source_id, actor):
             return _FakeDBManager()
 
     async def _fake_get_managed_datasource(tenant_id, session):

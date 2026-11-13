@@ -2,13 +2,17 @@
 
 from __future__ import annotations
 
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Body, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.api_connector.adapters import auth_config_to_dict, operation_domain_to_response
-from apps.shared.api_connector.domain import OperationStatus
-from apps.shared.api_connector.execution import ApiConnectorExecutionService
-from apps.shared.api_connector.schemas import (
+from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
+from apps.shared.core.auth import require_permission
+from apps.shared.db.session import get_db
+from apps.shared.domain.actor import ActorContext
+from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR
+from apps.shared.external_systems.api_connector.adapters import auth_config_to_dict, operation_domain_to_response
+from apps.shared.external_systems.api_connector.domain import OperationStatus
+from apps.shared.external_systems.api_connector.schemas import (
     ApiConnectorCreateRequest,
     ApiConnectorListResponse,
     ApiConnectorResponse,
@@ -24,12 +28,14 @@ from apps.shared.api_connector.schemas import (
     SyncSchemaRequest,
     SyncSchemaResponse,
 )
-from apps.shared.api_connector.service import ApiConnectorService
-from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
-from apps.shared.core.auth import require_permission
-from apps.shared.db.session import get_db
-from apps.shared.domain.actor import ActorContext
-from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
+from apps.shared.external_systems.application.wiring import api_connector_execution_service
+from apps.shared.external_systems.credentials.dtos import (
+    UserIntegrationConnectionResponse,
+    UserIntegrationConnectionTestResponse,
+    UserIntegrationConnectionUpsertRequest,
+)
+from apps.shared.external_systems.credentials.service import UserIntegrationCredentialService
 from apps.shared.schemas.pagination import PaginatedResponse
 from apps.shared.schemas.user import UserDTO
 from apps.shared.tag.adapters import domain_tag_value_to_api
@@ -75,6 +81,7 @@ async def create_connector(
         rate_policy=payload.rate_policy.to_domain(),
         schema_source_type=payload.schema_source_type,
         schema_source_url=payload.schema_source_url,
+        credential_mode=payload.credential_mode,
     )
 
 
@@ -84,9 +91,7 @@ async def list_connectors(
     page_size: int = Query(100, ge=1, le=100, description="Items per page"),
     query: str | None = Query(None, min_length=1, description="Search query"),
     db: AsyncSession = Depends(get_db),
-    current_user: UserDTO = Depends(
-        require_permission([Permissions.API_CONNECTORS_CREATE, Permissions.API_CONNECTORS_MANAGE])
-    ),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
 ):
     service = await _service(db, current_user.tenant_id)
     items, pagination = await service.list_connectors_paginated_for_actor(
@@ -104,13 +109,73 @@ async def list_connectors(
     )
 
 
+@router.get("/{connector_id}/connections/me", response_model=UserIntegrationConnectionResponse)
+async def get_my_api_connector_connection(
+    connector_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.get_my_connection_api_connector(actor=actor, connector_id=connector_id)
+
+
+@router.put("/{connector_id}/connections/me", response_model=UserIntegrationConnectionResponse)
+async def upsert_my_api_connector_connection(
+    connector_id: int,
+    body: UserIntegrationConnectionUpsertRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.upsert_api_connector_connection(
+        actor=actor,
+        connector_id=connector_id,
+        body=body,
+    )
+
+
+@router.delete("/{connector_id}/connections/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_api_connector_connection(
+    connector_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    await cred_service.disconnect_api_connector(actor=actor, connector_id=connector_id)
+
+
+@router.post("/{connector_id}/connections/me/test", response_model=UserIntegrationConnectionTestResponse)
+async def test_my_api_connector_connection(
+    connector_id: int,
+    body: UserIntegrationConnectionUpsertRequest | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.test_api_connector_connection(
+        actor=actor,
+        connector_id=connector_id,
+        body=body,
+    )
+
+
 @router.get("/{connector_id}", response_model=ApiConnectorResponse)
 async def get_connector(
     connector_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDTO = Depends(
-        require_permission([Permissions.API_CONNECTORS_CREATE, Permissions.API_CONNECTORS_MANAGE])
-    ),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
 ):
     service = await _service(db, current_user.tenant_id)
     return await service.get_connector_for_actor(
@@ -344,11 +409,9 @@ async def call_operation(
     operation_uid: str,
     payload: ApiOperationCallRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: UserDTO = Depends(
-        require_permission([Permissions.API_CONNECTORS_CREATE, Permissions.API_CONNECTORS_MANAGE])
-    ),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
 ):
-    exec_service = ApiConnectorExecutionService(tenant_id=current_user.tenant_id, db_session=db)
+    exec_service = api_connector_execution_service(current_user.tenant_id, db)
     result = await exec_service.execute_operation_for_actor(
         operation_uid=operation_uid,
         actor=_actor_ctx(current_user),

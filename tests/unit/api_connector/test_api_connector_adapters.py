@@ -2,12 +2,12 @@
 
 from datetime import UTC, datetime
 
-from apps.shared.api_connector.adapters import (
+from apps.shared.external_systems.api_connector.adapters import (
     auth_config_to_dict,
     connector_domain_to_response,
     connector_entity_to_domain,
 )
-from apps.shared.api_connector.constants import (
+from apps.shared.external_systems.api_connector.constants import (
     AUTH_TYPE_API_KEY,
     AUTH_TYPE_BEARER,
     AUTH_TYPE_CUSTOM,
@@ -16,8 +16,8 @@ from apps.shared.api_connector.constants import (
     SCHEMA_SOURCE_TYPE_MANUAL,
     SCHEMA_SOURCE_TYPE_OPENAPI_UPLOAD,
 )
-from apps.shared.api_connector.domain import ApiConnectorDomain, NoAuthConfig, RatePolicyDomain
-from apps.shared.api_connector.schemas import ApiKeyAuthConfigSchema, NoAuthConfigSchema
+from apps.shared.external_systems.api_connector.domain import ApiConnectorDomain, NoAuthConfig, RatePolicyDomain
+from apps.shared.external_systems.api_connector.schemas import ApiKeyAuthConfigSchema, NoAuthConfigSchema
 from apps.shared.db.models import ApiConnector, User
 from apps.shared.utils.field_cipher import FieldCipher
 
@@ -68,7 +68,7 @@ class TestConnectorEntityToDomain:
 
         # Auth config should be converted to dataclass
         # Without cipher, api_key remains encrypted in the dataclass
-        from apps.shared.api_connector.domain import ApiKeyAuthConfig
+        from apps.shared.external_systems.api_connector.domain import ApiKeyAuthConfig
 
         assert isinstance(domain.auth_config, ApiKeyAuthConfig)
         assert domain.auth_config.api_key == "enc:abc123"
@@ -107,7 +107,7 @@ class TestConnectorEntityToDomain:
         domain = connector_entity_to_domain(connector, cipher=cipher)
 
         # Auth config should be decrypted and converted to dataclass
-        from apps.shared.api_connector.domain import ApiKeyAuthConfig
+        from apps.shared.external_systems.api_connector.domain import ApiKeyAuthConfig
 
         assert isinstance(domain.auth_config, ApiKeyAuthConfig)
         assert domain.auth_config.api_key == "sk-test-1234567890abcdef"
@@ -138,7 +138,7 @@ class TestConnectorEntityToDomain:
         domain = connector_entity_to_domain(connector, cipher=cipher)
 
         # Empty auth_config becomes NoAuthConfig
-        from apps.shared.api_connector.domain import NoAuthConfig
+        from apps.shared.external_systems.api_connector.domain import NoAuthConfig
 
         assert isinstance(domain.auth_config, NoAuthConfig)
 
@@ -168,7 +168,7 @@ class TestConnectorEntityToDomain:
         domain = connector_entity_to_domain(connector, cipher=cipher)
 
         # None auth_config becomes NoAuthConfig
-        from apps.shared.api_connector.domain import NoAuthConfig
+        from apps.shared.external_systems.api_connector.domain import NoAuthConfig
 
         assert isinstance(domain.auth_config, NoAuthConfig)
 
@@ -388,7 +388,7 @@ class TestConnectorDomainToResponse:
 
     def test_masking_does_not_modify_original_domain(self):
         """Masking should create a copy, not modify the original domain."""
-        from apps.shared.api_connector.domain import ApiKeyAuthConfig
+        from apps.shared.external_systems.api_connector.domain import ApiKeyAuthConfig
 
         original_api_key = "sk-test-original-key-12345"
         domain = ApiConnectorDomain(
@@ -460,7 +460,7 @@ class TestEncryptionDecryptionMaskingFlow:
 
         # Step 3: Convert to domain (auto-decrypt + convert to dataclass)
         domain = connector_entity_to_domain(connector, cipher=cipher)
-        from apps.shared.api_connector.domain import ApiKeyAuthConfig
+        from apps.shared.external_systems.api_connector.domain import ApiKeyAuthConfig
 
         assert isinstance(domain.auth_config, ApiKeyAuthConfig)
         assert domain.auth_config.api_key == "sk-live-secret-key-1234567890"

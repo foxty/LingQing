@@ -10,6 +10,7 @@ export const API_ENDPOINTS = {
   dataSources: '/data-sources',
   dataSourceById: (id: number) => `/data-sources/${id}`,
   testConnection: '/data-sources/test-connection',
+  dataSourceTestConnection: (id: number) => `/data-sources/${id}/test-connection`,
   discoverAssets: (id: number) => `/data-sources/${id}/discover-assets`,
   updateAssetSelection: (id: number) => `/data-sources/${id}/assets/selection`,
   dataSourceAssets: (id: number) => `/data-sources/${id}/assets`,

@@ -24,9 +24,9 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
 
 from apps.config import EnvConfig
-from apps.shared.data_source.domain import AssetMetadataDomain
-from apps.shared.data_source.schemas import DiscoveredAsset, DiscoveredColumn
 from apps.shared.domain.value_objects import AssetType, DatabaseConnectionVO, DataType
+from apps.shared.external_systems.data_source.domain import AssetMetadataDomain
+from apps.shared.external_systems.data_source.schemas import DiscoveredAsset, DiscoveredColumn
 from apps.shared.infra.analytics_db.base_manager import AnalyticsDBManager
 from apps.shared.infra.analytics_db.errors import (
     ConnectionError,
@@ -341,6 +341,19 @@ class RelationalDBManager(AnalyticsDBManager):
 
     # ========== Optional Async Methods ==========
 
+    @staticmethod
+    def _connection_test_user_message(exc: Exception) -> str:
+        detail = str(exc).strip().lower()
+        if "password authentication failed" in detail or "access denied" in detail:
+            return "Connection failed: invalid username or password."
+        if "timeout" in detail or "timed out" in detail:
+            return "Connection failed: timed out reaching the database host."
+        if "could not connect" in detail or "connection refused" in detail or "name or service not known" in detail:
+            return "Connection failed: could not reach the database host."
+        if "does not exist" in detail and "database" in detail:
+            return "Connection failed: database name was not found."
+        return "Connection failed. Check host, credentials, and network access."
+
     async def test_connection(self) -> tuple[bool, str]:
         """Test database connection.
 
@@ -353,8 +366,8 @@ class RelationalDBManager(AnalyticsDBManager):
                 await conn.execute(text("SELECT 1"))
             return True, "Connection successful"
         except Exception as e:
-            self.logger.error(f"Connection test failed: {e}")
-            return False, f"Connection failed: {str(e)}"
+            self.logger.error(f"Connection test failed: {e}", exc_info=True)
+            return False, self._connection_test_user_message(e)
 
     async def discover_assets(
         self,

@@ -8,6 +8,7 @@ from apps.shared.core.exceptions import (
     AuthorizationError,
     DomainException,
     DuplicateResourceError,
+    IntegrationNotConnectedError,
     InternalServiceError,
     ResourceNotFoundError,
     SQLPreviewError,
@@ -132,6 +133,19 @@ def register_exception_handlers(app):
             fallback_code="INTERNAL_SERVICE_ERROR",
             message=exc.message,
             details=exc.details,
+        )
+
+    @app.exception_handler(IntegrationNotConnectedError)
+    async def handle_integration_not_connected(request: Request, exc: IntegrationNotConnectedError):
+        ctx = format_request_context(request)
+        logger.info(f"Integration not connected: {exc.message} ({ctx})")
+        details = {**exc.details, "code": exc.details.get("code", "INTEGRATION_NOT_CONNECTED")}
+        return _contract_error_response(
+            request=request,
+            status_code=422,
+            fallback_code="INTEGRATION_NOT_CONNECTED",
+            message=exc.message,
+            details=details,
         )
 
     @app.exception_handler(SQLPreviewError)

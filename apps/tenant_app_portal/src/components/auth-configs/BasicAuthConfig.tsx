@@ -26,6 +26,8 @@ interface BasicAuthConfigProps {
   password: string
   isAuthConfigured: boolean
   submitting: boolean
+  usernameError?: string
+  passwordError?: string
   onUsernameChange: (value: string) => void
   onPasswordChange: (value: string) => void
 }
@@ -39,6 +41,8 @@ export function BasicAuthConfig({
   password,
   isAuthConfigured,
   submitting,
+  usernameError,
+  passwordError,
   onUsernameChange,
   onPasswordChange,
 }: BasicAuthConfigProps) {
@@ -53,6 +57,7 @@ export function BasicAuthConfig({
           onChange={(e) => onUsernameChange(e.target.value)}
           placeholder={isAuthConfigured ? t('components.authConfigs.basicUsernamePlaceholder') : t('components.authConfigs.basicUsernamePlaceholder')}
           disabled={submitting}
+          errorMsg={usernameError}
         />
       </div>
       <div className="space-y-2">
@@ -64,6 +69,7 @@ export function BasicAuthConfig({
           onChange={(e) => onPasswordChange(e.target.value)}
           placeholder={isAuthConfigured ? t('components.authConfigs.basicPasswordPlaceholder') : t('components.authConfigs.basicPasswordPlaceholder')}
           disabled={submitting}
+          errorMsg={passwordError}
         />
       </div>
     </div>

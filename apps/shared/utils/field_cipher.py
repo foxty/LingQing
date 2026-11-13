@@ -5,6 +5,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+from copy import deepcopy
 from typing import Any
 
 from cryptography.fernet import Fernet, InvalidToken
@@ -25,6 +26,15 @@ SENSITIVE_FIELD_KEYS = {
 
 # Aliases for backward compatibility and domain-specific naming
 AUTH_CONFIG_SENSITIVE_FIELDS = SENSITIVE_FIELD_KEYS
+
+
+def strip_sensitive_fields(data: dict[str, Any]) -> dict[str, Any]:
+    """Remove secret keys from a config dict (user-mode resource definitions)."""
+    cleaned = deepcopy(data)
+    for key in list(cleaned.keys()):
+        if key in SENSITIVE_FIELD_KEYS:
+            del cleaned[key]
+    return cleaned
 
 
 class FieldCipher:

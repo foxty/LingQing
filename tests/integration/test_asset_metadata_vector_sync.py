@@ -23,9 +23,9 @@ import pytest
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.data_source.asset_metadata_service import AssetMetadataService
-from apps.shared.data_source.domain import AssetMetadataDomain
-from apps.shared.data_source.schemas import RAGSourceType
+from apps.shared.external_systems.data_source.asset_metadata_service import AssetMetadataService
+from apps.shared.external_systems.data_source.domain import AssetMetadataDomain
+from apps.shared.external_systems.data_source.schemas import RAGSourceType
 from apps.shared.db.models import AssetMetadata, DataSource, Tenant, User
 from apps.shared.domain.actor import ActorContext
 from apps.shared.tasks.domain import TaskExecutionContext

@@ -14,7 +14,8 @@ Domain models have been moved to their respective domain modules:
 - UserDomain -> apps.tenant_app_service.auth.domain
 - CustomAgent -> apps.tenant_app_service.agent_catalog.domain
 - DocumentDomain -> apps.shared.document.domain
-- DataSourceDomain, AssetMetadataDomain -> apps.shared.data_source.domain
+- DataSourceDomain, AssetMetadataDomain -> apps.shared.external_systems.data_source.domain
+- External system integration kernel -> apps.shared.external_systems.domain
 - MessageDomain, thread/message types -> apps.tenant_app_service.chat.domain
 
 Import them directly from their respective modules to avoid circular dependencies.

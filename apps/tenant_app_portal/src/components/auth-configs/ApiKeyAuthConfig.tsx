@@ -24,6 +24,7 @@ interface ApiKeyAuthConfigProps {
   keyValue: string
   isAuthConfigured: boolean
   submitting: boolean
+  keyValueError?: string
   onKeyNameChange: (value: string) => void
   onKeyValueChange: (value: string) => void
 }
@@ -36,6 +37,7 @@ export function ApiKeyAuthConfig({
   keyName,
   keyValue,
   submitting,
+  keyValueError,
   onKeyNameChange,
   onKeyValueChange,
 }: ApiKeyAuthConfigProps) {
@@ -61,6 +63,7 @@ export function ApiKeyAuthConfig({
           onChange={(e) => onKeyValueChange(e.target.value)}
           placeholder={t('components.authConfigs.apiKeyPlaceholder')}
           disabled={submitting}
+          errorMsg={keyValueError}
         />
       </div>
     </div>

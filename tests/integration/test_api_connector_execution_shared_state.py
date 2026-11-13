@@ -14,7 +14,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from apps.shared.api_connector.execution import (
+from apps.shared.external_systems.api_connector.execution import (
     ApiConnectorExecutionService,
     _shared_execution_state,
 )
@@ -43,10 +43,11 @@ async def test_token_cache_persists_across_service_instances():
     3. Request 2 should see cached token (cache hit)
     """
     connector_id = 999
+    cache_key = (1, 42, connector_id)
 
     # Request 1: Create service instance and cache token
     service1 = ApiConnectorExecutionService(tenant_id=1, db_session=MagicMock())
-    service1._token_cache[connector_id] = {
+    service1._token_cache[cache_key] = {
         "tokens": {"session_id": "cached-token-123"},
         "expires_at": monotonic() + 1800,  # 30 min TTL
     }
@@ -55,8 +56,8 @@ async def test_token_cache_persists_across_service_instances():
     service2 = ApiConnectorExecutionService(tenant_id=1, db_session=MagicMock())
 
     # Verify cache is shared
-    assert connector_id in service2._token_cache
-    cached = service2._token_cache[connector_id]
+    assert cache_key in service2._token_cache
+    cached = service2._token_cache[cache_key]
     assert cached["tokens"]["session_id"] == "cached-token-123"
     assert cached["expires_at"] > monotonic()
 
@@ -98,7 +99,7 @@ async def test_rate_limiters_shared_across_instances():
     service1 = ApiConnectorExecutionService(tenant_id=tenant_id, db_session=MagicMock())
     import asyncio
 
-    from apps.shared.api_connector.execution import _TokenBucketState
+    from apps.shared.external_systems.api_connector.execution import _TokenBucketState
 
     service1._rate_limiters[key] = _TokenBucketState(
         rate_per_second=10.0,
@@ -156,27 +157,28 @@ async def test_state_lock_shared_across_instances():
 async def test_full_token_lifecycle_across_requests():
     """Test complete token lifecycle: cache miss → login → cache → cache hit."""
     connector_id = 555
+    cache_key = (1, 99, connector_id)
 
     # Simulate Request 1: Cache miss, would trigger login
     service1 = ApiConnectorExecutionService(tenant_id=1, db_session=MagicMock())
-    cached1 = service1._token_cache.get(connector_id)
+    cached1 = service1._token_cache.get(cache_key)
     assert cached1 is None, "Request 1: Should be cache miss"
 
     # Simulate login and cache token (would happen in _get_or_refresh_session_tokens)
-    service1._token_cache[connector_id] = {
+    service1._token_cache[cache_key] = {
         "tokens": {"session_id": "fresh-token-abc"},
         "expires_at": monotonic() + 1800,
     }
 
     # Simulate Request 2: Should get cache hit
     service2 = ApiConnectorExecutionService(tenant_id=1, db_session=MagicMock())
-    cached2 = service2._token_cache.get(connector_id)
+    cached2 = service2._token_cache.get(cache_key)
     assert cached2 is not None, "Request 2: Should be cache hit"
     assert cached2["tokens"]["session_id"] == "fresh-token-abc"
 
     # Simulate Request 3: Should still get cache hit
     service3 = ApiConnectorExecutionService(tenant_id=1, db_session=MagicMock())
-    cached3 = service3._token_cache.get(connector_id)
+    cached3 = service3._token_cache.get(cache_key)
     assert cached3 is not None, "Request 3: Should be cache hit"
     assert cached3["tokens"]["session_id"] == "fresh-token-abc"
 
@@ -186,25 +188,38 @@ async def test_multiple_connectors_independent_caches():
     """Different connectors should have independent token caches."""
     connector_a = 111
     connector_b = 222
+    key_a = (1, 7, connector_a)
+    key_b = (1, 7, connector_b)
 
     service1 = ApiConnectorExecutionService(tenant_id=1, db_session=MagicMock())
 
-    # Cache tokens for connector A
-    service1._token_cache[connector_a] = {
+    service1._token_cache[key_a] = {
         "tokens": {"session_id": "token-a"},
         "expires_at": monotonic() + 1800,
     }
-
-    # Cache tokens for connector B
-    service1._token_cache[connector_b] = {
+    service1._token_cache[key_b] = {
         "tokens": {"session_id": "token-b"},
         "expires_at": monotonic() + 1800,
     }
 
-    # New service should see both caches
     service2 = ApiConnectorExecutionService(tenant_id=1, db_session=MagicMock())
-    assert service2._token_cache[connector_a]["tokens"]["session_id"] == "token-a"
-    assert service2._token_cache[connector_b]["tokens"]["session_id"] == "token-b"
+    assert service2._token_cache[key_a]["tokens"]["session_id"] == "token-a"
+    assert service2._token_cache[key_b]["tokens"]["session_id"] == "token-b"
+
+
+@pytest.mark.asyncio
+async def test_token_cache_isolated_per_user_same_connector():
+    """BYOT: same connector, different users must not share session tokens."""
+    connector_id = 333
+    user_a_key = (1, 10, connector_id)
+    user_b_key = (1, 20, connector_id)
+
+    service = ApiConnectorExecutionService(tenant_id=1, db_session=MagicMock())
+    service._token_cache[user_a_key] = {"tokens": {"session_id": "user-a"}, "expires_at": monotonic() + 1800}
+    service._token_cache[user_b_key] = {"tokens": {"session_id": "user-b"}, "expires_at": monotonic() + 1800}
+
+    assert service._token_cache[user_a_key]["tokens"]["session_id"] == "user-a"
+    assert service._token_cache[user_b_key]["tokens"]["session_id"] == "user-b"
 
 
 @pytest.mark.asyncio

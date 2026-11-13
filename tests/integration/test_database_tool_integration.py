@@ -10,7 +10,7 @@ import pandas as pd
 import pytest
 from sqlalchemy import delete
 
-from apps.shared.data_source.service import DataSourceService
+from apps.shared.external_systems.data_source.service import DataSourceService
 from apps.shared.db.models import AssetMetadata, DataSource, Tenant
 from apps.tenant_app_service.agents.tools import database as database_tool
 from apps.tenant_app_service.agents.tools.tool_result import ToolResultStatus
@@ -122,6 +122,8 @@ async def test_list_data_sources_tool_returns_dialect_hints(
     assert payload[0]["data_source_id"] == data_source.id
     assert payload[0]["name"] == data_source.name
     assert payload[0]["type"] == data_source.type
+    assert payload[0]["credential_mode"] == "shared"
+    assert payload[0]["user_connection_status"] is None
     assert "SQL Dialect Hints" in payload[0]["description"]
 
 
@@ -150,10 +152,10 @@ async def test_run_sql_query_on_datasource_formats_rows_and_truncates_cells(
         ]
     )
 
-    async def _fake_get_db_manager(self, data_source_id: int):
+    async def _fake_get_db_manager_for_actor(self, data_source_id: int, actor):
         return _FakeDBManager(df)
 
-    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+    monkeypatch.setattr(DataSourceService, "get_db_manager_for_actor", _fake_get_db_manager_for_actor)
 
     result = await database_tool.run_sql_query_on_datasource.ainvoke(
         {
@@ -200,10 +202,10 @@ async def test_run_sql_query_on_datasource_caps_row_limit(
 
     df = pd.DataFrame([{"value": i} for i in range(database_tool.MAX_QUERY_RESULT_ROWS + 1)])
 
-    async def _fake_get_db_manager(self, data_source_id: int):
+    async def _fake_get_db_manager_for_actor(self, data_source_id: int, actor):
         return _FakeDBManager(df)
 
-    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+    monkeypatch.setattr(DataSourceService, "get_db_manager_for_actor", _fake_get_db_manager_for_actor)
 
     result = await database_tool.run_sql_query_on_datasource.ainvoke(
         {
@@ -244,10 +246,10 @@ async def test_run_sql_query_on_datasource_denies_unregistered_table(
             warehouse_called = True
             return await super().query(sql, params=params)
 
-    async def _fake_get_db_manager(self, data_source_id: int):
+    async def _fake_get_db_manager_for_actor(self, data_source_id: int, actor):
         return _FailIfCalledManager(pd.DataFrame())
 
-    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+    monkeypatch.setattr(DataSourceService, "get_db_manager_for_actor", _fake_get_db_manager_for_actor)
 
     result = await database_tool.run_sql_query_on_datasource.ainvoke(
         {
@@ -293,7 +295,7 @@ async def test_run_sql_query_on_datasource_denies_information_schema_catalog(
 
     warehouse_called = False
 
-    async def _fake_get_db_manager(self, data_source_id: int):
+    async def _fake_get_db_manager_for_actor(self, data_source_id: int, actor):
         class _Manager(_FakeDBManager):
             async def query(self, sql: str, params: dict | None = None) -> pd.DataFrame:
                 nonlocal warehouse_called
@@ -302,7 +304,7 @@ async def test_run_sql_query_on_datasource_denies_information_schema_catalog(
 
         return _Manager(pd.DataFrame())
 
-    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+    monkeypatch.setattr(DataSourceService, "get_db_manager_for_actor", _fake_get_db_manager_for_actor)
 
     sql = (
         "SELECT table_schema, table_name FROM information_schema.tables "

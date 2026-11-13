@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from apps.shared.api_connector.schemas import SyncSchemaSummaryDTO
+from apps.shared.external_systems.api_connector.schemas import SyncSchemaSummaryDTO
 from apps.shared.core.auth import get_current_user
 from apps.shared.core.exception_handlers import register_exception_handlers
 from apps.shared.core.exceptions import ValidationError
@@ -282,7 +282,10 @@ def app(monkeypatch):
         return service
 
     monkeypatch.setattr(api_connectors, "_service", _fake_service)
-    monkeypatch.setattr(api_connectors, "ApiConnectorExecutionService", _FakeExecutionService)
+    def _fake_execution_service(tenant_id, db_session):
+        return _FakeExecutionService(tenant_id, db_session)
+
+    monkeypatch.setattr(api_connectors, "api_connector_execution_service", _fake_execution_service)
 
     return api
 

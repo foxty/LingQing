@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import pytest
 
-from apps.shared.api_connector.domain import RatePolicyDomain
-from apps.shared.api_connector.service import ApiConnectorService
+from apps.shared.external_systems.api_connector.domain import RatePolicyDomain
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
 from apps.shared.db.models import AclGrant, ResourceAcl, Tenant, User
 from apps.shared.domain.actor import ActorContext
 

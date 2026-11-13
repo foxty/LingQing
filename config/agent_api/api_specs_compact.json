@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-10T04:05:23.312112+00:00",
+  "generated_at": "2026-11-11T13:44:50.606570+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -563,6 +563,15 @@
             "type": "string",
             "title": "Base Url"
           },
+          "credential_mode": {
+            "type": "string",
+            "enum": [
+              "shared",
+              "user"
+            ],
+            "title": "Credential Mode",
+            "default": "shared"
+          },
           "auth_type": {
             "type": "string",
             "enum": [
@@ -783,6 +792,25 @@
             ],
             "title": "Status"
           },
+          "credential_mode": {
+            "type": "string",
+            "enum": [
+              "shared",
+              "user"
+            ],
+            "title": "Credential Mode",
+            "default": "shared"
+          },
+          "user_connection_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserConnectionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "created_at": {
             "type": "string",
             "format": "date-time",
@@ -849,6 +877,21 @@
               }
             ],
             "title": "Base Url"
+          },
+          "credential_mode": {
+            "anyOf": [
+              {
+                "type": "string",
+                "enum": [
+                  "shared",
+                  "user"
+                ]
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Credential Mode"
           },
           "auth_type": {
             "anyOf": [
@@ -4153,6 +4196,27 @@
             "title": "Asset Count",
             "description": "Number of assets in this data source",
             "default": 0
+          },
+          "credential_mode": {
+            "type": "string",
+            "enum": [
+              "shared",
+              "user"
+            ],
+            "title": "Credential Mode",
+            "description": "shared | user",
+            "default": "shared"
+          },
+          "user_connection_status": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/UserConnectionStatus"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Caller connection status when credential_mode=user"
           }
         },
         "type": "object",
@@ -6684,6 +6748,24 @@
         "title": "ReportResponse",
         "description": "Report API response."
       },
+      "SavedConnectionTestRequest": {
+        "properties": {
+          "config": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Config"
+          }
+        },
+        "type": "object",
+        "title": "SavedConnectionTestRequest"
+      },
       "ScatterDisplayConfigDTO": {
         "properties": {
           "sizeRange": {
@@ -8780,6 +8862,140 @@
         "type": "object",
         "title": "UpdateLLMProviderRequest"
       },
+      "UserConnectionStatus": {
+        "type": "string",
+        "enum": [
+          "not_connected",
+          "connected",
+          "expired"
+        ],
+        "title": "UserConnectionStatus"
+      },
+      "UserIntegrationConnectionResponse": {
+        "properties": {
+          "resource_type": {
+            "type": "string",
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "type": "integer",
+            "title": "Resource Id"
+          },
+          "status": {
+            "$ref": "#/components/schemas/UserConnectionStatus",
+            "description": "not_connected | connected | expired"
+          },
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          },
+          "auth_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Auth Type"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
+          },
+          "secrets_public": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secrets Public",
+            "description": "Non-sensitive saved secret fields (e.g. username) for edit forms"
+          },
+          "secret_keys_configured": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Secret Keys Configured",
+            "description": "Sensitive secret keys that have a saved value"
+          }
+        },
+        "type": "object",
+        "required": [
+          "resource_type",
+          "resource_id",
+          "status"
+        ],
+        "title": "UserIntegrationConnectionResponse"
+      },
+      "UserIntegrationConnectionTestResponse": {
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "title": "Success"
+          },
+          "message": {
+            "type": "string",
+            "title": "Message"
+          }
+        },
+        "type": "object",
+        "required": [
+          "success",
+          "message"
+        ],
+        "title": "UserIntegrationConnectionTestResponse"
+      },
+      "UserIntegrationConnectionUpsertRequest": {
+        "properties": {
+          "auth_type": {
+            "type": "string",
+            "title": "Auth Type",
+            "description": "Data source: db_password (RDBMS) or pat (Databricks). API connector: must match connector auth_type (api_key, bearer, basic)."
+          },
+          "secrets": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "type": "object",
+            "title": "Secrets",
+            "description": "Plaintext secrets; encrypted server-side"
+          },
+          "account_label": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Account Label"
+          }
+        },
+        "type": "object",
+        "required": [
+          "auth_type",
+          "secrets"
+        ],
+        "title": "UserIntegrationConnectionUpsertRequest"
+      },
       "ValidationError": {
         "properties": {
           "loc": {
@@ -8867,9 +9083,11 @@
     "DELETE_/agents/{agent_id}/integrations/slack": "delete_agent_slack_integration_agents__agent_id__integrations_slack_delete",
     "DELETE_/api-connectors/operations/{operation_id}": "delete_operation_api_connectors_operations__operation_id__delete",
     "DELETE_/api-connectors/{connector_id}": "delete_connector_api_connectors__connector_id__delete",
+    "DELETE_/api-connectors/{connector_id}/connections/me": "delete_my_api_connector_connection_api_connectors__connector_id__connections_me_delete",
     "DELETE_/dashboards/{dashboard_id}": "delete_dashboard_dashboards__dashboard_id__delete",
     "DELETE_/dashboards/{dashboard_id}/filters/{filter_id}": "remove_dashboard_filter_dashboards__dashboard_id__filters__filter_id__delete",
     "DELETE_/dashboards/{dashboard_id}/widgets/{widget_id}": "remove_dashboard_widget_dashboards__dashboard_id__widgets__widget_id__delete",
+    "DELETE_/data-sources/{data_source_id}/connections/me": "delete_my_data_source_connection_data_sources__data_source_id__connections_me_delete",
     "DELETE_/data-sources/{data_source_id}/tags/{tag_value_id}": "unbind_data_source_tag_data_sources__data_source_id__tags__tag_value_id__delete",
     "DELETE_/document-collections/{collection_id}": "delete_document_collection_document_collections__collection_id__delete",
     "DELETE_/document-collections/{collection_id}/sync-connector": "delete_sync_connector_document_collections__collection_id__sync_connector_delete",
@@ -8899,6 +9117,7 @@
     "GET_/api-connectors": "list_connectors_api_connectors_get",
     "GET_/api-connectors/operations/search": "search_operations_api_connectors_operations_search_get",
     "GET_/api-connectors/{connector_id}": "get_connector_api_connectors__connector_id__get",
+    "GET_/api-connectors/{connector_id}/connections/me": "get_my_api_connector_connection_api_connectors__connector_id__connections_me_get",
     "GET_/api-connectors/{connector_id}/operations": "list_operations_api_connectors__connector_id__operations_get",
     "GET_/api-connectors/{connector_id}/operations/stats": "get_operation_stats_api_connectors__connector_id__operations_stats_get",
     "GET_/apps": "list_live_apps_apps_get",
@@ -8919,6 +9138,7 @@
     "GET_/data-sources/{data_source_id}": "get_data_source_data_sources__data_source_id__get",
     "GET_/data-sources/{data_source_id}/assets": "list_assets_data_sources__data_source_id__assets_get",
     "GET_/data-sources/{data_source_id}/assets/{asset_name}": "get_asset_schema_data_sources__data_source_id__assets__asset_name__get",
+    "GET_/data-sources/{data_source_id}/connections/me": "get_my_data_source_connection_data_sources__data_source_id__connections_me_get",
     "GET_/data-sources/{data_source_id}/tags": "list_data_source_tags_data_sources__data_source_id__tags_get",
     "GET_/document-collections": "list_document_collections_document_collections_get",
     "GET_/document-collections/{collection_id}": "get_document_collection_document_collections__collection_id__get",
@@ -8982,6 +9202,7 @@
     "POST_/agents/{agent_id}/integrations/slack/test": "test_agent_slack_connection_agents__agent_id__integrations_slack_test_post",
     "POST_/api-connectors": "create_connector_api_connectors_post",
     "POST_/api-connectors/operations/{operation_uid}/call": "call_operation_api_connectors_operations__operation_uid__call_post",
+    "POST_/api-connectors/{connector_id}/connections/me/test": "test_my_api_connector_connection_api_connectors__connector_id__connections_me_test_post",
     "POST_/api-connectors/{connector_id}/operations": "add_manual_operation_api_connectors__connector_id__operations_post",
     "POST_/api-connectors/{connector_id}/sync-schema": "sync_schema_api_connectors__connector_id__sync_schema_post",
     "POST_/apps/v1/{app_id}/{environment}/api-connectors/{operation_uid}/call": "call_api_connector_v1_apps_v1__app_id___environment__api_connectors__operation_uid__call_post",
@@ -8997,8 +9218,10 @@
     "POST_/dashboards/{dashboard_id}/widgets/{widget_id}/query-preview": "query_dashboard_widget_preview_dashboards__dashboard_id__widgets__widget_id__query_preview_post",
     "POST_/data-sources/test-connection": "test_connection_data_sources_test_connection_post",
     "POST_/data-sources/{data_source_id}/assets/upload-csv": "upload_csv_data_sources__data_source_id__assets_upload_csv_post",
+    "POST_/data-sources/{data_source_id}/connections/me/test": "test_my_data_source_connection_data_sources__data_source_id__connections_me_test_post",
     "POST_/data-sources/{data_source_id}/query": "query_data_source_data_sources__data_source_id__query_post",
     "POST_/data-sources/{data_source_id}/tags": "bind_data_source_tag_data_sources__data_source_id__tags_post",
+    "POST_/data-sources/{data_source_id}/test-connection": "test_saved_data_source_connection_data_sources__data_source_id__test_connection_post",
     "POST_/document-collections": "create_document_collection_document_collections_post",
     "POST_/document-collections/{collection_id}/reindex": "queue_collection_reindex_document_collections__collection_id__reindex_post",
     "POST_/document-collections/{collection_id}/reparse": "queue_collection_reparse_document_collections__collection_id__reparse_post",
@@ -9017,7 +9240,9 @@
     "POST_/skills": "create_skill_skills_post",
     "POST_/skills/import": "import_skill_skills_import_post",
     "PUT_/agents/{agent_id}": "update_agent_agents__agent_id__put",
+    "PUT_/api-connectors/{connector_id}/connections/me": "upsert_my_api_connector_connection_api_connectors__connector_id__connections_me_put",
     "PUT_/dashboards/{dashboard_id}": "update_dashboard_dashboards__dashboard_id__put",
+    "PUT_/data-sources/{data_source_id}/connections/me": "upsert_my_data_source_connection_data_sources__data_source_id__connections_me_put",
     "PUT_/document-collections/{collection_id}": "update_document_collection_document_collections__collection_id__put",
     "PUT_/document-sources/google-drive": "upsert_google_drive_source_document_sources_google_drive_put",
     "PUT_/llm-config/registry/defaults": "update_registry_defaults_llm_config_registry_defaults_put",
@@ -9910,6 +10135,66 @@
             "schema": {
               "type": "string",
               "title": "Message Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "204",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "delete_my_api_connector_connection_api_connectors__connector_id__connections_me_delete": {
+      "operation_key": "DELETE_/api-connectors/{connector_id}/connections/me",
+      "method": "DELETE",
+      "path": "/api-connectors/{connector_id}/connections/me",
+      "summary": "Delete My Api Connector Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connector Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "204",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "delete_my_data_source_connection_data_sources__data_source_id__connections_me_delete": {
+      "operation_key": "DELETE_/data-sources/{data_source_id}/connections/me",
+      "method": "DELETE",
+      "path": "/data-sources/{data_source_id}/connections/me",
+      "summary": "Delete My Data Source Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "data_source_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Data Source Id"
             },
             "description": ""
           }
@@ -11377,6 +11662,72 @@
       },
       "response": {
         "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_my_api_connector_connection_api_connectors__connector_id__connections_me_get": {
+      "operation_key": "GET_/api-connectors/{connector_id}/connections/me",
+      "method": "GET",
+      "path": "/api-connectors/{connector_id}/connections/me",
+      "summary": "Get My Api Connector Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connector Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/UserIntegrationConnectionResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "get_my_data_source_connection_data_sources__data_source_id__connections_me_get": {
+      "operation_key": "GET_/data-sources/{data_source_id}/connections/me",
+      "method": "GET",
+      "path": "/data-sources/{data_source_id}/connections/me",
+      "summary": "Get My Data Source Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "data_source_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Data Source Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/UserIntegrationConnectionResponse"
+        },
         "error_statuses": [
           "422"
         ]
@@ -15151,6 +15502,106 @@
         "idempotent": false
       }
     },
+    "test_my_api_connector_connection_api_connectors__connector_id__connections_me_test_post": {
+      "operation_key": "POST_/api-connectors/{connector_id}/connections/me/test",
+      "method": "POST",
+      "path": "/api-connectors/{connector_id}/connections/me/test",
+      "summary": "Test My Api Connector Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connector Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/UserIntegrationConnectionUpsertRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/UserIntegrationConnectionTestResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "test_my_data_source_connection_data_sources__data_source_id__connections_me_test_post": {
+      "operation_key": "POST_/data-sources/{data_source_id}/connections/me/test",
+      "method": "POST",
+      "path": "/data-sources/{data_source_id}/connections/me/test",
+      "summary": "Test My Data Source Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "data_source_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Data Source Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/UserIntegrationConnectionUpsertRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/UserIntegrationConnectionTestResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
     "test_registry_profile_connection_llm_config_registry_profiles__profile_id__test_post": {
       "operation_key": "POST_/llm-config/registry/profiles/{profile_id}/test",
       "method": "POST",
@@ -15222,6 +15673,56 @@
       },
       "response": {
         "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "test_saved_data_source_connection_data_sources__data_source_id__test_connection_post": {
+      "operation_key": "POST_/data-sources/{data_source_id}/test-connection",
+      "method": "POST",
+      "path": "/data-sources/{data_source_id}/test-connection",
+      "summary": "Test Saved Data Source Connection",
+      "description": "Test connection for a saved data source (merges overlay; placeholder keeps stored secrets).",
+      "request": {
+        "path_params": [
+          {
+            "name": "data_source_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Data Source Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "anyOf": [
+                  {
+                    "$ref": "#/components/schemas/SavedConnectionTestRequest"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ],
+                "title": "Body"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/TestConnectionResponse"
+        },
         "error_statuses": [
           "422"
         ]
@@ -16123,6 +16624,92 @@
         "success_status": "200",
         "success_schema": {
           "$ref": "#/components/schemas/FeedbackResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "upsert_my_api_connector_connection_api_connectors__connector_id__connections_me_put": {
+      "operation_key": "PUT_/api-connectors/{connector_id}/connections/me",
+      "method": "PUT",
+      "path": "/api-connectors/{connector_id}/connections/me",
+      "summary": "Upsert My Api Connector Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connector Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserIntegrationConnectionUpsertRequest"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/UserIntegrationConnectionResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "upsert_my_data_source_connection_data_sources__data_source_id__connections_me_put": {
+      "operation_key": "PUT_/data-sources/{data_source_id}/connections/me",
+      "method": "PUT",
+      "path": "/data-sources/{data_source_id}/connections/me",
+      "summary": "Upsert My Data Source Connection",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "data_source_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Data Source Id"
+            },
+            "description": ""
+          }
+        ],
+        "body_schema": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UserIntegrationConnectionUpsertRequest"
+              }
+            }
+          }
+        }
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/UserIntegrationConnectionResponse"
         },
         "error_statuses": [
           "422"

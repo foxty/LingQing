@@ -75,7 +75,7 @@ def test_upload_csv_forwards_description_as_keyword_arg(app, monkeypatch):
         async def require_write_access_for_actor(self, *, data_source_id: int, actor):
             return SimpleNamespace(id=data_source_id, managed=True), False
 
-        async def get_db_manager(self, data_source_id: int):
+        async def get_db_manager_for_actor(self, data_source_id: int, actor):
             return _FakeDBManager()
 
     class _FakeAssetService:
@@ -110,7 +110,7 @@ def test_upload_csv_forwards_description_as_keyword_arg(app, monkeypatch):
         lambda db, tenant_id: _FakeAssetService(),
     )
     monkeypatch.setattr(
-        "apps.shared.data_source.adapters.domain_asset_metadata_to_api",
+        "apps.shared.external_systems.data_source.adapters.domain_asset_metadata_to_api",
         lambda asset: payload,
     )
 

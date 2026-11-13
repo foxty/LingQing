@@ -348,3 +348,5 @@ class TestFieldCipherEdgeCases:
         encrypted = cipher.encrypt_dict(data, sensitive_fields=sensitive_fields)
         decrypted = cipher.decrypt_dict(encrypted, sensitive_fields=sensitive_fields)
         assert decrypted == data
+
+

@@ -7,8 +7,8 @@ import pytest
 from sqlalchemy import select
 
 from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError
-from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
-from apps.shared.data_source.service import DataSourceService
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository, DataSourceRepository
+from apps.shared.external_systems.data_source.service import DataSourceService
 from apps.shared.db.models import AclGrant, AssetMetadata, ResourceAcl, ResourceIndex, User
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import ABAC_ACTION_READ, RESOURCE_TYPE_ASSET

@@ -6,8 +6,8 @@ import pytest
 from apps.shared.core.exceptions import AuthorizationError
 from apps.shared.dashboard.domain import DashboardWidget, WidgetPosition
 from apps.shared.dashboard.service import DashboardService
-from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
-from apps.shared.data_source.service import DataSourceService
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository, DataSourceRepository
+from apps.shared.external_systems.data_source.service import DataSourceService
 from apps.shared.domain.actor import ActorContext
 from tests.helpers.data_source_fixtures import (
     create_asset,
@@ -99,10 +99,10 @@ async def test_query_data_for_actor_allows_schema_qualified_business_table(async
     service = await _service(async_db_session, tenant.id)
     actor = ActorContext(tenant_id=tenant.id, user_id=owner.id, user_role="admin")
 
-    async def _fake_get_db_manager(_self, _data_source_id: int):
+    async def _fake_get_db_manager_for_actor(_self, _data_source_id: int, _actor):
         return _FakeDBManager()
 
-    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+    monkeypatch.setattr(DataSourceService, "get_db_manager_for_actor", _fake_get_db_manager_for_actor)
 
     await service.query_data_for_actor(
         data_source_id=data_source.id,
@@ -126,10 +126,10 @@ async def test_query_data_for_actor_denies_unregistered_table_with_real_metadata
     service = await _service(async_db_session, tenant.id)
     actor = ActorContext(tenant_id=tenant.id, user_id=owner.id, user_role="admin")
 
-    async def _fake_get_db_manager(_self, _data_source_id: int):
+    async def _fake_get_db_manager_for_actor(_self, _data_source_id: int, _actor):
         return _FakeDBManager()
 
-    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+    monkeypatch.setattr(DataSourceService, "get_db_manager_for_actor", _fake_get_db_manager_for_actor)
 
     with pytest.raises(AuthorizationError, match="unregistered asset 'secret_table'"):
         await service.query_data_for_actor(
@@ -164,10 +164,10 @@ async def test_prepare_widget_analytics_query_denies_information_schema_with_rea
         data_source_id=data_source.id,
     )
 
-    async def _fake_get_db_manager(_self, _data_source_id: int):
+    async def _fake_get_db_manager_for_actor(_self, _data_source_id: int, _actor):
         raise AssertionError("warehouse must not run when whitelist fails")
 
-    monkeypatch.setattr(DataSourceService, "get_db_manager", _fake_get_db_manager)
+    monkeypatch.setattr(DataSourceService, "get_db_manager_for_actor", _fake_get_db_manager_for_actor)
 
     with pytest.raises(AuthorizationError, match="information_schema.tables"):
         await dashboard_service.prepare_widget_analytics_query(

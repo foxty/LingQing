@@ -31,13 +31,13 @@ sys.path.insert(0, project_root)
 
 from apps.shared.core.exceptions import DuplicateResourceError, ValidationError  # noqa: E402
 from apps.shared.core.tag_seed import seed_default_tags  # noqa: E402
-from apps.shared.data_source import (  # noqa: E402
+from apps.shared.db.session import app_db_session  # noqa: E402
+from apps.shared.external_systems.data_source import (  # noqa: E402
     AssetMetadataRepository,
     DataSourceRepository,
     DataSourceService,
 )
-from apps.shared.data_source.schemas import DataSourceCreate  # noqa: E402
-from apps.shared.db.session import app_db_session  # noqa: E402
+from apps.shared.external_systems.data_source.schemas import DataSourceCreate  # noqa: E402
 from apps.tenant_app_service.tenant import (  # noqa: E402
     PostgreSQLProvisioningExecutor,
     TenantProvisioningService,

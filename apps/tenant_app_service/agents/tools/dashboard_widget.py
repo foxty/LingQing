@@ -22,9 +22,9 @@ from apps.shared.dashboard.schemas import (
     WidgetPositionDTO,
 )
 from apps.shared.dashboard.service import DashboardService
-from apps.shared.data_source import AssetMetadataRepository, DataSourceRepository, DataSourceService
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.data_source import AssetMetadataRepository, DataSourceRepository, DataSourceService
 from apps.shared.utils.logger import get_logger
 from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.tools.tool_result import ToolResult
