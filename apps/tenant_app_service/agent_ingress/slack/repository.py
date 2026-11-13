@@ -88,6 +88,49 @@ class SlackRepository:
         )
         return result.scalar_one_or_none()
 
+    async def ensure_stub_endpoint(self, *, tenant_id: int, agent_id: int) -> AgentIngressEndpoint:
+        """Create a placeholder Slack endpoint row, or return the existing one (race-safe)."""
+        existing = await self.get_endpoint_by_agent(tenant_id, agent_id)
+        if existing is not None:
+            return existing
+
+        endpoint_key = secrets.token_urlsafe(32)
+        external_scope_key = slack_endpoint_scope_key(team_id=None, app_id=None, tenant_id=tenant_id)
+        encrypted = self._cipher.encrypt_dict({}, sensitive_fields=_SLACK_SECRET_FIELDS)
+        now = datetime.now(UTC)
+        stmt = (
+            pg_insert(AgentIngressEndpoint)
+            .values(
+                tenant_id=tenant_id,
+                agent_id=agent_id,
+                platform=PLATFORM_SLACK,
+                endpoint_key=endpoint_key,
+                external_scope_key=external_scope_key,
+                enabled=False,
+                identity_source_id=None,
+                platform_config={},
+                credentials_encrypted=encrypted,
+                created_at=now,
+                updated_at=now,
+            )
+            .on_conflict_do_nothing(index_elements=["tenant_id", "agent_id", "platform"])
+            .returning(AgentIngressEndpoint.id)
+        )
+        result = await self.db.execute(stmt)
+        inserted_id = result.scalar_one_or_none()
+        if inserted_id is not None:
+            await self.db.flush()
+            created = await self.get_endpoint_by_agent(tenant_id, agent_id)
+            if created is not None:
+                return created
+
+        existing = await self.get_endpoint_by_agent(tenant_id, agent_id)
+        if existing is None:
+            raise RuntimeError(
+                f"Failed to ensure Slack ingress endpoint for tenant {tenant_id} agent {agent_id}"
+            )
+        return existing
+
     async def create_endpoint(
         self,
         *,
