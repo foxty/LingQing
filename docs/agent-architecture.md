@@ -10,7 +10,7 @@ This document describes the detailed architecture of the LingQing agent system, 
 graph TD
     A["Frontend Portal\n(React + TypeScript)"] --> B["API Gateway\n(FastAPI Routers)"]
 
-    B --> C["Chat Service\n(ChatService)"]
+    B --> C["Chat turn orchestration\n(ChatTurnService)"]
     B --> D["Agent Pool\n(AgentPool)"]
     B --> E["Thread Management\n(ThreadRepository)"]
     B --> F["Timeline Stores\n(Main + AgentRun repos)"]
@@ -301,7 +301,7 @@ Response Generation → Message Saving → Streaming Response → User Output
 ### Infrastructure
 
 - **Containerization**: Docker
-- **Orchestration**: Kubernetes (Helm charts)
+- **Orchestration**: Docker Compose for production; Kubernetes/Helm not shipped in-repo (see [deploy/reference.md](deploy/reference.md))
 - **CI/CD**: GitHub Actions
 - **Monitoring**: Structured logging
 

@@ -17,14 +17,13 @@ Public docs use **kebab-case** English filenames.
 
 ## Deploy & operations
 
-Start at [deploy/README.md](deploy/README.md) · repo layout: [deploy/README.md](../deploy/README.md).
+Start at [../deploy/README.md](../deploy/README.md) (folder layout, commands, how release tags appear in examples).
 
 | Document | Description |
 | --- | --- |
 | [deploy/guide.md](deploy/guide.md) | **Deploy guide** — production steps, scripts, troubleshooting |
 | [deploy/reference.md](deploy/reference.md) | PostgreSQL, env vars, Nginx/TLS, topology |
 | [deploy/byo-cicd.md](deploy/byo-cicd.md) | Custom CI/CD with build/deploy scripts |
-| [deploy/README.md](../deploy/README.md) | Deploy folder layout and commands |
 
 ## Development reference
 
@@ -40,8 +39,11 @@ Start at [deploy/README.md](deploy/README.md) · repo layout: [deploy/README.md]
 | [../SECURITY.md](../SECURITY.md) | Security reporting |
 | [../AGENTS.md](../AGENTS.md) | Coding conventions |
 
-## App READMEs
+## Apps (code lives under `apps/`)
 
-- [tenant_app_service](../apps/tenant_app_service/README.md)
-- [tenant_app_portal](../apps/tenant_app_portal/README.md)
-- [tenant_manager_portal](../apps/tenant_manager_portal/README.md)
+| App | Local dev | UI / API notes |
+| --- | --- | --- |
+| Tenant stack | `npm run dev:ta` | [dev-guide.md](dev-guide.md); OpenAPI at `:8000/docs` |
+| Tenant portal | included in `dev:ta` | [tenant_app_portal/DESIGN.md](../apps/tenant_app_portal/DESIGN.md) |
+| Control plane | `npm run dev:tm` | Manager API `:8010`, portal `:5174` |
+| Live App SDK | `npm run gen-live-app-sdk` | [live-app-sdk-guide.md](live-app-sdk-guide.md), [apps/shared/sdk/README.md](../apps/shared/sdk/README.md) |

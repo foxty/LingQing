@@ -75,7 +75,7 @@ npm run dev:ta                          # API + frontend + scheduler + sandbox
 **First-time setup:** create a tenant (`npm run dev:ta` links skills automatically — see [dev guide](docs/dev-guide.md)):
 
 ```bash
-npm run tenant-cli -- --name demo --slug demo
+npm run tenant-cli -- create --name "Demo" --slug demo
 ```
 
 **Open in browser:**
@@ -86,7 +86,7 @@ npm run tenant-cli -- --name demo --slug demo
 | API docs | http://localhost:8000/docs |
 | Control plane (optional `npm run dev:tm`) | http://localhost:5174 |
 
-Default local credentials: `admin` / `admin` (development only).
+Default local credentials after tenant create: `admin@<slug>` / `admin` (e.g. `admin@demo` — development only).
 
 Full install, run modes (hot reload vs full Docker), and troubleshooting → **[docs/dev-guide.md](docs/dev-guide.md)**
 
@@ -94,7 +94,7 @@ Full install, run modes (hot reload vs full Docker), and troubleshooting → **[
 
 ## Deployment
 
-LingQing is self-hosted. See [docs/deploy/README.md](docs/deploy/README.md):
+LingQing is self-hosted. See [deploy/README.md](deploy/README.md) (layout + tags) and:
 
 - **Single VM (recommended):** [Deploy guide](docs/deploy/guide.md)
 - **Custom CI/CD:** [BYO pipeline guide](docs/deploy/byo-cicd.md) + [workflow example](.github/workflows/deploy.example.yml)
@@ -115,7 +115,8 @@ npm run lint                # Ruff + ESLint
 | [docs/dev-guide.md](docs/dev-guide.md) | **Local development** — setup, commands, troubleshooting |
 | [docs/agent-architecture.md](docs/agent-architecture.md) | Agent runtime and tools |
 | [docs/testing-guide.md](docs/testing-guide.md) | Testing strategy, commands, CI |
-| [docs/deploy/README.md](docs/deploy/README.md) | Production deployment paths |
+| [deploy/README.md](deploy/README.md) | Deploy layout, commands, version tags |
+| [docs/deploy/guide.md](docs/deploy/guide.md) | Production deploy steps |
 | [docs/README.md](docs/README.md) | Full documentation index |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Contribution workflow |
 | [AGENTS.md](AGENTS.md) | Code architecture conventions |

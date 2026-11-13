@@ -1,6 +1,18 @@
 # Deploy layout
 
-Full guides: [docs/deploy/guide.md](../docs/deploy/guide.md)
+**Procedure & troubleshooting:** [docs/deploy/guide.md](../docs/deploy/guide.md) · **Reference (env, Postgres, Nginx):** [docs/deploy/reference.md](../docs/deploy/reference.md) · **CI/CD:** [docs/deploy/byo-cicd.md](../docs/deploy/byo-cicd.md)
+
+## Image / release tags in examples
+
+Deploy scripts take an image tag that matches a **git semver tag** (`vX.Y.Z`) or a daily tag (`daily`, `daily-YYYY-MM-DD`). Examples use shell variables — set them from [GitHub Releases](https://github.com/foxty/LingQing/releases) or your registry, not from stale doc copy:
+
+```bash
+VERSION=vX.Y.Z                              # e.g. latest release tag
+REGISTRY=ghcr.io/<org>/lingqing             # your registry namespace
+GITHUB_ORG_REPO=<org>/<repo>                # for release bundle curl
+```
+
+Repo `package.json` / root `pyproject.toml` `version` is the product version; the tag you deploy must exist in the registry.
 
 ## Directory structure
 
@@ -35,7 +47,7 @@ deploy/
 | Tier | Target | Compose | Env file | Command |
 | --- | --- | --- | --- | --- |
 | **dev** | Laptop | `compose/local/infra.yml` | `.env.local` | `scripts/local-stack.sh infra-up` |
-| **e2e** | Laptop | `compose/local/full-stack.yml` | `env/.env.e2e` | `scripts/local-stack.sh stack-up` |
+| **e2e** | Laptop | `compose/local/full-stack.yml` | `deploy/env/.env.e2e` | `scripts/local-stack.sh stack-up` |
 | **remote** | Remote VM | release bundle or `remote/stack.yml` | `.env` / `.env.prod` | `remote/host-deploy.sh` or `remote/deploy.sh …` |
 
 **Folder = where** (local vs remote). **Tier = purpose** (dev/e2e on laptop; prod/staging on separate VMs with different `.env`).
@@ -56,17 +68,17 @@ cp deploy/env/.env.template deploy/env/.env.e2e   # container config: DB host=po
 # Remote VM: provision PostgreSQL first (./init_db.sh in release bundle — see docs/deploy/reference.md#postgresql-external)
 
 # VM deploy from GitHub Release bundle (init_db.sh + .env.template + bootstrap.sh)
-curl -fsSL https://github.com/foxty/LingQing/releases/download/v2.0.0/lingqing-deploy-v2.0.0.tar.gz | tar -xz
-cd lingqing-deploy-v2.0.0
+curl -fsSL "https://github.com/${GITHUB_ORG_REPO}/releases/download/${VERSION}/lingqing-deploy-${VERSION}.tar.gz" | tar -xz
+cd "lingqing-deploy-${VERSION}"
 cp .env.template .env && $EDITOR .env
-./bootstrap.sh --version v2.0.0 --registry ghcr.io/foxty/lingqing
+./bootstrap.sh --version "${VERSION}" --registry "${REGISTRY}"
 
 # Production deploy from laptop (SSH)
 cp deploy/env/.env.template .env.prod
-./deploy/scripts/remote/deploy.sh v2.0.0 ghcr.io/foxty/lingqing user@vm deploy .env.prod all
+./deploy/scripts/remote/deploy.sh "${VERSION}" "${REGISTRY}" your-vm deploy .env.prod all
 
 # Local build + production release from laptop
-./deploy/scripts/remote/release.sh user@vm ghcr.io/org/lingqing .env.prod v2.0.0 all
+./deploy/scripts/remote/release.sh user@your-vm "${REGISTRY}" .env.prod "${VERSION}" all
 ```
 
 ## Local tiers in detail
@@ -88,9 +100,10 @@ E2E uses **fixed host ports** in `full-stack.yml` so dev and E2E can run togethe
 
 Internal services (app, manager, chroma, docling, sandbox) are **not** published to the host — containers talk over the Docker network. `.env.e2e` uses internal values only (`TENANT_APP_DB_HOST=postgres`, `TENANT_APP_DB_PORT=5432`).
 
-**Migrate / tenant-cli from laptop**:
+**Tenant CLI from laptop** (after `stack-up`; Alembic already runs in backend entrypoint):
 
 ```bash
-TENANT_APP_DB_HOST=localhost TENANT_APP_DB_PORT=5433 npm run migrate-db:ta
 TENANT_APP_DB_HOST=localhost TENANT_APP_DB_PORT=5433 npm run tenant-cli -- create --name "Demo" --slug demo
 ```
+
+Optional debug only: `npm run migrate-db:ta` with the same `TENANT_APP_DB_*` host overrides.

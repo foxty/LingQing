@@ -6,7 +6,7 @@ This package contains pure domain models that are independent of:
 - External libraries
 
 Domain models represent business entities and contain business logic only.
-They are used exclusively in the Service layer.
+They are used in the Application and Domain layers (not in presentation DTOs).
 
 Domain models have been moved to their respective domain modules:
 - BaseDomainModel -> apps.shared.domain.models
@@ -15,7 +15,7 @@ Domain models have been moved to their respective domain modules:
 - CustomAgent -> apps.tenant_app_service.agent_catalog.domain
 - DocumentDomain -> apps.shared.document.domain
 - DataSourceDomain, AssetMetadataDomain -> apps.shared.data_source.domain
-- MessageDomain, ConversationDomain -> apps.chat_backend.chat.domain
+- MessageDomain, thread/message types -> apps.tenant_app_service.chat.domain
 
 Import them directly from their respective modules to avoid circular dependencies.
 """

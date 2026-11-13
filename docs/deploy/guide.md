@@ -18,7 +18,7 @@ Local development details → [dev-guide.md](../dev-guide.md). Repo layout → [
 | Tier | Target | Compose | Env file | Command |
 | --- | --- | --- | --- | --- |
 | **dev** | Laptop | `compose/local/infra.yml` | `.env.local` | `./deploy/scripts/local-stack.sh infra-up` |
-| **e2e** | Laptop | `compose/local/full-stack.yml` | `.env.e2e` | `./deploy/scripts/local-stack.sh stack-up` |
+| **e2e** | Laptop | `compose/local/full-stack.yml` | `deploy/env/.env.e2e` | `./deploy/scripts/local-stack.sh stack-up` |
 | **remote** | Remote VM | release bundle or `remote/stack.yml` | `.env` / `.env.prod` | `./bootstrap.sh` or `./deploy/scripts/remote/deploy.sh …` |
 
 Staging and production use the **same** remote stack on **separate VMs**; only `.env` differs.
@@ -74,14 +74,16 @@ Full Docker stack on laptop — no registry or SSH.
 cp deploy/env/.env.template deploy/env/.env.e2e
 # Edit .env.e2e: TENANT_APP_DB_HOST=postgres, TENANT_APP_DB_PORT=5432, CHROMA_URL=http://chroma:8000, …
 
-./deploy/scripts/local-stack.sh stack-up
+./deploy/scripts/local-stack.sh stack-up   # builds images, runs Postgres init, starts services
 ./deploy/scripts/local-stack.sh smoke
 
-TENANT_APP_DB_HOST=localhost TENANT_APP_DB_PORT=5433 npm run migrate-db:ta
+# First tenant from laptop (Postgres published on host 5433; backends already ran Alembic via entrypoint)
 TENANT_APP_DB_HOST=localhost TENANT_APP_DB_PORT=5433 npm run tenant-cli -- create --name "Demo" --slug demo
 ```
 
-Host ports are fixed in `full-stack.yml` (Postgres `5433`, gateway `18080`). See [deploy/README.md](../../deploy/README.md#e2e-host-ports-fixed-in-compose).
+Host ports are fixed in `full-stack.yml` (Postgres `5433`, gateway `18080`). Map `app-test.example.com` and `manager-test.example.com` to `127.0.0.1`, then open `http://app-test.example.com:18080`. See [deploy/README.md](../../deploy/README.md#e2e-host-ports-fixed-in-compose).
+
+Host `npm run migrate-db:ta` is for debugging against E2E Postgres only; you normally skip it after `stack-up`.
 
 ---
 
@@ -119,7 +121,7 @@ Full variable reference: [reference.md](reference.md).
 
 #### Option A — Release bundle on VM (recommended, no repo clone)
 
-Each semver tag publishes `lingqing-deploy-vX.Y.Z.tar.gz` on GitHub Releases (includes `init_db.sh`, `.env.template`, `bootstrap.sh`):
+Each semver tag publishes `lingqing-deploy-vX.Y.Z.tar.gz` on GitHub Releases (includes `init_db.sh`, `.env.template`, `bootstrap.sh`). Examples below use `foxty/LingQing`; substitute your org, repo, and registry:
 
 ```bash
 VERSION=v2.0.0
@@ -213,7 +215,7 @@ Login: `admin@demo` / `admin` — change immediately in production.
 - [ ] Unique `SECRET_KEY`
 - [ ] `TENANT_APP_DB_SSL_MODE=require` (and manager DB if separate)
 - [ ] `APP_PUBLIC_URL` and `MANAGER_PUBLIC_URL` set in `.env`
-- [ ] Change default `admin` / `admin` password
+- [ ] Change default `admin@<slug>` / `admin` password
 - [ ] Backups for Postgres + `DATA_ROOT_HOST_PATH` (include `chroma/` for vector DB files)
 - [ ] LLM keys configured per tenant in Settings
 - [ ] Firewall: only 443/80 public

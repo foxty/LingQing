@@ -214,8 +214,8 @@ npm run dev:ta
 npm run dev:tm
 
 # DB migrations
-npm run migrate:ta
-npm run migrate:tm
+npm run migrate-db:ta
+npm run migrate-db:tm
 ```
 
 ## Agent Workflow

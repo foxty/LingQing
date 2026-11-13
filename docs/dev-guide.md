@@ -79,7 +79,7 @@ cd apps/tenant_app_portal && npm install
 npm run dev:ta   # frontend, tenant backend, scheduler, sandbox
 
 # Create a tenant
-npm run tenant-cli -- --name test --slug test
+npm run tenant-cli -- create --name "Test" --slug test
 ```
 
 **Skills symlink (local dev)**
@@ -126,7 +126,7 @@ Complete containerized environment for system integration testing:
 | Mode | Frontend | API | Database |
 | --- | --- | --- | --- |
 | **Local dev** | http://localhost:5173 | http://localhost:8000/docs | localhost:5432 |
-| **Docker stack** | http://localhost | http://localhost:8000/docs | localhost:5432 |
+| **Docker E2E** | http://app-test.example.com:18080 (map in `/etc/hosts` → `127.0.0.1`) | same gateway, path `/api/` | localhost:5433 (host) |
 
 ---
 
@@ -135,7 +135,7 @@ Complete containerized environment for system integration testing:
 Development/default tenant only — **never use in production**:
 
 ```
-Username: admin
+Username: admin@<tenant-slug>   # e.g. admin@test when slug is "test"
 Password: admin
 ```
 

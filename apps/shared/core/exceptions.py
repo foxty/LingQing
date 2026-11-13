@@ -1,6 +1,6 @@
 """Domain-specific exceptions for business logic layer.
 
-Service layer raises these exceptions, API layer converts them to HTTPException.
+Domain and application code raise these; presentation maps them to HTTP responses (see exception_handlers).
 """
 
 
