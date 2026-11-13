@@ -180,7 +180,6 @@ cp deploy/env/.env.template deploy/env/.env.e2e
 ./deploy/scripts/local-stack.sh build-e2e
 ./deploy/scripts/local-stack.sh stack-up
 ./deploy/scripts/local-stack.sh smoke
-TENANT_APP_DB_HOST=localhost TENANT_APP_DB_PORT=5433 npm run migrate-db:ta
 TENANT_APP_DB_HOST=localhost TENANT_APP_DB_PORT=5433 npm run tenant-cli -- create --name "Test" --slug test
 ./deploy/scripts/local-stack.sh stack-down
 ```

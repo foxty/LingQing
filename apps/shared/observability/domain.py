@@ -1,6 +1,6 @@
 """Domain models for agent observability.
 
-Migrated from chat_backend/agents/metrics/agent_metrics_v3.py
+Migrated from legacy chat_backend agent metrics (pre–tenant_app_service consolidation).
 
 Domain models are framework-agnostic and represent pure business entities.
 They use dataclasses and should not depend on Pydantic, SQLAlchemy, or any external frameworks.
