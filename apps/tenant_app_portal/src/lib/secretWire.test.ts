@@ -36,7 +36,8 @@ describe('secret wire contract', () => {
     const masked = maskSecretForDisplay('secret')
     expect(shouldStripSecretLeafOnSubmit('')).toBe(true)
     expect(shouldStripSecretLeafOnSubmit(API_SECRET_PLACEHOLDER)).toBe(true)
-    expect(shouldStripSecretLeafOnSubmit('********')).toBe(true)
+    // Legacy all-asterisk blobs are not display masks (see isDisplayMask).
+    expect(shouldStripSecretLeafOnSubmit('********')).toBe(false)
     expect(shouldStripSecretLeafOnSubmit(masked)).toBe(true)
     expect(shouldStripSecretLeafOnSubmit('real-secret')).toBe(false)
   })
