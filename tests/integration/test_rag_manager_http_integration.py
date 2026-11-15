@@ -6,7 +6,8 @@ import uuid
 
 import pytest
 from langchain_core.documents import Document
-from apps.shared.data_source.schemas import RAGSourceType
+
+from apps.shared.external_systems.data_source.schemas import RAGSourceType
 from apps.shared.infra.rag.rag_manager import RAGManager
 from tests.keyword_embeddings import KeywordEmbeddings
 

@@ -6,7 +6,7 @@ import base64
 
 import pytest
 
-from apps.shared.api_connector.domain import (
+from apps.shared.external_systems.api_connector.domain import (
     ApiConnectorDomain,
     ApiKeyAuthConfig,
     BasicAuthConfig,

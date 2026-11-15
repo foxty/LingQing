@@ -7,7 +7,6 @@ from fastapi.testclient import TestClient
 
 from apps.shared.core.auth import get_current_user
 from apps.shared.core.exception_handlers import register_exception_handlers
-from apps.shared.data_source.service import DataSourceService
 from apps.shared.db.session import get_db
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.routers import data_sources
@@ -50,15 +49,15 @@ def test_query_data_source_returns_403_for_unregistered_table(app, monkeypatch):
     app.dependency_overrides[get_db] = _fake_db
 
     class _FakeService:
-        def __init__(self, tenant_id, data_source_repo, asset_repo):
-            pass
-
         async def query_data_for_actor(self, **kwargs):
             from apps.shared.core.exceptions import AuthorizationError
 
             raise AuthorizationError("Query references unregistered asset 'secret_table'.")
 
-    monkeypatch.setattr(data_sources, "DataSourceService", _FakeService)
+    def _fake_factory(_db, _tenant_id):
+        return _FakeService()
+
+    monkeypatch.setattr(data_sources, "_create_data_source_service", _fake_factory)
 
     client = TestClient(app)
     response = client.post(
@@ -80,13 +79,13 @@ def test_query_data_source_returns_rows_for_registered_table(app, monkeypatch):
     app.dependency_overrides[get_db] = _fake_db
 
     class _FakeService:
-        def __init__(self, tenant_id, data_source_repo, asset_repo):
-            pass
-
         async def query_data_for_actor(self, **kwargs):
             return pd.DataFrame([{"id": 1, "name": "A"}])
 
-    monkeypatch.setattr(data_sources, "DataSourceService", _FakeService)
+    def _fake_factory(_db, _tenant_id):
+        return _FakeService()
+
+    monkeypatch.setattr(data_sources, "_create_data_source_service", _fake_factory)
 
     client = TestClient(app)
     response = client.post(

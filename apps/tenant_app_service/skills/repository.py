@@ -123,7 +123,9 @@ class SkillConfigStore:
         config = self.read_config(skill_dir, skill_name)
         if config is None:
             return {}
-        return {key: FieldCipher.mask_value(value) for key, value in config.env_vars.items()}
+        from apps.shared.utils.secret_wire import mask_secret_for_display
+
+        return {key: mask_secret_for_display(value) for key, value in config.env_vars.items()}
 
     def get_decrypted_env_vars(self, skill_dir: str, skill_name: str) -> dict[str, str]:
         config = self.read_config(skill_dir, skill_name)

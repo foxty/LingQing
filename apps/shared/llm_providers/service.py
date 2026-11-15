@@ -46,6 +46,7 @@ from apps.shared.llm_providers.runtime_config import (
 )
 from apps.shared.utils.field_cipher import FieldCipher
 from apps.shared.utils.logger import get_logger
+from apps.shared.utils.secret_wire import mask_secret_for_display
 
 logger = get_logger(__name__)
 
@@ -530,7 +531,7 @@ class LLMProviderConfigService:
             type=provider.type,
             api_base=provider.api_base,
             embedding_api_base=provider.embedding_api_base,
-            api_key_masked=FieldCipher.mask_value(decrypted),
+            api_key_masked=mask_secret_for_display(decrypted),
             status=provider.status,
         )
 

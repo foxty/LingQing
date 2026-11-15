@@ -254,9 +254,18 @@ class TestRBACEndpointProtection:
             "Admin should have >= member perms >= viewer perms"
         )
 
-        # Verify role hierarchy: viewer ⊂ member ⊂ admin
+        from apps.shared.authz.ta_permissions import ta_permission_implies
+
+        # Verify role hierarchy under effective implication (manage → read), not only explicit grants
         assert viewer_perms.issubset(member_perms), "viewer permissions should be subset of member"
-        assert member_perms.issubset(admin_perms), "member permissions should be subset of admin"
+        for perm in member_perms:
+            assert any(ta_permission_implies(granted, perm) for granted in admin_perms), (
+                f"admin cannot satisfy member permission {perm}"
+            )
+        for perm in viewer_perms:
+            assert any(ta_permission_implies(granted, perm) for granted in member_perms), (
+                f"member cannot satisfy viewer permission {perm}"
+            )
 
 
 class TestEndpointInventoryGaps:

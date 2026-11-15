@@ -251,10 +251,9 @@ class SkillService:
         else:
             raise ValidationError("Env vars are only supported for tenant and personal skills")
         config = self._config_store.update_env_vars(skill_dir, skill_name, env_vars)
-        return {
-            key: __import__("apps.shared.utils.field_cipher", fromlist=["FieldCipher"]).FieldCipher.mask_value(value)
-            for key, value in config.env_vars.items()
-        }
+        from apps.shared.utils.secret_wire import mask_secret_for_display
+
+        return {key: mask_secret_for_display(value) for key, value in config.env_vars.items()}
 
     def toggle_enabled(
         self, tenant_id: int, user_id: int, scope: SkillType, skill_name: str, enabled: bool

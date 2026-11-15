@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.shared.core.exceptions import InternalServiceError
-from apps.shared.data_source.asset_metadata_service import AssetMetadataService
+from apps.shared.external_systems.data_source.asset_metadata_service import AssetMetadataService
 
 
 class _FakeScalarResult:
@@ -89,6 +89,29 @@ async def test_sync_all_assets_marks_partial_status_when_errors_present():
     assert result["updated_count"] == 1
     assert result["error_count"] == 1
     service._record_asset_sync_error.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_sync_all_assets_records_actionable_error_when_db_manager_missing():
+    db_session = SimpleNamespace(commit=AsyncMock())
+    service = AssetMetadataService(tenant_id=1, db_session=db_session)
+
+    service.asset_repo = SimpleNamespace(
+        list_sync_candidates_by_tenant=AsyncMock(
+            return_value=[SimpleNamespace(id=10, data_source_id=4)]
+        ),
+        get_by_id=AsyncMock(return_value=None),
+        update=AsyncMock(),
+    )
+    service._record_asset_sync_error = AsyncMock()
+
+    result = await service.sync_all_assets(db_managers={})
+
+    assert result["error_count"] == 1
+    service._record_asset_sync_error.assert_awaited_once()
+    error_message = service._record_asset_sync_error.await_args.args[1]
+    assert "data source 4" in error_message
+    assert "Sync login" in error_message
 
 
 @pytest.mark.asyncio

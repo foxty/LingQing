@@ -971,7 +971,7 @@ async def test_execute_liveapp_job_task_builds_runtime_context(monkeypatch):
         async def get_for_tenant(self, *, app_id, tenant_id):
             return fake_live_app
 
-    from apps.shared.data_source.domain import DatabaseConnectionVO, DataSourceDomain
+    from apps.shared.external_systems.data_source.domain import DatabaseConnectionVO, DataSourceDomain
 
     now = datetime.now(timezone.utc)
     fake_ds_domain = DataSourceDomain(
@@ -996,7 +996,7 @@ async def test_execute_liveapp_job_task_builds_runtime_context(monkeypatch):
             return NS(id=99, type="postgresql", managed=True)
 
     monkeypatch.setattr("apps.shared.live_app.repository.LiveAppRepository", FakeLiveAppRepo)
-    monkeypatch.setattr("apps.shared.data_source.repository.DataSourceRepository", FakeDataSourceRepo)
+    monkeypatch.setattr("apps.shared.external_systems.data_source.repository.DataSourceRepository", FakeDataSourceRepo)
     monkeypatch.setattr(
         "apps.shared.tasks.execution_service.db_data_source_to_domain",
         lambda ds: fake_ds_domain,

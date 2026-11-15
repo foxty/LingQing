@@ -108,7 +108,9 @@ async def test_resolve_profile(async_db_session):
     assert resolved.model_id == "gpt-test"
     assert resolved.api_key == "plain-secret"
     assert resolved.params == {"temperature": 0.2}
-    assert cipher.mask_value(resolved.api_key) == provider.api_key_masked
+    from apps.shared.utils.secret_wire import mask_secret_for_display
+
+    assert mask_secret_for_display(resolved.api_key) == provider.api_key_masked
 
 
 async def test_test_provider_connection_uses_linked_profile(async_db_session):

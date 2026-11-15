@@ -5,6 +5,7 @@ from tempfile import NamedTemporaryFile
 
 from fastapi import (
     APIRouter,
+    Body,
     Depends,
     File,
     Form,
@@ -13,19 +14,27 @@ from fastapi import (
     UploadFile,
     status,
 )
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
-from apps.shared.core.exceptions import AuthorizationError, ValidationError
-from apps.shared.data_source import (
-    AssetMetadataRepository,
-    DataSourceRepository,
-    DataSourceService,
+from apps.shared.core.exceptions import AuthorizationError, ResourceNotFoundError, ValidationError
+from apps.shared.db.session import get_db
+from apps.shared.domain.actor import ActorContext
+from apps.shared.domain.types import RESOURCE_TYPE_DATA_SOURCE
+from apps.shared.domain.value_objects import DataSourceTypeStr
+from apps.shared.external_systems.application.wiring import data_source_service as wire_data_source_service
+from apps.shared.external_systems.credentials.dtos import (
+    UserIntegrationConnectionResponse,
+    UserIntegrationConnectionTestResponse,
+    UserIntegrationConnectionUpsertRequest,
 )
-from apps.shared.data_source.adapters import domain_asset_to_api_schema, domain_data_source_to_api
-from apps.shared.data_source.asset_metadata_service import AssetMetadataService
-from apps.shared.data_source.schemas import (
+from apps.shared.external_systems.credentials.service import UserIntegrationCredentialService
+from apps.shared.external_systems.data_source import DataSourceService
+from apps.shared.external_systems.data_source.adapters import domain_asset_to_api_schema
+from apps.shared.external_systems.data_source.asset_metadata_service import AssetMetadataService
+from apps.shared.external_systems.data_source.schemas import (
     AssetMetadataOverrideUpdate,
     AssetMetadataResponse,
     AssetSchemaResponse,
@@ -37,10 +46,6 @@ from apps.shared.data_source.schemas import (
     DiscoverAssetsResponse,
     TestConnectionResponse,
 )
-from apps.shared.db.session import get_db
-from apps.shared.domain.actor import ActorContext
-from apps.shared.domain.types import RESOURCE_TYPE_DATA_SOURCE
-from apps.shared.domain.value_objects import DataSourceTypeStr
 from apps.shared.schemas.pagination import PaginatedResponse
 from apps.shared.schemas.user import UserDTO
 from apps.shared.tag.adapters import domain_tag_value_to_api
@@ -54,20 +59,8 @@ router = APIRouter(prefix="/data-sources", tags=["data-sources"])
 
 
 def _create_data_source_service(db: AsyncSession, tenant_id: int) -> DataSourceService:
-    """Create DataSourceService with injected repositories.
-
-    Args:
-        db: Database session
-        tenant_id: Tenant ID
-
-    Returns:
-        Configured DataSourceService instance
-    """
-    return DataSourceService(
-        tenant_id=tenant_id,
-        data_source_repo=DataSourceRepository(db),
-        asset_repo=AssetMetadataRepository(db),
-    )
+    """Create DataSourceService with BYOT resolver wired at the application boundary."""
+    return wire_data_source_service(tenant_id, db)
 
 
 def _create_asset_metadata_service(db: AsyncSession, tenant_id: int) -> AssetMetadataService:
@@ -95,7 +88,94 @@ def _actor_from_user(current_user: UserDTO) -> ActorContext:
     )
 
 
+# ============ Per-user connections (BYOT) ============
+
+
+@router.get("/{data_source_id}/connections/me", response_model=UserIntegrationConnectionResponse)
+async def get_my_data_source_connection(
+    data_source_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_READ)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.get_my_connection_data_source(actor=actor, data_source_id=data_source_id)
+
+
+@router.put("/{data_source_id}/connections/me", response_model=UserIntegrationConnectionResponse)
+async def upsert_my_data_source_connection(
+    data_source_id: int,
+    body: UserIntegrationConnectionUpsertRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_READ)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.upsert_data_source_connection(
+        actor=actor,
+        data_source_id=data_source_id,
+        body=body,
+    )
+
+
+@router.delete("/{data_source_id}/connections/me", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_my_data_source_connection(
+    data_source_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_READ)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    await cred_service.disconnect_data_source(actor=actor, data_source_id=data_source_id)
+
+
+@router.post("/{data_source_id}/connections/me/test", response_model=UserIntegrationConnectionTestResponse)
+async def test_my_data_source_connection(
+    data_source_id: int,
+    body: UserIntegrationConnectionUpsertRequest | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_READ)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.test_data_source_connection(
+        actor=actor,
+        data_source_id=data_source_id,
+        body=body,
+    )
+
+
 # ============ Connection Testing ============
+
+
+class SavedConnectionTestRequest(BaseModel):
+    config: dict | None = None
+
+
+@router.post("/{data_source_id}/test-connection", response_model=TestConnectionResponse)
+async def test_saved_data_source_connection(
+    data_source_id: int,
+    body: SavedConnectionTestRequest | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_WRITE)),
+):
+    """Test connection for a saved data source (merges overlay; placeholder keeps stored secrets)."""
+    service = _create_data_source_service(db, current_user.tenant_id)
+    try:
+        overlay = body.config if body else None
+        return await service.test_saved_data_source_connection(data_source_id, config_overlay=overlay)
+    except ResourceNotFoundError as e:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
+    except ValidationError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
 
 
 @router.post("/test-connection", response_model=TestConnectionResponse)
@@ -143,7 +223,7 @@ async def discover_assets(
     query: str | None = Query(None, min_length=1, description="Search query"),
     light: bool = Query(False, description="Use lightweight discovery (no schema metadata)"),
     db: AsyncSession = Depends(get_db),
-    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_WRITE)),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_READ)),
 ):
     """Discover available assets from a saved data source.
 
@@ -193,6 +273,7 @@ async def create_data_source(
     type: DataSourceTypeStr = Form(..., description="Database type"),
     config: str = Form(..., description="Connection configuration as JSON string"),
     description: str | None = Form(None, description="Data source description"),
+    credential_mode: str = Form("shared", description="shared | user"),
     db: AsyncSession = Depends(get_db),
     current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_WRITE)),
 ):
@@ -225,6 +306,7 @@ async def create_data_source(
             managed=False,
             config=config_dict,
             description=description,
+            credential_mode=credential_mode,
         )
         data_source = await service.create_data_source(data_source_create, owner_id=current_user.id)
 
@@ -263,14 +345,14 @@ async def list_data_sources(
     """
     try:
         service = _create_data_source_service(db, current_user.tenant_id)
-        data_sources, pagination = await service.list_data_sources_paginated_for_actor(
+        items, pagination = await service.list_data_source_responses_paginated_for_actor(
             actor=_actor_from_user(current_user),
             page=page,
             page_size=page_size,
             query=query,
         )
         return DataSourceListResponse(
-            items=[domain_data_source_to_api(ds) for ds in data_sources],
+            items=items,
             total=pagination.total,
             page=pagination.page,
             page_size=pagination.page_size,
@@ -316,6 +398,7 @@ async def update_data_source(
     name: str | None = Form(None, description="Data source name"),
     config: str | None = Form(None, description="Connection configuration as JSON string"),
     description: str | None = Form(None, description="Data source description"),
+    credential_mode: str | None = Form(None, description="shared | user"),
     db: AsyncSession = Depends(get_db),
     current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_WRITE)),
 ):
@@ -345,6 +428,7 @@ async def update_data_source(
                 name=name,
                 config=json.loads(config) if config else None,
                 description=description,
+                credential_mode=credential_mode,
             ),
             actor=actor,
         )
@@ -505,7 +589,7 @@ async def update_asset_meta_override(
     current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_WRITE)),
 ):
     """Update user overrides for asset metadata."""
-    from apps.shared.data_source.adapters import domain_asset_metadata_to_api
+    from apps.shared.external_systems.data_source.adapters import domain_asset_metadata_to_api
 
     actor = _actor_from_user(current_user)
 
@@ -548,7 +632,7 @@ async def upload_csv(
     Raises:
         HTTPException: If data source not found, asset already exists, or upload/import fails
     """
-    from apps.shared.data_source.adapters import domain_asset_metadata_to_api
+    from apps.shared.external_systems.data_source.adapters import domain_asset_metadata_to_api
 
     # Validate file type
     if not file.filename.lower().endswith(".csv"):
@@ -581,7 +665,7 @@ async def upload_csv(
             temp_path = Path(temp_file.name)
         try:
             # Get DB manager and import CSV using AssetMetadataService
-            db_manager = await ds_service.get_db_manager(data_source_id)
+            db_manager = await ds_service.get_db_manager_for_actor(data_source_id, actor)
             async with db_manager as db:
                 asset, rows_imported = await asset_service.import_csv_as_asset_for_actor(
                     actor=actor,
@@ -706,6 +790,7 @@ async def delete_assets(
     ds_service = _create_data_source_service(db, current_user.tenant_id)
     asset_service = _create_asset_metadata_service(db, current_user.tenant_id)
     actor = _actor_from_user(current_user)
+    await ds_service.require_asset_curate_access_for_actor(data_source_id=data_source_id, actor=actor)
     data_source = await ds_service.get_data_source_for_actor(
         data_source_id=data_source_id,
         actor=actor,
@@ -854,7 +939,7 @@ async def sync_asset_metadata(
 
     data_source_service = _create_data_source_service(db, current_user.tenant_id)
     actor = _actor_from_user(current_user)
-    await data_source_service.require_write_access_for_actor(
+    await data_source_service.require_asset_curate_access_for_actor(
         data_source_id=data_source_id,
         actor=actor,
     )
@@ -862,8 +947,16 @@ async def sync_asset_metadata(
     # Create services with dependency injection
     asset_service = _create_asset_metadata_service(db, current_user.tenant_id)
 
-    # Get db_manager for the asset's data source (injected dependency)
-    db_manager = await data_source_service.get_db_manager(data_source_id)
+    entity = await data_source_service.data_source_repo.get_by_id_and_tenant(
+        data_source_id,
+        current_user.tenant_id,
+    )
+    from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER, effective_credential_mode
+
+    if entity and not entity.managed and effective_credential_mode(entity.credential_mode) == CREDENTIAL_MODE_USER:
+        db_manager = await data_source_service.get_db_manager_for_metadata_sync(data_source_id)
+    else:
+        db_manager = await data_source_service.get_db_manager_for_actor(data_source_id, actor)
 
     result = await asset_service.sync_asset_metadata(
         asset_id=asset_id,

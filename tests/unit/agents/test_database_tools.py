@@ -8,6 +8,7 @@ import pytest
 from apps.shared.core.exceptions import AuthorizationError
 from apps.tenant_app_service.agents.tools.database import (
     _format_response,
+    list_data_sources,
     run_sql_query_on_datasource,
 )
 from apps.tenant_app_service.agents.tools.tool_result import ToolResultStatus
@@ -62,6 +63,59 @@ class TestFormatResponse:
         # _format_response returns native values; ToolResult JSON coercion stringifies timestamps.
         assert isinstance(data["rows"][0]["timestamp"], (str, pd.Timestamp))
         assert isinstance(data["rows"][0]["amount"], float)
+
+
+@pytest.mark.asyncio
+async def test_list_data_sources_includes_credential_fields(monkeypatch, runnable_config):
+    from datetime import UTC, datetime
+
+    from apps.shared.domain.value_objects import DatabaseConnectionVO
+    from apps.shared.external_systems.data_source.domain import DataSourceDomain
+
+    class _FakeSessionContext:
+        async def __aenter__(self):
+            return object()
+
+        async def __aexit__(self, exc_type, exc, tb):
+            return False
+
+    now = datetime.now(UTC)
+    user_ds = DataSourceDomain(
+        id=9,
+        tenant_id=1,
+        name="byot",
+        type="postgres",
+        managed=False,
+        connection=DatabaseConnectionVO.from_dict(
+            {"host": "h", "database": "d", "username": "u", "password": "p"},
+        ),
+        description=None,
+        owner_id=1,
+        asset_count=2,
+        credential_mode="user",
+        created_at=now,
+        updated_at=now,
+    )
+
+    class _FakeService:
+        def __init__(self, tenant_id, data_source_repo, asset_repo):
+            pass
+
+        async def list_data_sources_for_actor(self, *, actor):
+            user_ds.user_connection_status = "not_connected"
+            return [user_ds]
+
+    monkeypatch.setattr(
+        "apps.tenant_app_service.agents.tools.database.app_db_session", lambda: _FakeSessionContext()
+    )
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.database.DataSourceService", _FakeService)
+
+    result = await list_data_sources.ainvoke({}, config=runnable_config)
+    payload = json.loads(result.content)
+    assert len(payload) == 1
+    row = payload[0]
+    assert row["credential_mode"] == "user"
+    assert row["user_connection_status"] == "not_connected"
 
 
 @pytest.mark.asyncio

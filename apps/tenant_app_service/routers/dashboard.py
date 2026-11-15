@@ -44,9 +44,9 @@ from apps.shared.dashboard.schemas import (
     DashboardWidgetUpdateRequest,
 )
 from apps.shared.dashboard.service import DashboardService, apply_filter_value_overrides
-from apps.shared.data_source import AssetMetadataRepository, DataSourceRepository, DataSourceService
 from apps.shared.db.session import app_db_session, get_db
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.data_source import AssetMetadataRepository, DataSourceRepository, DataSourceService
 from apps.shared.schemas.user import UserDTO
 from apps.shared.utils.logger import get_logger
 

@@ -6,7 +6,7 @@ import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from apps.shared.api_connector.schemas import SyncSchemaSummaryDTO
+from apps.shared.external_systems.api_connector.schemas import SyncSchemaSummaryDTO
 from apps.shared.core.auth import get_current_user
 from apps.shared.core.exception_handlers import register_exception_handlers
 from apps.shared.core.exceptions import ValidationError
@@ -71,7 +71,7 @@ def app(monkeypatch):
                 "description": kwargs.get("description"),
                 "base_url": kwargs["base_url"],
                 "auth_type": kwargs["auth_type"],
-                "auth_config_masked": {},
+                "auth_config": {},
                 "rate_policy": {},
                 "schema_source_type": kwargs["schema_source_type"],
                 "schema_source_url": kwargs.get("schema_source_url"),
@@ -94,7 +94,7 @@ def app(monkeypatch):
                 "description": kwargs.get("description"),
                 "base_url": kwargs.get("base_url") or "https://8.8.8.8",
                 "auth_type": kwargs.get("auth_type") or "none",
-                "auth_config_masked": {},
+                "auth_config": {},
                 "rate_policy": {},
                 "schema_source_type": kwargs.get("schema_source_type") or "openapi_upload",
                 "schema_source_url": kwargs.get("schema_source_url"),
@@ -122,7 +122,7 @@ def app(monkeypatch):
                 "description": "orders",
                 "base_url": "https://8.8.8.8",
                 "auth_type": "none",
-                "auth_config_masked": {},
+                "auth_config": {},
                 "rate_policy": {},
                 "schema_source_type": "openapi_upload",
                 "schema_source_url": None,
@@ -282,7 +282,10 @@ def app(monkeypatch):
         return service
 
     monkeypatch.setattr(api_connectors, "_service", _fake_service)
-    monkeypatch.setattr(api_connectors, "ApiConnectorExecutionService", _FakeExecutionService)
+    def _fake_execution_service(tenant_id, db_session):
+        return _FakeExecutionService(tenant_id, db_session)
+
+    monkeypatch.setattr(api_connectors, "api_connector_execution_service", _fake_execution_service)
 
     return api
 

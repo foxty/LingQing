@@ -3,7 +3,9 @@
 import pytest
 
 from apps.shared.core.exceptions import ValidationError
-from apps.shared.utils.field_cipher import SENSITIVE_FIELD_KEYS, FieldCipher
+from apps.shared.external_systems.credentials.sensitive_config import DATA_SOURCE_USER_MODE_STRIP_KEYS
+from apps.shared.external_systems.integration_secret_keys import INTEGRATION_SECRET_LEAF_KEYS
+from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
 
 
 class TestFieldCipherEncryptDecrypt:
@@ -49,7 +51,7 @@ class TestFieldCipherEncryptDecrypt:
         assert masked["name"] == "test"
 
     def test_all_default_sensitive_fields_can_be_encrypted(self):
-        """All fields in SENSITIVE_FIELD_KEYS should be encryptable when specified."""
+        """All integration secret leaf keys should be encryptable when specified."""
         cipher = FieldCipher()
         data = {
             "api_key": "key1",
@@ -61,7 +63,7 @@ class TestFieldCipherEncryptDecrypt:
             "password": "key7",
             "name": "should_not_encrypt",
         }
-        encrypted = cipher.encrypt_dict(data, sensitive_fields=SENSITIVE_FIELD_KEYS)
+        encrypted = cipher.encrypt_dict(data, sensitive_fields=INTEGRATION_SECRET_LEAF_KEYS)
 
         # All sensitive fields should be encrypted
         assert encrypted["api_key"].startswith("enc:")
@@ -348,3 +350,22 @@ class TestFieldCipherEdgeCases:
         encrypted = cipher.encrypt_dict(data, sensitive_fields=sensitive_fields)
         decrypted = cipher.decrypt_dict(encrypted, sensitive_fields=sensitive_fields)
         assert decrypted == data
+
+
+def test_strip_sensitive_fields_requires_key_set():
+    raw = {
+        "host": "db.internal",
+        "username": "admin",
+        "password": "enc:secret",
+        "api_key": "x",
+    }
+    stripped = strip_sensitive_fields(raw, sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS)
+    assert stripped == {"host": "db.internal", "api_key": "x"}
+    connector_stripped = strip_sensitive_fields(raw, sensitive_keys=INTEGRATION_SECRET_LEAF_KEYS)
+    assert "password" not in connector_stripped
+    assert "api_key" not in connector_stripped
+    assert connector_stripped["host"] == "db.internal"
+
+
+
+

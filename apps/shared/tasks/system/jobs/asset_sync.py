@@ -16,11 +16,16 @@ from typing import Any
 
 from sqlalchemy import select
 
-from apps.shared.data_source.asset_metadata_service import AssetMetadataService
-from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
-from apps.shared.data_source.service import DataSourceService
 from apps.shared.db.models import DataSource
 from apps.shared.db.session import app_db_session
+from apps.shared.external_systems.data_source.asset_metadata_service import (
+    AssetMetadataService,
+    _format_exception_message,
+)
+from apps.shared.external_systems.data_source.catalog_sync import CatalogSyncCredentials
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository, DataSourceRepository
+from apps.shared.external_systems.data_source.service import DataSourceService
+from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER
 from apps.shared.tasks.domain import TaskExecutionContext
 from apps.shared.tasks.system.handler_result import (
     SystemTaskHandlerResult,
@@ -133,35 +138,63 @@ async def _sync_tenant_assets(tenant_id: int) -> dict[str, Any]:
             )
 
             result = await session.execute(
-                select(DataSource.id).where(
+                select(DataSource.id, DataSource.credential_mode, DataSource.config, DataSource.type).where(
                     DataSource.tenant_id == tenant_id,
                     DataSource.managed.is_(False),
                 )
             )
-            resolved_data_source_ids = [row[0] for row in result.all()]
+            rows = result.all()
+            resolved_data_source_ids: list[int] = []
+            skipped_user_mode = 0
+            for row in rows:
+                ds_id = row[0]
+                credential_mode = row[1] if len(row) > 1 else "shared"
+                config = row[2] if len(row) > 2 else {}
+                ds_type = row[3] if len(row) > 3 else None
+                if (credential_mode or "shared") == CREDENTIAL_MODE_USER:
+                    if not CatalogSyncCredentials.is_configured_in_config(config, data_source_type=ds_type):
+                        skipped_user_mode += 1
+                        continue
+                resolved_data_source_ids.append(ds_id)
             if not resolved_data_source_ids:
-                logger.info(f"[SKIP] No external data sources for tenant={tenant_id}")
+                logger.info(
+                    f"[SKIP] No syncable external data sources for tenant={tenant_id} "
+                    f"(skipped_user_mode={skipped_user_mode})"
+                )
                 return {
                     "status": "success",
                     "tenant_id": tenant_id,
                     "updated_count": 0,
-                    "skipped_count": 0,
+                    "skipped_count": skipped_user_mode,
                     "error_count": 0,
                 }
 
             logger.info(f"[INFO] tenant={tenant_id} data_sources={resolved_data_source_ids}")
 
             # Create db_managers dict for all data sources
-            db_managers = {}
+            db_managers: dict[int, Any] = {}
             for ds_id in resolved_data_source_ids:
                 try:
-                    db_managers[ds_id] = await ds_service.get_db_manager(ds_id)
+                    row = next((r for r in rows if r[0] == ds_id), None)
+                    cred_mode = (row[1] if row and len(row) > 1 else None) or "shared"
+                    if cred_mode == CREDENTIAL_MODE_USER:
+                        db_managers[ds_id] = await ds_service.get_db_manager_for_metadata_sync(ds_id)
+                    else:
+                        db_managers[ds_id] = await ds_service.get_db_manager(ds_id)
                 except Exception as e:
-                    logger.error(f"[WARN] Failed to get db_manager for data_source={ds_id}: {e}")
+                    reason = _format_exception_message(e)
+                    logger.warning(
+                        "Asset metadata sync: could not open warehouse for data_source_id=%s tenant_id=%s: %s",
+                        ds_id,
+                        tenant_id,
+                        reason,
+                        exc_info=True,
+                    )
 
             # Delegate to service layer with db_managers
             result = await asset_service.sync_all_assets(
-                db_managers=db_managers, data_source_ids=resolved_data_source_ids
+                db_managers=db_managers,
+                data_source_ids=resolved_data_source_ids,
             )
 
             logger.info(
@@ -174,6 +207,7 @@ async def _sync_tenant_assets(tenant_id: int) -> dict[str, Any]:
             return {
                 "status": result.get("status", "success"),
                 "tenant_id": tenant_id,
+                "skipped_user_mode": skipped_user_mode,
                 **result,
             }
 

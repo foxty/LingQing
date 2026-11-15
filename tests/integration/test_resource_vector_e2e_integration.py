@@ -25,7 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 from sqlalchemy.pool import NullPool
 
 from apps.shared.core.auth import get_current_user
-from apps.shared.data_source.schemas import RAGSourceType
+from apps.shared.external_systems.data_source.schemas import RAGSourceType
 from apps.shared.db.models import DataSource, Document, DocumentCollection, Tenant, User
 from apps.shared.db.session import get_db
 from apps.shared.tasks.domain import TaskExecutionContext

@@ -11,9 +11,9 @@ from typing import Any
 
 import pandas as pd
 
-from apps.shared.data_source.domain import AssetMetadataDomain
-from apps.shared.data_source.schemas import DiscoveredAsset
 from apps.shared.domain.value_objects import DatabaseConnectionVO
+from apps.shared.external_systems.data_source.domain import AssetMetadataDomain
+from apps.shared.external_systems.data_source.schemas import DiscoveredAsset
 from apps.shared.infra.analytics_db.errors import PermissionError
 from apps.shared.utils.logger import get_logger
 

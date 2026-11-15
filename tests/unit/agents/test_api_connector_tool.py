@@ -45,7 +45,7 @@ async def test_api_connector_tool_get_operation_detail(monkeypatch, runnable_con
         "apps.tenant_app_service.agents.tools.api_connector.app_db_session",
         lambda: _FakeSessionContext(),
     )
-    monkeypatch.setattr("apps.shared.api_connector.service.ApiConnectorService", _FakeService)
+    monkeypatch.setattr("apps.shared.external_systems.api_connector.service.ApiConnectorService", _FakeService)
 
     result = await api_connector.ainvoke(
         {
@@ -88,8 +88,12 @@ async def test_api_connector_tool_call_external_api(monkeypatch, runnable_config
         "apps.tenant_app_service.agents.tools.api_connector.app_db_session",
         lambda: _FakeSessionContext(),
     )
+    def _fake_execution_service(tenant_id, db_session):
+        return _FakeExecService(tenant_id, db_session)
+
     monkeypatch.setattr(
-        "apps.tenant_app_service.agents.tools.api_connector.ApiConnectorExecutionService", _FakeExecService
+        "apps.tenant_app_service.agents.tools.api_connector.api_connector_execution_service",
+        _fake_execution_service,
     )
 
     result = await api_connector.ainvoke(

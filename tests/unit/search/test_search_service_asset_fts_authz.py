@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from apps.shared.data_source.service import AssetAccessScope
+from apps.shared.external_systems.data_source.service import AssetAccessScope
 from apps.shared.search.search_service import SearchService
 
 

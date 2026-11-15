@@ -1,5 +1,7 @@
 import AddDataSourceDialog from '@/components/AddDataSourceDialog'
 import ContainerRowActions from '@/components/ContainerRowActions'
+import DataSourceTypeIcon from '@/components/data-source/DataSourceTypeIcon'
+import TruncatedTextPopover from '@/components/TruncatedTextPopover'
 import ListIndexToolbar from '@/components/ListIndexToolbar'
 import PaginationBar from '@/components/PaginationBar'
 import ResourceAclShareDialog from '@/components/ResourceAclShareDialog'
@@ -14,6 +16,11 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import IntegrationCredentialsCell, {
+  integrationConnectionActionLabel,
+  showPerUserConnectionAction,
+} from '@/components/IntegrationCredentialsCell'
+import MyIntegrationConnectionDialog from '@/components/MyIntegrationConnectionDialog'
 import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import {
@@ -35,7 +42,7 @@ import { formatDate } from '@/lib/dateTime'
 import { actionRules } from '@/lib/permissionRules'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import { Database, RefreshCw } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -132,6 +139,8 @@ export default function DataSourcesPage() {
   const [sharingDataSource, setSharingDataSource] = useState<DataSource | null>(null)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
+  const [connectDialogOpen, setConnectDialogOpen] = useState(false)
+  const [connectDataSource, setConnectDataSource] = useState<DataSource | null>(null)
 
   // Fetch data sources on mount
   useEffect(() => {
@@ -202,15 +211,23 @@ export default function DataSourcesPage() {
     }
   }
 
-  const getDataSourceTypeBadge = (type: string) => {
-    const variants: Record<string, 'default' | 'secondary' | 'outline'> = {
-      postgres: 'outline',
-      mysql: 'outline',
-      databricks: 'outline',
-      snowflake: 'outline',
-      bigquery: 'outline',
+  const openConnectDialog = (dataSource: DataSource, e: MouseEvent) => {
+    e.stopPropagation()
+    setConnectDataSource(dataSource)
+    setConnectDialogOpen(true)
+  }
+
+  const renderNameMeta = (dataSource: DataSource) => {
+    if (dataSource.managed) {
+      return null
     }
-    return <Badge variant={variants[type] || 'default'}>{type.toUpperCase()}</Badge>
+    return (
+      <div className="flex flex-wrap items-center gap-1 pl-6">
+        <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
+          {t('dataSources.externalConnection')}
+        </Badge>
+      </div>
+    )
   }
 
   if (authLoading) {
@@ -271,12 +288,11 @@ export default function DataSourcesPage() {
                   <TableRow className="hover:bg-transparent">
                     <TableHead className="h-10">{t('dataSources.nameCol')}</TableHead>
                     <TableHead className="h-10 w-32">{t('dataSources.ownerCol')}</TableHead>
-                    <TableHead className="h-10 w-32">{t('dataSources.typeCol')}</TableHead>
-                    <TableHead className="h-10 w-32">{t('dataSources.managedCol')}</TableHead>
+                    <TableHead className="h-10 w-[8.5rem]">{t('integrationCredentials.columnTitle')}</TableHead>
                     <TableHead className="h-10 w-24 text-center">{t('dataSources.assetCountCol')}</TableHead>
-                    <TableHead className="h-10">{t('dataSources.descCol')}</TableHead>
+                    <TableHead className="h-10 max-w-[14rem]">{t('dataSources.descCol')}</TableHead>
                     <TableHead className="h-10 w-40">{t('dataSources.createdCol')}</TableHead>
-                    <TableHead className="h-10 w-24 text-right">{t('common.action')}</TableHead>
+                    <TableHead className="h-10 w-14 text-right">{t('common.action')}</TableHead>
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -285,7 +301,10 @@ export default function DataSourcesPage() {
                       <TableCell className="py-2.5">
                         <div className="flex flex-col gap-1">
                           <div className="flex items-center gap-2">
-                            <Database className="w-4 h-4 text-muted-foreground flex-shrink-0" />
+                            <DataSourceTypeIcon
+                              type={dataSource.type}
+                              managed={dataSource.managed}
+                            />
                             <button
                               onClick={() => handleDataSourceClick(dataSource)}
                               className="text-sm font-medium hover:underline cursor-pointer text-left"
@@ -293,6 +312,7 @@ export default function DataSourcesPage() {
                               {dataSource.name}
                             </button>
                           </div>
+                          {renderNameMeta(dataSource)}
                           {canReadTags && (dataSourceTagsMap[dataSource.id]?.length || 0) > 0 ? (
                             <TagChips
                               tags={dataSourceTagsMap[dataSource.id]}
@@ -307,28 +327,35 @@ export default function DataSourcesPage() {
                         <span className="text-sm">{dataSource.owner_name || t('dataSources.deletedUser')}</span>
                       </TableCell>
                       <TableCell className="py-2.5">
-                        {getDataSourceTypeBadge(dataSource.type)}
-                      </TableCell>
-                      <TableCell className="py-2.5">
-                        {dataSource.managed ? (
-                          <Badge variant="secondary">
-                            {t('dataSources.platformManaged')}
-                          </Badge>
-                        ) : (
-                          <Badge variant="outline">{t('dataSources.externalConnection')}</Badge>
-                        )}
+                        <IntegrationCredentialsCell
+                          credentialMode={(dataSource.credential_mode ?? 'shared') as 'shared' | 'user'}
+                          userConnectionStatus={dataSource.user_connection_status ?? 'not_connected'}
+                          managed={dataSource.managed}
+                        />
                       </TableCell>
                       <TableCell className="py-2.5 text-center">
                         <span className="text-sm font-medium">{dataSource.asset_count || '-'}</span>
                       </TableCell>
-                      <TableCell className="py-2.5 text-sm max-w-xs truncate">
-                        {dataSource.description || '-'}
+                      <TableCell className="py-2.5 max-w-[14rem]">
+                        <TruncatedTextPopover text={dataSource.description} emptyFallback="-" />
                       </TableCell>
                       <TableCell className="py-2.5 text-sm text-muted-foreground">
                         {formatDate(dataSource.created_at)}
                       </TableCell>
                       <TableCell className="py-2.5 text-right">
                         <ContainerRowActions
+                          connection={
+                            showPerUserConnectionAction(dataSource.credential_mode, dataSource.managed)
+                              ? {
+                                  label: integrationConnectionActionLabel(
+                                    t,
+                                    dataSource.user_connection_status ?? 'not_connected'
+                                  ),
+                                  status: dataSource.user_connection_status ?? 'not_connected',
+                                  onClick: (e) => openConnectDialog(dataSource, e),
+                                }
+                              : undefined
+                          }
                           onShare={() => setSharingDataSource(dataSource)}
                           shareTitle={t('dataSources.shareSource')}
                           tags={
@@ -386,6 +413,21 @@ export default function DataSourcesPage() {
         onOpenChange={handleDialogClose}
         dataSource={editingDataSource}
         onSuccess={handleAddSuccess}
+      />
+
+      <MyIntegrationConnectionDialog
+        kind="data_source"
+        open={connectDialogOpen}
+        onOpenChange={(open) => {
+          setConnectDialogOpen(open)
+          if (!open) {
+            void fetchDataSources(currentPage, DATA_SOURCE_PAGE_SIZE, searchQuery.trim() || undefined)
+          }
+        }}
+        dataSource={connectDataSource}
+        onConnectionChanged={() =>
+          void fetchDataSources(currentPage, DATA_SOURCE_PAGE_SIZE, searchQuery.trim() || undefined)
+        }
       />
 
       {/* Delete Confirmation Dialog */}

@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Trans } from 'react-i18next'
 
 import ContainerDetailHeader from '@/components/ContainerDetailHeader'
+import ListDetailInlineNotice from '@/components/ListDetailInlineNotice'
 import ListDetailToolbar from '@/components/ListDetailToolbar'
 import ApiOperationCallDialog from '@/components/ApiOperationCallDialog'
 import ApiOperationTable from '@/components/ApiOperationTable'
@@ -15,7 +17,7 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { useApiConnectors } from '@/hooks/useApiConnectors'
 import { useNotification } from '@/hooks/useNotification'
 import type { ApiOperation, ApiOperationCallResponse } from '@/lib/apiConnectorApi'
-import { Braces, Cable, Info, Plus, RefreshCw, Upload } from 'lucide-react'
+import { Braces, Cable, Info, Plus, RefreshCw, TriangleAlert, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 
@@ -67,6 +69,12 @@ i18n.addResourceBundle('en', 'translation', {
     callParameters: 'Call Parameters',
     callFailed: 'Operation call failed',
     callSuccess: 'Operation call succeeded',
+    userCredentialsNotConnectedTitle: 'Connect your API credentials',
+    userCredentialsNotConnected:
+      'Use <1>Connect</1> in the Actions column on <0>API Connectors</0>, then save credentials.',
+    userCredentialsExpiredTitle: 'API credentials expired',
+    userCredentialsExpired:
+      'Reconnect via <1>Reconnect</1> on <0>API Connectors</0> and save new credentials.',
   }
 }, true, true)
 
@@ -118,6 +126,12 @@ i18n.addResourceBundle('zh', 'translation', {
     callParameters: '调用参数',
     callFailed: '操作调用失败',
     callSuccess: '操作调用成功',
+    userCredentialsNotConnectedTitle: '请连接 API 凭证',
+    userCredentialsNotConnected:
+      '在 <0>API 连接器</0> 列表的操作列点击 <1>连接</1> 并保存凭证。',
+    userCredentialsExpiredTitle: 'API 凭证已过期',
+    userCredentialsExpired:
+      '在 <0>API 连接器</0> 列表的操作列点击 <1>重新连接</1> 并保存新凭证。',
   }
 }, true, true)
 
@@ -442,6 +456,17 @@ export default function ApiConnectorDetailPage() {
     )
   }
 
+  const connectionStatus = selectedConnector?.user_connection_status ?? 'not_connected'
+  const isUserCredentialMode = (selectedConnector?.credential_mode ?? 'shared') === 'user'
+  const showConnectionWarn = Boolean(selectedConnector) && isUserCredentialMode && connectionStatus !== 'connected'
+  const userCredentialAccessLink = (
+    <Link
+      key="ac-list"
+      to="/api-connectors"
+      className="font-medium text-foreground underline underline-offset-2"
+    />
+  )
+
   return (
     <div className="space-y-4">
       <ContainerDetailHeader
@@ -450,7 +475,32 @@ export default function ApiConnectorDetailPage() {
         title={selectedConnector?.name ?? t('apiConnectorDetail.loadingConnector')}
         meta={
           selectedConnector ? (
-            <span className="font-mono text-xs">{selectedConnector.base_url}</span>
+            <div className="space-y-3 pt-1">
+              <span className="font-mono text-xs">{selectedConnector.base_url}</span>
+              {showConnectionWarn ? (
+                <ListDetailInlineNotice
+                  tone="warn"
+                  icon={<TriangleAlert className="text-amber-700 dark:text-amber-400" aria-hidden />}
+                  title={t(
+                    connectionStatus === 'expired'
+                      ? 'apiConnectorDetail.userCredentialsExpiredTitle'
+                      : 'apiConnectorDetail.userCredentialsNotConnectedTitle'
+                  )}
+                >
+                  <Trans
+                    i18nKey={
+                      connectionStatus === 'expired'
+                        ? 'apiConnectorDetail.userCredentialsExpired'
+                        : 'apiConnectorDetail.userCredentialsNotConnected'
+                    }
+                    components={[
+                      userCredentialAccessLink,
+                      <span key="action" className="font-medium text-foreground" />,
+                    ]}
+                  />
+                </ListDetailInlineNotice>
+              ) : null}
+            </div>
           ) : null
         }
       />

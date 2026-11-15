@@ -8,8 +8,8 @@ from pathlib import Path
 
 from sqlalchemy import text
 
-from apps.shared.data_source.domain import AssetMetadataDomain
 from apps.shared.domain.value_objects import DatabaseConnectionVO
+from apps.shared.external_systems.data_source.domain import AssetMetadataDomain
 from apps.shared.infra.analytics_db.errors import QueryExecutionError
 from apps.shared.infra.analytics_db.relational_db_manager import RelationalDBManager
 from apps.shared.utils.logger import get_logger

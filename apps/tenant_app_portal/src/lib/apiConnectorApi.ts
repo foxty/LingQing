@@ -2,6 +2,12 @@ import { API_ENDPOINTS } from '@/constants/api'
 import api from '@/lib/api'
 import type { PaginatedResponse } from '@/lib/documentsApi'
 import type { PaginatedListResponse } from '@/lib/paginatedList'
+import type {
+  UserIntegrationConnection,
+  UserIntegrationConnectionUpsert,
+} from '@/lib/userIntegrationConnection'
+
+export type { UserIntegrationConnection, UserIntegrationConnectionUpsert }
 
 export type ApiConnectorAuthType = 'none' | 'api_key' | 'bearer' | 'basic' | 'custom'
 export type ApiConnectorSchemaSourceType = 'manual' | 'openapi_url' | 'openapi_upload'
@@ -15,13 +21,16 @@ export interface ApiConnector {
   description: string | null
   base_url: string
   auth_type: ApiConnectorAuthType
-  auth_config_masked: Record<string, any>
+  auth_config: Record<string, any>
   rate_policy: Record<string, any>
   schema_source_type: ApiConnectorSchemaSourceType
   schema_source_url: string | null
   schema_metadata: Record<string, any>
   schema_last_synced_at: string | null
   status: string
+  credential_mode?: 'shared' | 'user'
+  user_connection_status?: 'not_connected' | 'connected' | 'expired' | null
+  masked_fields?: string[]
   created_at: string
   updated_at: string
 }
@@ -30,6 +39,7 @@ export interface ApiConnectorCreateRequest {
   name: string
   description?: string
   base_url: string
+  credential_mode?: 'shared' | 'user'
   auth_type: ApiConnectorAuthType
   auth_config: Record<string, any>
   rate_policy: Record<string, any>
@@ -41,6 +51,7 @@ export interface ApiConnectorUpdateRequest {
   name?: string
   description?: string
   base_url?: string
+  credential_mode?: 'shared' | 'user'
   auth_type?: ApiConnectorAuthType
   auth_config?: Record<string, any>
   rate_policy?: Record<string, any>
@@ -249,6 +260,41 @@ export async function callApiOperation(
   const response = await api.post<ApiOperationCallResponse>(
     API_ENDPOINTS.apiConnectorCallOperation(operationUid),
     { parameters }
+  )
+  return response.data
+}
+
+export async function getMyApiConnectorConnection(
+  connectorId: number
+): Promise<UserIntegrationConnection> {
+  const response = await api.get<UserIntegrationConnection>(
+    `/api-connectors/${connectorId}/connections/me`
+  )
+  return response.data
+}
+
+export async function upsertMyApiConnectorConnection(
+  connectorId: number,
+  body: UserIntegrationConnectionUpsert
+): Promise<UserIntegrationConnection> {
+  const response = await api.put<UserIntegrationConnection>(
+    `/api-connectors/${connectorId}/connections/me`,
+    body
+  )
+  return response.data
+}
+
+export async function deleteMyApiConnectorConnection(connectorId: number): Promise<void> {
+  await api.delete(`/api-connectors/${connectorId}/connections/me`)
+}
+
+export async function testMyApiConnectorConnection(
+  connectorId: number,
+  body?: UserIntegrationConnectionUpsert
+): Promise<{ success: boolean; message: string }> {
+  const response = await api.post<{ success: boolean; message: string }>(
+    `/api-connectors/${connectorId}/connections/me/test`,
+    body ?? undefined
   )
   return response.data
 }

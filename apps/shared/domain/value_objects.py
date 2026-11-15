@@ -170,6 +170,8 @@ class DatabaseConnectionVO:
         # Detect datasource type and validate accordingly
         if self._is_databricks_connection():
             self._validate_databricks()
+        elif self._is_byot_connection_template():
+            self._validate_byot_template()
         else:
             self._validate_standard_credentials()
 
@@ -195,6 +197,18 @@ class DatabaseConnectionVO:
 
         if not self.extra_params or not (self.extra_params.get("warehouse_id") or self.extra_params.get("http_path")):
             raise ValueError("Databricks connection requires extra_params with 'warehouse_id' or 'http_path'")
+
+    def _is_byot_connection_template(self) -> bool:
+        """User-mode data source: shared template has endpoint only; creds are per-user."""
+        if self.connection_url:
+            return False
+        if self._is_databricks_connection():
+            return False
+        return bool(self.host and self.database and not self.password)
+
+    def _validate_byot_template(self) -> None:
+        if not (self.host and self.database):
+            raise ValueError("User-mode data source requires host and database in the connection template")
 
     def _validate_standard_credentials(self) -> None:
         """Validate standard SQL database connection requirements.

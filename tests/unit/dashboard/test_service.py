@@ -410,7 +410,7 @@ async def test_prepare_widget_analytics_query_does_not_execute():
         async def require_registered_assets_in_sql(self, *, data_source_id, sql_query):
             return None
 
-        async def get_db_manager(self, data_source_id):
+        async def get_db_manager_for_actor(self, data_source_id, actor):
             assert data_source_id == 3
             return _FakeManager()
 
@@ -448,7 +448,7 @@ async def test_prepare_widget_analytics_query_enforces_registered_asset_whitelis
         async def require_registered_assets_in_sql(self, *, data_source_id, sql_query):
             raise AuthorizationError("Query references unregistered asset 'secret_table'.")
 
-        async def get_db_manager(self, data_source_id):
+        async def get_db_manager_for_actor(self, data_source_id, actor):
             raise AssertionError("should not reach warehouse when whitelist fails")
 
     with pytest.raises(AuthorizationError, match="unregistered asset"):
@@ -494,7 +494,7 @@ async def test_prepare_widget_analytics_query_uses_overridden_filter_value():
         async def require_registered_assets_in_sql(self, *, data_source_id, sql_query):
             return None
 
-        async def get_db_manager(self, data_source_id):
+        async def get_db_manager_for_actor(self, data_source_id, actor):
             return object()
 
     prepared = await service.prepare_widget_analytics_query(
@@ -544,7 +544,7 @@ async def test_prepared_analytics_query_executes_after_prepare():
         async def require_registered_assets_in_sql(self, *, data_source_id, sql_query):
             return None
 
-        async def get_db_manager(self, data_source_id):
+        async def get_db_manager_for_actor(self, data_source_id, actor):
             events.append("get_manager")
             return _FakeManager()
 

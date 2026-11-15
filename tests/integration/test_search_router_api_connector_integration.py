@@ -8,8 +8,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.pool import NullPool
 
-from apps.shared.api_connector.domain import RatePolicyDomain
-from apps.shared.api_connector.service import ApiConnectorService
+from apps.shared.external_systems.api_connector.domain import RatePolicyDomain
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
 from apps.shared.authz.authz_query_builder import AuthzSqlFilter
 from apps.shared.core.auth import get_current_user
 from apps.shared.db.models import Tenant, User

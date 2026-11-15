@@ -12,15 +12,10 @@ from langchain_core.embeddings import Embeddings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.api_connector.repository import ApiConnectorRepository, ApiOperationIndexRepository
 from apps.shared.authz.agent_scope import combine_agent_scope
 from apps.shared.authz.authz_query_builder import AuthzSqlFilter, build_unified_resource_filter
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
-from apps.shared.data_source.adapters import db_asset_metadata_to_domain
-from apps.shared.data_source.repository import AssetMetadataRepository, DataSourceRepository
-from apps.shared.data_source.schemas import RAGSourceType
-from apps.shared.data_source.service import AssetAccessScope, DataSourceService
 from apps.shared.db.models import ApiConnector, AssetMetadata, ResourceIndex
 from apps.shared.db.models import Document as DocumentModel
 from apps.shared.document.collection_service import DocumentAccessScope, DocumentCollectionService
@@ -35,6 +30,11 @@ from apps.shared.domain.types import (
     RESOURCE_TYPE_DOCUMENT_COLLECTION,
     SearchableResourceType,
 )
+from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository, ApiOperationIndexRepository
+from apps.shared.external_systems.data_source.adapters import db_asset_metadata_to_domain
+from apps.shared.external_systems.data_source.repository import AssetMetadataRepository, DataSourceRepository
+from apps.shared.external_systems.data_source.schemas import RAGSourceType
+from apps.shared.external_systems.data_source.service import AssetAccessScope, DataSourceService
 from apps.shared.infra.rag import RAGManager
 from apps.shared.infra.rag.metadata_keys import META_RESOURCE_ID
 from apps.shared.search.parser import prepare_search_queries

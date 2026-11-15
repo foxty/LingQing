@@ -1,12 +1,14 @@
+import { SensitiveCredentialField } from '@/components/SensitiveCredentialField'
+import type { SecretCredentialFieldHandle } from '@/hooks/useSecretCredentialField'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 
 i18n.addResourceBundle('en', 'translation', {
   components: {
     authConfigs: {
       basicUsernamePlaceholder: 'Enter username',
-      basicPasswordPlaceholder: 'Enter password',
     },
   },
 }, true, true)
@@ -15,32 +17,30 @@ i18n.addResourceBundle('zh', 'translation', {
   components: {
     authConfigs: {
       basicUsernamePlaceholder: '输入用户名',
-      basicPasswordPlaceholder: '输入密码',
     },
   },
 }, true, true)
-import { Input } from '@/components/ui/input'
 
 interface BasicAuthConfigProps {
   username: string
-  password: string
-  isAuthConfigured: boolean
+  passwordSecret: SecretCredentialFieldHandle
+  maskedPreview?: string | null
   submitting: boolean
+  usernameError?: string
+  passwordError?: string
   onUsernameChange: (value: string) => void
-  onPasswordChange: (value: string) => void
+  onPasswordDraftChange?: (value: string) => void
 }
 
-/**
- * HTTP Basic authentication configuration form.
- * Standard username/password authentication.
- */
 export function BasicAuthConfig({
   username,
-  password,
-  isAuthConfigured,
+  passwordSecret,
+  maskedPreview,
   submitting,
+  usernameError,
+  passwordError,
   onUsernameChange,
-  onPasswordChange,
+  onPasswordDraftChange,
 }: BasicAuthConfigProps) {
   const { t } = useTranslation()
   return (
@@ -51,21 +51,22 @@ export function BasicAuthConfig({
           id="add-basic-username"
           value={username}
           onChange={(e) => onUsernameChange(e.target.value)}
-          placeholder={isAuthConfigured ? t('components.authConfigs.basicUsernamePlaceholder') : t('components.authConfigs.basicUsernamePlaceholder')}
+          placeholder={t('components.authConfigs.basicUsernamePlaceholder')}
           disabled={submitting}
+          errorMsg={usernameError}
         />
       </div>
-      <div className="space-y-2">
-        <Label htmlFor="add-basic-password">Password</Label>
-        <Input
-          id="add-basic-password"
-          type="password"
-          value={password}
-          onChange={(e) => onPasswordChange(e.target.value)}
-          placeholder={isAuthConfigured ? t('components.authConfigs.basicPasswordPlaceholder') : t('components.authConfigs.basicPasswordPlaceholder')}
-          disabled={submitting}
-        />
-      </div>
+      <SensitiveCredentialField
+        id="add-basic-password"
+        label="Password"
+        binding={passwordSecret}
+        maskedPreview={maskedPreview}
+        disabled={submitting}
+        errorMsg={passwordError}
+        onStartEdit={passwordSecret.startEdit}
+        onCancelEdit={passwordSecret.cancelEdit}
+        onDraftChange={onPasswordDraftChange ?? passwordSecret.setDraft}
+      />
     </div>
   )
 }

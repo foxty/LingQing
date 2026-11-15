@@ -4,9 +4,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from apps.shared.api_connector.domain import RatePolicyDomain
-from apps.shared.api_connector.schemas import NoAuthConfigSchema
-from apps.shared.api_connector.service import ApiConnectorService
+from apps.shared.external_systems.api_connector.domain import RatePolicyDomain
+from apps.shared.external_systems.api_connector.schemas import NoAuthConfigSchema
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.db.models import Tenant, User
 from apps.shared.domain.actor import ActorContext
@@ -53,12 +53,12 @@ async def test_create_connector_encrypts_sensitive_fields(async_db_session, mock
 
     # Service returns response DTO with masked auth_config
     assert created.id is not None
-    # auth_config_masked should contain the masked value (not encrypted, not plaintext)
-    assert "auth_config_masked" in created.model_dump()
-    assert created.auth_config_masked["key_value"].startswith("se")  # First 2 chars visible
-    assert created.auth_config_masked["key_value"].endswith("en")  # Last 2 chars visible
-    assert "*" in created.auth_config_masked["key_value"]  # Middle is masked
-    assert created.auth_config_masked["key_value"] != "secret-token"  # Not plaintext
+    # auth_config should contain the masked value (not encrypted, not plaintext)
+    assert "auth_config" in created.model_dump()
+    assert created.auth_config["key_value"].startswith("se")  # First 2 chars visible
+    assert created.auth_config["key_value"].endswith("en")  # Last 2 chars visible
+    assert "*" in created.auth_config["key_value"]  # Middle is masked
+    assert created.auth_config["key_value"] != "secret-token"  # Not plaintext
 
 
 @pytest.mark.asyncio
@@ -88,7 +88,7 @@ async def test_create_connector_accepts_pydantic_no_auth_schema(async_db_session
 
     assert created.id is not None
     assert created.auth_type == "none"
-    assert created.auth_config_masked["auth_method"] == "none"
+    assert created.auth_config["auth_method"] == "none"
 
 
 @pytest.mark.asyncio
@@ -674,18 +674,10 @@ paths:
 
 
 @pytest.mark.asyncio
-async def test_update_connector_preserves_original_secret_when_ui_sends_masked_value(
+async def test_update_connector_does_not_preserve_when_client_sends_masked_value(
     async_db_session, mock_rag_indexing_service
 ):
-    """Test that updating a connector with masked auth_config preserves original secrets.
-
-    Scenario:
-    1. Create connector with real secret "my-secret-key-12345"
-    2. UI gets masked response: "my*************45"
-    3. User updates connector name, UI sends back masked secret
-    4. Service should detect masked value and preserve original secret
-    5. Execution should still work with original secret
-    """
+    """Masked GET values are not merge sentinels — clients must omit the key instead."""
     tenant = Tenant(name="tenant_masked_update", slug="tenant_masked_update", config=None)
     async_db_session.add(tenant)
     await async_db_session.flush()
@@ -723,7 +715,7 @@ async def test_update_connector_preserves_original_secret_when_ui_sends_masked_v
         )
 
         # Step 2: UI receives masked value
-        masked_secret = created.auth_config_masked["extra_config"]["app_secret"]
+        masked_secret = created.auth_config["extra_config"]["app_secret"]
         assert masked_secret != original_secret
         assert "*" in masked_secret
 
@@ -747,26 +739,75 @@ async def test_update_connector_preserves_original_secret_when_ui_sends_masked_v
 
         assert updated.name == "kingdee-erp-updated"
 
-        # Step 4: Fetch connector and verify original secret is preserved
-        fetched = await service.get_connector_for_actor(
-            connector_id=created.id,
-            actor=ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role),
-        )
-
-        # The masked value in response should still be the same pattern
-        assert fetched.auth_config_masked["extra_config"]["app_secret"] == masked_secret
-
-        # Step 5: Verify by executing (decrypt should get original, not masked)
-        from apps.shared.api_connector.adapters import connector_entity_to_domain
-        from apps.shared.api_connector.repository import ApiConnectorRepository
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+        from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository
 
         repo = ApiConnectorRepository(async_db_session)
         entity = await repo.get_by_id_and_tenant(created.id, tenant.id)
         domain = connector_entity_to_domain(entity, cipher=service.cipher)
 
-        # Domain should have the ORIGINAL secret, not the masked one
+        assert domain.auth_config.extra_config["app_secret"] == masked_secret
+        assert domain.auth_config.extra_config["app_secret"] != original_secret
+
+
+@pytest.mark.asyncio
+async def test_update_connector_preserves_secret_when_ui_omits_nested_key(
+    async_db_session, mock_rag_indexing_service
+):
+    """Preferred path: omit sensitive keys instead of echoing GET masks."""
+    tenant = Tenant(name="tenant_omit_nested", slug="tenant_omit_nested", config=None)
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+
+    user = User(username="omit-user", email=None, hashed_password="hashed", role="admin", tenant_id=tenant.id)
+    async_db_session.add(user)
+    await async_db_session.flush()
+
+    original_secret = "my-secret-key-12345"
+
+    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+        service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
+
+        created = await service.create_connector(
+            owner_id=user.id,
+            name="kingdee-erp",
+            description=None,
+            base_url="https://erp.kingdee.com",
+            auth_type="custom",
+            auth_config={
+                "auth_method": "custom",
+                "login_endpoint": "/login",
+                "login_payload_template": {"parameters": ["{username}", "{app_secret}"]},
+                "token_extraction": {"session_id": "Context.SessionId"},
+                "request_headers": {"Cookie": "kdservice-sessionid={session_id}"},
+                "extra_config": {"app_secret": original_secret, "username": "admin"},
+            },
+            rate_policy=RatePolicyDomain.from_raw({}),
+            schema_source_type="manual",
+            schema_source_url=None,
+        )
+
+        await service.update_connector_for_actor(
+            connector_id=created.id,
+            actor=ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role),
+            name="kingdee-erp-updated",
+            auth_config={
+                "auth_method": "custom",
+                "login_endpoint": "/login",
+                "login_payload_template": {"parameters": ["{username}", "{app_secret}"]},
+                "token_extraction": {"session_id": "Context.SessionId"},
+                "request_headers": {"Cookie": "kdservice-sessionid={session_id}"},
+                "extra_config": {"username": "admin"},
+            },
+        )
+
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+        from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository
+
+        repo = ApiConnectorRepository(async_db_session)
+        entity = await repo.get_by_id_and_tenant(created.id, tenant.id)
+        domain = connector_entity_to_domain(entity, cipher=service.cipher)
         assert domain.auth_config.extra_config["app_secret"] == original_secret
-        assert domain.auth_config.extra_config["app_secret"] != masked_secret
 
 
 @pytest.mark.asyncio
@@ -807,8 +848,8 @@ async def test_update_connector_allows_changing_secret_with_real_value(async_db_
         )
 
         # Verify the secret was actually changed
-        from apps.shared.api_connector.adapters import connector_entity_to_domain
-        from apps.shared.api_connector.repository import ApiConnectorRepository
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+        from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository
 
         repo = ApiConnectorRepository(async_db_session)
         entity = await repo.get_by_id_and_tenant(created.id, tenant.id)
@@ -820,8 +861,8 @@ async def test_update_connector_allows_changing_secret_with_real_value(async_db_
 
 
 @pytest.mark.asyncio
-async def test_update_connector_mixed_masked_and_real_values(async_db_session, mock_rag_indexing_service):
-    """Test updating with mix of masked (keep original) and real (update) values."""
+async def test_update_connector_mixed_omit_and_real_values(async_db_session, mock_rag_indexing_service):
+    """Omit unchanged nested secrets; apply real values for keys that change."""
     tenant = Tenant(name="tenant_mixed_update", slug="tenant_mixed_update", config=None)
     async_db_session.add(tenant)
     await async_db_session.flush()
@@ -857,11 +898,6 @@ async def test_update_connector_mixed_masked_and_real_values(async_db_session, m
             schema_source_url=None,
         )
 
-        # Get masked values
-        masked_secret = created.auth_config_masked["extra_config"]["app_secret"]
-        assert "*" in masked_secret
-
-        # Update: keep app_secret (masked), change app_key (real value)
         new_app_key = "new-key-value-xyz"
         updated = await service.update_connector_for_actor(
             connector_id=created.id,
@@ -873,16 +909,15 @@ async def test_update_connector_mixed_masked_and_real_values(async_db_session, m
                 "token_extraction": {"session_id": "Context.SessionId"},
                 "request_headers": {"Cookie": "kdservice-sessionid={session_id}"},
                 "extra_config": {
-                    "app_secret": masked_secret,  # Masked - should keep original
-                    "app_key": new_app_key,  # Real value - should update
+                    "app_key": new_app_key,
                     "username": "admin",
                 },
             },
         )
 
         # Verify mixed behavior
-        from apps.shared.api_connector.adapters import connector_entity_to_domain
-        from apps.shared.api_connector.repository import ApiConnectorRepository
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+        from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository
 
         repo = ApiConnectorRepository(async_db_session)
         entity = await repo.get_by_id_and_tenant(created.id, tenant.id)

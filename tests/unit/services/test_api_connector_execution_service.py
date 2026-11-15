@@ -3,10 +3,10 @@
 
 import pytest
 
-from apps.shared.api_connector.domain import RatePolicyDomain
-from apps.shared.api_connector.execution import ApiConnectorExecutionService
-from apps.shared.api_connector.schemas import ApiOperationCallParameters
-from apps.shared.api_connector.service import ApiConnectorService
+from apps.shared.external_systems.api_connector.domain import RatePolicyDomain
+from apps.shared.external_systems.api_connector.execution import ApiConnectorExecutionService
+from apps.shared.external_systems.api_connector.schemas import ApiOperationCallParameters
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.db.models import Tenant, User
 from apps.shared.domain.actor import ActorContext
@@ -182,7 +182,7 @@ async def test_execute_operation_retries_on_retryable_status(async_db_session, m
         slept.append(seconds)
 
     monkeypatch.setattr(ApiConnectorExecutionService, "_send_http_request", _fake_send)
-    monkeypatch.setattr("apps.shared.api_connector.execution.asyncio.sleep", _fake_sleep)
+    monkeypatch.setattr("apps.shared.external_systems.api_connector.execution.asyncio.sleep", _fake_sleep)
 
     exec_service = ApiConnectorExecutionService(tenant_id=tenant.id, db_session=async_db_session)
     result = await exec_service.execute_operation_for_actor(
@@ -215,12 +215,12 @@ async def test_rate_limiter_waits_when_tokens_exhausted(monkeypatch):
     monotonics = iter([0.0, 0.0, 0.0, 0.5])
     slept: list[float] = []
 
-    monkeypatch.setattr("apps.shared.api_connector.execution.monotonic", lambda: next(monotonics))
+    monkeypatch.setattr("apps.shared.external_systems.api_connector.execution.monotonic", lambda: next(monotonics))
 
     async def _fake_sleep(seconds: float):
         slept.append(seconds)
 
-    monkeypatch.setattr("apps.shared.api_connector.execution.asyncio.sleep", _fake_sleep)
+    monkeypatch.setattr("apps.shared.external_systems.api_connector.execution.asyncio.sleep", _fake_sleep)
 
     await exec_service._apply_rate_limit(connector)
     await exec_service._apply_rate_limit(connector)
@@ -277,3 +277,83 @@ async def test_execute_operation_rejects_disabled_operation(async_db_session):
             actor=ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role),
             parameters=ApiOperationCallParameters(path={"id": "1"}),
         )
+
+
+@pytest.mark.asyncio
+async def test_user_mode_connector_uses_per_actor_bearer_token(async_db_session, monkeypatch):
+    """BYOT: two users with different bindings send different Authorization headers."""
+    from apps.shared.external_systems.credentials.domain import RESOURCE_TYPE_API_CONNECTOR
+    from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
+    from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
+    from apps.shared.utils.field_cipher import FieldCipher
+
+    tenant = Tenant(name="tenant_byot_api", slug="tenant_byot_api", config=None)
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+
+    user_a = User(username="byot_a", email=None, hashed_password="h", role="member", tenant_id=tenant.id)
+    user_b = User(username="byot_b", email=None, hashed_password="h", role="member", tenant_id=tenant.id)
+    async_db_session.add_all([user_a, user_b])
+    await async_db_session.flush()
+
+    api_service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
+    connector = await api_service.create_connector(
+        owner_id=user_a.id,
+        name="byot-api",
+        description=None,
+        base_url="https://8.8.8.8",
+        credential_mode="user",
+        auth_type="bearer",
+        auth_config={"auth_method": "bearer"},
+        rate_policy=RatePolicyDomain.from_raw({"timeout_ms": 5000}),
+        schema_source_type="manual",
+        schema_source_url=None,
+    )
+    operation = await api_service.add_manual_operation_for_actor(
+        connector_id=connector.id,
+        actor=ActorContext(tenant_id=tenant.id, user_id=user_a.id, user_role=user_a.role),
+        method="GET",
+        path_template="/me",
+        operation_id="me",
+        summary="me",
+        description=None,
+        tags=[],
+        request_schema={"type": "object"},
+        response_schema={"type": "object"},
+    )
+
+    cipher = FieldCipher()
+    repo = UserIntegrationCredentialRepository(async_db_session)
+    for user, token in ((user_a, "token-user-a"), (user_b, "token-user-b")):
+        await repo.upsert_binding(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            resource_type=RESOURCE_TYPE_API_CONNECTOR,
+            resource_id=connector.id,
+            auth_type="bearer",
+            secrets_enc=cipher.encrypt_dict({"token": token}, sensitive_fields={"token"}),
+            account_label=user.username,
+        )
+
+    captured: list[dict] = []
+
+    async def _fake_send(self, *, method, url, headers, query, body, timeout_ms):
+        captured.append(dict(headers))
+        return 200, {}, {"ok": True}
+
+    monkeypatch.setattr(ApiConnectorExecutionService, "_send_http_request", _fake_send)
+
+    exec_service = ApiConnectorExecutionService(
+        tenant_id=tenant.id,
+        db_session=async_db_session,
+        user_integration_auth=IntegrationCredentialResolver(async_db_session),
+    )
+    for user, expected in ((user_a, "Bearer token-user-a"), (user_b, "Bearer token-user-b")):
+        captured.clear()
+        result = await exec_service.execute_operation_for_actor(
+            operation_uid=operation.operation_uid,
+            actor=ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role),
+            parameters=ApiOperationCallParameters(),
+        )
+        assert result.error is None
+        assert captured[0]["Authorization"] == expected

@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-10-26T14:57:02.049472+00:00",
+  "generated_at": "2026-11-11T01:35:43.032918+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -28,6 +28,11 @@
       "risk_level": "write"
     },
     {
+      "operation_key": "DELETE_/api-connectors/{connector_id}/connections/me",
+      "summary": "Delete My Api Connector Connection",
+      "risk_level": "write"
+    },
+    {
       "operation_key": "DELETE_/dashboards/{dashboard_id}",
       "summary": "Delete Dashboard",
       "risk_level": "write"
@@ -40,6 +45,11 @@
     {
       "operation_key": "DELETE_/dashboards/{dashboard_id}/widgets/{widget_id}",
       "summary": "Remove Widget",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "DELETE_/data-sources/{data_source_id}/connections/me",
+      "summary": "Delete My Data Source Connection",
       "risk_level": "write"
     },
     {
@@ -188,6 +198,11 @@
       "risk_level": "read"
     },
     {
+      "operation_key": "GET_/api-connectors/{connector_id}/connections/me",
+      "summary": "Get My Api Connector Connection",
+      "risk_level": "read"
+    },
+    {
       "operation_key": "GET_/api-connectors/{connector_id}/operations",
       "summary": "List Operations",
       "risk_level": "read"
@@ -285,6 +300,11 @@
     {
       "operation_key": "GET_/data-sources/{data_source_id}/assets/{asset_name}",
       "summary": "Get Asset Schema",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/data-sources/{data_source_id}/connections/me",
+      "summary": "Get My Data Source Connection",
       "risk_level": "read"
     },
     {
@@ -603,6 +623,11 @@
       "risk_level": "write"
     },
     {
+      "operation_key": "POST_/api-connectors/{connector_id}/connections/me/test",
+      "summary": "Test My Api Connector Connection",
+      "risk_level": "write"
+    },
+    {
       "operation_key": "POST_/api-connectors/{connector_id}/operations",
       "summary": "Add Manual Operation",
       "risk_level": "write"
@@ -678,6 +703,11 @@
       "risk_level": "write"
     },
     {
+      "operation_key": "POST_/data-sources/{data_source_id}/connections/me/test",
+      "summary": "Test My Data Source Connection",
+      "risk_level": "write"
+    },
+    {
       "operation_key": "POST_/data-sources/{data_source_id}/query",
       "summary": "Query Data Source",
       "risk_level": "write"
@@ -685,6 +715,11 @@
     {
       "operation_key": "POST_/data-sources/{data_source_id}/tags",
       "summary": "Bind Data Source Tag",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/data-sources/{data_source_id}/test-connection",
+      "summary": "Test Saved Data Source Connection",
       "risk_level": "write"
     },
     {
@@ -778,8 +813,18 @@
       "risk_level": "write"
     },
     {
+      "operation_key": "PUT_/api-connectors/{connector_id}/connections/me",
+      "summary": "Upsert My Api Connector Connection",
+      "risk_level": "write"
+    },
+    {
       "operation_key": "PUT_/dashboards/{dashboard_id}",
       "summary": "Update Dashboard by ID",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "PUT_/data-sources/{data_source_id}/connections/me",
+      "summary": "Upsert My Data Source Connection",
       "risk_level": "write"
     },
     {

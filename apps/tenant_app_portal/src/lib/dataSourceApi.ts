@@ -5,6 +5,10 @@
 
 import api from './api'
 import { API_ENDPOINTS } from '@/constants/api'
+import type {
+  UserIntegrationConnection,
+  UserIntegrationConnectionUpsert,
+} from '@/lib/userIntegrationConnection'
 
 export interface DataSource {
   id: number
@@ -18,20 +22,27 @@ export interface DataSource {
   created_at: string
   updated_at: string
   asset_count: number
+  credential_mode?: 'shared' | 'user'
+  user_connection_status?: 'not_connected' | 'connected' | 'expired' | null
+  masked_fields?: string[]
 }
 
 export interface DataSourceCreate {
   name: string
   type: 'postgres' | 'mysql' | 'databricks' | 'snowflake' | 'bigquery' | 'other'
   managed: boolean
+  credential_mode?: 'shared' | 'user'
   config?: Record<string, any>
   description?: string
 }
+
+export type { UserIntegrationConnection, UserIntegrationConnectionUpsert }
 
 export interface DataSourceUpdate {
   name?: string
   config?: Record<string, any>
   description?: string
+  credential_mode?: 'shared' | 'user'
 }
 
 export interface AssetMetadata {
@@ -162,6 +173,9 @@ export async function createDataSource(data: DataSourceCreate): Promise<DataSour
   formData.append('name', data.name)
   formData.append('type', data.type)
   formData.append('config', JSON.stringify(data.config || {}))
+  if (data.credential_mode) {
+    formData.append('credential_mode', data.credential_mode)
+  }
 
   if (data.description) {
     formData.append('description', data.description)
@@ -193,6 +207,10 @@ export async function updateDataSource(id: number, data: DataSourceUpdate): Prom
     formData.append('config', JSON.stringify(data.config))
   }
 
+  if (data.credential_mode) {
+    formData.append('credential_mode', data.credential_mode)
+  }
+
   const response = await api.put<DataSource>(API_ENDPOINTS.dataSourceById(id), formData, {
     headers: {
       'Content-Type': 'multipart/form-data',
@@ -209,8 +227,19 @@ export async function deleteDataSource(id: number): Promise<void> {
 }
 
 /**
- * Test connection to a data source without saving (PostgreSQL/MySQL only)
+ * Test connection for a saved data source (merges overlay with stored secrets).
  */
+export async function testSavedDataSourceConnection(
+  dataSourceId: number,
+  configOverlay?: Record<string, unknown>
+): Promise<TestConnectionResponse> {
+  const response = await api.post<TestConnectionResponse>(
+    API_ENDPOINTS.dataSourceTestConnection(dataSourceId),
+    configOverlay ? { config: configOverlay } : {}
+  )
+  return response.data
+}
+
 export async function testConnection(
   request: TestConnectionRequest
 ): Promise<TestConnectionResponse> {
@@ -378,6 +407,41 @@ export async function deleteAsset(dataSourceId: number, assetName: string): Prom
 /**
  * Batch delete multiple assets (convenience wrapper)
  */
+export async function getMyDataSourceConnection(
+  dataSourceId: number
+): Promise<UserIntegrationConnection> {
+  const response = await api.get<UserIntegrationConnection>(
+    `/data-sources/${dataSourceId}/connections/me`
+  )
+  return response.data
+}
+
+export async function upsertMyDataSourceConnection(
+  dataSourceId: number,
+  body: UserIntegrationConnectionUpsert
+): Promise<UserIntegrationConnection> {
+  const response = await api.put<UserIntegrationConnection>(
+    `/data-sources/${dataSourceId}/connections/me`,
+    body
+  )
+  return response.data
+}
+
+export async function deleteMyDataSourceConnection(dataSourceId: number): Promise<void> {
+  await api.delete(`/data-sources/${dataSourceId}/connections/me`)
+}
+
+export async function testMyDataSourceConnection(
+  dataSourceId: number,
+  body?: UserIntegrationConnectionUpsert
+): Promise<{ success: boolean; message: string }> {
+  const response = await api.post<{ success: boolean; message: string }>(
+    `/data-sources/${dataSourceId}/connections/me/test`,
+    body ?? undefined
+  )
+  return response.data
+}
+
 export async function batchDeleteAssets(
   dataSourceId: number,
   assetNames: string[]

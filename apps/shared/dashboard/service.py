@@ -40,10 +40,10 @@ from apps.shared.dashboard.schemas import (
     DashboardFilterValueOverrideDTO,
 )
 from apps.shared.dashboard.types import ChartType, FilterType, TimePrecision, WidgetType
-from apps.shared.data_source import DataSourceService
 from apps.shared.db.models import ChatThread
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.value_objects import SQLDialectStr, resolve_sql_dialect
+from apps.shared.external_systems.data_source import DataSourceService
 from apps.shared.utils.json_sanitizer import sanitize_json_data
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.sql_utils import validate_read_only_sql
@@ -619,7 +619,7 @@ class DashboardService(TenantAwareService):
             data_source_id=widget.data_source_id,
             sql_query=compiled.sql,
         )
-        db_manager = await data_source_service.get_db_manager(widget.data_source_id)
+        db_manager = await data_source_service.get_db_manager_for_actor(widget.data_source_id, actor)
         return PreparedAnalyticsQuery(
             sql=compiled.sql,
             params=compiled.params,

@@ -64,6 +64,11 @@ platform:
       cacheable: true
     retrieve_resource_context:
       limit: 5
+    search_apis:
+      limit: 10
+      cacheable: true
+    api_connector:
+      limit: 15
     create_report:
       limit: 5
     get_report:
@@ -97,6 +102,8 @@ system_agents:
       - read_skill_file
       - search_documents
       - retrieve_resource_context
+      - search_apis
+      - api_connector
     tags:
       - general
       - assistant

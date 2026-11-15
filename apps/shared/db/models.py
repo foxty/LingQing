@@ -1272,6 +1272,13 @@ class DataSource(Base):
         comment="Whether this data source is managed by the platform",
     )
     config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict)
+    credential_mode: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="shared",
+        server_default="shared",
+        comment="shared: tenant secret on resource; user: per-user bindings",
+    )
     description: Mapped[str | None] = mapped_column(Text, nullable=True)
     owner_id: Mapped[int] = mapped_column(
         Integer,
@@ -1463,6 +1470,13 @@ class ApiConnector(Base):
     base_url: Mapped[str] = mapped_column(String(1024), nullable=False)
     auth_type: Mapped[str] = mapped_column(String(50), nullable=False, default="none", server_default="none")
     auth_config: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    credential_mode: Mapped[str] = mapped_column(
+        String(20),
+        nullable=False,
+        default="shared",
+        server_default="shared",
+        comment="shared: tenant secret on connector; user: per-user bindings",
+    )
     rate_policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     schema_source_type: Mapped[str] = mapped_column(String(50), nullable=False)
     schema_source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)
@@ -1487,6 +1501,47 @@ class ApiConnector(Base):
     owner_user: Mapped["User | None"] = relationship("User", foreign_keys=[owner_id], lazy="noload")
     operations: Mapped[list["ApiOperationIndex"]] = relationship(
         "ApiOperationIndex", back_populates="connector", cascade="all, delete-orphan", lazy="noload"
+    )
+
+
+class UserIntegrationCredential(Base):
+    """Per-user credentials for BYOT on data sources and API connectors."""
+
+    __tablename__ = "user_integration_credentials"
+    __table_args__ = (
+        UniqueConstraint(
+            "tenant_id",
+            "user_id",
+            "resource_type",
+            "resource_id",
+            name="uq_user_integration_cred",
+        ),
+        Index("idx_user_integration_cred_resource", "tenant_id", "resource_type", "resource_id"),
+        Index("idx_user_integration_cred_user", "tenant_id", "user_id"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(32), nullable=False)
+    resource_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    auth_type: Mapped[str] = mapped_column(String(50), nullable=False, default="bearer", server_default="bearer")
+    secrets_enc: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
+    account_label: Mapped[str | None] = mapped_column(String(320), nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="active", server_default="active")
+    expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
+        server_default=text("CURRENT_TIMESTAMP"),
     )
 
 

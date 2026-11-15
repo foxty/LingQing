@@ -2,12 +2,12 @@
 
 from datetime import UTC, datetime
 
-from apps.shared.api_connector.adapters import (
+from apps.shared.external_systems.api_connector.adapters import (
     auth_config_to_dict,
     connector_domain_to_response,
     connector_entity_to_domain,
 )
-from apps.shared.api_connector.constants import (
+from apps.shared.external_systems.api_connector.constants import (
     AUTH_TYPE_API_KEY,
     AUTH_TYPE_BEARER,
     AUTH_TYPE_CUSTOM,
@@ -16,8 +16,8 @@ from apps.shared.api_connector.constants import (
     SCHEMA_SOURCE_TYPE_MANUAL,
     SCHEMA_SOURCE_TYPE_OPENAPI_UPLOAD,
 )
-from apps.shared.api_connector.domain import ApiConnectorDomain, NoAuthConfig, RatePolicyDomain
-from apps.shared.api_connector.schemas import ApiKeyAuthConfigSchema, NoAuthConfigSchema
+from apps.shared.external_systems.api_connector.domain import ApiConnectorDomain, NoAuthConfig, RatePolicyDomain
+from apps.shared.external_systems.api_connector.schemas import ApiKeyAuthConfigSchema, NoAuthConfigSchema
 from apps.shared.db.models import ApiConnector, User
 from apps.shared.utils.field_cipher import FieldCipher
 
@@ -68,7 +68,7 @@ class TestConnectorEntityToDomain:
 
         # Auth config should be converted to dataclass
         # Without cipher, api_key remains encrypted in the dataclass
-        from apps.shared.api_connector.domain import ApiKeyAuthConfig
+        from apps.shared.external_systems.api_connector.domain import ApiKeyAuthConfig
 
         assert isinstance(domain.auth_config, ApiKeyAuthConfig)
         assert domain.auth_config.api_key == "enc:abc123"
@@ -107,7 +107,7 @@ class TestConnectorEntityToDomain:
         domain = connector_entity_to_domain(connector, cipher=cipher)
 
         # Auth config should be decrypted and converted to dataclass
-        from apps.shared.api_connector.domain import ApiKeyAuthConfig
+        from apps.shared.external_systems.api_connector.domain import ApiKeyAuthConfig
 
         assert isinstance(domain.auth_config, ApiKeyAuthConfig)
         assert domain.auth_config.api_key == "sk-test-1234567890abcdef"
@@ -138,7 +138,7 @@ class TestConnectorEntityToDomain:
         domain = connector_entity_to_domain(connector, cipher=cipher)
 
         # Empty auth_config becomes NoAuthConfig
-        from apps.shared.api_connector.domain import NoAuthConfig
+        from apps.shared.external_systems.api_connector.domain import NoAuthConfig
 
         assert isinstance(domain.auth_config, NoAuthConfig)
 
@@ -168,7 +168,7 @@ class TestConnectorEntityToDomain:
         domain = connector_entity_to_domain(connector, cipher=cipher)
 
         # None auth_config becomes NoAuthConfig
-        from apps.shared.api_connector.domain import NoAuthConfig
+        from apps.shared.external_systems.api_connector.domain import NoAuthConfig
 
         assert isinstance(domain.auth_config, NoAuthConfig)
 
@@ -241,9 +241,10 @@ class TestConnectorDomainToResponse:
         response = connector_domain_to_response(domain)
 
         # api_key should be masked (first 2 + stars + last 2)
-        assert response.auth_config_masked["api_key"] == "sk********************ef"
+        assert response.auth_config["api_key"] == "sk********************ef"
         # endpoint should remain unchanged (not sensitive)
-        assert response.auth_config_masked["endpoint"] == "https://api.example.com/v1"
+        assert response.auth_config["endpoint"] == "https://api.example.com/v1"
+        assert response.masked_fields == ["auth_config.api_key"]
 
     def test_masking_with_multiple_sensitive_fields(self):
         """Multiple sensitive fields should all be masked."""
@@ -276,20 +277,20 @@ class TestConnectorDomainToResponse:
         response = connector_domain_to_response(domain)
 
         # All sensitive fields should be masked
-        assert response.auth_config_masked["client_id"] == "my-client-id"  # Not sensitive
+        assert response.auth_config["client_id"] == "my-client-id"  # Not sensitive
         assert (
-            "****" in response.auth_config_masked["client_secret"]
-            or "se" in response.auth_config_masked["client_secret"]
+            "****" in response.auth_config["client_secret"]
+            or "se" in response.auth_config["client_secret"]
         )
         assert (
-            "****" in response.auth_config_masked["access_token"] or "to" in response.auth_config_masked["access_token"]
+            "****" in response.auth_config["access_token"] or "to" in response.auth_config["access_token"]
         )
         assert (
-            "****" in response.auth_config_masked["refresh_token"]
-            or "re" in response.auth_config_masked["refresh_token"]
+            "****" in response.auth_config["refresh_token"]
+            or "re" in response.auth_config["refresh_token"]
         )
         # endpoint should remain unchanged
-        assert response.auth_config_masked["endpoint"] == "https://api.example.com/oauth"
+        assert response.auth_config["endpoint"] == "https://api.example.com/oauth"
 
     def test_masking_with_empty_auth_config(self):
         """Empty auth_config should result in empty masked config."""
@@ -315,7 +316,7 @@ class TestConnectorDomainToResponse:
 
         response = connector_domain_to_response(domain)
 
-        assert response.auth_config_masked == {}
+        assert response.auth_config == {}
 
     def test_masking_with_short_values(self):
         """Short sensitive values should be fully masked."""
@@ -345,8 +346,8 @@ class TestConnectorDomainToResponse:
         response = connector_domain_to_response(domain)
 
         # Short values should be fully masked
-        assert response.auth_config_masked["api_key"] == "***"
-        assert response.auth_config_masked["token"] == "****"
+        assert response.auth_config["api_key"] == "***"
+        assert response.auth_config["token"] == "****"
 
     def test_response_dto_contains_all_fields(self):
         """Response DTO should contain all connector fields."""
@@ -384,11 +385,11 @@ class TestConnectorDomainToResponse:
         assert response.schema_source_type == SCHEMA_SOURCE_TYPE_OPENAPI_UPLOAD
         assert response.schema_metadata == {"version": "1.0"}
         assert response.status == CONNECTOR_STATUS_ACTIVE
-        assert response.auth_config_masked is not None
+        assert response.auth_config is not None
 
     def test_masking_does_not_modify_original_domain(self):
         """Masking should create a copy, not modify the original domain."""
-        from apps.shared.api_connector.domain import ApiKeyAuthConfig
+        from apps.shared.external_systems.api_connector.domain import ApiKeyAuthConfig
 
         original_api_key = "sk-test-original-key-12345"
         domain = ApiConnectorDomain(
@@ -416,7 +417,7 @@ class TestConnectorDomainToResponse:
         # Original domain should remain unchanged (dataclass attribute)
         assert domain.auth_config.api_key == original_api_key
         # Response should have masked value
-        assert response.auth_config_masked["api_key"] != original_api_key
+        assert response.auth_config["api_key"] != original_api_key
 
 
 class TestEncryptionDecryptionMaskingFlow:
@@ -460,7 +461,7 @@ class TestEncryptionDecryptionMaskingFlow:
 
         # Step 3: Convert to domain (auto-decrypt + convert to dataclass)
         domain = connector_entity_to_domain(connector, cipher=cipher)
-        from apps.shared.api_connector.domain import ApiKeyAuthConfig
+        from apps.shared.external_systems.api_connector.domain import ApiKeyAuthConfig
 
         assert isinstance(domain.auth_config, ApiKeyAuthConfig)
         assert domain.auth_config.api_key == "sk-live-secret-key-1234567890"
@@ -468,8 +469,37 @@ class TestEncryptionDecryptionMaskingFlow:
         # Step 4: Convert to response (auto-mask)
         response = connector_domain_to_response(domain)
         # api_key masked: first 2 + stars + last 2
-        assert response.auth_config_masked["api_key"] == "sk*************************90"
+        assert response.auth_config["api_key"] == "sk*************************90"
         # endpoint is not part of ApiKeyAuthConfig, so it won't be in masked output
 
         # Verify original value is not exposed
-        assert "sk-live-secret-key-1234567890" not in str(response.auth_config_masked)
+        assert "sk-live-secret-key-1234567890" not in str(response.auth_config)
+
+    def test_masked_fields_lists_nested_extra_config_secret(self):
+        from apps.shared.external_systems.api_connector.domain import CustomAuthConfig
+
+        domain = ApiConnectorDomain(
+            id=1,
+            tenant_id=1,
+            owner_id=1,
+            owner_name="admin",
+            name="custom-api",
+            description="Custom",
+            base_url="https://api.example.com",
+            auth_type=AUTH_TYPE_CUSTOM,
+            auth_config=CustomAuthConfig(
+                login_endpoint="/login",
+                extra_config={"app_secret": "my-super-secret", "region": "us"},
+            ),
+            rate_policy=RatePolicyDomain(),
+            schema_source_type=SCHEMA_SOURCE_TYPE_MANUAL,
+            schema_source_url=None,
+            schema_metadata={},
+            schema_last_synced_at=None,
+            status=CONNECTOR_STATUS_ACTIVE,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        response = connector_domain_to_response(domain)
+        assert "auth_config.extra_config.app_secret" in response.masked_fields
+        assert "auth_config.region" not in response.masked_fields

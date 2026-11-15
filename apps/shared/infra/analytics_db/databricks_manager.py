@@ -13,8 +13,8 @@ import aiohttp
 import pandas as pd
 
 from apps.config import EnvConfig
-from apps.shared.data_source.schemas import DiscoveredAsset, DiscoveredColumn
 from apps.shared.domain.value_objects import AssetType, DatabaseConnectionVO
+from apps.shared.external_systems.data_source.schemas import DiscoveredAsset, DiscoveredColumn
 from apps.shared.infra.analytics_db.errors import ConnectionError
 from apps.shared.infra.analytics_db.relational_db_manager import RelationalDBManager
 from apps.shared.utils.logger import get_logger

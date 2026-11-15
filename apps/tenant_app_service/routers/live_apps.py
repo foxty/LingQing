@@ -8,15 +8,15 @@ from uuid import uuid4
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Response, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.api_connector.execution import ApiConnectorExecutionService
-from apps.shared.api_connector.schemas import (
-    ApiOperationCallRequest,
-    ApiOperationCallResponse,
-)
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import get_current_user, require_permission
 from apps.shared.db.session import get_db
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.api_connector.schemas import (
+    ApiOperationCallRequest,
+    ApiOperationCallResponse,
+)
+from apps.shared.external_systems.application.wiring import api_connector_execution_service
 from apps.shared.live_app.schemas import (
     LiveAppListDTO,
     LiveAppMutateRequestDTO,
@@ -351,7 +351,7 @@ async def call_api_connector_v1(
     await service.require_read_access(app_id=app_id, actor=_actor_ctx(current_user))
 
     # Execute via ApiConnectorExecutionService (already uses operation_uid)
-    exec_service = ApiConnectorExecutionService(tenant_id=current_user.tenant_id, db_session=db)
+    exec_service = api_connector_execution_service(current_user.tenant_id, db)
     result = await exec_service.execute_operation_for_actor(
         operation_uid=operation_uid,
         actor=_actor_ctx(current_user),

@@ -12,7 +12,7 @@
     "migrate-db:tm": "nx migrate-db:tenant-manager",
     "downgrade-db:ta": "nx downgrade-db:tenant-app -- -1",
     "downgrade-db:tm": "nx downgrade-db:tenant-manager -- -1",
-    "test": "nx run root:test",
+    "test": "nx run-many -t test --projects=root,tenant_app_portal --parallel=false",
     "test:unit": "nx run root:test:unit",
     "ci": "nx run root:ci",
     "lint": "nx lint",
