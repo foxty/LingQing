@@ -162,7 +162,7 @@ class ApiConnectorResponse(MaskedFieldsMixin):
     description: str | None
     base_url: str
     auth_type: AuthType
-    auth_config_masked: dict[str, Any]
+    auth_config: dict[str, Any]
     rate_policy: ApiRatePolicySchema
     schema_source_type: SchemaSourceType
     schema_source_url: str | None

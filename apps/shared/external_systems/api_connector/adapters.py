@@ -24,7 +24,7 @@ from apps.shared.external_systems.api_connector.schemas import (
     ApiRatePolicySchema,
 )
 from apps.shared.external_systems.api_connector.sensitive_config import (
-    AUTH_CONFIG_MASKED_ROOT,
+    AUTH_CONFIG_ROOT,
     AUTH_CONFIG_SENSITIVE_FIELDS,
     AUTH_CONFIG_SENSITIVE_LEAF_KEYS,
 )
@@ -190,7 +190,7 @@ def connector_domain_to_response(connector: ApiConnectorDomain) -> ApiConnectorR
 
     masked_fields = collect_stored_secret_paths(
         auth_config_dict,
-        root_prefix=AUTH_CONFIG_MASKED_ROOT,
+        root_prefix=AUTH_CONFIG_ROOT,
         sensitive_leaf_keys=AUTH_CONFIG_SENSITIVE_LEAF_KEYS,
     )
     masked_auth_config = FieldCipher.mask_dict(auth_config_dict, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS)
@@ -204,7 +204,7 @@ def connector_domain_to_response(connector: ApiConnectorDomain) -> ApiConnectorR
         description=connector.description,
         base_url=connector.base_url,
         auth_type=connector.auth_type,
-        auth_config_masked=masked_auth_config,
+        auth_config=masked_auth_config,
         rate_policy=ApiRatePolicySchema.from_domain(connector.rate_policy),
         schema_source_type=connector.schema_source_type,
         schema_source_url=connector.schema_source_url,

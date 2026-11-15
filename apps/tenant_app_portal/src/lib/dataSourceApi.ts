@@ -5,6 +5,10 @@
 
 import api from './api'
 import { API_ENDPOINTS } from '@/constants/api'
+import type {
+  UserIntegrationConnection,
+  UserIntegrationConnectionUpsert,
+} from '@/lib/userIntegrationConnection'
 
 export interface DataSource {
   id: number
@@ -32,23 +36,7 @@ export interface DataSourceCreate {
   description?: string
 }
 
-export interface UserIntegrationConnection {
-  resource_type: string
-  resource_id: number
-  status: 'not_connected' | 'connected' | 'expired'
-  account_label?: string | null
-  auth_type?: string | null
-  expires_at?: string | null
-  secrets_public?: Record<string, string>
-  secret_keys_configured?: string[]
-  masked_fields?: string[]
-}
-
-export interface UserIntegrationConnectionUpsert {
-  auth_type: string
-  secrets: Record<string, string>
-  account_label?: string | null
-}
+export type { UserIntegrationConnection, UserIntegrationConnectionUpsert }
 
 export interface DataSourceUpdate {
   name?: string

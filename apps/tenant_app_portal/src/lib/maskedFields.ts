@@ -23,15 +23,11 @@ export function secretKeysFromMaskedFields(maskedFields: readonly string[] | und
   return keys
 }
 
-/** BYOT GET: use ``masked_fields`` when present; else legacy ``secret_keys_configured``. */
+/** BYOT GET: which secret leaves are stored (from ``masked_fields``). */
 export function configuredSecretKeysFromConnection(status: {
   masked_fields?: string[]
-  secret_keys_configured?: string[]
 }): string[] {
-  if (status.masked_fields !== undefined) {
-    return secretKeysFromMaskedFields(status.masked_fields)
-  }
-  return status.secret_keys_configured ?? []
+  return secretKeysFromMaskedFields(status.masked_fields)
 }
 
 /** Inline partial mask from GET config/auth JSON — preview text only (not “stored” detection). */

@@ -9,7 +9,7 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useNotification } from '@/hooks/useNotification'
 import { getApiErrorMessage, sanitizeUserFacingMessage } from '@/lib/api'
-import type { UserIntegrationConnectionUpsert } from '@/lib/dataSourceApi'
+import type { UserIntegrationConnectionUpsert } from '@/lib/userIntegrationConnection'
 import {
   isSecretSatisfiedForTest,
   secretPayloadValue,
@@ -140,7 +140,7 @@ export default function MyIntegrationConnectionPanel({
       return
     }
     setAccountLabel(status.account_label ?? '')
-    const publicSecrets = status.secrets_public ?? {}
+    const connectionSecrets = status.secrets ?? {}
     const configured = new Set(configuredSecretKeysFromConnection(status))
     setConfiguredSecretKeys(configured)
     const nextPlain: Record<string, string> = {}
@@ -148,8 +148,8 @@ export default function MyIntegrationConnectionPanel({
       if (isSensitiveFieldKey(field.key)) {
         continue
       }
-      if (publicSecrets[field.key] !== undefined) {
-        nextPlain[field.key] = String(publicSecrets[field.key])
+      if (connectionSecrets[field.key] !== undefined) {
+        nextPlain[field.key] = String(connectionSecrets[field.key])
       } else {
         nextPlain[field.key] = ''
       }
@@ -373,6 +373,11 @@ export default function MyIntegrationConnectionPanel({
               mode={secretMode(field.key)}
               stored={configuredSecretKeys.has(field.key)}
               resetKey={secretResetKey}
+              maskedPreview={
+                configuredSecretKeys.has(field.key)
+                  ? (status?.secrets?.[field.key] ?? null)
+                  : null
+              }
               disabled={busy}
               errorMsg={fieldErrors[field.key]}
               onBindingChange={onSecretBindingChange}

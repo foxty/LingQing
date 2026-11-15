@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-15T03:04:46.953982+00:00",
+  "generated_at": "2026-11-15T03:21:04.279203+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -747,10 +747,10 @@
             ],
             "title": "Auth Type"
           },
-          "auth_config_masked": {
+          "auth_config": {
             "additionalProperties": true,
             "type": "object",
-            "title": "Auth Config Masked"
+            "title": "Auth Config"
           },
           "rate_policy": {
             "$ref": "#/components/schemas/ApiRatePolicySchema"
@@ -839,7 +839,7 @@
           "description",
           "base_url",
           "auth_type",
-          "auth_config_masked",
+          "auth_config",
           "rate_policy",
           "schema_source_type",
           "schema_source_url",
@@ -8943,21 +8943,13 @@
             ],
             "title": "Expires At"
           },
-          "secrets_public": {
+          "secrets": {
             "additionalProperties": {
               "type": "string"
             },
             "type": "object",
-            "title": "Secrets Public",
-            "description": "Non-sensitive saved secret fields (e.g. username) for edit forms"
-          },
-          "secret_keys_configured": {
-            "items": {
-              "type": "string"
-            },
-            "type": "array",
-            "title": "Secret Keys Configured",
-            "description": "Sensitive secret keys that have a saved value"
+            "title": "Secrets",
+            "description": "Redacted secret blob; sensitive leaves show partial mask or are omitted"
           }
         },
         "type": "object",

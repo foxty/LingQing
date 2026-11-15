@@ -19,13 +19,9 @@ class UserIntegrationConnectionResponse(MaskedFieldsMixin):
     account_label: str | None = None
     auth_type: str | None = None
     expires_at: datetime | None = None
-    secrets_public: dict[str, str] = Field(
+    secrets: dict[str, str] = Field(
         default_factory=dict,
-        description="Non-sensitive saved secret fields (e.g. username) for edit forms",
-    )
-    secret_keys_configured: list[str] = Field(
-        default_factory=list,
-        description="Sensitive secret keys that have a saved value",
+        description="Redacted secret blob; sensitive leaves show partial mask or are omitted",
     )
 
 

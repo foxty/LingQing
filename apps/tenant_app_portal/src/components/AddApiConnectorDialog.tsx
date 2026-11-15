@@ -131,7 +131,7 @@ import { hasMaskedFieldPath } from '@/lib/maskedFields'
 
 import { omitUnchangedSecretsDeep } from '@/lib/secretWire'
 
-const maskedAuthSecretPath = (field: string) => `auth_config_masked.${field}`
+const maskedAuthSecretPath = (field: string) => `auth_config.${field}`
 
 interface AddApiConnectorDialogProps {
   open: boolean
@@ -211,11 +211,11 @@ export default function AddApiConnectorDialog({
   const initialAuthType = connector?.auth_type ?? 'none'
 
   const maskedFields = connector?.masked_fields
-  const maskedAuth = connector?.auth_config_masked ?? {}
+  const maskedAuth = connector?.auth_config ?? {}
   const isAuthConfigured =
     mode === 'edit' &&
     connector?.auth_type !== 'none' &&
-    (maskedFields ?? []).some((path) => path.startsWith('auth_config_masked.'))
+    (maskedFields ?? []).some((path) => path.startsWith('auth_config.'))
 
   const authResetKey = open ? (connector?.id ?? 'new') : 'closed'
   const apiKeyValueSecret = useSecretCredentialField(
@@ -280,7 +280,7 @@ export default function AddApiConnectorDialog({
       setSchemaSourceUrl(connector.schema_source_url || '')
       setCredentialMode(connector.credential_mode ?? 'shared')
 
-      const masked = connector.auth_config_masked ?? {}
+      const masked = connector.auth_config ?? {}
       if (connector.auth_type === 'api_key') {
         setApiKeyConfig({
           keyName: typeof masked.key_name === 'string' ? masked.key_name : defaultApiKeyConfig.keyName,
@@ -301,8 +301,8 @@ export default function AddApiConnectorDialog({
       // Load custom auth config structure from masked response
       // Note: Sensitive values (credentials) are masked and can't be loaded,
       // but we preserve the configuration structure (endpoints, templates, etc.)
-      if (connector.auth_type === 'custom' && connector.auth_config_masked) {
-        const masked = connector.auth_config_masked
+      if (connector.auth_type === 'custom' && connector.auth_config) {
+        const masked = connector.auth_config
         setCustomAuthConfig({
           loginEndpoint: masked.login_endpoint || '',
           loginMethod: masked.login_method || 'POST',

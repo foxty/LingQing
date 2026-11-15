@@ -53,12 +53,12 @@ async def test_create_connector_encrypts_sensitive_fields(async_db_session, mock
 
     # Service returns response DTO with masked auth_config
     assert created.id is not None
-    # auth_config_masked should contain the masked value (not encrypted, not plaintext)
-    assert "auth_config_masked" in created.model_dump()
-    assert created.auth_config_masked["key_value"].startswith("se")  # First 2 chars visible
-    assert created.auth_config_masked["key_value"].endswith("en")  # Last 2 chars visible
-    assert "*" in created.auth_config_masked["key_value"]  # Middle is masked
-    assert created.auth_config_masked["key_value"] != "secret-token"  # Not plaintext
+    # auth_config should contain the masked value (not encrypted, not plaintext)
+    assert "auth_config" in created.model_dump()
+    assert created.auth_config["key_value"].startswith("se")  # First 2 chars visible
+    assert created.auth_config["key_value"].endswith("en")  # Last 2 chars visible
+    assert "*" in created.auth_config["key_value"]  # Middle is masked
+    assert created.auth_config["key_value"] != "secret-token"  # Not plaintext
 
 
 @pytest.mark.asyncio
@@ -88,7 +88,7 @@ async def test_create_connector_accepts_pydantic_no_auth_schema(async_db_session
 
     assert created.id is not None
     assert created.auth_type == "none"
-    assert created.auth_config_masked["auth_method"] == "none"
+    assert created.auth_config["auth_method"] == "none"
 
 
 @pytest.mark.asyncio
@@ -715,7 +715,7 @@ async def test_update_connector_does_not_preserve_when_client_sends_masked_value
         )
 
         # Step 2: UI receives masked value
-        masked_secret = created.auth_config_masked["extra_config"]["app_secret"]
+        masked_secret = created.auth_config["extra_config"]["app_secret"]
         assert masked_secret != original_secret
         assert "*" in masked_secret
 

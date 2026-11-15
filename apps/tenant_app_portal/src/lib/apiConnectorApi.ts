@@ -2,6 +2,12 @@ import { API_ENDPOINTS } from '@/constants/api'
 import api from '@/lib/api'
 import type { PaginatedResponse } from '@/lib/documentsApi'
 import type { PaginatedListResponse } from '@/lib/paginatedList'
+import type {
+  UserIntegrationConnection,
+  UserIntegrationConnectionUpsert,
+} from '@/lib/userIntegrationConnection'
+
+export type { UserIntegrationConnection, UserIntegrationConnectionUpsert }
 
 export type ApiConnectorAuthType = 'none' | 'api_key' | 'bearer' | 'basic' | 'custom'
 export type ApiConnectorSchemaSourceType = 'manual' | 'openapi_url' | 'openapi_upload'
@@ -15,7 +21,7 @@ export interface ApiConnector {
   description: string | null
   base_url: string
   auth_type: ApiConnectorAuthType
-  auth_config_masked: Record<string, any>
+  auth_config: Record<string, any>
   rate_policy: Record<string, any>
   schema_source_type: ApiConnectorSchemaSourceType
   schema_source_url: string | null
@@ -256,24 +262,6 @@ export async function callApiOperation(
     { parameters }
   )
   return response.data
-}
-
-export interface UserIntegrationConnection {
-  resource_type: string
-  resource_id: number
-  status: 'not_connected' | 'connected' | 'expired'
-  account_label?: string | null
-  auth_type?: string | null
-  expires_at?: string | null
-  secrets_public?: Record<string, string>
-  secret_keys_configured?: string[]
-  masked_fields?: string[]
-}
-
-export interface UserIntegrationConnectionUpsert {
-  auth_type: string
-  secrets: Record<string, string>
-  account_label?: string | null
 }
 
 export async function getMyApiConnectorConnection(

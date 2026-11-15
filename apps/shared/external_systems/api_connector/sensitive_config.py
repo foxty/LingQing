@@ -4,7 +4,8 @@ from __future__ import annotations
 
 from apps.shared.external_systems.integration_secret_keys import INTEGRATION_SECRET_LEAF_KEYS
 
-AUTH_CONFIG_MASKED_ROOT = "auth_config_masked"
+# GET response / ``masked_fields`` path prefix (redacted values live under ``auth_config``, like ``config`` on data sources).
+AUTH_CONFIG_ROOT = "auth_config"
 
 AUTH_CONFIG_SENSITIVE_LEAF_KEYS: frozenset[str] = INTEGRATION_SECRET_LEAF_KEYS
 

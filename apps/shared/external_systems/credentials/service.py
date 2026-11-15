@@ -8,6 +8,7 @@ from apps.shared.core.exceptions import IntegrationNotConnectedError, ResourceNo
 from apps.shared.db.models import ApiConnector, DataSource
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
+from apps.shared.external_systems.credentials.adapters import redact_user_integration_secrets_for_api
 from apps.shared.external_systems.credentials.dtos import (
     UserIntegrationConnectionResponse,
     UserIntegrationConnectionTestResponse,
@@ -19,7 +20,6 @@ from apps.shared.external_systems.credentials.sensitive_config import (
     API_CONNECTOR_USER_MODE_STRIP_KEYS,
     DATA_SOURCE_USER_MODE_STRIP_KEYS,
     USER_INTEGRATION_SENSITIVE_LEAF_KEYS,
-    masked_fields_for_configured_secret_keys,
 )
 from apps.shared.external_systems.credentials.user_integration_auth import validate_user_integration_upsert
 from apps.shared.external_systems.domain.types import (
@@ -339,11 +339,11 @@ class UserIntegrationCredentialService:
             resource_type=resource_type,
             resource_id=resource_id,
         )
-        secrets_public: dict[str, str] = {}
-        secret_keys_configured: list[str] = []
+        secrets: dict[str, str] = {}
+        masked_fields: list[str] = []
         if row is not None and row.secrets_enc:
             decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
-            secrets_public, secret_keys_configured = self._public_secrets_view(decrypted)
+            secrets, masked_fields = redact_user_integration_secrets_for_api(decrypted)
         return UserIntegrationConnectionResponse(
             resource_type=resource_type,
             resource_id=resource_id,
@@ -351,9 +351,8 @@ class UserIntegrationCredentialService:
             account_label=row.account_label if row else None,
             auth_type=row.auth_type if row else None,
             expires_at=row.expires_at if row else None,
-            secrets_public=secrets_public,
-            secret_keys_configured=secret_keys_configured,
-            masked_fields=masked_fields_for_configured_secret_keys(secret_keys_configured),
+            secrets=secrets,
+            masked_fields=masked_fields,
         )
 
     async def _get_data_source(self, tenant_id: int, data_source_id: int) -> DataSource:
@@ -411,19 +410,6 @@ class UserIntegrationCredentialService:
                     merged.pop(key, None)
         return merged
 
-    @staticmethod
-    def _public_secrets_view(decrypted: dict) -> tuple[dict[str, str], list[str]]:
-        secrets_public: dict[str, str] = {}
-        secret_keys_configured: list[str] = []
-        for key, value in decrypted.items():
-            if not isinstance(value, str) or not value.strip():
-                continue
-            if key in USER_INTEGRATION_SENSITIVE_LEAF_KEYS:
-                secret_keys_configured.append(key)
-            else:
-                secrets_public[key] = value
-        secret_keys_configured.sort()
-        return secrets_public, secret_keys_configured
 
 
     @staticmethod

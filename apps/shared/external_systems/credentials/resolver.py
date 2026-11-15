@@ -20,7 +20,7 @@ from apps.shared.external_systems.credentials.sensitive_config import (
 from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER, IntegrationPurpose
 from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
 
-__all__ = ["IntegrationCredentialResolver", "strip_sensitive_fields"]
+__all__ = ["IntegrationCredentialResolver"]
 
 
 class IntegrationCredentialResolver:

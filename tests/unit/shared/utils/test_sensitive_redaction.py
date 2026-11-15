@@ -1,6 +1,6 @@
 """Sensitive redaction helpers driven by declared specs."""
 
-from apps.shared.external_systems.api_connector.sensitive_config import AUTH_CONFIG_MASKED_ROOT
+from apps.shared.external_systems.api_connector.sensitive_config import AUTH_CONFIG_ROOT
 from apps.shared.external_systems.data_source.sensitive_config import DATA_SOURCE_GET_SECRET_SPECS
 from apps.shared.external_systems.integration_secret_keys import INTEGRATION_SECRET_LEAF_KEYS
 from apps.shared.utils.secret_wire import mask_secret_for_display
@@ -31,12 +31,12 @@ def test_collect_stored_secret_paths_nested_extra_config():
     }
     paths = collect_stored_secret_paths(
         auth,
-        root_prefix=AUTH_CONFIG_MASKED_ROOT,
+        root_prefix=AUTH_CONFIG_ROOT,
         sensitive_leaf_keys=INTEGRATION_SECRET_LEAF_KEYS,
     )
-    assert "auth_config_masked.api_key" in paths
-    assert "auth_config_masked.extra_config.app_secret" in paths
-    assert "auth_config_masked.login_endpoint" not in paths
+    assert "auth_config.api_key" in paths
+    assert "auth_config.extra_config.app_secret" in paths
+    assert "auth_config.login_endpoint" not in paths
 
 
 def test_redact_omits_leaf_when_mask_returns_none():

@@ -163,8 +163,8 @@ async def test_connections_me_lifecycle(byot_connections_setup, mock_warehouse_t
     get0 = client.get(f"/data-sources/{ds_id}/connections/me", headers=headers)
     assert get0.status_code == 200, get0.text
     assert get0.json()["status"] == "not_connected"
-    assert get0.json()["secret_keys_configured"] == []
     assert get0.json()["masked_fields"] == []
+    assert get0.json()["secrets"] == {}
 
     test_only = client.post(
         f"/data-sources/{ds_id}/connections/me/test",
@@ -190,11 +190,10 @@ async def test_connections_me_lifecycle(byot_connections_setup, mock_warehouse_t
     body = put.json()
     assert body["status"] == "connected"
     assert body["account_label"] == "work"
-    assert "password" in body["secret_keys_configured"]
     assert "secrets.password" in body["masked_fields"]
-    assert body["secrets_public"].get("username") == "alice"
-    assert "password" not in body["secrets_public"]
-
+    assert body["secrets"].get("username") == "alice"
+    assert "password" in body["secrets"]
+    assert "alice" not in body["secrets"]["password"]
     async with byot_connections_setup["session_factory"]() as session:
         row = (
             await session.execute(
