@@ -38,6 +38,17 @@ SHARED_CHANNEL_TYPES: frozenset[str] = frozenset({"channel", "group", "mpim"})
 CHANNEL_CHAT_CONFIG_KEY = "channel_chat_enabled"
 _CHANNEL_CHAT_OFF = frozenset({"false", "0", "no", "off"})
 _CHANNEL_CHAT_ON = frozenset({"true", "1", "yes", "on"})
+_SLACK_BOT_USER_ID_KEY = "bot_user_id"
+
+
+def slack_bot_user_id_from_config(platform_config: Mapping[str, Any] | None) -> str | None:
+    """Bot user id stored on the ingress endpoint after OAuth / auth.test."""
+    if not isinstance(platform_config, Mapping):
+        return None
+    value = platform_config.get(_SLACK_BOT_USER_ID_KEY)
+    if isinstance(value, str) and value.strip():
+        return value.strip()
+    return None
 
 
 def channel_chat_enabled(platform_config: Mapping[str, Any] | None) -> bool:
@@ -255,7 +266,12 @@ def is_processable_message_event(event: dict) -> bool:
     return event.get("type") == SlackEventType.APP_MENTION
 
 
-def parse_message_event(event: dict, event_id: str | None = None) -> SlackMessageEvent | None:
+def parse_message_event(
+    event: dict,
+    event_id: str | None = None,
+    *,
+    bot_user_id: str | None = None,
+) -> SlackMessageEvent | None:
     """Extract a SlackMessageEvent from a Slack event payload, or None if not a DM.
 
     Only DMs (channel_type == "im") are accepted in MVP.
@@ -264,7 +280,7 @@ def parse_message_event(event: dict, event_id: str | None = None) -> SlackMessag
         return None
     if event.get("channel_type") and event["channel_type"] != "im":
         return None
-    assembled = assemble_slack_inbound_message(event)
+    assembled = assemble_slack_inbound_message(event, bot_user_id=bot_user_id)
     if not assembled.is_processable:
         return None
     team_id = event.get("team") or ""
@@ -283,6 +299,7 @@ def parse_message_event(event: dict, event_id: str | None = None) -> SlackMessag
         thread_ts=event.get("thread_ts"),
         channel_type=event.get("channel_type"),
         source="dm",
+        bot_user_id=bot_user_id,
         incomplete_forward_context=assembled.incomplete_context,
     )
 
@@ -328,13 +345,18 @@ def parse_mention_only_channel_message_event(event: dict, event_id: str | None =
     )
 
 
-def parse_app_mention_event(event: dict, event_id: str | None = None) -> SlackMessageEvent | None:
+def parse_app_mention_event(
+    event: dict,
+    event_id: str | None = None,
+    *,
+    bot_user_id: str | None = None,
+) -> SlackMessageEvent | None:
     """Extract a SlackMessageEvent from an app_mention payload."""
     if event.get("type") != SlackEventType.APP_MENTION:
         return None
     if not is_processable_message_event(event):
         return None
-    assembled = assemble_slack_inbound_message(event)
+    assembled = assemble_slack_inbound_message(event, bot_user_id=bot_user_id)
     agent_text = assembled.content if assembled.is_processable else (event.get("text") or "")
     user_id = event.get("user") or ""
     channel_id = event.get("channel") or ""
@@ -351,11 +373,17 @@ def parse_app_mention_event(event: dict, event_id: str | None = None) -> SlackMe
         thread_ts=event.get("thread_ts"),
         channel_type=event.get("channel_type"),
         source="app_mention",
+        bot_user_id=bot_user_id,
         incomplete_forward_context=assembled.incomplete_context,
     )
 
 
-def parse_slack_ingress_event(event: dict, *, event_id: str | None) -> SlackMessageEvent | None:
+def parse_slack_ingress_event(
+    event: dict,
+    *,
+    event_id: str | None,
+    bot_user_id: str | None = None,
+) -> SlackMessageEvent | None:
     """Normalize a Slack event sub-object the ingress layer may act on.
 
     Accepts DMs (``message.im``), channel ``app_mention``, and mention-only
@@ -363,12 +391,12 @@ def parse_slack_ingress_event(event: dict, *, event_id: str | None) -> SlackMess
     """
     event_type = event.get("type")
     if event_type == SlackEventType.MESSAGE:
-        dm = parse_message_event(event, event_id=event_id)
+        dm = parse_message_event(event, event_id=event_id, bot_user_id=bot_user_id)
         if dm is not None:
             return dm
         return parse_mention_only_channel_message_event(event, event_id=event_id)
     if event_type == SlackEventType.APP_MENTION:
-        return parse_app_mention_event(event, event_id=event_id)
+        return parse_app_mention_event(event, event_id=event_id, bot_user_id=bot_user_id)
     return None
 
 
@@ -387,7 +415,8 @@ def decide_slack_ingress_admission(
     already_processed: bool,
 ) -> SlackIngressAdmission:
     """Classify an ``event_callback`` inner event without I/O (dedupe supplied by caller)."""
-    message_event = parse_slack_ingress_event(inner_event, event_id=event_id)
+    bot_user_id = slack_bot_user_id_from_config(platform_config)
+    message_event = parse_slack_ingress_event(inner_event, event_id=event_id, bot_user_id=bot_user_id)
 
     if not endpoint_enabled:
         if message_event is not None:
@@ -443,7 +472,12 @@ def message_has_leading_user_mention(text: str) -> bool:
     return bool(_BOT_MENTION_PATTERN.match(text or ""))
 
 
-def parse_thread_reply_event(event: dict, event_id: str | None = None) -> SlackMessageEvent | None:
+def parse_thread_reply_event(
+    event: dict,
+    event_id: str | None = None,
+    *,
+    bot_user_id: str | None = None,
+) -> SlackMessageEvent | None:
     """Extract a SlackMessageEvent from a channel/group/mpim thread follow-up.
 
     Not used by the ingress router (channels require ``app_mention``). Kept for
@@ -457,7 +491,7 @@ def parse_thread_reply_event(event: dict, event_id: str | None = None) -> SlackM
     thread_ts = event.get("thread_ts")
     if not thread_ts or channel_type not in SHARED_CHANNEL_TYPES:
         return None
-    assembled = assemble_slack_inbound_message(event)
+    assembled = assemble_slack_inbound_message(event, bot_user_id=bot_user_id)
     if not assembled.is_processable:
         return None
     user_id = event.get("user") or ""
@@ -479,6 +513,7 @@ def parse_thread_reply_event(event: dict, event_id: str | None = None) -> SlackM
         thread_ts=thread_ts,
         channel_type=channel_type,
         source="thread_reply",
+        bot_user_id=bot_user_id,
         incomplete_forward_context=assembled.incomplete_context,
     )
 

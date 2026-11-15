@@ -24,7 +24,7 @@ def slack_inbound_has_processable_content(event: dict[str, Any]) -> bool:
     user_comment = (event.get("text") or "").strip()
     if user_comment:
         return True
-    if _shared_attachments(event) or _top_level_shared_files(event):
+    if _shared_attachments(event):
         return True
     return False
 
@@ -47,11 +47,6 @@ def assemble_slack_inbound_message(
         if section:
             forward_sections.append(section)
         incomplete = incomplete or section_incomplete
-
-    file_note = _top_level_files_note(event)
-    if file_note:
-        forward_sections.append(file_note)
-        incomplete = True
 
     if not user_comment and not forward_sections:
         return SlackInboundAssembly(content="", incomplete_context=False, is_processable=False)
@@ -160,10 +155,12 @@ def _attachment_metadata_lines(attachment: dict[str, Any]) -> list[str]:
 def _attachment_metadata_incomplete(attachment: dict[str, Any], metadata_lines: list[str]) -> bool:
     if not metadata_lines:
         return True
-    expected = ("author_name", "author_subname", "author_id", "channel_id", "ts")
-    if not any(attachment.get(key) for key in expected):
-        return True
-    return False
+    has_author = bool(
+        attachment.get("author_name") or attachment.get("author_subname") or attachment.get("author_id")
+    )
+    has_source = bool(attachment.get("channel_id") or attachment.get("from_url"))
+    has_time = bool(attachment.get("ts"))
+    return not has_author and not has_source and not has_time
 
 
 def _attachment_body(attachment: dict[str, Any]) -> tuple[str, bool]:
@@ -257,27 +254,3 @@ def _rich_text_elements(elements: Any) -> str:
 def _attachment_has_files(attachment: dict[str, Any]) -> bool:
     files = attachment.get("files")
     return isinstance(files, list) and bool(files)
-
-
-def _top_level_shared_files(event: dict[str, Any]) -> bool:
-    files = event.get("files")
-    return isinstance(files, list) and bool(files)
-
-
-def _top_level_files_note(event: dict[str, Any]) -> str | None:
-    files = event.get("files")
-    if not isinstance(files, list) or not files:
-        return None
-    names: list[str] = []
-    for file_obj in files:
-        if not isinstance(file_obj, dict):
-            continue
-        name = file_obj.get("name") or file_obj.get("title") or file_obj.get("id")
-        if name:
-            names.append(str(name))
-    label = ", ".join(names) if names else "attachment"
-    return (
-        f"{_FORWARDED_HEADER}\n"
-        f"---\n"
-        f"(Shared file only — `{label}`; file content is not included in this version.)"
-    )

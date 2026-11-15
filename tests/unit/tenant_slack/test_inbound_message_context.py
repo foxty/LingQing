@@ -134,7 +134,8 @@ def test_file_only_forward_marks_incomplete():
     assert "file/image content is not included" in parsed.text
 
 
-def test_top_level_files_only_dm():
+def test_plain_file_upload_dm_is_not_treated_as_forward():
+    """Direct file upload to DM (top-level files) must stay pre-PR behavior: ignored."""
     event = {
         "type": "message",
         "channel": "D123",
@@ -142,12 +143,11 @@ def test_top_level_files_only_dm():
         "text": "",
         "ts": "1700000000.000100",
         "channel_type": "im",
-        "files": [{"id": "F9", "name": "notes.pdf"}],
+        "files": [{"id": "F9", "name": "report.pdf"}],
     }
-    assert is_processable_message_event(event) is True
-    assembly = assemble_slack_inbound_message(event)
-    assert assembly.incomplete_context is True
-    assert "notes.pdf" in assembly.content
+    assert is_processable_message_event(event) is False
+    assert assemble_slack_inbound_message(event).is_processable is False
+    assert parse_message_event(event, event_id="EvUpload") is None
 
 
 def test_fallback_marks_incomplete_but_still_processable():
@@ -209,6 +209,23 @@ def test_skips_bot_authored_forward_attachment():
     assembly = assemble_slack_inbound_message(event, bot_user_id="UBOT")
     assert assembly.content == "follow up"
     assert "my prior reply" not in assembly.content
+
+
+def test_parse_message_event_passes_bot_user_id_to_skip_self_unfurl():
+    event = {
+        "type": "message",
+        "channel": "D123",
+        "user": "U123",
+        "text": "please summarize",
+        "ts": "1700000000.000100",
+        "channel_type": "im",
+        "attachments": [_forward_attachment(author_id="UBOT", text="prior bot answer")],
+    }
+    parsed = parse_message_event(event, event_id="EvBot", bot_user_id="UBOT")
+    assert parsed is not None
+    assert parsed.text == "please summarize"
+    assert "prior bot answer" not in parsed.text
+    assert parsed.bot_user_id == "UBOT"
 
 
 def test_plain_dm_unchanged():

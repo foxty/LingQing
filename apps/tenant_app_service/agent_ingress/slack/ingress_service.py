@@ -131,7 +131,11 @@ class SlackIngressService:
         configured_team_id = self.repo.slack_team_id(endpoint)
         already_processed = False
         if endpoint.enabled:
-            preview = parse_slack_ingress_event(inner_event, event_id=event_id)
+            preview = parse_slack_ingress_event(
+                inner_event,
+                event_id=event_id,
+                bot_user_id=self.repo.slack_bot_user_id(endpoint),
+            )
             if preview and not slack_event_team_mismatch(
                 configured_team_id=configured_team_id,
                 event_team_id=preview.team_id,
