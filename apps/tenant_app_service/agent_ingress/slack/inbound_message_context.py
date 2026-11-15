@@ -6,6 +6,9 @@ from dataclasses import dataclass
 from typing import Any
 
 _FORWARDED_HEADER = "[Forwarded message]"
+_ATTACHMENT_ONLY_NOTE = (
+    "(Forwarded attachment only — file/image content is not included in this version.)"
+)
 
 
 @dataclass(frozen=True)
@@ -103,21 +106,25 @@ def _is_forwarded_attachment(attachment: dict[str, Any]) -> bool:
 
 
 def _format_forwarded_attachment(attachment: dict[str, Any]) -> tuple[str, bool]:
-    body, body_incomplete = _attachment_body(attachment)
+    body, body_degraded = _attachment_body(attachment)
     metadata_lines = _attachment_metadata_lines(attachment)
     metadata_incomplete = _attachment_metadata_incomplete(attachment, metadata_lines)
 
     lines = [_FORWARDED_HEADER, *metadata_lines]
+    incomplete = body_degraded or metadata_incomplete
+
     if body:
         lines.append("---")
         lines.append(body)
-    elif _attachment_has_files(attachment):
+    elif _attachment_has_attachment_clues(attachment):
         lines.append("---")
-        lines.append("(Forwarded attachment only — file/image content is not included in this version.)")
-        body_incomplete = True
+        lines.append(_ATTACHMENT_ONLY_NOTE)
+        incomplete = True
+    else:
+        incomplete = True
 
     section = "\n".join(lines).strip()
-    return section, body_incomplete or metadata_incomplete
+    return section, incomplete
 
 
 def _attachment_metadata_lines(attachment: dict[str, Any]) -> list[str]:
@@ -180,7 +187,7 @@ def _attachment_body(attachment: dict[str, Any]) -> tuple[str, bool]:
     if title:
         return title, True
 
-    return "", bool(_attachment_has_files(attachment))
+    return "", False
 
 
 def _text_from_message_blocks(message_blocks: Any) -> str:
@@ -194,9 +201,13 @@ def _text_from_message_blocks(message_blocks: Any) -> str:
         if not isinstance(message, dict):
             continue
         blocks = message.get("blocks")
-        if not isinstance(blocks, list):
-            continue
-        extracted = _text_from_blocks(blocks)
+        extracted = ""
+        if isinstance(blocks, list) and blocks:
+            extracted = _text_from_blocks(blocks)
+        if not extracted:
+            plain = message.get("text")
+            if isinstance(plain, str) and plain.strip():
+                extracted = plain.strip()
         if extracted:
             parts.append(extracted)
     return "\n".join(parts).strip()
@@ -251,6 +262,33 @@ def _rich_text_elements(elements: Any) -> str:
     return "".join(parts).strip()
 
 
-def _attachment_has_files(attachment: dict[str, Any]) -> bool:
+def _attachment_has_attachment_clues(attachment: dict[str, Any]) -> bool:
     files = attachment.get("files")
-    return isinstance(files, list) and bool(files)
+    if isinstance(files, list) and files:
+        return True
+    if attachment.get("image_url") or attachment.get("thumb_url"):
+        return True
+    return _message_blocks_have_attachment_clues(attachment.get("message_blocks"))
+
+
+def _message_blocks_have_attachment_clues(message_blocks: Any) -> bool:
+    if not isinstance(message_blocks, list):
+        return False
+    for entry in message_blocks:
+        if not isinstance(entry, dict):
+            continue
+        message = entry.get("message")
+        if not isinstance(message, dict):
+            continue
+        nested_files = message.get("files")
+        if isinstance(nested_files, list) and nested_files:
+            return True
+        blocks = message.get("blocks")
+        if not isinstance(blocks, list):
+            continue
+        for block in blocks:
+            if not isinstance(block, dict):
+                continue
+            if block.get("type") in {"image", "file"}:
+                return True
+    return False

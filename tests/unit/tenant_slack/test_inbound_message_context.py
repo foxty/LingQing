@@ -228,6 +228,93 @@ def test_parse_message_event_passes_bot_user_id_to_skip_self_unfurl():
     assert parsed.bot_user_id == "UBOT"
 
 
+def test_forward_metadata_only_without_body_marks_incomplete_case_a():
+    event = {
+        "type": "message",
+        "channel": "D123",
+        "user": "U123",
+        "text": "summarize",
+        "ts": "1700000000.000100",
+        "channel_type": "im",
+        "attachments": [
+            _forward_attachment(
+                text="",
+                author_name="Pat",
+                author_id="U_A",
+                channel_id="C_S",
+                message_blocks=None,
+            )
+        ],
+    }
+    assembly = assemble_slack_inbound_message(event)
+    assert assembly.incomplete_context is True
+    assert "summarize" in assembly.content
+    assert "Pat" in assembly.content
+    assert "original body" not in assembly.content
+
+
+def test_forward_image_url_without_body_marks_incomplete_case_b():
+    event = {
+        "type": "message",
+        "channel": "D123",
+        "user": "U123",
+        "text": "",
+        "ts": "1700000000.000100",
+        "channel_type": "im",
+        "attachments": [
+            _forward_attachment(
+                text="",
+                image_url="https://files.slack.com/foo.png",
+                message_blocks=None,
+            )
+        ],
+    }
+    assembly = assemble_slack_inbound_message(event)
+    assert assembly.incomplete_context is True
+    assert "file/image content is not included" in assembly.content
+
+
+def test_forward_message_text_fallback_when_blocks_missing_case_c():
+    event = {
+        "type": "message",
+        "channel": "D123",
+        "user": "U123",
+        "text": "",
+        "ts": "1700000000.000100",
+        "channel_type": "im",
+        "attachments": [
+            _forward_attachment(
+                text="",
+                message_blocks=[
+                    {
+                        "channel": "C_SRC",
+                        "ts": "1.0",
+                        "message": {"text": "body from message.text"},
+                    }
+                ],
+            )
+        ],
+    }
+    assembly = assemble_slack_inbound_message(event)
+    assert assembly.incomplete_context is False
+    assert "body from message.text" in assembly.content
+
+
+def test_forward_with_body_text_stays_complete():
+    event = {
+        "type": "message",
+        "channel": "D123",
+        "user": "U123",
+        "text": "what is this?",
+        "ts": "1700000000.000100",
+        "channel_type": "im",
+        "attachments": [_forward_attachment(text="clear forwarded body")],
+    }
+    assembly = assemble_slack_inbound_message(event)
+    assert assembly.incomplete_context is False
+    assert "clear forwarded body" in assembly.content
+
+
 def test_plain_dm_unchanged():
     event = {
         "type": "message",
