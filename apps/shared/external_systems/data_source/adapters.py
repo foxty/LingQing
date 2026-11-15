@@ -1,17 +1,12 @@
 """Adapters for DataSource and AssetMetadata domain model conversions."""
 
 from collections.abc import Mapping
-from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
 
 from apps.shared.db import models as db_models
 from apps.shared.domain.value_objects import AssetMetaVO, ColumnVO, DatabaseConnectionVO
-from apps.shared.external_systems.data_source.catalog_sync import (
-    API_SECRET_PLACEHOLDER,
-    METADATA_SYNC_CONFIG_KEY,
-    CatalogSyncCredentials,
-)
+from apps.shared.external_systems.data_source.catalog_sync import CatalogSyncCredentials
 from apps.shared.external_systems.data_source.domain import AssetMetadataDomain, DataSourceDomain
 from apps.shared.external_systems.data_source.schemas import (
     AssetMetadataCreate,
@@ -21,7 +16,12 @@ from apps.shared.external_systems.data_source.schemas import (
     DataSourceResponse,
     DiscoveredAsset,
 )
+from apps.shared.external_systems.data_source.sensitive_config import DATA_SOURCE_GET_SECRET_SPECS
 from apps.shared.external_systems.domain.types import effective_credential_mode
+from apps.shared.utils.sensitive_redaction import (
+    config_has_secret_value,
+    redact_secret_leaves_for_get,
+)
 
 # ============ Domain to DTO Conversions ============
 
@@ -108,36 +108,58 @@ def db_data_source_to_domain_with_connection(
     )
 
 
-def redact_data_source_config_for_api(config: dict[str, Any] | None) -> dict[str, Any]:
-    """Presentation mapping: secrets in stored config → API placeholder."""
+def _mask_secret_for_api_display(raw: Any) -> str | None:
+    """Partial mask for GET config when decrypt/mask succeeds; otherwise ``None`` (omit key — use ``masked_fields``)."""
+    from apps.shared.utils.field_cipher import FieldCipher
+    from apps.shared.utils.secret_wire import mask_secret_for_display
+
+    if not config_has_secret_value(raw):
+        return None
+    plain = raw
+    if raw.startswith("enc:"):
+        try:
+            plain = FieldCipher().decrypt(raw)
+        except Exception:
+            return None
+    masked = mask_secret_for_display(plain)
+    return masked or None
+
+
+def redact_data_source_config_for_api(config: dict[str, Any] | None) -> tuple[dict[str, Any], list[str]]:
+    """Redact secrets for GET per ``DATA_SOURCE_GET_SECRET_SPECS``."""
     if not config:
-        return {}
-    out = deepcopy(config)
-    sync = out.get(METADATA_SYNC_CONFIG_KEY)
-    if isinstance(sync, dict) and sync.get("password"):
-        sync["password"] = API_SECRET_PLACEHOLDER
-    if out.get("password"):
-        out["password"] = API_SECRET_PLACEHOLDER
-    return out
+        return {}, []
+    return redact_secret_leaves_for_get(
+        config,
+        DATA_SOURCE_GET_SECRET_SPECS,
+        mask_value=_mask_secret_for_api_display,
+    )
 
 
 def db_data_source_to_api_response(
     entity: db_models.DataSource,
     *,
     api_config: dict[str, Any],
+    masked_fields: list[str] | None = None,
 ) -> DataSourceResponse:
     """Map DB entity to API response using the supplied config payload."""
     domain = db_data_source_to_domain(entity)
     if domain is None:
         raise ValueError(f"Data source {entity.id} not found")
-    return domain_data_source_to_api(domain, raw_config=api_config)
+    return domain_data_source_to_api(
+        domain,
+        raw_config=api_config,
+        masked_fields=masked_fields or [],
+    )
 
 
 def db_data_source_to_public_api_response(entity: db_models.DataSource) -> DataSourceResponse:
     """DB entity → public ``DataSourceResponse`` with config redacted."""
+    api_config, masked_fields = redact_data_source_config_for_api(entity.config or {})
     return db_data_source_to_api_response(
         entity,
-        api_config=redact_data_source_config_for_api(entity.config or {}),
+        api_config=api_config,
+        masked_fields=masked_fields,
     )
 
 
@@ -277,6 +299,7 @@ def domain_data_source_to_api(
     domain_ds: DataSourceDomain,
     *,
     raw_config: dict | None = None,
+    masked_fields: list[str] | None = None,
 ) -> DataSourceResponse:
     """Convert Domain DataSource to API DataSourceResponse."""
     config_payload = raw_config if raw_config is not None else domain_ds.connection.to_dict()
@@ -292,6 +315,7 @@ def domain_data_source_to_api(
         owner_name=domain_ds.owner_name,
         credential_mode=effective_credential_mode(domain_ds.credential_mode),
         user_connection_status=None,
+        masked_fields=masked_fields or [],
         created_at=domain_ds.created_at,
         updated_at=domain_ds.updated_at,
     )

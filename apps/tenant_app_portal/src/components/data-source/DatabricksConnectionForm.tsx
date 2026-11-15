@@ -55,7 +55,12 @@ import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import type { FieldErrors, UseFormRegister } from 'react-hook-form'
 import * as z from 'zod'
-import { dsFieldLabelClass, dsFieldRowClass } from '@/components/data-source/formLayout'
+import {
+  type DataSourceConnectionFieldErrors,
+  dsFieldLabelClass,
+  dsFieldRowClass,
+  resolveConnectionFieldError,
+} from '@/components/data-source/formLayout'
 
 // Schema definition for Databricks connections
 export const databricksConnectionSchema = z.object({
@@ -71,16 +76,29 @@ export const databricksUserTemplateSchema = z.object({
   http_path: z.string().optional(),
 })
 
+import { SensitiveCredentialField } from '@/components/SensitiveCredentialField'
+import type { SecretCredentialFieldHandle } from '@/hooks/useSecretCredentialField'
+import type { SecretFieldBinding } from '@/lib/sensitiveCredential'
+import { applySecretKey, isSecretSatisfiedForTest } from '@/lib/sensitiveCredential'
+
 // Helper to build Databricks config from form data
-export function buildDatabricksConfig(data: any): Record<string, any> {
+export function buildDatabricksConfig(
+  data: any,
+  options?: { passwordSecret?: SecretFieldBinding },
+): Record<string, any> {
   const config: Record<string, any> = {
     readOnly: true,
   }
   if (data.host) config.host = data.host
-  if (data.password) config.password = data.password
   config.extra_params = {
     warehouse_id: data.warehouse_id,
     ...(data.http_path && { http_path: data.http_path }),
+  }
+  if (options?.passwordSecret) {
+    return applySecretKey(config, 'password', options.passwordSecret) as Record<string, any>
+  }
+  if (data.password) {
+    config.password = String(data.password).trim()
   }
   return config
 }
@@ -105,6 +123,9 @@ interface DatabricksConnectionFormProps {
   getFormData?: () => any
   showTestConnection?: boolean
   credentialMode?: 'shared' | 'user'
+  sharedPasswordSecret?: SecretCredentialFieldHandle
+  sharedPasswordMaskedPreview?: string | null
+  connectionFieldErrors?: DataSourceConnectionFieldErrors
 }
 
 export default function DatabricksConnectionForm({
@@ -115,8 +136,13 @@ export default function DatabricksConnectionForm({
   getFormData,
   showTestConnection = true,
   credentialMode = 'shared',
+  sharedPasswordSecret,
+  sharedPasswordMaskedPreview,
+  connectionFieldErrors,
 }: DatabricksConnectionFormProps) {
   const { t } = useTranslation()
+  const fieldError = (key: keyof DataSourceConnectionFieldErrors) =>
+    resolveConnectionFieldError(key, connectionFieldErrors, errors)
   const isUserCredentialMode = credentialMode === 'user'
   const [testingConnection, setTestingConnection] = useState(false)
   const [connectionTested, setConnectionTested] = useState(false)
@@ -135,7 +161,11 @@ export default function DatabricksConnectionForm({
     const formData = getFormData()
 
     // Validate required fields
-    if (!formData.host || !formData.password || !formData.warehouse_id) {
+    const passwordOk =
+      sharedPasswordSecret != null
+        ? isSecretSatisfiedForTest(sharedPasswordSecret)
+        : Boolean(formData.password?.trim())
+    if (!formData.host || !passwordOk || !formData.warehouse_id) {
       setConnectionTestResult(false, t('components.databricksForm.completeRequiredFields'))
       return
     }
@@ -145,14 +175,9 @@ export default function DatabricksConnectionForm({
     setConnectionMessage('')
 
     try {
-      const config = {
-        host: formData.host,
-        password: formData.password,
-        extra_params: {
-          warehouse_id: formData.warehouse_id,
-          ...(formData.http_path && { http_path: formData.http_path }),
-        },
-      }
+      const config = buildDatabricksConfig(formData, {
+        passwordSecret: sharedPasswordSecret,
+      })
 
       const result = await testConnection({
         type: 'databricks',
@@ -210,28 +235,60 @@ export default function DatabricksConnectionForm({
             register('host').onChange(e)
             resetConnectionStatus()
           }}
-          errorMsg={errors?.host?.message as string}
+          errorMsg={fieldError('host')}
         />
       </div>
 
       {!isUserCredentialMode ? (
         <div className={dsFieldRowClass}>
-          <Label htmlFor="password" className={dsFieldLabelClass}>
-            {t('components.databricksForm.accessToken')} <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="password"
-            type="password"
-            {...register('password')}
-            placeholder="dapi••••••••••••••••"
-            disabled={disabled}
-            className="h-8 text-sm w-full min-w-0"
-            onChange={(e) => {
-              register('password').onChange(e)
-              resetConnectionStatus()
-            }}
-            errorMsg={errors?.password?.message as string}
-          />
+          {sharedPasswordSecret ? (
+            <>
+              <Label htmlFor="password" className={dsFieldLabelClass}>
+                {t('components.databricksForm.accessToken')} <span className="text-destructive">*</span>
+              </Label>
+              <SensitiveCredentialField
+                id="password"
+                hideLabel
+                label={
+                  <>
+                    {t('components.databricksForm.accessToken')} <span className="text-destructive">*</span>
+                  </>
+                }
+                binding={sharedPasswordSecret}
+                maskedPreview={sharedPasswordMaskedPreview}
+                disabled={disabled}
+                errorMsg={fieldError('password')}
+                onStartEdit={sharedPasswordSecret.startEdit}
+                onCancelEdit={() => {
+                  sharedPasswordSecret.cancelEdit()
+                  resetConnectionStatus()
+                }}
+                onDraftChange={(value) => {
+                  sharedPasswordSecret.setDraft(value)
+                  resetConnectionStatus()
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Label htmlFor="password" className={dsFieldLabelClass}>
+                {t('components.databricksForm.accessToken')} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                {...register('password')}
+                placeholder="dapi••••••••••••••••"
+                disabled={disabled}
+                className="h-8 text-sm w-full min-w-0"
+                onChange={(e) => {
+                  register('password').onChange(e)
+                  resetConnectionStatus()
+                }}
+                errorMsg={fieldError('password')}
+              />
+            </>
+          )}
         </div>
       ) : null}
 
@@ -249,7 +306,7 @@ export default function DatabricksConnectionForm({
             register('warehouse_id').onChange(e)
             resetConnectionStatus()
           }}
-          errorMsg={errors?.warehouse_id?.message as string}
+          errorMsg={fieldError('warehouse_id')}
         />
       </div>
 
@@ -267,7 +324,7 @@ export default function DatabricksConnectionForm({
             register('http_path').onChange(e)
             resetConnectionStatus()
           }}
-          errorMsg={errors?.http_path?.message as string}
+          errorMsg={fieldError('http_path')}
         />
       </div>
 

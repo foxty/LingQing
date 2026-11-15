@@ -5,7 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from apps.shared.external_systems.data_source.catalog_sync import API_SECRET_PLACEHOLDER
 from apps.shared.external_systems.data_source.service import DataSourceService
 
 
@@ -42,11 +41,12 @@ async def test_saved_connection_user_mode_merges_stored_sync_password_from_overl
     manager.__aexit__ = AsyncMock(return_value=False)
     manager.test_connection = AsyncMock(return_value=(True, "ok"))
 
+    # Overlay omits sync password (same as portal PATCH: unchanged secret not on wire).
     overlay = {
         "host": "localhost",
         "port": 5432,
         "database": "lq_tenant_app",
-        "metadata_sync": {"username": "sync_u", "password": API_SECRET_PLACEHOLDER},
+        "metadata_sync": {"username": "sync_u"},
     }
 
     with patch(
@@ -90,14 +90,15 @@ async def test_saved_connection_shared_mode_merges_stored_root_password():
         "port": 5432,
         "database": "lq_tenant_app",
         "username": "app",
-        "password": API_SECRET_PLACEHOLDER,
     }
 
     with patch(
         "apps.shared.external_systems.data_source.service.get_db_manager_for_datasource",
         return_value=manager,
-    ):
+    ) as get_manager:
         result = await service.test_saved_data_source_connection(9, config_overlay=overlay)
 
     assert result.success is True
     manager.test_connection.assert_awaited_once()
+    domain = get_manager.call_args[0][0]
+    assert domain.connection.password == "secret-shared"

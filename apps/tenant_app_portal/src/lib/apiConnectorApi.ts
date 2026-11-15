@@ -24,6 +24,7 @@ export interface ApiConnector {
   status: string
   credential_mode?: 'shared' | 'user'
   user_connection_status?: 'not_connected' | 'connected' | 'expired' | null
+  masked_fields?: string[]
   created_at: string
   updated_at: string
 }
@@ -266,6 +267,7 @@ export interface UserIntegrationConnection {
   expires_at?: string | null
   secrets_public?: Record<string, string>
   secret_keys_configured?: string[]
+  masked_fields?: string[]
 }
 
 export interface UserIntegrationConnectionUpsert {

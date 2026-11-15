@@ -23,8 +23,14 @@ from apps.shared.external_systems.api_connector.schemas import (
     ApiOperationResponse,
     ApiRatePolicySchema,
 )
+from apps.shared.external_systems.api_connector.sensitive_config import (
+    AUTH_CONFIG_MASKED_ROOT,
+    AUTH_CONFIG_SENSITIVE_FIELDS,
+    AUTH_CONFIG_SENSITIVE_LEAF_KEYS,
+)
 from apps.shared.external_systems.domain.types import effective_credential_mode
-from apps.shared.utils.field_cipher import AUTH_CONFIG_SENSITIVE_FIELDS, FieldCipher
+from apps.shared.utils.field_cipher import FieldCipher
+from apps.shared.utils.sensitive_redaction import collect_stored_secret_paths
 
 
 def auth_config_to_dict(auth_config: Any) -> dict[str, Any]:
@@ -182,6 +188,11 @@ def connector_domain_to_response(connector: ApiConnectorDomain) -> ApiConnectorR
     """
     auth_config_dict = auth_config_to_dict(connector.auth_config)
 
+    masked_fields = collect_stored_secret_paths(
+        auth_config_dict,
+        root_prefix=AUTH_CONFIG_MASKED_ROOT,
+        sensitive_leaf_keys=AUTH_CONFIG_SENSITIVE_LEAF_KEYS,
+    )
     masked_auth_config = FieldCipher.mask_dict(auth_config_dict, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS)
 
     return ApiConnectorResponse(
@@ -202,6 +213,7 @@ def connector_domain_to_response(connector: ApiConnectorDomain) -> ApiConnectorR
         status=connector.status,
         credential_mode=effective_credential_mode(connector.credential_mode),
         user_connection_status=None,
+        masked_fields=masked_fields,
         created_at=connector.created_at,
         updated_at=connector.updated_at,
     )

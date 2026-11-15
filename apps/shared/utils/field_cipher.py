@@ -13,26 +13,12 @@ from cryptography.fernet import Fernet, InvalidToken
 from apps.config import EnvConfig
 from apps.shared.core.exceptions import ValidationError
 
-SENSITIVE_FIELD_KEYS = {
-    "api_key",
-    "key_value",
-    "token",
-    "access_token",
-    "refresh_token",
-    "client_secret",
-    "password",
-    "app_secret",  # For custom auth (e.g., Kingdee ERP)
-}
 
-# Aliases for backward compatibility and domain-specific naming
-AUTH_CONFIG_SENSITIVE_FIELDS = SENSITIVE_FIELD_KEYS
-
-
-def strip_sensitive_fields(data: dict[str, Any]) -> dict[str, Any]:
-    """Remove secret keys from a config dict (user-mode resource definitions)."""
+def strip_sensitive_fields(data: dict[str, Any], *, sensitive_keys: frozenset[str]) -> dict[str, Any]:
+    """Remove top-level secret keys from a config dict (caller supplies key names from ``sensitive_config``)."""
     cleaned = deepcopy(data)
     for key in list(cleaned.keys()):
-        if key in SENSITIVE_FIELD_KEYS:
+        if key in sensitive_keys:
             del cleaned[key]
     return cleaned
 
@@ -149,38 +135,6 @@ class FieldCipher:
         return value
 
     @staticmethod
-    def mask_value(value: str) -> str:
-        """Mask a single sensitive value for logging/display.
-
-        Args:
-            value: The sensitive string value to mask
-
-        Returns:
-            Masked string (e.g., 'sk****key' for long values, '****' for short values)
-        """
-        if not value:
-            return ""
-        if len(value) <= 4:
-            return "*" * len(value)
-        return value[:2] + "*" * (len(value) - 4) + value[-2:]
-
-    @staticmethod
-    def is_masked(value: str) -> bool:
-        """Check if a value is already masked (contains asterisks in the middle).
-
-        Args:
-            value: String value to check
-
-        Returns:
-            True if the value appears to be masked (e.g., 'sk****key', '****')
-        """
-        if not value or len(value) < 4:
-            return False
-        # Masked values have asterisks in the middle (not at start or end)
-        # Pattern: starts with non-*, has * in middle, may end with non-*
-        return "*" in value[1:-1] and not value.startswith("*")
-
-    @staticmethod
     def mask_dict(
         data: dict[str, Any],
         sensitive_fields: set[str],
@@ -206,7 +160,9 @@ class FieldCipher:
             if isinstance(v, list):
                 return [_mask(item, key) for item in v]
             if isinstance(v, str) and key in sensitive_fields:
-                return FieldCipher.mask_value(v)
+                from apps.shared.utils.secret_wire import mask_secret_for_display
+
+                return mask_secret_for_display(v)
             return v
 
         return _mask(data)

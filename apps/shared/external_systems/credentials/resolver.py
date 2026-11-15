@@ -12,8 +12,13 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
 from apps.shared.external_systems.credentials.domain import CREDENTIAL_STATUS_ACTIVE
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
+from apps.shared.external_systems.credentials.sensitive_config import (
+    API_CONNECTOR_USER_MODE_STRIP_KEYS,
+    DATA_SOURCE_USER_MODE_STRIP_KEYS,
+    USER_INTEGRATION_SENSITIVE_LEAF_KEYS,
+)
 from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER, IntegrationPurpose
-from apps.shared.utils.field_cipher import SENSITIVE_FIELD_KEYS, FieldCipher, strip_sensitive_fields
+from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
 
 __all__ = ["IntegrationCredentialResolver", "strip_sensitive_fields"]
 
@@ -48,8 +53,8 @@ class IntegrationCredentialResolver:
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             resource_id=data_source.id,
         )
-        user_secrets = self.cipher.decrypt_dict(binding.secrets_enc, sensitive_fields=SENSITIVE_FIELD_KEYS)
-        merged = {**strip_sensitive_fields(base), **user_secrets}
+        user_secrets = self.cipher.decrypt_dict(binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        merged = {**strip_sensitive_fields(base, sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS), **user_secrets}
         return merged
 
     async def resolve_api_connector_auth_config(
@@ -59,13 +64,15 @@ class IntegrationCredentialResolver:
         actor: ActorContext | None,
         purpose: IntegrationPurpose,
     ) -> dict[str, Any]:
-        from apps.shared.utils.field_cipher import AUTH_CONFIG_SENSITIVE_FIELDS
+        
 
         mode = getattr(connector, "credential_mode", None) or "shared"
         if mode != CREDENTIAL_MODE_USER:
             raw = connector.auth_config or {}
             if self.cipher and raw:
-                return self.cipher.decrypt_dict(raw, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS)
+                return self.cipher.decrypt_dict(
+                    raw, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS
+                )
             return dict(raw)
 
         if actor is None:
@@ -80,8 +87,8 @@ class IntegrationCredentialResolver:
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=connector.id,
         )
-        template = strip_sensitive_fields(connector.auth_config or {})
-        user_secrets = self.cipher.decrypt_dict(binding.secrets_enc, sensitive_fields=SENSITIVE_FIELD_KEYS)
+        template = strip_sensitive_fields(connector.auth_config or {}, sensitive_keys=API_CONNECTOR_USER_MODE_STRIP_KEYS)
+        user_secrets = self.cipher.decrypt_dict(binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
         return {**template, **user_secrets}
 
     async def connection_status_for_actor(

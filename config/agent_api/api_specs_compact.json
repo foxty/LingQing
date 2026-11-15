@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-11T13:44:50.606570+00:00",
+  "generated_at": "2026-11-15T03:04:46.953982+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -685,6 +685,14 @@
       },
       "ApiConnectorResponse": {
         "properties": {
+          "masked_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Masked Fields",
+            "description": "Root-relative dot paths of leaves that mask a stored secret on GET"
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -4133,6 +4141,14 @@
       },
       "DataSourceResponse": {
         "properties": {
+          "masked_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Masked Fields",
+            "description": "Root-relative dot paths of leaves that mask a stored secret on GET"
+          },
           "id": {
             "type": "integer",
             "title": "Id"
@@ -8873,6 +8889,14 @@
       },
       "UserIntegrationConnectionResponse": {
         "properties": {
+          "masked_fields": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Masked Fields",
+            "description": "Root-relative dot paths of leaves that mask a stored secret on GET"
+          },
           "resource_type": {
             "type": "string",
             "title": "Resource Type"

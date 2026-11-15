@@ -33,6 +33,7 @@ from apps.shared.external_systems.domain.types import (
     CredentialModeStr,
     UserConnectionStatus,
 )
+from apps.shared.schemas.masked_fields import MaskedFieldsMixin
 from apps.shared.schemas.pagination import PaginatedResponse
 
 # Pydantic validation models for API boundary
@@ -152,7 +153,7 @@ class ApiConnectorUpdateRequest(BaseModel):
     status: ConnectorStatus | None = None
 
 
-class ApiConnectorResponse(BaseModel):
+class ApiConnectorResponse(MaskedFieldsMixin):
     id: int
     tenant_id: int
     owner_id: int

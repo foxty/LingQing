@@ -121,6 +121,17 @@ import type {
   ApiConnectorSchemaSourceType,
   ApiConnectorUpdateRequest,
 } from '@/lib/apiConnectorApi'
+import { useSecretCredentialField } from '@/hooks/useSecretCredentialField'
+import {
+  secretPayloadValue,
+  validateSecretRequired,
+  validateSecretWhenEditing,
+} from '@/lib/sensitiveCredential'
+import { hasMaskedFieldPath } from '@/lib/maskedFields'
+
+import { omitUnchangedSecretsDeep } from '@/lib/secretWire'
+
+const maskedAuthSecretPath = (field: string) => `auth_config_masked.${field}`
 
 interface AddApiConnectorDialogProps {
   open: boolean
@@ -138,13 +149,8 @@ interface ApiKeyConfig {
   keyValue: string
 }
 
-interface BearerConfig {
-  token: string
-}
-
 interface BasicConfig {
   username: string
-  password: string
 }
 
 interface CustomAuthConfig {
@@ -161,13 +167,8 @@ const defaultApiKeyConfig: ApiKeyConfig = {
   keyValue: '',
 }
 
-const defaultBearerConfig: BearerConfig = {
-  token: '',
-}
-
 const defaultBasicConfig: BasicConfig = {
   username: '',
-  password: '',
 }
 
 type FieldErrorKey =
@@ -209,13 +210,30 @@ export default function AddApiConnectorDialog({
   const mode: 'create' | 'edit' = connector && onUpdate ? 'edit' : 'create'
   const initialAuthType = connector?.auth_type ?? 'none'
 
-  // True when the server has a non-empty masked auth config, meaning credentials
-  // were previously saved. auth_config_masked keys are present but values are
-  // masked (e.g. "****"), so checking object size is sufficient.
+  const maskedFields = connector?.masked_fields
+  const maskedAuth = connector?.auth_config_masked ?? {}
   const isAuthConfigured =
     mode === 'edit' &&
     connector?.auth_type !== 'none' &&
-    Object.keys(connector?.auth_config_masked ?? {}).length > 0
+    (maskedFields ?? []).some((path) => path.startsWith('auth_config_masked.'))
+
+  const authResetKey = open ? (connector?.id ?? 'new') : 'closed'
+  const apiKeyValueSecret = useSecretCredentialField(
+    mode,
+    hasMaskedFieldPath(maskedFields, maskedAuthSecretPath('key_value')) ||
+      hasMaskedFieldPath(maskedFields, maskedAuthSecretPath('api_key')),
+    `${authResetKey}-api-key`,
+  )
+  const bearerSecret = useSecretCredentialField(
+    mode,
+    hasMaskedFieldPath(maskedFields, maskedAuthSecretPath('token')),
+    `${authResetKey}-bearer`,
+  )
+  const basicPasswordSecret = useSecretCredentialField(
+    mode,
+    hasMaskedFieldPath(maskedFields, maskedAuthSecretPath('password')),
+    `${authResetKey}-basic`,
+  )
 
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
 
@@ -225,7 +243,6 @@ export default function AddApiConnectorDialog({
 
   const [authType, setAuthType] = useState<ApiConnectorAuthType>('none')
   const [apiKeyConfig, setApiKeyConfig] = useState<ApiKeyConfig>(defaultApiKeyConfig)
-  const [bearerConfig, setBearerConfig] = useState<BearerConfig>(defaultBearerConfig)
   const [basicConfig, setBasicConfig] = useState<BasicConfig>(defaultBasicConfig)
   const [customAuthConfig, setCustomAuthConfig] =
     useState<CustomAuthConfig>(defaultCustomAuthConfig)
@@ -262,9 +279,24 @@ export default function AddApiConnectorDialog({
       setSchemaSourceType(connector.schema_source_type)
       setSchemaSourceUrl(connector.schema_source_url || '')
       setCredentialMode(connector.credential_mode ?? 'shared')
-      setApiKeyConfig(defaultApiKeyConfig)
-      setBearerConfig(defaultBearerConfig)
-      setBasicConfig(defaultBasicConfig)
+
+      const masked = connector.auth_config_masked ?? {}
+      if (connector.auth_type === 'api_key') {
+        setApiKeyConfig({
+          keyName: typeof masked.key_name === 'string' ? masked.key_name : defaultApiKeyConfig.keyName,
+          keyValue: '',
+        })
+      } else {
+        setApiKeyConfig(defaultApiKeyConfig)
+      }
+
+      if (connector.auth_type === 'basic') {
+        setBasicConfig({
+          username: typeof masked.username === 'string' ? masked.username : '',
+        })
+      } else {
+        setBasicConfig(defaultBasicConfig)
+      }
 
       // Load custom auth config structure from masked response
       // Note: Sensitive values (credentials) are masked and can't be loaded,
@@ -291,25 +323,28 @@ export default function AddApiConnectorDialog({
 
   const authConfig = useMemo<Record<string, any>>(() => {
     if (authType === 'api_key') {
+      const keyValue = secretPayloadValue(apiKeyValueSecret)
       return {
         auth_method: 'api_key',
         key_name: apiKeyConfig.keyName.trim(),
-        key_value: apiKeyConfig.keyValue,
+        ...(keyValue !== undefined ? { key_value: keyValue } : {}),
       }
     }
 
     if (authType === 'bearer') {
+      const token = secretPayloadValue(bearerSecret)
       return {
         auth_method: 'bearer',
-        token: bearerConfig.token,
+        ...(token !== undefined ? { token } : {}),
       }
     }
 
     if (authType === 'basic') {
+      const password = secretPayloadValue(basicPasswordSecret)
       return {
         auth_method: 'basic',
         username: basicConfig.username,
-        password: basicConfig.password,
+        ...(password !== undefined ? { password } : {}),
       }
     }
 
@@ -338,12 +373,22 @@ export default function AddApiConnectorDialog({
         ),
         token_extraction: parseJsonSafely(customAuthConfig.tokenExtraction, 'token_extraction'),
         request_headers: parseJsonSafely(customAuthConfig.requestHeaders, 'request_headers'),
-        extra_config: parseJsonSafely(customAuthConfig.extraConfig, 'extra_config'),
+        extra_config: omitUnchangedSecretsDeep(
+          parseJsonSafely(customAuthConfig.extraConfig, 'extra_config'),
+        ),
       }
     }
 
     return {}
-  }, [apiKeyConfig, authType, basicConfig, bearerConfig, customAuthConfig])
+  }, [
+    apiKeyConfig,
+    apiKeyValueSecret,
+    authType,
+    basicConfig,
+    basicPasswordSecret,
+    bearerSecret,
+    customAuthConfig,
+  ])
 
   const resetForm = () => {
     setName('')
@@ -351,7 +396,6 @@ export default function AddApiConnectorDialog({
     setDescription('')
     setAuthType('none')
     setApiKeyConfig(defaultApiKeyConfig)
-    setBearerConfig(defaultBearerConfig)
     setBasicConfig(defaultBasicConfig)
     setCustomAuthConfig(defaultCustomAuthConfig)
     setSchemaSourceType('manual')
@@ -366,10 +410,10 @@ export default function AddApiConnectorDialog({
       schemaSourceUrl.trim() ||
       authType !== 'none' ||
       schemaSourceType !== 'manual' ||
-      apiKeyConfig.keyValue.trim() ||
-      bearerConfig.token.trim() ||
+      apiKeyValueSecret.draft.trim() ||
+      bearerSecret.draft.trim() ||
       basicConfig.username.trim() ||
-      basicConfig.password.trim()
+      basicPasswordSecret.draft.trim()
     )
   }
 
@@ -401,43 +445,30 @@ export default function AddApiConnectorDialog({
       errors.baseUrl = v('baseUrlRequired')
     }
 
-    const authChanged = mode === 'create' || authType !== initialAuthType
-    const hasApiKeyInput = apiKeyConfig.keyName.trim() || apiKeyConfig.keyValue.trim()
-    const hasBearerInput = bearerConfig.token.trim()
-    const hasBasicInput = basicConfig.username.trim() || basicConfig.password.trim()
     const requiresSharedSecrets = credentialMode === 'shared'
 
-    if (
-      requiresSharedSecrets &&
-      authType === 'api_key' &&
-      (authChanged || hasApiKeyInput) &&
-      !apiKeyConfig.keyValue.trim() &&
-      !(mode === 'edit' && isAuthConfigured && !authChanged)
-    ) {
-      errors.apiKeyValue = v('apiKeyValueRequired')
+    if (requiresSharedSecrets && authType === 'api_key') {
+      const req = validateSecretRequired(apiKeyValueSecret, v('apiKeyValueRequired'))
+      const editErr = validateSecretWhenEditing(apiKeyValueSecret, v('apiKeyValueRequired'))
+      if (req) errors.apiKeyValue = req
+      else if (editErr) errors.apiKeyValue = editErr
     }
 
-    if (
-      requiresSharedSecrets &&
-      authType === 'bearer' &&
-      (authChanged || hasBearerInput) &&
-      !bearerConfig.token.trim() &&
-      !(mode === 'edit' && isAuthConfigured && !authChanged)
-    ) {
-      errors.bearerToken = v('bearerTokenRequired')
+    if (requiresSharedSecrets && authType === 'bearer') {
+      const req = validateSecretRequired(bearerSecret, v('bearerTokenRequired'))
+      const editErr = validateSecretWhenEditing(bearerSecret, v('bearerTokenRequired'))
+      if (req) errors.bearerToken = req
+      else if (editErr) errors.bearerToken = editErr
     }
 
-    if (
-      requiresSharedSecrets &&
-      authType === 'basic' &&
-      (authChanged || hasBasicInput)
-    ) {
+    if (requiresSharedSecrets && authType === 'basic') {
       if (!basicConfig.username.trim()) {
         errors.basicUsername = v('basicUsernameRequired')
       }
-      if (!basicConfig.password.trim() && !(mode === 'edit' && isAuthConfigured && !authChanged)) {
-        errors.basicPassword = v('basicPasswordRequired')
-      }
+      const req = validateSecretRequired(basicPasswordSecret, v('basicPasswordRequired'))
+      const editErr = validateSecretWhenEditing(basicPasswordSecret, v('basicPasswordRequired'))
+      if (req) errors.basicPassword = req
+      else if (editErr) errors.basicPassword = editErr
     }
 
     if (authType === 'custom') {
@@ -498,10 +529,10 @@ export default function AddApiConnectorDialog({
 
         const authChanged = authType !== initialAuthType
         const hasAuthInput =
-          apiKeyConfig.keyValue.trim() ||
-          bearerConfig.token.trim() ||
+          secretPayloadValue(apiKeyValueSecret) !== undefined ||
+          secretPayloadValue(bearerSecret) !== undefined ||
           basicConfig.username.trim() ||
-          basicConfig.password.trim()
+          secretPayloadValue(basicPasswordSecret) !== undefined
 
         // Include auth_config if auth type changed, standard auth fields have input,
         // or custom auth is selected (since it's always configured via UI)
@@ -655,29 +686,35 @@ export default function AddApiConnectorDialog({
               {authType === 'api_key' && (
                 <ApiKeyAuthConfig
                   keyName={apiKeyConfig.keyName}
-                  keyValue={apiKeyConfig.keyValue}
-                  isAuthConfigured={isAuthConfigured}
+                  keyValueSecret={apiKeyValueSecret}
+                  maskedPreview={
+                    typeof maskedAuth.key_value === 'string'
+                      ? maskedAuth.key_value
+                      : typeof maskedAuth.api_key === 'string'
+                        ? maskedAuth.api_key
+                        : null
+                  }
                   submitting={submitting}
                   keyValueError={fieldErrors.apiKeyValue}
                   onKeyNameChange={(value) =>
                     setApiKeyConfig((prev) => ({ ...prev, keyName: value }))
                   }
-                  onKeyValueChange={(value) => {
+                  onKeyValueDraftChange={(value) => {
+                    apiKeyValueSecret.setDraft(value)
                     clearFieldError('apiKeyValue')
-                    setApiKeyConfig((prev) => ({ ...prev, keyValue: value }))
                   }}
                 />
               )}
 
               {authType === 'bearer' && (
                 <BearerAuthConfig
-                  token={bearerConfig.token}
-                  isAuthConfigured={isAuthConfigured}
+                  secret={bearerSecret}
+                  maskedPreview={typeof maskedAuth.token === 'string' ? maskedAuth.token : null}
                   submitting={submitting}
                   tokenError={fieldErrors.bearerToken}
-                  onTokenChange={(value) => {
+                  onDraftChange={(value) => {
+                    bearerSecret.setDraft(value)
                     clearFieldError('bearerToken')
-                    setBearerConfig({ token: value })
                   }}
                 />
               )}
@@ -685,8 +722,8 @@ export default function AddApiConnectorDialog({
               {authType === 'basic' && (
                 <BasicAuthConfig
                   username={basicConfig.username}
-                  password={basicConfig.password}
-                  isAuthConfigured={isAuthConfigured}
+                  passwordSecret={basicPasswordSecret}
+                  maskedPreview={typeof maskedAuth.password === 'string' ? maskedAuth.password : null}
                   submitting={submitting}
                   usernameError={fieldErrors.basicUsername}
                   passwordError={fieldErrors.basicPassword}
@@ -694,9 +731,9 @@ export default function AddApiConnectorDialog({
                     clearFieldError('basicUsername')
                     setBasicConfig((prev) => ({ ...prev, username: value }))
                   }}
-                  onPasswordChange={(value) => {
+                  onPasswordDraftChange={(value) => {
+                    basicPasswordSecret.setDraft(value)
                     clearFieldError('basicPassword')
-                    setBasicConfig((prev) => ({ ...prev, password: value }))
                   }}
                 />
               )}

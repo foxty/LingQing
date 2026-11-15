@@ -1,7 +1,12 @@
 import ConnectionTestFeedback, { type ConnectionTestResult } from '@/components/ConnectionTestFeedback'
 import { Button } from '@/components/ui/button'
+import type { SecretCredentialFieldHandle } from '@/hooks/useSecretCredentialField'
 import { testConnection, testSavedDataSourceConnection } from '@/lib/dataSourceApi'
-import { isSavedSecretFormMask, STORED_SECRET_PLACEHOLDER } from '@/lib/storedSecrets'
+import {
+  applyNestedSecretKey,
+  isSecretSatisfiedForTest,
+  type SecretFieldBinding,
+} from '@/lib/sensitiveCredential'
 import { Loader2 } from 'lucide-react'
 import { useCallback, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -58,71 +63,55 @@ function shortenConnectionError(message: string): string {
   return trimmed
 }
 
-/** Flat connection for stateless sync-login test (create flow). */
-function buildRDBMSSyncTestConfig(data: Record<string, unknown>): Record<string, unknown> {
-  return {
-    readOnly: true,
-    host: data.host,
-    port: data.port,
-    database: data.database,
-    username: data.metadataSyncUsername,
-    password: data.metadataSyncPassword,
-    ssl: data.ssl || false,
-  }
-}
-
-function buildDatabricksSyncTestConfig(data: Record<string, unknown>): Record<string, unknown> {
-  return {
-    host: data.host,
-    password: data.metadataSyncPassword,
-    extra_params: {
-      warehouse_id: data.warehouse_id,
-      ...(data.http_path ? { http_path: data.http_path } : {}),
-    },
-  }
-}
-
-/** Same shape as save payload — backend merges placeholders with stored secrets. */
-function buildSaveShapedOverlay(
+function buildUserModeSyncOverlay(
   type: DataSourceType,
-  credentialMode: 'shared' | 'user',
   data: Record<string, unknown>,
-  useStoredSecret: boolean
+  syncSecret?: SecretFieldBinding,
 ): Record<string, unknown> {
-  if (credentialMode === 'shared') {
-    return type === 'databricks' ? buildDatabricksConfig(data) : buildRDBMSConfig(data)
-  }
-
-  const rawPwd = typeof data.metadataSyncPassword === 'string' ? data.metadataSyncPassword.trim() : ''
-  const syncPassword =
-    rawPwd && !isSavedSecretFormMask(rawPwd)
-      ? rawPwd
-      : useStoredSecret
-        ? STORED_SECRET_PLACEHOLDER
-        : rawPwd
-
+  let overlay: Record<string, unknown>
   if (type === 'databricks') {
-    return {
+    overlay = {
       host: data.host,
       extra_params: {
         warehouse_id: data.warehouse_id,
         ...(data.http_path ? { http_path: data.http_path } : {}),
       },
-      metadata_sync: { password: syncPassword },
+    }
+    if (syncSecret) {
+      return applyNestedSecretKey(overlay, 'metadata_sync', 'password', syncSecret)
+    }
+    return overlay
+  } else {
+    overlay = {
+      readOnly: true,
+      host: data.host,
+      port: data.port,
+      database: data.database,
+      ssl: data.ssl || false,
+      metadata_sync: {
+        username: data.metadataSyncUsername,
+      },
     }
   }
-
-  return {
-    readOnly: true,
-    host: data.host,
-    port: data.port,
-    database: data.database,
-    ssl: data.ssl || false,
-    metadata_sync: {
-      username: data.metadataSyncUsername,
-      password: syncPassword,
-    },
+  if (syncSecret) {
+    overlay = applyNestedSecretKey(overlay, 'metadata_sync', 'password', syncSecret)
   }
+  return overlay
+}
+
+function buildSaveShapedOverlay(
+  type: DataSourceType,
+  credentialMode: 'shared' | 'user',
+  data: Record<string, unknown>,
+  sharedPasswordSecret?: SecretFieldBinding,
+  syncPasswordSecret?: SecretFieldBinding,
+): Record<string, unknown> {
+  if (credentialMode === 'shared') {
+    return type === 'databricks'
+      ? buildDatabricksConfig(data, { passwordSecret: sharedPasswordSecret })
+      : buildRDBMSConfig(data, { passwordSecret: sharedPasswordSecret })
+  }
+  return buildUserModeSyncOverlay(type, data, syncPasswordSecret)
 }
 
 interface DataSourceConnectionTestsProps {
@@ -131,8 +120,8 @@ interface DataSourceConnectionTestsProps {
   getFormData: () => Record<string, unknown>
   disabled?: boolean
   dataSourceId?: number
-  storedMetadataSyncPassword?: boolean
-  storedSharedPassword?: boolean
+  sharedPasswordSecret?: SecretCredentialFieldHandle
+  syncPasswordSecret?: SecretCredentialFieldHandle
 }
 
 export default function DataSourceConnectionTests({
@@ -141,8 +130,8 @@ export default function DataSourceConnectionTests({
   getFormData,
   disabled = false,
   dataSourceId,
-  storedMetadataSyncPassword = false,
-  storedSharedPassword = false,
+  sharedPasswordSecret,
+  syncPasswordSecret,
 }: DataSourceConnectionTestsProps) {
   const { t } = useTranslation()
   const [testingId, setTestingId] = useState<string | null>(null)
@@ -205,43 +194,30 @@ export default function DataSourceConnectionTests({
     [applyResult, dataSourceId, t]
   )
 
-  const runConnectionTest = async (testId: string, data: Record<string, unknown>, overlay: Record<string, unknown>) => {
+  const runConnectionTest = async (testId: string, data: Record<string, unknown>) => {
+    const shaped = buildSaveShapedOverlay(
+      type,
+      credentialMode,
+      data,
+      sharedPasswordSecret,
+      syncPasswordSecret,
+    )
     if (dataSourceId) {
-      const stored =
-        credentialMode === 'user'
-          ? storedMetadataSyncPassword
-          : storedSharedPassword
-      const useStored = Boolean(
-        stored &&
-          (credentialMode === 'user'
-            ? (() => {
-                const syncPwd =
-                  typeof data.metadataSyncPassword === 'string' ? data.metadataSyncPassword.trim() : ''
-                return !syncPwd || isSavedSecretFormMask(syncPwd)
-              })()
-            : (() => {
-                const pwd = typeof data.password === 'string' ? data.password.trim() : ''
-                return !pwd || isSavedSecretFormMask(pwd)
-              })())
-      )
-      const shaped = buildSaveShapedOverlay(type, credentialMode, data, useStored)
       await runSavedTest(testId, shaped)
       return
     }
-    await runStatelessTest(
-      testId,
-      credentialMode === 'user'
-        ? type === 'databricks'
-          ? buildDatabricksSyncTestConfig(data)
-          : buildRDBMSSyncTestConfig(data)
-        : overlay
-    )
+    await runStatelessTest(testId, shaped)
   }
 
   const handleTestConnection = async () => {
     const data = getFormData()
+    const passwordOk =
+      sharedPasswordSecret != null
+        ? isSecretSatisfiedForTest(sharedPasswordSecret)
+        : Boolean(String(data.password ?? '').trim())
+
     if (type === 'databricks') {
-      if (!data.host || !data.password || !data.warehouse_id) {
+      if (!data.host || !passwordOk || !data.warehouse_id) {
         setResults({
           connection: {
             ok: false,
@@ -250,10 +226,10 @@ export default function DataSourceConnectionTests({
         })
         return
       }
-      await runConnectionTest('connection', data, buildDatabricksConfig(data))
+      await runConnectionTest('connection', data)
       return
     }
-    if (!data.host || !data.port || !data.database || !data.username || !data.password) {
+    if (!data.host || !data.port || !data.database || !data.username || !passwordOk) {
       setResults({
         connection: {
           ok: false,
@@ -262,20 +238,18 @@ export default function DataSourceConnectionTests({
       })
       return
     }
-    await runConnectionTest('connection', data, buildRDBMSConfig(data))
+    await runConnectionTest('connection', data)
   }
 
   const handleTestSyncLogin = async () => {
     const data = getFormData()
-    const syncPwd = typeof data.metadataSyncPassword === 'string' ? data.metadataSyncPassword.trim() : ''
+    const syncOk =
+      syncPasswordSecret != null
+        ? isSecretSatisfiedForTest(syncPasswordSecret)
+        : Boolean(String(data.metadataSyncPassword ?? '').trim())
 
     if (type === 'databricks') {
-      if (
-        !data.host ||
-        !data.warehouse_id ||
-        (!syncPwd && !storedMetadataSyncPassword) ||
-        (isSavedSecretFormMask(syncPwd) && !storedMetadataSyncPassword)
-      ) {
+      if (!data.host || !data.warehouse_id || !syncOk) {
         setResults({
           sync: {
             ok: false,
@@ -289,8 +263,7 @@ export default function DataSourceConnectionTests({
       !data.port ||
       !data.database ||
       !data.metadataSyncUsername ||
-      ((!syncPwd && !storedMetadataSyncPassword) ||
-        (isSavedSecretFormMask(syncPwd) && !storedMetadataSyncPassword))
+      !syncOk
     ) {
       setResults({
         sync: {
@@ -301,7 +274,7 @@ export default function DataSourceConnectionTests({
       return
     }
 
-    await runConnectionTest('sync', data, {})
+    await runConnectionTest('sync', data)
   }
 
   const isUser = credentialMode === 'user'

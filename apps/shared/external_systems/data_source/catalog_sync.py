@@ -11,8 +11,6 @@ from dataclasses import dataclass
 from typing import Any
 
 METADATA_SYNC_CONFIG_KEY = "metadata_sync"
-# API contract: GET responses redact secrets to this token; PATCH may echo it to mean "keep stored value".
-API_SECRET_PLACEHOLDER = "***"
 
 
 @dataclass(frozen=True)
@@ -30,8 +28,6 @@ class CatalogSyncCredentials:
         username = (block.get("username") or block.get("user") or "").strip() or None
         password_raw = block.get("password")
         password = password_raw if isinstance(password_raw, str) and password_raw.strip() else None
-        if password == API_SECRET_PLACEHOLDER:
-            password = None
         if not username and not password:
             return None
         return cls(username=username, password=password)
@@ -43,7 +39,7 @@ class CatalogSyncCredentials:
 
     def is_configured_for(self, data_source_type: str) -> bool:
         password = (self.password or "").strip()
-        if not password or password == API_SECRET_PLACEHOLDER:
+        if not password:
             return False
         ds_type = (data_source_type or "").lower()
         if ds_type == "databricks":
@@ -83,35 +79,26 @@ class CatalogSyncCredentials:
         existing: dict[str, Any] | None,
         incoming: dict[str, Any] | None,
     ) -> dict[str, Any]:
-        """Merge admin PATCH payload; preserve stored sync password when client sends placeholder."""
-        base = deepcopy(existing or {})
-        if not incoming:
-            return base
-        merged = {**base, **incoming}
-        root_pwd = incoming.get("password")
-        if root_pwd in (None, "", API_SECRET_PLACEHOLDER) and base.get("password"):
-            merged["password"] = base["password"]
-        new_block = incoming.get(METADATA_SYNC_CONFIG_KEY)
-        if not isinstance(new_block, dict) or not new_block:
-            return merged
-        prev_dict = (
-            (base.get(METADATA_SYNC_CONFIG_KEY) or {})
-            if isinstance(base.get(METADATA_SYNC_CONFIG_KEY), dict)
-            else {}
+        """Merge admin PATCH payload; preserve stored secrets when client omits or sends placeholders."""
+        from apps.shared.external_systems.data_source.sensitive_config import (
+            DATA_SOURCE_MERGE_SENSITIVE_LEAF_KEYS,
         )
-        combined_sync = {**prev_dict, **new_block}
-        pwd = new_block.get("password")
-        if pwd in (None, "", API_SECRET_PLACEHOLDER) and prev_dict.get("password"):
-            combined_sync["password"] = prev_dict["password"]
-        merged[METADATA_SYNC_CONFIG_KEY] = combined_sync
-        return merged
+        from apps.shared.utils.secret_merge import merge_dict_preserve_secrets
+
+        return merge_dict_preserve_secrets(
+            existing,
+            incoming,
+            sensitive_keys=DATA_SOURCE_MERGE_SENSITIVE_LEAF_KEYS,
+        )
 
 
 def strip_user_mode_connection_template(data: dict[str, Any]) -> dict[str, Any]:
     """Domain: persisted template for user-mode sources — endpoint fields only, not shared login."""
-    from apps.shared.utils.field_cipher import SENSITIVE_FIELD_KEYS
+    from apps.shared.external_systems.data_source.sensitive_config import (
+        DATA_SOURCE_MERGE_SENSITIVE_LEAF_KEYS,
+    )
 
-    strip_keys = frozenset(SENSITIVE_FIELD_KEYS | {"username", "user", "connection_url"})
+    strip_keys = frozenset(DATA_SOURCE_MERGE_SENSITIVE_LEAF_KEYS | {"username", "user", "connection_url"})
     cleaned = deepcopy(data)
     for key in list(cleaned.keys()):
         if key in strip_keys:

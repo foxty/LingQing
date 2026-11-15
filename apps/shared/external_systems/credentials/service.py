@@ -15,6 +15,12 @@ from apps.shared.external_systems.credentials.dtos import (
 )
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
+from apps.shared.external_systems.credentials.sensitive_config import (
+    API_CONNECTOR_USER_MODE_STRIP_KEYS,
+    DATA_SOURCE_USER_MODE_STRIP_KEYS,
+    USER_INTEGRATION_SENSITIVE_LEAF_KEYS,
+    masked_fields_for_configured_secret_keys,
+)
 from apps.shared.external_systems.credentials.user_integration_auth import validate_user_integration_upsert
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_USER,
@@ -22,7 +28,7 @@ from apps.shared.external_systems.domain.types import (
     USER_CONNECTION_NOT_CONNECTED,
     IntegrationPurpose,
 )
-from apps.shared.utils.field_cipher import SENSITIVE_FIELD_KEYS, FieldCipher
+from apps.shared.utils.field_cipher import FieldCipher
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -89,7 +95,7 @@ class UserIntegrationCredentialService:
             merged_secrets=merged_secrets,
             data_source_type=ds.type,
         )
-        secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=SENSITIVE_FIELD_KEYS)
+        secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
         await self.repo.upsert_binding(
             tenant_id=actor.tenant_id,
             user_id=actor.user_id,
@@ -128,7 +134,7 @@ class UserIntegrationCredentialService:
             merged_secrets=merged_secrets,
             connector_auth_type=conn.auth_type,
         )
-        secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=SENSITIVE_FIELD_KEYS)
+        secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
         await self.repo.upsert_binding(
             tenant_id=actor.tenant_id,
             user_id=actor.user_id,
@@ -202,7 +208,13 @@ class UserIntegrationCredentialService:
                 merged_secrets=merged_secrets,
                 data_source_type=ds.type,
             )
-            resolved_config = {**strip_sensitive_fields(deepcopy(ds.config or {})), **merged_secrets}
+            resolved_config = {
+                **strip_sensitive_fields(
+                    deepcopy(ds.config or {}),
+                    sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS,
+                ),
+                **merged_secrets,
+            }
         else:
             status, _ = await self.resolver.connection_status_for_actor(
                 tenant_id=actor.tenant_id,
@@ -264,9 +276,12 @@ class UserIntegrationCredentialService:
                     merged_secrets=merged_secrets,
                     connector_auth_type=conn.auth_type,
                 )
-                template = strip_sensitive_fields(deepcopy(conn.auth_config or {}))
+                template = strip_sensitive_fields(
+                    deepcopy(conn.auth_config or {}),
+                    sensitive_keys=API_CONNECTOR_USER_MODE_STRIP_KEYS,
+                )
                 auth_dict = {**template, **merged_secrets}
-                if not any(_non_empty_str(auth_dict.get(k)) for k in SENSITIVE_FIELD_KEYS if k in auth_dict):
+                if not any(_non_empty_str(auth_dict.get(k)) for k in USER_INTEGRATION_SENSITIVE_LEAF_KEYS if k in auth_dict):
                     return UserIntegrationConnectionTestResponse(
                         success=False,
                         message="Enter your credentials before testing",
@@ -316,6 +331,7 @@ class UserIntegrationCredentialService:
                 resource_type=resource_type,
                 resource_id=resource_id,
                 status=USER_CONNECTION_NOT_CONNECTED,
+                masked_fields=[],
             )
         status, row = await self.resolver.connection_status_for_actor(
             tenant_id=actor.tenant_id,
@@ -326,7 +342,7 @@ class UserIntegrationCredentialService:
         secrets_public: dict[str, str] = {}
         secret_keys_configured: list[str] = []
         if row is not None and row.secrets_enc:
-            decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=SENSITIVE_FIELD_KEYS)
+            decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
             secrets_public, secret_keys_configured = self._public_secrets_view(decrypted)
         return UserIntegrationConnectionResponse(
             resource_type=resource_type,
@@ -337,6 +353,7 @@ class UserIntegrationCredentialService:
             expires_at=row.expires_at if row else None,
             secrets_public=secrets_public,
             secret_keys_configured=secret_keys_configured,
+            masked_fields=masked_fields_for_configured_secret_keys(secret_keys_configured),
         )
 
     async def _get_data_source(self, tenant_id: int, data_source_id: int) -> DataSource:
@@ -381,10 +398,10 @@ class UserIntegrationCredentialService:
         )
         existing: dict[str, str] = {}
         if row is not None and row.secrets_enc:
-            decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=SENSITIVE_FIELD_KEYS)
+            decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
             existing = {k: v for k, v in decrypted.items() if isinstance(v, str)}
         merged = {**existing, **incoming}
-        for key in SENSITIVE_FIELD_KEYS:
+        for key in USER_INTEGRATION_SENSITIVE_LEAF_KEYS:
             if key not in incoming:
                 continue
             if not _non_empty_str(incoming.get(key)):
@@ -401,12 +418,13 @@ class UserIntegrationCredentialService:
         for key, value in decrypted.items():
             if not isinstance(value, str) or not value.strip():
                 continue
-            if key in SENSITIVE_FIELD_KEYS:
+            if key in USER_INTEGRATION_SENSITIVE_LEAF_KEYS:
                 secret_keys_configured.append(key)
             else:
                 secrets_public[key] = value
         secret_keys_configured.sort()
         return secrets_public, secret_keys_configured
+
 
     @staticmethod
     def _require_user_mode(credential_mode: str | None, resource_type: str) -> None:

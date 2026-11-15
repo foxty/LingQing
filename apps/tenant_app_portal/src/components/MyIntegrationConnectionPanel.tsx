@@ -1,5 +1,6 @@
 import ConnectionTestFeedback from '@/components/ConnectionTestFeedback'
-import { useEffect, useMemo, useState } from 'react'
+import { IntegrationSecretField } from '@/components/integration/IntegrationSecretField'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -9,6 +10,12 @@ import { Label } from '@/components/ui/label'
 import { useNotification } from '@/hooks/useNotification'
 import { getApiErrorMessage, sanitizeUserFacingMessage } from '@/lib/api'
 import type { UserIntegrationConnectionUpsert } from '@/lib/dataSourceApi'
+import {
+  isSecretSatisfiedForTest,
+  secretPayloadValue,
+  type SecretFieldBinding,
+} from '@/lib/sensitiveCredential'
+import { configuredSecretKeysFromConnection } from '@/lib/maskedFields'
 import {
   deleteMyApiConnectorConnection,
   getMyApiConnectorConnection,
@@ -21,8 +28,6 @@ import {
   testMyDataSourceConnection,
   upsertMyDataSourceConnection,
 } from '@/lib/dataSourceApi'
-
-export const SAVED_SECRET_MASK = '*****'
 
 i18n.addResourceBundle('en', 'translation', {
   myIntegrationConnection: {
@@ -77,7 +82,6 @@ interface Props {
   authTypeHint?: string
   secretFields?: { key: string; label: string }[]
   onConnectionChanged?: () => void
-  /** Called after a successful test-then-save (e.g. close dialog). */
   onSaved?: () => void
   compact?: boolean
 }
@@ -99,11 +103,13 @@ export default function MyIntegrationConnectionPanel({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useNotification()
-  const [secrets, setSecrets] = useState<Record<string, string>>({})
+  const [plainSecrets, setPlainSecrets] = useState<Record<string, string>>({})
   const [accountLabel, setAccountLabel] = useState('')
   const [configuredSecretKeys, setConfiguredSecretKeys] = useState<Set<string>>(() => new Set())
   const [testFeedback, setTestFeedback] = useState<{ ok: boolean; message: string } | null>(null)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
+  const [secretBindings, setSecretBindings] = useState<Record<string, SecretFieldBinding>>({})
+  const secretBindingsRef = useRef<Record<string, SecretFieldBinding>>({})
 
   const queryKey = ['my-integration-connection', resourceKind, resourceId]
 
@@ -117,12 +123,16 @@ export default function MyIntegrationConnectionPanel({
     refetchOnMount: 'always',
   })
 
+  const secretResetKey = `${resourceKind}-${resourceId}-${status?.status ?? 'none'}-${[...configuredSecretKeys].sort().join(',')}`
+
   useEffect(() => {
-    setSecrets({})
+    setPlainSecrets({})
     setAccountLabel('')
     setConfiguredSecretKeys(new Set())
     setTestFeedback(null)
     setFieldErrors({})
+    secretBindingsRef.current = {}
+    setSecretBindings({})
   }, [resourceId, resourceKind])
 
   useEffect(() => {
@@ -131,32 +141,66 @@ export default function MyIntegrationConnectionPanel({
     }
     setAccountLabel(status.account_label ?? '')
     const publicSecrets = status.secrets_public ?? {}
-    const configured = new Set(status.secret_keys_configured ?? [])
+    const configured = new Set(configuredSecretKeysFromConnection(status))
     setConfiguredSecretKeys(configured)
-    const nextSecrets: Record<string, string> = {}
+    const nextPlain: Record<string, string> = {}
     for (const field of secretFields) {
+      if (isSensitiveFieldKey(field.key)) {
+        continue
+      }
       if (publicSecrets[field.key] !== undefined) {
-        nextSecrets[field.key] = publicSecrets[field.key]
-      } else if (configured.has(field.key) && isSensitiveFieldKey(field.key)) {
-        nextSecrets[field.key] = SAVED_SECRET_MASK
+        nextPlain[field.key] = String(publicSecrets[field.key])
       } else {
-        nextSecrets[field.key] = ''
+        nextPlain[field.key] = ''
       }
     }
-    setSecrets(nextSecrets)
+    setPlainSecrets(nextPlain)
   }, [status, secretFields])
 
-  const fieldSatisfied = (key: string) => {
-    const value = (secrets[key] ?? '').trim()
-    if (value && value !== SAVED_SECRET_MASK) {
-      return true
-    }
-    return configuredSecretKeys.has(key) || value === SAVED_SECRET_MASK
-  }
+  const onSecretBindingChange = useCallback((key: string, binding: SecretFieldBinding) => {
+    secretBindingsRef.current[key] = binding
+    setSecretBindings((prev) => {
+      const prior = prev[key]
+      if (
+        prior &&
+        prior.mode === binding.mode &&
+        prior.stored === binding.stored &&
+        prior.editing === binding.editing &&
+        prior.draft === binding.draft
+      ) {
+        return prev
+      }
+      return { ...prev, [key]: binding }
+    })
+  }, [])
+
+  const bumpSecretRevision = useCallback(() => {
+    setTestFeedback(null)
+    setFieldErrors((prev) => {
+      if (Object.keys(prev).length === 0) {
+        return prev
+      }
+      return {}
+    })
+  }, [])
+
+  const fieldSatisfied = useCallback(
+    (key: string) => {
+      if (isSensitiveFieldKey(key)) {
+        const binding = secretBindings[key] ?? secretBindingsRef.current[key]
+        if (!binding) {
+          return false
+        }
+        return isSecretSatisfiedForTest(binding)
+      }
+      return Boolean(plainSecrets[key]?.trim())
+    },
+    [plainSecrets, secretBindings],
+  )
 
   const secretsComplete = useMemo(
     () => secretFields.every((field) => fieldSatisfied(field.key)),
-    [secretFields, secrets, configuredSecretKeys]
+    [secretFields, fieldSatisfied],
   )
 
   const isConnected = status?.status === 'connected'
@@ -164,13 +208,22 @@ export default function MyIntegrationConnectionPanel({
   const buildSecretsForApi = (): Record<string, string> => {
     const out: Record<string, string> = {}
     for (const field of secretFields) {
-      const raw = secrets[field.key] ?? ''
-      if (raw === SAVED_SECRET_MASK || !raw.trim()) {
-        if (configuredSecretKeys.has(field.key) || raw === SAVED_SECRET_MASK) {
+      if (isSensitiveFieldKey(field.key)) {
+        const binding = secretBindingsRef.current[field.key]
+        if (!binding) {
+          continue
+        }
+        const payload = secretPayloadValue(binding)
+        if (payload !== undefined) {
+          out[field.key] = payload
+        } else if (binding.stored && !binding.editing) {
           out[field.key] = ''
         }
       } else {
-        out[field.key] = raw
+        const trimmed = plainSecrets[field.key]?.trim()
+        if (trimmed) {
+          out[field.key] = trimmed
+        }
       }
     }
     return out
@@ -195,6 +248,7 @@ export default function MyIntegrationConnectionPanel({
   const ensureSecretsOrMarkFields = (): boolean => {
     if (secretsComplete) {
       setFieldErrors({})
+      setTestFeedback(null)
       return true
     }
     const missing: Record<string, string> = {}
@@ -205,6 +259,7 @@ export default function MyIntegrationConnectionPanel({
       }
     }
     setFieldErrors(missing)
+    setTestFeedback({ ok: false, message })
     return false
   }
 
@@ -218,7 +273,7 @@ export default function MyIntegrationConnectionPanel({
       if (!testRes.success) {
         const failMessage = formatConnectionMessage(
           testRes.message || '',
-          t('myIntegrationConnection.testFailed')
+          t('myIntegrationConnection.testFailed'),
         )
         throw new Error(failMessage)
       }
@@ -268,15 +323,18 @@ export default function MyIntegrationConnectionPanel({
         ? deleteMyDataSourceConnection(resourceId)
         : deleteMyApiConnectorConnection(resourceId),
     onSuccess: () => {
-      setSecrets({})
+      setPlainSecrets({})
       setAccountLabel('')
       setConfiguredSecretKeys(new Set())
       setTestFeedback(null)
+      secretBindingsRef.current = {}
+      setSecretBindings({})
       queryClient.invalidateQueries({ queryKey })
       showSuccess(t('myIntegrationConnection.disconnected'))
       onConnectionChanged?.()
     },
-    onError: (err: unknown) => showError(getApiErrorMessage(err, t('myIntegrationConnection.testFailed'))),
+    onError: (err: unknown) =>
+      showError(getApiErrorMessage(err, t('myIntegrationConnection.testFailed'))),
   })
 
   if (credentialMode !== 'user') {
@@ -288,6 +346,9 @@ export default function MyIntegrationConnectionPanel({
     defaultValue: t('myIntegrationConnection.status.unknown'),
   })
   const busy = saveMutation.isPending || testMutation.isPending
+
+  const secretMode = (fieldKey: string): 'create' | 'edit' =>
+    configuredSecretKeys.has(fieldKey) ? 'edit' : 'create'
 
   return (
     <div className={compact ? 'space-y-3' : 'rounded-lg border p-4 space-y-3 bg-card'}>
@@ -303,40 +364,39 @@ export default function MyIntegrationConnectionPanel({
         {isLoading ? '…' : statusLabel}
       </p>
       {secretFields.map((field) => {
-        const sensitive = isSensitiveFieldKey(field.key)
-        const value = secrets[field.key] ?? ''
-        const showSavedMask = value === SAVED_SECRET_MASK
+        if (isSensitiveFieldKey(field.key)) {
+          return (
+            <IntegrationSecretField
+              key={field.key}
+              fieldKey={field.key}
+              label={field.label}
+              mode={secretMode(field.key)}
+              stored={configuredSecretKeys.has(field.key)}
+              resetKey={secretResetKey}
+              disabled={busy}
+              errorMsg={fieldErrors[field.key]}
+              onBindingChange={onSecretBindingChange}
+              onUserEdit={bumpSecretRevision}
+            />
+          )
+        }
         return (
           <div key={field.key} className="space-y-1">
             <Label htmlFor={`${resourceKind}-${resourceId}-${field.key}`}>{field.label}</Label>
             <Input
               id={`${resourceKind}-${resourceId}-${field.key}`}
-              type={sensitive && !showSavedMask ? 'password' : 'text'}
-              autoComplete="off"
-              value={secrets[field.key] ?? ''}
+              autoComplete={field.key === 'username' ? 'username' : 'off'}
+              value={plainSecrets[field.key] ?? ''}
               onChange={(e) => {
-                let value = e.target.value
-                const prev = secrets[field.key] ?? ''
-                if (prev === SAVED_SECRET_MASK && value !== SAVED_SECRET_MASK) {
-                  if (value.startsWith(SAVED_SECRET_MASK)) {
-                    value = value.slice(SAVED_SECRET_MASK.length)
-                  }
-                  setConfiguredSecretKeys((keys) => {
-                    const next = new Set(keys)
-                    next.delete(field.key)
-                    return next
-                  })
-                }
-                setSecrets((prevSecrets) => ({ ...prevSecrets, [field.key]: value }))
-                setTestFeedback(null)
-                setFieldErrors((prev) => {
-                  if (!prev[field.key]) {
-                    return prev
-                  }
-                  const next = { ...prev }
-                  delete next[field.key]
-                  return next
-                })
+                setPlainSecrets((prev) => ({ ...prev, [field.key]: e.target.value }))
+                bumpSecretRevision()
+              }}
+              onInput={(e) => {
+                const value = e.currentTarget.value
+                setPlainSecrets((prev) =>
+                  prev[field.key] === value ? prev : { ...prev, [field.key]: value },
+                )
+                bumpSecretRevision()
               }}
               errorMsg={fieldErrors[field.key]}
             />

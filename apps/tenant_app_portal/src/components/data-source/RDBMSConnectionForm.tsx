@@ -45,17 +45,23 @@ import { Button } from '@/components/ui/button'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { SensitiveCredentialField } from '@/components/SensitiveCredentialField'
+import type { SecretCredentialFieldHandle } from '@/hooks/useSecretCredentialField'
 import { testConnection } from '@/lib/dataSourceApi'
+import { isSecretSatisfiedForTest } from '@/lib/sensitiveCredential'
 import { Loader2 } from 'lucide-react'
 import { useState } from 'react'
 import type { FieldErrors, UseFormRegister } from 'react-hook-form'
 import * as z from 'zod'
 import {
+  type DataSourceConnectionFieldErrors,
   dsFieldLabelClass,
   dsFieldPairRowClass,
   dsFieldRowClass,
+  resolveConnectionFieldError,
 } from '@/components/data-source/formLayout'
-import { isSavedSecretFormMask, STORED_SECRET_PLACEHOLDER } from '@/lib/storedSecrets'
+import type { SecretFieldBinding } from '@/lib/sensitiveCredential'
+import { applySecretKey } from '@/lib/sensitiveCredential'
 
 type DataSourceType = 'postgres' | 'mysql'
 
@@ -83,7 +89,10 @@ export const rdbmsUserTemplateConnectionSchema = z.object({
 })
 
 // Helper to build RDBMS config from form data
-export function buildRDBMSConfig(data: any): Record<string, any> {
+export function buildRDBMSConfig(
+  data: any,
+  options?: { passwordSecret?: SecretFieldBinding },
+): Record<string, any> {
   const config: Record<string, any> = {
     readOnly: true,
   }
@@ -91,11 +100,13 @@ export function buildRDBMSConfig(data: any): Record<string, any> {
   if (data.port) config.port = data.port
   if (data.database) config.database = data.database
   if (data.username) config.username = data.username
-  if (data.password) {
-    const pwd = String(data.password).trim()
-    config.password = isSavedSecretFormMask(pwd) ? STORED_SECRET_PLACEHOLDER : pwd
-  }
   if (data.ssl !== undefined) config.ssl = data.ssl
+  if (options?.passwordSecret) {
+    return applySecretKey(config, 'password', options.passwordSecret) as Record<string, any>
+  }
+  if (data.password) {
+    config.password = String(data.password).trim()
+  }
   return config
 }
 
@@ -128,7 +139,9 @@ interface RDBMSConnectionFormProps {
   getFormData?: () => any
   credentialMode?: 'shared' | 'user'
   showTestConnection?: boolean
-  onClearSavedPassword?: () => void
+  sharedPasswordSecret?: SecretCredentialFieldHandle
+  sharedPasswordMaskedPreview?: string | null
+  connectionFieldErrors?: DataSourceConnectionFieldErrors
 }
 
 export default function RDBMSConnectionForm({
@@ -140,8 +153,12 @@ export default function RDBMSConnectionForm({
   getFormData,
   credentialMode = 'shared',
   showTestConnection = true,
-  onClearSavedPassword,
+  sharedPasswordSecret,
+  sharedPasswordMaskedPreview,
+  connectionFieldErrors,
 }: RDBMSConnectionFormProps) {
+  const fieldError = (key: keyof DataSourceConnectionFieldErrors) =>
+    resolveConnectionFieldError(key, connectionFieldErrors, errors)
   const { t } = useTranslation()
   const isUserCredentialMode = credentialMode === 'user'
   const [testingConnection, setTestingConnection] = useState(false)
@@ -161,14 +178,11 @@ export default function RDBMSConnectionForm({
     const formData = getFormData()
 
     // Validate required fields
-    if (
-      !formData.host ||
-      !formData.port ||
-      !formData.database ||
-      !formData.username ||
-      !formData.password ||
-      isSavedSecretFormMask(formData.password)
-    ) {
+    const passwordOk =
+      sharedPasswordSecret != null
+        ? isSecretSatisfiedForTest(sharedPasswordSecret)
+        : Boolean(formData.password?.trim())
+    if (!formData.host || !formData.port || !formData.database || !formData.username || !passwordOk) {
       setConnectionTestResult(false, t('components.rdbmsForm.completeRequiredFields'))
       return
     }
@@ -178,15 +192,9 @@ export default function RDBMSConnectionForm({
     setConnectionMessage('')
 
     try {
-      const config = {
-        readOnly: true,
-        host: formData.host,
-        port: formData.port,
-        database: formData.database,
-        username: formData.username,
-        password: formData.password,
-        ssl: formData.ssl || false,
-      }
+      const config = buildRDBMSConfig(formData, {
+        passwordSecret: sharedPasswordSecret,
+      })
 
       const result = await testConnection({
         type: type,
@@ -236,7 +244,7 @@ export default function RDBMSConnectionForm({
             register('host').onChange(e)
             resetConnectionStatus()
           }}
-          errorMsg={errors?.host?.message as string}
+          errorMsg={fieldError('host')}
         />
         <Label htmlFor="port" className={dsFieldLabelClass}>
           {t('components.rdbmsForm.port')} <span className="text-destructive">*</span>
@@ -252,7 +260,7 @@ export default function RDBMSConnectionForm({
             register('port').onChange(e)
             resetConnectionStatus()
           }}
-          errorMsg={errors?.port?.message as string}
+          errorMsg={fieldError('port')}
         />
       </div>
 
@@ -270,7 +278,7 @@ export default function RDBMSConnectionForm({
             register('database').onChange(e)
             resetConnectionStatus()
           }}
-          errorMsg={errors?.database?.message as string}
+          errorMsg={fieldError('database')}
         />
       </div>
 
@@ -290,26 +298,57 @@ export default function RDBMSConnectionForm({
               register('username').onChange(e)
               resetConnectionStatus()
             }}
-            errorMsg={errors?.username?.message as string}
+            errorMsg={fieldError('username')}
           />
-          <Label htmlFor="password" className={dsFieldLabelClass}>
-            {t('components.rdbmsForm.password')} <span className="text-destructive">*</span>
-          </Label>
-          <Input
-            id="password"
-            type="password"
-            {...register('password')}
-            placeholder={t('components.rdbmsForm.password')}
-            disabled={disabled}
-            autoComplete="off"
-            className="h-8 text-sm w-full min-w-0"
-            onFocus={() => onClearSavedPassword?.()}
-            onChange={(e) => {
-              register('password').onChange(e)
-              resetConnectionStatus()
-            }}
-            errorMsg={errors?.password?.message as string}
-          />
+          {sharedPasswordSecret ? (
+            <>
+              <Label htmlFor="password" className={dsFieldLabelClass}>
+                {t('components.rdbmsForm.password')} <span className="text-destructive">*</span>
+              </Label>
+              <SensitiveCredentialField
+                id="password"
+                hideLabel
+                label={
+                  <>
+                    {t('components.rdbmsForm.password')} <span className="text-destructive">*</span>
+                  </>
+                }
+                binding={sharedPasswordSecret}
+                maskedPreview={sharedPasswordMaskedPreview}
+                disabled={disabled}
+                errorMsg={fieldError('password')}
+                onStartEdit={sharedPasswordSecret.startEdit}
+                onCancelEdit={() => {
+                  sharedPasswordSecret.cancelEdit()
+                  resetConnectionStatus()
+                }}
+                onDraftChange={(value) => {
+                  sharedPasswordSecret.setDraft(value)
+                  resetConnectionStatus()
+                }}
+              />
+            </>
+          ) : (
+            <>
+              <Label htmlFor="password" className={dsFieldLabelClass}>
+                {t('components.rdbmsForm.password')} <span className="text-destructive">*</span>
+              </Label>
+              <Input
+                id="password"
+                type="password"
+                {...register('password')}
+                placeholder={t('components.rdbmsForm.password')}
+                disabled={disabled}
+                autoComplete="off"
+                className="h-8 text-sm w-full min-w-0"
+                onChange={(e) => {
+                  register('password').onChange(e)
+                  resetConnectionStatus()
+                }}
+                errorMsg={fieldError('password')}
+              />
+            </>
+          )}
         </div>
       ) : null}
 

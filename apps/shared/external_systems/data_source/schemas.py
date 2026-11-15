@@ -21,6 +21,7 @@ from apps.shared.external_systems.domain.types import (
     CredentialModeStr,
     UserConnectionStatus,
 )
+from apps.shared.schemas.masked_fields import MaskedFieldsMixin
 from apps.shared.schemas.pagination import PaginatedResponse
 
 
@@ -52,7 +53,7 @@ class DataSourceUpdate(BaseModel):
     config: dict[str, Any] | None = None
 
 
-class DataSourceResponse(BaseModel):
+class DataSourceResponse(MaskedFieldsMixin):
     """Data source response."""
 
     id: int

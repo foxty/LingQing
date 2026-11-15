@@ -39,7 +39,6 @@ from apps.shared.external_systems.data_source.adapters import (
     db_data_source_to_public_api_response,
 )
 from apps.shared.external_systems.data_source.catalog_sync import (
-    METADATA_SYNC_CONFIG_KEY,
     CatalogSyncCredentials,
     strip_user_mode_connection_template,
 )
@@ -772,9 +771,6 @@ class DataSourceService(TenantAwareService):
         merged = deepcopy(entity.config or {})
         if config_overlay:
             merged = CatalogSyncCredentials.merge_incoming_into_config(merged, config_overlay)
-            for key, value in config_overlay.items():
-                if key != METADATA_SYNC_CONFIG_KEY:
-                    merged[key] = value
 
         mode = effective_credential_mode(entity.credential_mode)
         if mode == CREDENTIAL_MODE_USER:

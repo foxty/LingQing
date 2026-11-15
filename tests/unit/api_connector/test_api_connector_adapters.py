@@ -244,6 +244,7 @@ class TestConnectorDomainToResponse:
         assert response.auth_config_masked["api_key"] == "sk********************ef"
         # endpoint should remain unchanged (not sensitive)
         assert response.auth_config_masked["endpoint"] == "https://api.example.com/v1"
+        assert response.masked_fields == ["auth_config_masked.api_key"]
 
     def test_masking_with_multiple_sensitive_fields(self):
         """Multiple sensitive fields should all be masked."""
@@ -473,3 +474,32 @@ class TestEncryptionDecryptionMaskingFlow:
 
         # Verify original value is not exposed
         assert "sk-live-secret-key-1234567890" not in str(response.auth_config_masked)
+
+    def test_masked_fields_lists_nested_extra_config_secret(self):
+        from apps.shared.external_systems.api_connector.domain import CustomAuthConfig
+
+        domain = ApiConnectorDomain(
+            id=1,
+            tenant_id=1,
+            owner_id=1,
+            owner_name="admin",
+            name="custom-api",
+            description="Custom",
+            base_url="https://api.example.com",
+            auth_type=AUTH_TYPE_CUSTOM,
+            auth_config=CustomAuthConfig(
+                login_endpoint="/login",
+                extra_config={"app_secret": "my-super-secret", "region": "us"},
+            ),
+            rate_policy=RatePolicyDomain(),
+            schema_source_type=SCHEMA_SOURCE_TYPE_MANUAL,
+            schema_source_url=None,
+            schema_metadata={},
+            schema_last_synced_at=None,
+            status=CONNECTOR_STATUS_ACTIVE,
+            created_at=datetime.now(UTC),
+            updated_at=datetime.now(UTC),
+        )
+        response = connector_domain_to_response(domain)
+        assert "auth_config_masked.extra_config.app_secret" in response.masked_fields
+        assert "auth_config_masked.region" not in response.masked_fields

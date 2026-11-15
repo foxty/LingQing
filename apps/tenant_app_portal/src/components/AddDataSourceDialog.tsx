@@ -108,10 +108,12 @@ import RDBMSConnectionForm, {
 import DataSourceConnectionTests from '@/components/data-source/DataSourceConnectionTests'
 import DataSourceFormSectionHeader from '@/components/data-source/DataSourceFormSectionHeader'
 import {
+  type DataSourceConnectionFieldErrors,
   dsFieldLabelClass,
   dsFieldPairRowClass,
   dsFieldRowClass,
   dsFieldRowStartClass,
+  resolveConnectionFieldError,
 } from '@/components/data-source/formLayout'
 import SelectAssetsDialog from '@/components/SelectAssetsDialog'
 import {
@@ -138,20 +140,23 @@ import { Label } from '@/components/ui/label'
 import { useDataSources } from '@/hooks/useDataSources'
 import { useNotification } from '@/hooks/useNotification'
 import type { DataSource } from '@/lib/dataSourceApi'
+import { SensitiveCredentialField } from '@/components/SensitiveCredentialField'
+import { useSecretCredentialField } from '@/hooks/useSecretCredentialField'
 import {
-  hasStoredMetadataSyncPassword,
-  hasStoredSharedPassword,
-  isSavedSecretFormMask,
-  isStoredSecretPlaceholder,
-  SAVED_SECRET_FORM_MASK,
-  STORED_SECRET_PLACEHOLDER,
-} from '@/lib/storedSecrets'
+  applyNestedSecretKey,
+  validateSecretRequired,
+  validateSecretWhenEditing,
+} from '@/lib/sensitiveCredential'
+import { hasMaskedFieldPath } from '@/lib/maskedFields'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { Database, InfoIcon } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useForm } from 'react-hook-form'
 import * as z from 'zod'
+
+const MASKED_DS_PASSWORD = 'config.password'
+const MASKED_DS_SYNC_PASSWORD = 'config.metadata_sync.password'
 
 type DataSourceType = 'postgres' | 'mysql' | 'databricks'
 
@@ -225,39 +230,38 @@ const getDefaultValues = (dataSource?: DataSource | null) => {
     port: dataSource.config?.port || 5432,
     database: dataSource.config?.database || '',
     username: dataSource.config?.username || '',
-    password: isStoredSecretPlaceholder(dataSource.config?.password)
-      ? SAVED_SECRET_FORM_MASK
-      : dataSource.config?.password || '',
+    password: '',
     ssl: dataSource.config?.ssl || false,
     // Databricks fields
     warehouse_id: dataSource.config?.extra_params?.warehouse_id || '',
     http_path: dataSource.config?.extra_params?.http_path || '',
     metadataSyncUsername: dataSource.config?.metadata_sync?.username || '',
-    metadataSyncPassword: isStoredSecretPlaceholder(dataSource.config?.metadata_sync?.password)
-      ? SAVED_SECRET_FORM_MASK
-      : dataSource.config?.metadata_sync?.password || '',
+    metadataSyncPassword: '',
   }
 }
 
 function attachMetadataSyncConfig(
   config: Record<string, any>,
-  data: { credentialMode: string; type: string; metadataSyncUsername?: string; metadataSyncPassword?: string },
+  data: { credentialMode: string; type: string; metadataSyncUsername?: string },
+  syncPasswordSecret?: ReturnType<typeof useSecretCredentialField>,
 ): Record<string, any> {
   if (data.credentialMode !== 'user') {
     return config
   }
-  const sync: Record<string, string> = {}
+  let next = { ...config }
   if (data.type !== 'databricks' && data.metadataSyncUsername?.trim()) {
-    sync.username = data.metadataSyncUsername.trim()
+    next = {
+      ...next,
+      metadata_sync: {
+        ...((next.metadata_sync as object) || {}),
+        username: data.metadataSyncUsername.trim(),
+      },
+    }
   }
-  if (data.metadataSyncPassword?.trim()) {
-    const pwd = data.metadataSyncPassword.trim()
-    sync.password = isSavedSecretFormMask(pwd) ? STORED_SECRET_PLACEHOLDER : pwd
+  if (syncPasswordSecret) {
+    next = applyNestedSecretKey(next, 'metadata_sync', 'password', syncPasswordSecret)
   }
-  if (Object.keys(sync).length === 0) {
-    return config
-  }
-  return { ...config, metadata_sync: { ...(config.metadata_sync || {}), ...sync } }
+  return next
 }
 
 export default function AddDataSourceDialog({
@@ -275,7 +279,10 @@ export default function AddDataSourceDialog({
   const [savedDataSourceId, setSavedDataSourceId] = useState<number | null>(null)
   const [savedDataSourceName, setSavedDataSourceName] = useState<string>('')
   const [selectAssetsDialogOpen, setSelectAssetsDialogOpen] = useState(false)
-  const [connectionValidationErrors, setConnectionValidationErrors] = useState<string[]>([])
+  const [connectionFieldErrors, setConnectionFieldErrors] =
+    useState<DataSourceConnectionFieldErrors>({})
+
+  const clearConnectionFieldErrors = () => setConnectionFieldErrors({})
 
   const {
     register,
@@ -315,19 +322,27 @@ export default function AddDataSourceDialog({
   const watchedCredentialMode = watch('credentialMode')
 
   const storedMetadataSyncPassword = useMemo(
-    () => (dataSource ? hasStoredMetadataSyncPassword(dataSource.config) : false),
+    () =>
+      dataSource ? hasMaskedFieldPath(dataSource.masked_fields, MASKED_DS_SYNC_PASSWORD) : false,
     [dataSource]
   )
   const storedSharedPassword = useMemo(
-    () => (dataSource ? hasStoredSharedPassword(dataSource.config) : false),
+    () => (dataSource ? hasMaskedFieldPath(dataSource.masked_fields, MASKED_DS_PASSWORD) : false),
     [dataSource]
   )
-  const clearSavedSecretMask = (field: 'password' | 'metadataSyncPassword') => {
-    const current = watch(field)
-    if (isSavedSecretFormMask(current)) {
-      setValue(field, '', { shouldDirty: true })
-    }
-  }
+
+  const formMode = dataSource ? 'edit' : 'create'
+  const secretResetKey = open ? (dataSource?.id ?? 'new') : 'closed'
+  const sharedPasswordSecret = useSecretCredentialField(
+    formMode,
+    storedSharedPassword,
+    `${secretResetKey}-shared`,
+  )
+  const syncPasswordSecret = useSecretCredentialField(
+    formMode,
+    storedMetadataSyncPassword,
+    `${secretResetKey}-sync`,
+  )
 
   // Update form validation schema when type changes
   useEffect(() => {
@@ -346,6 +361,7 @@ export default function AddDataSourceDialog({
       // Reset form when dialog opens to get fresh defaultValues
       reset(getDefaultValues(dataSource))
       setSelectedType((dataSource?.type as DataSourceType) || 'postgres')
+      clearConnectionFieldErrors()
     }
   }, [open, dataSource, reset])
 
@@ -389,34 +405,124 @@ export default function AddDataSourceDialog({
     setSelectedType(type)
   }
 
-  const onSubmit = async (data: FormData) => {
-    console.log('[AddDataSourceDialog] onSubmit - mode:', dataSource ? 'EDIT' : 'CREATE')
-    console.log('[AddDataSourceDialog] Form data:', data)
+  const connectionFieldKeys = new Set<keyof DataSourceConnectionFieldErrors>([
+    'host',
+    'port',
+    'database',
+    'username',
+    'password',
+    'warehouse_id',
+    'http_path',
+    'metadataSyncUsername',
+    'metadataSyncPassword',
+  ])
 
-    // Validate connection details based on type
-    setConnectionValidationErrors([])
+  const applyZodIssuesToFieldErrors = (
+    issues: { path: (string | number)[]; message: string }[],
+    target: DataSourceConnectionFieldErrors,
+  ) => {
+    for (const issue of issues) {
+      const key = issue.path[0]
+      if (typeof key !== 'string' || !connectionFieldKeys.has(key as keyof DataSourceConnectionFieldErrors)) {
+        continue
+      }
+      target[key as keyof DataSourceConnectionFieldErrors] = issue.message
+    }
+  }
+
+  const mergeSecretFieldError = (
+    existing: string | undefined,
+    next: string | null,
+  ): string | undefined => {
+    if (!next) {
+      return existing
+    }
+    return next
+  }
+
+  const onSubmit = async (data: FormData) => {
     const formData = watch()
-    const validationErrors: string[] = []
+    const fieldErrors: DataSourceConnectionFieldErrors = {}
 
     try {
       if (data.type === 'databricks' && data.credentialMode === 'user') {
         await databricksUserTemplateSchema.parseAsync(formData)
+        fieldErrors.metadataSyncPassword = mergeSecretFieldError(
+          fieldErrors.metadataSyncPassword,
+          validateSecretRequired(
+            syncPasswordSecret,
+            'Sync access token is required for per-user Databricks sources.',
+          ),
+        )
+        fieldErrors.metadataSyncPassword = mergeSecretFieldError(
+          fieldErrors.metadataSyncPassword,
+          validateSecretWhenEditing(
+            syncPasswordSecret,
+            'Enter a new sync token or keep saved',
+          ),
+        )
       } else if (data.type === 'databricks') {
-        await databricksConnectionSchema.parseAsync(formData)
+        await databricksConnectionSchema.omit({ password: true }).parseAsync(formData)
+        fieldErrors.password = mergeSecretFieldError(
+          fieldErrors.password,
+          validateSecretRequired(sharedPasswordSecret, 'Access token is required'),
+        )
+        fieldErrors.password = mergeSecretFieldError(
+          fieldErrors.password,
+          validateSecretWhenEditing(
+            sharedPasswordSecret,
+            'Enter a new access token or keep saved',
+          ),
+        )
       } else if (data.credentialMode === 'user') {
         await rdbmsUserTemplateConnectionSchema.parseAsync(formData)
+        fieldErrors.metadataSyncPassword = mergeSecretFieldError(
+          fieldErrors.metadataSyncPassword,
+          validateSecretRequired(
+            syncPasswordSecret,
+            'Sync login password is required for per-user data sources.',
+          ),
+        )
+        fieldErrors.metadataSyncPassword = mergeSecretFieldError(
+          fieldErrors.metadataSyncPassword,
+          validateSecretWhenEditing(
+            syncPasswordSecret,
+            'Enter a new sync password or keep saved',
+          ),
+        )
+        if (!data.metadataSyncUsername?.trim()) {
+          fieldErrors.metadataSyncUsername =
+            'Sync login username is required for per-user data sources.'
+        }
       } else {
-        await rdbmsConnectionSchema.parseAsync(formData)
+        await rdbmsConnectionSchema.omit({ password: true }).parseAsync(formData)
+        fieldErrors.password = mergeSecretFieldError(
+          fieldErrors.password,
+          validateSecretRequired(sharedPasswordSecret, 'Password is required'),
+        )
+        fieldErrors.password = mergeSecretFieldError(
+          fieldErrors.password,
+          validateSecretWhenEditing(
+            sharedPasswordSecret,
+            'Enter a new password or keep saved',
+          ),
+        )
       }
     } catch (error: any) {
       if (error.errors) {
-        error.errors.forEach((err: any) => {
-          validationErrors.push(err.message)
-        })
+        applyZodIssuesToFieldErrors(error.errors, fieldErrors)
       }
-      setConnectionValidationErrors(validationErrors)
+      setConnectionFieldErrors(fieldErrors)
       return
     }
+
+    const hasFieldErrors = Object.values(fieldErrors).some(Boolean)
+    if (hasFieldErrors) {
+      setConnectionFieldErrors(fieldErrors)
+      return
+    }
+
+    setConnectionFieldErrors({})
 
     setSaving(true)
 
@@ -427,37 +533,14 @@ export default function AddDataSourceDialog({
       if (data.type === 'databricks' && data.credentialMode === 'user') {
         config = buildDatabricksUserTemplateConfig(data)
       } else if (data.type === 'databricks') {
-        config = buildDatabricksConfig(data)
+        config = buildDatabricksConfig(data, { passwordSecret: sharedPasswordSecret })
       } else if (data.credentialMode === 'user') {
         config = buildRDBMSUserTemplateConfig(data)
       } else {
-        config = buildRDBMSConfig(data)
+        config = buildRDBMSConfig(data, { passwordSecret: sharedPasswordSecret })
       }
 
-      config = attachMetadataSyncConfig(config, data)
-
-      if (data.credentialMode === 'user' && data.type !== 'databricks') {
-        const syncPwd = data.metadataSyncPassword?.trim() ?? ''
-        const syncPwdOk =
-          Boolean(syncPwd) &&
-          (!isSavedSecretFormMask(syncPwd) || storedMetadataSyncPassword)
-        if (!data.metadataSyncUsername?.trim() || !syncPwdOk) {
-          setConnectionValidationErrors(['Sync login username and password are required for per-user data sources.'])
-          setSaving(false)
-          return
-        }
-      }
-      if (data.credentialMode === 'user' && data.type === 'databricks') {
-        const syncToken = data.metadataSyncPassword?.trim() ?? ''
-        const syncTokenOk =
-          Boolean(syncToken) &&
-          (!isSavedSecretFormMask(syncToken) || storedMetadataSyncPassword)
-        if (!syncTokenOk) {
-          setConnectionValidationErrors(['Sync access token is required for per-user Databricks sources.'])
-          setSaving(false)
-          return
-        }
-      }
+      config = attachMetadataSyncConfig(config, data, syncPasswordSecret)
 
       console.log('[AddDataSourceDialog] Config to save:', config)
 
@@ -545,7 +628,7 @@ export default function AddDataSourceDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={handleCloseWithConfirm}>
-        <DialogContent className="flex max-h-[85vh] min-h-0 flex-col sm:max-w-[700px]">
+        <DialogContent className="flex max-h-[85vh] min-h-0 min-w-0 flex-col sm:max-w-[700px]">
           <DialogHeader>
             <DialogTitle>
               {dataSource
@@ -559,8 +642,11 @@ export default function AddDataSourceDialog({
             </DialogDescription>
           </DialogHeader>
 
-          <form onSubmit={handleSubmit(onSubmit)} className="flex-1 overflow-hidden flex flex-col">
-            <div className="min-h-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain py-3 pr-3 [scrollbar-gutter:stable]">
+          <form
+            onSubmit={handleSubmit(onSubmit)}
+            className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden"
+          >
+            <div className="min-h-0 min-w-0 flex-1 space-y-4 overflow-x-hidden overflow-y-auto overscroll-contain py-3 pl-0.5 pr-5 [scrollbar-gutter:stable]">
               {/* Data Source Type */}
               <div className="grid grid-cols-3 gap-2">
                 {(['postgres', 'mysql', 'databricks'] as const).map((type) => (
@@ -700,36 +786,43 @@ export default function AddDataSourceDialog({
                     }
                   />
 
-                  {connectionValidationErrors.length > 0 && (
-                    <div className="bg-destructive/10 border border-destructive/30 rounded p-3 text-xs text-destructive">
-                      <ul className="list-disc list-inside">
-                        {connectionValidationErrors.map((err, idx) => (
-                          <li key={idx}>{err}</li>
-                        ))}
-                      </ul>
-                    </div>
-                  )}
-
                   {selectedType === 'databricks' ? (
                     <DatabricksConnectionForm
                       register={register}
                       errors={errors}
+                      connectionFieldErrors={connectionFieldErrors}
                       disabled={isSubmitting}
                       getFormData={() => watch()}
                       showTestConnection={false}
                       credentialMode={watchedCredentialMode}
+                      onFieldChange={clearConnectionFieldErrors}
+                      sharedPasswordSecret={
+                        watchedCredentialMode === 'shared' ? sharedPasswordSecret : undefined
+                      }
+                      sharedPasswordMaskedPreview={
+                        watchedCredentialMode === 'shared' && dataSource?.config?.password
+                          ? String(dataSource.config.password)
+                          : null
+                      }
                     />
                   ) : (
                     <RDBMSConnectionForm
                       type={selectedType}
                       register={register}
                       errors={errors}
+                      connectionFieldErrors={connectionFieldErrors}
                       disabled={isSubmitting}
                       getFormData={() => watch()}
                       credentialMode={watchedCredentialMode}
                       showTestConnection={false}
-                      onClearSavedPassword={
-                        storedSharedPassword ? () => clearSavedSecretMask('password') : undefined
+                      onFieldChange={clearConnectionFieldErrors}
+                      sharedPasswordSecret={
+                        watchedCredentialMode === 'shared' ? sharedPasswordSecret : undefined
+                      }
+                      sharedPasswordMaskedPreview={
+                        watchedCredentialMode === 'shared' && dataSource?.config?.password
+                          ? String(dataSource.config.password)
+                          : null
                       }
                     />
                   )}
@@ -749,23 +842,49 @@ export default function AddDataSourceDialog({
                         </Label>
                         <Input
                           id="metadataSyncUsername"
-                          {...register('metadataSyncUsername')}
+                          {...register('metadataSyncUsername', {
+                            onChange: () => clearConnectionFieldErrors(),
+                          })}
                           disabled={isSubmitting}
                           className="h-8 text-sm w-full min-w-0"
                           autoComplete="off"
+                          errorMsg={resolveConnectionFieldError(
+                            'metadataSyncUsername',
+                            connectionFieldErrors,
+                            errors,
+                          )}
                         />
                         <Label htmlFor="metadataSyncPassword" className={dsFieldLabelClass}>
                           {t('components.addDataSourceDialog.metadataSyncPassword')}{' '}
                           <span className="text-destructive">*</span>
                         </Label>
-                        <Input
+                        <SensitiveCredentialField
                           id="metadataSyncPassword"
-                          type="password"
-                          {...register('metadataSyncPassword')}
+                          hideLabel
+                          label={
+                            <>
+                              {t('components.addDataSourceDialog.metadataSyncPassword')}{' '}
+                              <span className="text-destructive">*</span>
+                            </>
+                          }
+                          binding={syncPasswordSecret}
+                          maskedPreview={
+                            dataSource?.config?.metadata_sync?.password
+                              ? String(dataSource.config.metadata_sync.password)
+                              : null
+                          }
                           disabled={isSubmitting}
-                          onFocus={() => clearSavedSecretMask('metadataSyncPassword')}
-                          className="h-8 text-sm w-full min-w-0"
-                          autoComplete="off"
+                          errorMsg={resolveConnectionFieldError(
+                            'metadataSyncPassword',
+                            connectionFieldErrors,
+                            errors,
+                          )}
+                          onStartEdit={syncPasswordSecret.startEdit}
+                          onCancelEdit={syncPasswordSecret.cancelEdit}
+                          onDraftChange={(value) => {
+                            syncPasswordSecret.setDraft(value)
+                            clearConnectionFieldErrors()
+                          }}
                         />
                       </div>
                     ) : (
@@ -774,14 +893,33 @@ export default function AddDataSourceDialog({
                           {t('components.addDataSourceDialog.metadataSyncToken')}{' '}
                           <span className="text-destructive">*</span>
                         </Label>
-                        <Input
+                        <SensitiveCredentialField
                           id="metadataSyncPassword"
-                          type="password"
-                          {...register('metadataSyncPassword')}
+                          hideLabel
+                          label={
+                            <>
+                              {t('components.addDataSourceDialog.metadataSyncToken')}{' '}
+                              <span className="text-destructive">*</span>
+                            </>
+                          }
+                          binding={syncPasswordSecret}
+                          maskedPreview={
+                            dataSource?.config?.metadata_sync?.password
+                              ? String(dataSource.config.metadata_sync.password)
+                              : null
+                          }
                           disabled={isSubmitting}
-                          onFocus={() => clearSavedSecretMask('metadataSyncPassword')}
-                          className="h-8 text-sm w-full min-w-0"
-                          autoComplete="off"
+                          errorMsg={resolveConnectionFieldError(
+                            'metadataSyncPassword',
+                            connectionFieldErrors,
+                            errors,
+                          )}
+                          onStartEdit={syncPasswordSecret.startEdit}
+                          onCancelEdit={syncPasswordSecret.cancelEdit}
+                          onDraftChange={(value) => {
+                            syncPasswordSecret.setDraft(value)
+                            clearConnectionFieldErrors()
+                          }}
                         />
                       </div>
                     )}
@@ -795,8 +933,12 @@ export default function AddDataSourceDialog({
                   getFormData={() => watch()}
                   disabled={isSubmitting || saving}
                   dataSourceId={dataSource?.id}
-                  storedMetadataSyncPassword={storedMetadataSyncPassword}
-                  storedSharedPassword={storedSharedPassword}
+                  sharedPasswordSecret={
+                    watchedCredentialMode === 'shared' ? sharedPasswordSecret : undefined
+                  }
+                  syncPasswordSecret={
+                    watchedCredentialMode === 'user' ? syncPasswordSecret : undefined
+                  }
                 />
               </div>
             </div>

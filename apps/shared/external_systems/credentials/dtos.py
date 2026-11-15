@@ -9,9 +9,10 @@ from pydantic import BaseModel, Field
 from apps.shared.external_systems.domain.types import (
     UserConnectionStatus,
 )
+from apps.shared.schemas.masked_fields import MaskedFieldsMixin
 
 
-class UserIntegrationConnectionResponse(BaseModel):
+class UserIntegrationConnectionResponse(MaskedFieldsMixin):
     resource_type: str
     resource_id: int
     status: UserConnectionStatus = Field(description="not_connected | connected | expired")

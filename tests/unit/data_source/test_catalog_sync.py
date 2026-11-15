@@ -1,7 +1,6 @@
 """Domain: catalog sync credentials and user-mode config template rules."""
 
 from apps.shared.external_systems.data_source.catalog_sync import (
-    API_SECRET_PLACEHOLDER,
     CatalogSyncCredentials,
     strip_user_mode_connection_template,
 )
@@ -29,18 +28,18 @@ def test_is_configured_in_config_requires_username_for_postgres():
     )
 
 
-def test_merge_incoming_into_config_preserves_password_on_placeholder():
+def test_merge_incoming_into_config_preserves_password_when_omitted():
     existing = {"host": "h", "metadata_sync": {"username": "u", "password": "secret"}}
-    incoming = {"host": "h2", "metadata_sync": {"username": "u2", "password": API_SECRET_PLACEHOLDER}}
+    incoming = {"host": "h2", "metadata_sync": {"username": "u2"}}
     merged = CatalogSyncCredentials.merge_incoming_into_config(existing, incoming)
     assert merged["host"] == "h2"
     assert merged["metadata_sync"]["username"] == "u2"
     assert merged["metadata_sync"]["password"] == "secret"
 
 
-def test_merge_incoming_into_config_preserves_root_password_on_placeholder():
+def test_merge_incoming_into_config_preserves_root_password_when_omitted():
     existing = {"host": "h", "username": "u", "password": "secret-root"}
-    incoming = {"host": "h2", "password": API_SECRET_PLACEHOLDER}
+    incoming = {"host": "h2"}
     merged = CatalogSyncCredentials.merge_incoming_into_config(existing, incoming)
     assert merged["host"] == "h2"
     assert merged["password"] == "secret-root"

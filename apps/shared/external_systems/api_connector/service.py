@@ -64,6 +64,7 @@ from apps.shared.external_systems.api_connector.schemas import (
     ApiOperationStatsResponse,
     SyncSchemaSummaryDTO,
 )
+from apps.shared.external_systems.api_connector.sensitive_config import AUTH_CONFIG_SENSITIVE_FIELDS
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_SHARED,
@@ -73,7 +74,7 @@ from apps.shared.external_systems.domain.types import (
 )
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.search.schemas import ResourceIndexCreateDTO
-from apps.shared.utils.field_cipher import AUTH_CONFIG_SENSITIVE_FIELDS, FieldCipher, strip_sensitive_fields
+from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
 
 if TYPE_CHECKING:
     from apps.shared.search.indexing_service import ResourceIndexService
@@ -133,7 +134,10 @@ class ApiConnectorService:
         auth_config_dict = auth_config_to_dict(auth_config)
         self._validate_auth_config(auth_type, auth_config_dict, credential_mode=credential_mode)
         if credential_mode == CREDENTIAL_MODE_USER:
-            auth_config_dict = strip_sensitive_fields(auth_config_dict)
+            auth_config_dict = strip_sensitive_fields(
+                auth_config_dict,
+                sensitive_keys=AUTH_CONFIG_SENSITIVE_FIELDS,
+            )
 
         encrypted_auth = self.cipher.encrypt_dict(auth_config_dict, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS)
 
@@ -364,12 +368,14 @@ class ApiConnectorService:
                 connector.auth_config or {}, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS
             )
 
-            # Filter out masked values from incoming auth_config
-            # If UI sends masked value (e.g., "sk****key"), keep the original decrypted value
+            # Merge preserves stored secrets when keys are omitted or sentinels/masks (see secret_wire).
             merged_config = self._merge_auth_config(existing_decrypted, auth_config_to_dict(auth_config))
             mode = effective_credential_mode(credential_mode or connector.credential_mode)
             if mode == CREDENTIAL_MODE_USER:
-                merged_config = strip_sensitive_fields(merged_config)
+                merged_config = strip_sensitive_fields(
+                    merged_config,
+                    sensitive_keys=AUTH_CONFIG_SENSITIVE_FIELDS,
+                )
 
             connector.auth_config = self.cipher.encrypt_dict(
                 merged_config, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS
@@ -1112,41 +1118,14 @@ class ApiConnectorService:
 
     @staticmethod
     def _merge_auth_config(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
-        """Merge incoming auth_config with existing, skipping masked values.
+        """Merge incoming auth_config with existing; preserve secrets unless client sends a new value."""
+        from apps.shared.utils.secret_merge import merge_dict_preserve_secrets
 
-        Recursively merges nested dicts. If a string value in incoming is masked,
-        keeps the original value from existing instead.
-
-        Args:
-            existing: Decrypted existing auth_config from database
-            incoming: New auth_config from UI/API request
-
-        Returns:
-            Merged auth_config with masked values replaced by originals
-        """
-        from apps.shared.utils.field_cipher import FieldCipher
-
-        merged = dict(existing)
-        for key, new_value in incoming.items():
-            if isinstance(new_value, str):
-                # Check if string value is masked
-                if FieldCipher.is_masked(new_value):
-                    # Skip masked values - keep original from existing
-                    logger.debug(f"Skipping masked field '{key}' during connector update")
-                    continue
-                merged[key] = new_value
-            elif isinstance(new_value, dict):
-                # Recursively merge nested dicts (e.g., extra_config)
-                existing_nested = existing.get(key, {})
-                if isinstance(existing_nested, dict):
-                    merged[key] = ApiConnectorService._merge_auth_config(existing_nested, new_value)
-                else:
-                    merged[key] = new_value
-            else:
-                # Non-dict, non-string values (lists, numbers, etc.) - just copy
-                merged[key] = new_value
-
-        return merged
+        return merge_dict_preserve_secrets(
+            existing,
+            incoming,
+            sensitive_keys=AUTH_CONFIG_SENSITIVE_FIELDS,
+        )
 
     @staticmethod
     def _validate_auth_config(

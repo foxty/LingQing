@@ -20,6 +20,7 @@ export interface DataSource {
   asset_count: number
   credential_mode?: 'shared' | 'user'
   user_connection_status?: 'not_connected' | 'connected' | 'expired' | null
+  masked_fields?: string[]
 }
 
 export interface DataSourceCreate {
@@ -40,6 +41,7 @@ export interface UserIntegrationConnection {
   expires_at?: string | null
   secrets_public?: Record<string, string>
   secret_keys_configured?: string[]
+  masked_fields?: string[]
 }
 
 export interface UserIntegrationConnectionUpsert {

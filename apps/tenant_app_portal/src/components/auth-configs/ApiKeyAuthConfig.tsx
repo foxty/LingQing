@@ -1,71 +1,56 @@
-import { useTranslation } from 'react-i18next'
-import i18n from '@/i18n/config'
+import { SensitiveCredentialField } from '@/components/SensitiveCredentialField'
+import type { SecretCredentialFieldHandle } from '@/hooks/useSecretCredentialField'
 import { Label } from '@/components/ui/label'
-
-i18n.addResourceBundle('en', 'translation', {
-  components: {
-    authConfigs: {
-      apiKeyPlaceholder: 'Enter API key value',
-    },
-  },
-}, true, true)
-
-i18n.addResourceBundle('zh', 'translation', {
-  components: {
-    authConfigs: {
-      apiKeyPlaceholder: '输入 API 密钥值',
-    },
-  },
-}, true, true)
 import { Input } from '@/components/ui/input'
+import { dsFieldLabelClass, dsFieldPairRowClass } from '@/components/data-source/formLayout'
 
 interface ApiKeyAuthConfigProps {
   keyName: string
-  keyValue: string
-  isAuthConfigured: boolean
+  keyValueSecret: SecretCredentialFieldHandle
+  maskedPreview?: string | null
   submitting: boolean
   keyValueError?: string
   onKeyNameChange: (value: string) => void
-  onKeyValueChange: (value: string) => void
+  onKeyValueDraftChange: (value: string) => void
 }
 
-/**
- * API Key authentication configuration form.
- * Allows users to specify custom header name and API key value.
- */
 export function ApiKeyAuthConfig({
   keyName,
-  keyValue,
+  keyValueSecret,
+  maskedPreview,
   submitting,
   keyValueError,
   onKeyNameChange,
-  onKeyValueChange,
+  onKeyValueDraftChange,
 }: ApiKeyAuthConfigProps) {
-  const { t } = useTranslation()
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div className="space-y-2">
-        <Label htmlFor="add-api-key-name">Key Name</Label>
-        <Input
-          id="add-api-key-name"
-          value={keyName}
-          onChange={(e) => onKeyNameChange(e.target.value)}
-          placeholder="X-API-Key"
-          disabled={submitting}
-        />
-      </div>
-      <div className="space-y-2">
-        <Label htmlFor="add-api-key-value">Key Value</Label>
-        <Input
-          id="add-api-key-value"
-          type="password"
-          value={keyValue}
-          onChange={(e) => onKeyValueChange(e.target.value)}
-          placeholder={t('components.authConfigs.apiKeyPlaceholder')}
-          disabled={submitting}
-          errorMsg={keyValueError}
-        />
-      </div>
+    <div className={dsFieldPairRowClass}>
+      <Label htmlFor="add-api-key-name" className={dsFieldLabelClass}>
+        Key Name
+      </Label>
+      <Input
+        id="add-api-key-name"
+        value={keyName}
+        onChange={(e) => onKeyNameChange(e.target.value)}
+        placeholder="X-API-Key"
+        disabled={submitting}
+        className="h-8 text-sm w-full min-w-0"
+      />
+      <Label htmlFor="add-api-key-value" className={dsFieldLabelClass}>
+        Key Value
+      </Label>
+      <SensitiveCredentialField
+        id="add-api-key-value"
+        hideLabel
+        label="Key Value"
+        binding={keyValueSecret}
+        maskedPreview={maskedPreview}
+        disabled={submitting}
+        errorMsg={keyValueError}
+        onStartEdit={keyValueSecret.startEdit}
+        onCancelEdit={keyValueSecret.cancelEdit}
+        onDraftChange={onKeyValueDraftChange}
+      />
     </div>
   )
 }
