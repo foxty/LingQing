@@ -350,6 +350,13 @@ class SlackIngressService:
             )
             return
 
+        if event.incomplete_forward_context:
+            await self._post_user_notice(
+                bot_token,
+                event,
+                slack_user_message(SlackMessageKey.FORWARDED_CONTEXT_INCOMPLETE),
+            )
+
         reply_thread_ts = slack_reply_thread_ts(
             channel_type=event.channel_type,
             thread_ts=event.thread_ts,

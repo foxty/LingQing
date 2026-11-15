@@ -19,6 +19,7 @@ class SlackMessageKey(enum.StrEnum):
     SLACK_VERIFY_FAILED = "slack_verify_failed"
     CHAT_PERMISSION_DENIED = "chat_permission_denied"
     EMPTY_MENTION_MESSAGE = "empty_mention_message"
+    FORWARDED_CONTEXT_INCOMPLETE = "forwarded_context_incomplete"
     LINKED_ACCOUNT_NOT_FOUND = "linked_account_not_found"
     IDENTITY_PENDING = "identity_pending"
     IDENTITY_DENIAL_GENERIC = "identity_denial_generic"
@@ -51,6 +52,10 @@ _CATALOG: dict[str, dict[SlackMessageKey, str]] = {
         SlackMessageKey.SLACK_VERIFY_FAILED: ("Could not reach Slack to verify your account. Please try again."),
         SlackMessageKey.CHAT_PERMISSION_DENIED: ("You don't have permission to chat with the agent."),
         SlackMessageKey.EMPTY_MENTION_MESSAGE: ("Please include a message after mentioning the bot."),
+        SlackMessageKey.FORWARDED_CONTEXT_INCOMPLETE: (
+            "Some forwarded message details could not be read completely. "
+            "I'll use whatever context Slack provided."
+        ),
         SlackMessageKey.LINKED_ACCOUNT_NOT_FOUND: ("Your linked account could not be found."),
         SlackMessageKey.IDENTITY_PENDING: (
             "Your Slack account is pending admin approval. You'll be able to chat once an admin links it."

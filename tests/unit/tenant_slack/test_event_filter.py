@@ -54,8 +54,25 @@ def test_ignores_empty_text():
     assert is_processable_message_event(_dm_event(text="   ")) is False
 
 
-def test_ignores_file_only_message():
+def test_ignores_empty_dm_without_forward_payload():
     assert is_processable_message_event(_dm_event(text="")) is False
+
+
+def test_accepts_forward_only_dm_without_top_level_text():
+    event = _dm_event(
+        text="",
+        attachments=[
+            {
+                "is_share": True,
+                "author_id": "U_OTHER",
+                "author_name": "Someone",
+                "channel_id": "C1",
+                "ts": "1.0",
+                "text": "forwarded hello",
+            }
+        ],
+    )
+    assert is_processable_message_event(event) is True
 
 
 def test_parse_message_event_returns_dm():

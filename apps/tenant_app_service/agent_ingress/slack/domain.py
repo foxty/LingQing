@@ -15,6 +15,10 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Any
 
+from apps.tenant_app_service.agent_ingress.slack.inbound_message_context import (
+    assemble_slack_inbound_message,
+    slack_inbound_has_processable_content,
+)
 from apps.tenant_app_service.agent_ingress.slack.messages import (
     SLACK_EMPTY_REPLY_FALLBACK,
 )
@@ -97,6 +101,7 @@ class SlackMessageEvent:
     channel_type: str | None = None
     source: str = "dm"
     bot_user_id: str | None = None
+    incomplete_forward_context: bool = False
 
 
 class SlackIngressAdmissionOutcome(enum.StrEnum):
@@ -217,7 +222,7 @@ def _describe_unprocessable_message(event: dict, event_type: str) -> str:
     if subtype in {"message_changed", "message_deleted", "message_replies"}:
         return f"unsupported_subtype={subtype}"
     text = event.get("text") or ""
-    if not text.strip():
+    if not text.strip() and not slack_inbound_has_processable_content(event):
         return f"empty_text type={event_type} subtype={subtype or 'none'}"
     if event_type == "message" and channel_type and channel_type != "im":
         if not event.get("thread_ts"):
@@ -236,7 +241,7 @@ def is_processable_message_event(event: dict) -> bool:
     Filters out:
       - bot messages (bot_id / subtype=bot_message) to prevent loops
       - message_changed / message_deleted / message_replies subtypes
-      - empty text / file-only messages (MVP)
+      - payloads with no user text and no forwarded/shared context
     """
     if not isinstance(event, dict):
         return False
@@ -245,10 +250,9 @@ def is_processable_message_event(event: dict) -> bool:
     subtype = event.get("subtype")
     if subtype in {"message_changed", "message_deleted", "message_replies"}:
         return False
-    text = event.get("text") or ""
-    if not text.strip():
-        return event.get("type") == SlackEventType.APP_MENTION
-    return True
+    if slack_inbound_has_processable_content(event):
+        return True
+    return event.get("type") == SlackEventType.APP_MENTION
 
 
 def parse_message_event(event: dict, event_id: str | None = None) -> SlackMessageEvent | None:
@@ -260,10 +264,12 @@ def parse_message_event(event: dict, event_id: str | None = None) -> SlackMessag
         return None
     if event.get("channel_type") and event["channel_type"] != "im":
         return None
+    assembled = assemble_slack_inbound_message(event)
+    if not assembled.is_processable:
+        return None
     team_id = event.get("team") or ""
     user_id = event.get("user") or ""
     channel_id = event.get("channel") or ""
-    text = event.get("text") or ""
     ts = event.get("ts") or ""
     if not (user_id and channel_id and ts):
         return None
@@ -272,11 +278,12 @@ def parse_message_event(event: dict, event_id: str | None = None) -> SlackMessag
         team_id=team_id,
         user_id=user_id,
         channel_id=channel_id,
-        text=text,
+        text=assembled.content,
         ts=ts,
         thread_ts=event.get("thread_ts"),
         channel_type=event.get("channel_type"),
         source="dm",
+        incomplete_forward_context=assembled.incomplete_context,
     )
 
 
@@ -327,9 +334,10 @@ def parse_app_mention_event(event: dict, event_id: str | None = None) -> SlackMe
         return None
     if not is_processable_message_event(event):
         return None
+    assembled = assemble_slack_inbound_message(event)
+    agent_text = assembled.content if assembled.is_processable else (event.get("text") or "")
     user_id = event.get("user") or ""
     channel_id = event.get("channel") or ""
-    text = event.get("text") or ""
     ts = event.get("ts") or ""
     if not (user_id and channel_id and ts):
         return None
@@ -338,11 +346,12 @@ def parse_app_mention_event(event: dict, event_id: str | None = None) -> SlackMe
         team_id=event.get("team") or "",
         user_id=user_id,
         channel_id=channel_id,
-        text=text,
+        text=agent_text,
         ts=ts,
         thread_ts=event.get("thread_ts"),
         channel_type=event.get("channel_type"),
         source="app_mention",
+        incomplete_forward_context=assembled.incomplete_context,
     )
 
 
@@ -448,6 +457,9 @@ def parse_thread_reply_event(event: dict, event_id: str | None = None) -> SlackM
     thread_ts = event.get("thread_ts")
     if not thread_ts or channel_type not in SHARED_CHANNEL_TYPES:
         return None
+    assembled = assemble_slack_inbound_message(event)
+    if not assembled.is_processable:
+        return None
     user_id = event.get("user") or ""
     channel_id = event.get("channel") or ""
     text = event.get("text") or ""
@@ -462,11 +474,12 @@ def parse_thread_reply_event(event: dict, event_id: str | None = None) -> SlackM
         team_id=event.get("team") or "",
         user_id=user_id,
         channel_id=channel_id,
-        text=text,
+        text=assembled.content,
         ts=ts,
         thread_ts=thread_ts,
         channel_type=channel_type,
         source="thread_reply",
+        incomplete_forward_context=assembled.incomplete_context,
     )
 
 
