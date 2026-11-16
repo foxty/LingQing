@@ -17,3 +17,27 @@ def test_export_audit_events_forbidden_without_manage():
         assert resp.status_code == 403
     finally:
         app.dependency_overrides.clear()
+
+
+def _admin_user():
+    return UserDTO(id=1, username="admin", role="admin", tenant_id=1, tenant_name="t")
+
+
+def test_list_audit_events_rejects_invalid_from_datetime():
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = _admin_user
+    try:
+        resp = client.get("/audit/events", params={"from": "not-a-date"})
+        assert resp.status_code == 400
+    finally:
+        app.dependency_overrides.clear()
+
+
+def test_export_audit_events_rejects_invalid_from_datetime():
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = _admin_user
+    try:
+        resp = client.get("/audit/events/export", params={"from": "not-a-date"})
+        assert resp.status_code == 400
+    finally:
+        app.dependency_overrides.clear()

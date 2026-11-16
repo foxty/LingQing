@@ -9,6 +9,7 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.audit_event.context import AuditRequestContext
+from apps.shared.core.exceptions import ValidationError
 from apps.shared.audit_event.repository import DEFAULT_PAGE_SIZE
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
@@ -22,7 +23,10 @@ router = APIRouter(prefix="/audit", tags=["audit"])
 def _parse_dt(value: str | None) -> datetime | None:
     if not value:
         return None
-    return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError as exc:
+        raise ValidationError("Invalid datetime filter", {"value": value}) from exc
 
 
 @router.get("/events")

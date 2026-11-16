@@ -33,6 +33,7 @@ AUDIT_EXPORT_HEADERS = (
     "resource_type",
     "resource_id",
     "client_ip",
+    "user_agent",
     "request_id",
     "payload_json",
 )
@@ -135,6 +136,7 @@ def _row_to_csv_cells(row: AuditEvent) -> list:
         row.resource_type or "",
         row.resource_id or "",
         row.client_ip or "",
+        row.user_agent or "",
         row.request_id or "",
         payload_json,
     ]
