@@ -131,7 +131,11 @@ class SlackIngressService:
         configured_team_id = self.repo.slack_team_id(endpoint)
         already_processed = False
         if endpoint.enabled:
-            preview = parse_slack_ingress_event(inner_event, event_id=event_id)
+            preview = parse_slack_ingress_event(
+                inner_event,
+                event_id=event_id,
+                bot_user_id=self.repo.slack_bot_user_id(endpoint),
+            )
             if preview and not slack_event_team_mismatch(
                 configured_team_id=configured_team_id,
                 event_team_id=preview.team_id,
@@ -349,6 +353,13 @@ class SlackIngressService:
                 slack_user_message(SlackMessageKey.EMPTY_MENTION_MESSAGE),
             )
             return
+
+        if event.incomplete_forward_context:
+            await self._post_user_notice(
+                bot_token,
+                event,
+                slack_user_message(SlackMessageKey.FORWARDED_CONTEXT_INCOMPLETE),
+            )
 
         reply_thread_ts = slack_reply_thread_ts(
             channel_type=event.channel_type,
