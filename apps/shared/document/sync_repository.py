@@ -19,7 +19,6 @@ from apps.shared.document.sync_types import (
     CONNECTOR_ACTIVE,
     CONNECTOR_STOPPED,
     SENSITIVE_CONNECTION_CREDENTIAL_FIELDS,
-    SOURCE_CONNECTION_ACTIVE,
     SOURCE_CONNECTION_REVOKED,
 )
 from apps.shared.utils.field_cipher import FieldCipher
