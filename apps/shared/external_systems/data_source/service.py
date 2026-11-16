@@ -15,7 +15,8 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlglot.errors import ParseError
 
 from apps.shared.audit_event.event_types import TenantAuditEventType
-from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_FAILURE, OUTCOME_SUCCESS, TenantAuditRecorder
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
+from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
@@ -630,12 +631,10 @@ class DataSourceService(TenantAwareService):
         existing = await self.data_source_repo.get_by_tenant_and_name(self.tenant_id, data_source_data.name)
 
         if existing:
-            recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
-            await recorder.record(
+            await record_conflict_rejection_audit(
+                tenant_id=self.tenant_id,
                 event_type=TenantAuditEventType.DATASOURCE_CREATE.value,
-                outcome=OUTCOME_FAILURE,
                 actor_user_id=owner_id,
-                actor_type=ACTOR_TYPE_USER,
                 resource_type="datasource",
                 resource_id=str(existing.id),
                 payload={
