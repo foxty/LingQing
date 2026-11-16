@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.audit_event.event_types import TenantAuditEventType
 from apps.shared.audit_event.payload import mask_email
-from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_FAILURE, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.authz.ta_rbac import DEFAULT_ROLE_PERMISSIONS
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import DuplicateResourceError, ResourceNotFoundError, ValidationError
@@ -137,6 +137,17 @@ class TenantUserManagementService(TenantAwareService):
 
         existing = await self.user_repo.get_by_username_and_tenant(username, self.tenant_id)
         if existing:
+            if actor_user_id is not None:
+                recorder = TenantAuditRecorder(self.db, tenant_id=self.tenant_id)
+                await recorder.record(
+                    event_type=TenantAuditEventType.USER_CREATE.value,
+                    outcome=OUTCOME_FAILURE,
+                    actor_user_id=actor_user_id,
+                    actor_type=ACTOR_TYPE_USER,
+                    resource_type="user",
+                    resource_id=None,
+                    payload={"email_masked": mask_email(email), "role": role, "failure_reason": "duplicate_username"},
+                )
             raise DuplicateResourceError("User already exists in tenant")
 
         user = await self.user_repo.create_user(

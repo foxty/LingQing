@@ -6,9 +6,20 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-_SENSITIVE_KEY_RE = re.compile(
-    r"(password|passwd|token|secret|api_key|apikey|credential|bot_token|signing_secret)",
-    re.IGNORECASE,
+# PRD-allowed metadata keys (booleans, field name lists) — never strip by substring rules.
+_ALLOWED_METADATA_KEYS = frozenset(
+    {
+        "credentials_changed",
+        "credential_field_names",
+        "credentials_present",
+        "fields_changed",
+        "env_var_keys_changed",
+        "change_summary",
+        "filter_summary",
+        "exported_count",
+        "truncated",
+        "total_matched",
+    }
 )
 
 _BLOCKED_VALUE_KEYS = frozenset(
@@ -26,6 +37,12 @@ _BLOCKED_VALUE_KEYS = frozenset(
     }
 )
 
+# Secret **value** keys only — do not match substrings like "credentials_present".
+_SENSITIVE_KEY_RE = re.compile(
+    r"(^password$|^passwd$|_token$|^token$|^secret$|api_key|apikey|^bot_token$|^signing_secret$)",
+    re.IGNORECASE,
+)
+
 
 def mask_email(email: str | None) -> str | None:
     if not email or "@" not in email:
@@ -37,14 +54,22 @@ def mask_email(email: str | None) -> str | None:
     return f"{visible}***@{domain}"
 
 
+def _should_drop_key(key: str) -> bool:
+    key_l = key.lower()
+    if key_l in _ALLOWED_METADATA_KEYS:
+        return False
+    if key_l in _BLOCKED_VALUE_KEYS:
+        return True
+    return _SENSITIVE_KEY_RE.search(key_l) is not None
+
+
 def sanitize_audit_payload(payload: Mapping[str, Any] | None) -> dict | None:
     """Strip secret-bearing keys/values from audit payload before persistence."""
     if payload is None:
         return None
     cleaned: dict[str, Any] = {}
     for key, value in payload.items():
-        key_l = key.lower()
-        if key_l in _BLOCKED_VALUE_KEYS or _SENSITIVE_KEY_RE.search(key):
+        if _should_drop_key(key):
             continue
         if isinstance(value, Mapping):
             nested = sanitize_audit_payload(value)

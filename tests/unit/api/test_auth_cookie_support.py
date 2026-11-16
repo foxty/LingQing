@@ -165,8 +165,8 @@ def test_login_rate_limited_by_ip(monkeypatch):
     async def _empty_db():
         yield object()
 
-    async def _fake_authenticate(self, credentials):
-        _ = credentials
+    async def _fake_authenticate(self, credentials, *, audit_context=None):
+        _ = credentials, audit_context
         return LoginResponse(
             access_token="jwt-token-abc",
             token_type="bearer",
@@ -205,8 +205,8 @@ def test_login_sets_access_token_cookie(monkeypatch):
     async def _empty_db():
         yield object()
 
-    async def _fake_authenticate(self, credentials):
-        _ = credentials
+    async def _fake_authenticate(self, credentials, *, audit_context=None):
+        _ = credentials, audit_context
         return LoginResponse(
             access_token="jwt-token-abc",
             token_type="bearer",

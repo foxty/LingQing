@@ -1,5 +1,4 @@
 import PaginationBar from '@/components/PaginationBar'
-import SettingsListToolbar from '@/components/SettingsListToolbar'
 import SettingsPageShell from '@/components/SettingsPageShell'
 import SettingsSection from '@/components/SettingsSection'
 import { Button } from '@/components/ui/button'
@@ -130,58 +129,58 @@ export default function SettingsAuditLogsTab() {
         showSuccess(t('auditLogs.exportTruncated'))
       }
     } catch (err) {
-      showError(getApiErrorMessage(err) || t('auditLogs.exportFailed'))
+      showError(getApiErrorMessage(err, t('auditLogs.exportFailed')))
     }
   }
 
   return (
-    <SettingsPageShell title={t('settings.auditLogs')}>
-      <SettingsSection title={t('settings.auditLogs')} description={t('auditLogs.description')}>
-        <SettingsListToolbar
-          actions={
-            canExport ? (
-              <Button variant="outline" size="sm" onClick={handleExport}>
-                <Download className="mr-2 h-4 w-4" />
-                {t('auditLogs.export')}
-              </Button>
-            ) : null
-          }
-        >
-          <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-            <Input
-              placeholder={t('auditLogs.eventType')}
-              value={eventType}
-              onChange={(e) => {
-                setPage(1)
-                setEventType(e.target.value)
-              }}
-            />
-            <Input
-              placeholder={t('auditLogs.actorUserId')}
-              value={actorUserId}
-              onChange={(e) => {
-                setPage(1)
-                setActorUserId(e.target.value)
-              }}
-            />
-            <Input
-              placeholder={t('auditLogs.from')}
-              value={from}
-              onChange={(e) => {
-                setPage(1)
-                setFrom(e.target.value)
-              }}
-            />
-            <Input
-              placeholder={t('auditLogs.to')}
-              value={to}
-              onChange={(e) => {
-                setPage(1)
-                setTo(e.target.value)
-              }}
-            />
-          </div>
-        </SettingsListToolbar>
+    <SettingsPageShell>
+      <SettingsSection
+        title={t('settings.auditLogs')}
+        description={t('auditLogs.description')}
+        action={
+          canExport ? (
+            <Button variant="outline" size="sm" onClick={handleExport}>
+              <Download className="mr-2 h-4 w-4" />
+              {t('auditLogs.export')}
+            </Button>
+          ) : undefined
+        }
+      >
+        <div className="mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+          <Input
+            placeholder={t('auditLogs.eventType')}
+            value={eventType}
+            onChange={(e) => {
+              setPage(1)
+              setEventType(e.target.value)
+            }}
+          />
+          <Input
+            placeholder={t('auditLogs.actorUserId')}
+            value={actorUserId}
+            onChange={(e) => {
+              setPage(1)
+              setActorUserId(e.target.value)
+            }}
+          />
+          <Input
+            placeholder={t('auditLogs.from')}
+            value={from}
+            onChange={(e) => {
+              setPage(1)
+              setFrom(e.target.value)
+            }}
+          />
+          <Input
+            placeholder={t('auditLogs.to')}
+            value={to}
+            onChange={(e) => {
+              setPage(1)
+              setTo(e.target.value)
+            }}
+          />
+        </div>
 
         {isError ? (
           <p className="py-6 text-sm text-destructive">
@@ -232,12 +231,15 @@ export default function SettingsAuditLogsTab() {
         )}
 
         {data && data.total_pages > 1 ? (
-          <PaginationBar
-            page={data.page}
-            totalPages={data.total_pages}
-            onPageChange={setPage}
-            className="mt-4"
-          />
+          <div className="mt-4">
+            <PaginationBar
+              page={data.page}
+              pageSize={data.page_size}
+              total={data.total}
+              totalPages={data.total_pages}
+              onPageChange={setPage}
+            />
+          </div>
         ) : null}
       </SettingsSection>
     </SettingsPageShell>

@@ -15,7 +15,7 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlglot.errors import ParseError
 
 from apps.shared.audit_event.event_types import TenantAuditEventType
-from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_FAILURE, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
@@ -630,6 +630,20 @@ class DataSourceService(TenantAwareService):
         existing = await self.data_source_repo.get_by_tenant_and_name(self.tenant_id, data_source_data.name)
 
         if existing:
+            recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
+            await recorder.record(
+                event_type=TenantAuditEventType.DATASOURCE_CREATE.value,
+                outcome=OUTCOME_FAILURE,
+                actor_user_id=owner_id,
+                actor_type=ACTOR_TYPE_USER,
+                resource_type="datasource",
+                resource_id=str(existing.id),
+                payload={
+                    "name": data_source_data.name,
+                    "connector_type": data_source_data.type,
+                    "failure_reason": "duplicate_name",
+                },
+            )
             raise ValueError(f"Data source '{data_source_data.name}' already exists for tenant {self.tenant_id}")
 
         config = data_source_data.config or {}

@@ -116,6 +116,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "X-Request-ID",
+        "X-Audit-Truncated",
+        "X-Audit-Total-Matched",
+        "X-Audit-Exported-Count",
+    ],
 )
 
 # Mount static files
