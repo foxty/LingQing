@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-16T11:43:52.392949+00:00",
+  "generated_at": "2026-11-17T03:09:50.799976+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -9196,6 +9196,8 @@
     "GET_/apps/{app_id}/{environment}/entry": "get_live_app_entry_apps__app_id___environment__entry_get",
     "GET_/apps/{app_id}/{environment}/{asset_path}": "get_live_app_asset_apps__app_id___environment___asset_path__get",
     "GET_/artifacts/context-picker": "search_artifacts_for_context_picker_artifacts_context_picker_get",
+    "GET_/audit/events": "list_audit_events_audit_events_get",
+    "GET_/audit/events/export": "export_audit_events_audit_events_export_get",
     "GET_/charts/{chart_id}/image.{extension}": "get_chart_image_charts__chart_id__image__extension__get",
     "GET_/dashboards": "list_dashboards_dashboards_get",
     "GET_/dashboards/{dashboard_id}": "get_dashboard_dashboards__dashboard_id__get",
@@ -10677,6 +10679,91 @@
       "constraints": {
         "side_effect": true,
         "idempotent": false
+      }
+    },
+    "export_audit_events_audit_events_export_get": {
+      "operation_key": "GET_/audit/events/export",
+      "method": "GET",
+      "path": "/audit/events/export",
+      "summary": "Export Audit Events",
+      "description": "",
+      "request": {
+        "query_params": [
+          {
+            "name": "actor_user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor User Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            },
+            "description": ""
+          },
+          {
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            },
+            "description": ""
+          },
+          {
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
       }
     },
     "export_feedback_feedback_export_get": {
@@ -12789,6 +12876,114 @@
           "type": "array",
           "title": "Response List Assignable Skills Agents Catalog Skills Get"
         }
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_audit_events_audit_events_get": {
+      "operation_key": "GET_/audit/events",
+      "method": "GET",
+      "path": "/audit/events",
+      "summary": "List Audit Events",
+      "description": "",
+      "request": {
+        "query_params": [
+          {
+            "name": "actor_user_id",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Actor User Id"
+            },
+            "description": ""
+          },
+          {
+            "name": "event_type",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Event Type"
+            },
+            "description": ""
+          },
+          {
+            "name": "from",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "From"
+            },
+            "description": ""
+          },
+          {
+            "name": "to",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "To"
+            },
+            "description": ""
+          },
+          {
+            "name": "page",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 1,
+              "title": "Page"
+            },
+            "description": ""
+          },
+          {
+            "name": "page_size",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "maximum": 100,
+              "minimum": 1,
+              "default": 20,
+              "title": "Page Size"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
       },
       "constraints": {
         "side_effect": false,
