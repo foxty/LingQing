@@ -46,10 +46,10 @@ Staging and production use the **same** remote stack on **separate VMs**; only `
 
 ```bash
 # Build + deploy
-./deploy/scripts/remote/release.sh user@vm ghcr.io/org/lingqing .env.prod v2.0.0 all
+./deploy/scripts/remote/release.sh user@vm ghcr.io/org/lingqing .env.prod vX.Y.Z all
 
 # Deploy only (images already in registry)
-./deploy/scripts/remote/deploy.sh v2.0.0 ghcr.io/org/lingqing vm deploy .env.prod all
+./deploy/scripts/remote/deploy.sh vX.Y.Z ghcr.io/org/lingqing vm deploy .env.prod all
 ```
 
 ---
@@ -124,7 +124,7 @@ Full variable reference: [reference.md](reference.md).
 Each semver tag publishes `lingqing-deploy-vX.Y.Z.tar.gz` on GitHub Releases (includes `init_db.sh`, `.env.template`, `bootstrap.sh`). Examples below use `foxty/LingQing`; substitute your org, repo, and registry:
 
 ```bash
-VERSION=v2.0.0
+VERSION=vX.Y.Z
 curl -fsSL "https://github.com/foxty/LingQing/releases/download/${VERSION}/lingqing-deploy-${VERSION}.tar.gz" | tar -xz
 cd "lingqing-deploy-${VERSION}"
 
@@ -139,7 +139,7 @@ cp .env.template .env && nano .env   # fill "FILL BEFORE DEPLOY" section
 **Upgrade** (from the bundle directory):
 
 ```bash
-./bootstrap.sh --version v2.1.0 --registry ghcr.io/foxty/lingqing
+./bootstrap.sh --version vX.Y.Z --registry ghcr.io/foxty/lingqing
 ```
 
 ### Daily staging images
@@ -150,7 +150,7 @@ Daily builds from `main` publish GHCR tags **`daily-YYYY-MM-DD`** (immutable) an
 | --- | --- |
 | Try latest daily | `./bootstrap.sh --version daily --registry ghcr.io/foxty/lingqing` |
 | Pin a specific day (rollback) | `./bootstrap.sh --version daily-2026-10-02 --registry ghcr.io/foxty/lingqing` |
-| Production | semver only, e.g. `v1.0.2` |
+| Production | semver only, e.g. `v0.0.3` |
 
 Daily images are built only when `main` has commits in the last 24 hours (`.github/workflows/schedule-daily.yml`). Each run also checks for `daily-*` tags older than 14 days and prunes them when found.
 
@@ -168,13 +168,13 @@ When images already exist in the registry:
 
 ```bash
 ./deploy/scripts/generate-env.sh deploy/env/.env.template /tmp/.env.prod
-./deploy/scripts/remote/deploy.sh v2.0.0 ghcr.io/foxty/lingqing your-vm deploy /tmp/.env.prod all
+./deploy/scripts/remote/deploy.sh vX.Y.Z ghcr.io/foxty/lingqing your-vm deploy /tmp/.env.prod all
 ```
 
 #### Option C — `release.sh` (build locally + deploy)
 
 ```bash
-./deploy/scripts/remote/release.sh user@your-vm ghcr.io/yourorg/lingqing .env.prod v2.0.0 all
+./deploy/scripts/remote/release.sh user@your-vm ghcr.io/yourorg/lingqing .env.prod vX.Y.Z all
 ```
 
 Use when customizing images. For published GHCR tags, prefer Option A or B.
