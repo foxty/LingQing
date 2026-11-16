@@ -147,18 +147,12 @@ export function useResumeSyncConnector(collectionId: number) {
 
   return useMutation({
     mutationFn: () => resumeCollectionSyncConnector(collectionId),
-    onSuccess: (connector) => {
+    onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['document-sync', 'connector', collectionId, user?.tenantId],
       })
       queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
-      queryClient.invalidateQueries({ queryKey: ['documents', user?.tenantId] })
-      invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
-      if (connector.last_sync_error) {
-        showError(connector.last_sync_error)
-      } else {
-        showSuccess(i18n.t('collectionSync.resumeSuccess'))
-      }
+      showSuccess(i18n.t('collectionSync.resumeSuccess'))
     },
     onError: (error: unknown) => {
       showError(getApiErrorMessage(error, i18n.t('collectionSync.resumeFailed')))

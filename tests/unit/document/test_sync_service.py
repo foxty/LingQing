@@ -321,12 +321,9 @@ async def test_resume_connector_sets_active_when_connection_active(sync_service:
     sync_service._sync_repo.get_connector = AsyncMock(return_value=stopped)
     sync_service._connector_to_response = MagicMock(return_value=MagicMock())
 
-    sync_service.sync_connector = AsyncMock(return_value=MagicMock())
-
     await sync_service.resume_connector(collection_id=20, actor=actor)
 
     sync_service._sync_repo.activate_connector.assert_awaited_once_with(stopped)
-    sync_service.sync_connector.assert_awaited_once_with(connector_id=9, actor=actor)
 
 
 @pytest.mark.asyncio

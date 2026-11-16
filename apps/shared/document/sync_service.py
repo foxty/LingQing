@@ -371,20 +371,7 @@ class DocumentSyncService(TenantAwareService):
         await self._sync_repo.activate_connector(connector)
         connector = await self._sync_repo.get_connector(self.tenant_id, connector.id)
         assert connector is not None
-        result = self._connector_to_response(connector)
-        try:
-            await self.sync_connector(connector_id=connector.id, actor=actor)
-        except Exception as exc:
-            logger.warning(
-                "document_sync_resume_followup_failed tenant_id=%s connector_id=%s error=%s",
-                self.tenant_id,
-                connector.id,
-                exc,
-            )
-            connector = await self._sync_repo.get_connector(self.tenant_id, connector.id)
-            assert connector is not None
-            result = self._connector_to_response(connector)
-        return result
+        return self._connector_to_response(connector)
 
     async def sync_connector(
         self,
