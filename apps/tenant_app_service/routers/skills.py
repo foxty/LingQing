@@ -5,6 +5,8 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.audit_event.event_types import TenantAuditEventType
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
 from apps.shared.db.session import get_db
@@ -94,6 +96,16 @@ async def create_skill(
         zip_file=file.file,
         created_by=str(current_user.id),
     )
+    recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
+    await recorder.record(
+        event_type=TenantAuditEventType.SKILL_CREATE.value,
+        outcome=OUTCOME_SUCCESS,
+        actor_user_id=current_user.id,
+        actor_type=ACTOR_TYPE_USER,
+        resource_type="skill",
+        resource_id=skill_info.name,
+        payload={"name": skill_info.name, "scope": skill_type.value},
+    )
 
     return SkillCreateResponse(name=skill_info.name, type=skill_type.value)
 
@@ -108,6 +120,16 @@ async def delete_skill(
 ):
     skill_type = SkillType(type)
     service.delete_skill(current_user.tenant_id, current_user.id, skill_type, name)
+    recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
+    await recorder.record(
+        event_type=TenantAuditEventType.SKILL_DELETE.value,
+        outcome=OUTCOME_SUCCESS,
+        actor_user_id=current_user.id,
+        actor_type=ACTOR_TYPE_USER,
+        resource_type="skill",
+        resource_id=name,
+        payload={"name_snapshot": name, "scope": skill_type.value},
+    )
 
 
 @router.get("/{scope}/{name}/env-vars", response_model=EnvVarListResponse)
@@ -133,7 +155,23 @@ async def toggle_skill_enabled(
     service: SkillService = Depends(_get_skill_service),
 ):
     scope_type = SkillType(scope)
+    before = service.get_skill(current_user.tenant_id, current_user.id, name)
     skill = service.toggle_enabled(current_user.tenant_id, current_user.id, scope_type, name, payload.enabled)
+    recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
+    await recorder.record(
+        event_type=TenantAuditEventType.SKILL_STATUS_UPDATE.value,
+        outcome=OUTCOME_SUCCESS,
+        actor_user_id=current_user.id,
+        actor_type=ACTOR_TYPE_USER,
+        resource_type="skill",
+        resource_id=name,
+        payload={
+            "enabled_before": before.enabled if before else None,
+            "enabled_after": payload.enabled,
+            "scope": scope_type.value,
+            "name": name,
+        },
+    )
     return skill
 
 
@@ -148,4 +186,14 @@ async def update_env_vars(
 ):
     scope_type = SkillType(scope)
     masked = service.update_env_vars(current_user.tenant_id, current_user.id, scope_type, name, payload.env_vars)
+    recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
+    await recorder.record(
+        event_type=TenantAuditEventType.SKILL_ENV_VARS_UPDATE.value,
+        outcome=OUTCOME_SUCCESS,
+        actor_user_id=current_user.id,
+        actor_type=ACTOR_TYPE_USER,
+        resource_type="skill",
+        resource_id=name,
+        payload={"env_var_keys_changed": sorted(payload.env_vars.keys())},
+    )
     return EnvVarListResponse(env_vars=masked)

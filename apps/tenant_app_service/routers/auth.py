@@ -2,7 +2,7 @@
 
 from urllib.parse import quote
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -29,6 +29,7 @@ from apps.tenant_app_service.auth.schemas import (
     ResetPasswordRequest,
     UpdateProfilePreferencesRequest,
 )
+from apps.shared.audit_event.context import AuditRequestContext
 from apps.tenant_app_service.auth.service import AuthService
 from apps.tenant_app_service.sso.dtos import (
     ResolveTenantMethodsRequest,
@@ -60,6 +61,7 @@ def _public_auth_limit(name: str, *, detail: str = _TOO_MANY_REQUESTS):
 async def login(
     credentials: LoginRequest,
     response: Response,
+    request: Request,
     db: AsyncSession = Depends(get_db),
 ):
     """Authenticate user and return JWT token.
@@ -72,7 +74,10 @@ async def login(
         LoginResponse with access token and user info
     """
     auth_service = AuthService(db=db)
-    login_response = await auth_service.authenticate(credentials)
+    login_response = await auth_service.authenticate(
+        credentials,
+        audit_context=AuditRequestContext.from_request(request),
+    )
     set_access_token_cookie(response, login_response.access_token)
     return login_response
 

@@ -56,6 +56,7 @@ export const PERMISSIONS = {
 
   // Audit
   AUDIT_READ: 'audit.read',
+  AUDIT_MANAGE: 'audit.manage',
 
   // Live apps
   APPS_WRITE: 'apps.write',

@@ -7,6 +7,8 @@ from datetime import UTC, datetime, timedelta
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.audit_event.event_types import TenantAuditEventType
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.authz.authz_query_builder import build_unified_resource_filter, evaluate_resource_action
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
@@ -265,6 +267,16 @@ class AgentCatalogService(TenantAwareService):
             )
         )
         logger.info("Created custom agent id=%s tenant=%s", record.id, self.tenant_id)
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        await recorder.record(
+            event_type=TenantAuditEventType.AGENT_CREATE.value,
+            outcome=OUTCOME_SUCCESS,
+            actor_user_id=actor.user_id,
+            actor_type=ACTOR_TYPE_USER,
+            resource_type="agent",
+            resource_id=str(record.id),
+            payload={"name": record.name},
+        )
         return await self._to_response(
             db_agent_to_custom(record), actor=actor, assignable_skills=assignable_skills
         )
@@ -281,6 +293,9 @@ class AgentCatalogService(TenantAwareService):
         record = await self._repo.get_by_id_and_tenant(agent_id, self.tenant_id)
         if record is None:
             raise ResourceNotFoundError(f"Agent {agent_id} not found")
+
+        status_before = record.status
+        changed_fields = set(payload.model_dump(exclude_unset=True).keys())
 
         if payload.name and payload.name.strip() != domain.name:
             existing = await self._repo.get_by_name(self.tenant_id, payload.name.strip())
@@ -305,15 +320,51 @@ class AgentCatalogService(TenantAwareService):
 
         record.updated_at = datetime.now(UTC)
         await self.db_session.flush()
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        if changed_fields == {"status"} and payload.status is not None:
+            await recorder.record(
+                event_type=TenantAuditEventType.AGENT_STATUS_UPDATE.value,
+                outcome=OUTCOME_SUCCESS,
+                actor_user_id=actor.user_id,
+                actor_type=ACTOR_TYPE_USER,
+                resource_type="agent",
+                resource_id=str(agent_id),
+                payload={
+                    "status_before": status_before,
+                    "status_after": record.status,
+                },
+            )
+        else:
+            await recorder.record(
+                event_type=TenantAuditEventType.AGENT_UPDATE.value,
+                outcome=OUTCOME_SUCCESS,
+                actor_user_id=actor.user_id,
+                actor_type=ACTOR_TYPE_USER,
+                resource_type="agent",
+                resource_id=str(agent_id),
+                payload={"change_summary": sorted(changed_fields)},
+            )
         return await self._to_response(
             db_agent_to_custom(record), actor=actor, assignable_skills=assignable_skills
         )
 
     async def delete_agent(self, *, agent_id: int, actor: ActorContext) -> None:
         await self.require_agent_access(agent_id=agent_id, actor=actor, action=ABAC_ACTION_WRITE)
+        record = await self._repo.get_by_id_and_tenant(agent_id, self.tenant_id)
+        name_snapshot = record.name if record else None
         deleted = await self._repo.delete_by_id(agent_id)
         if not deleted:
             raise ResourceNotFoundError(f"Agent {agent_id} not found")
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        await recorder.record(
+            event_type=TenantAuditEventType.AGENT_DELETE.value,
+            outcome=OUTCOME_SUCCESS,
+            actor_user_id=actor.user_id,
+            actor_type=ACTOR_TYPE_USER,
+            resource_type="agent",
+            resource_id=str(agent_id),
+            payload={"name_snapshot": name_snapshot},
+        )
 
     def get_system_agent_template(self) -> AgentResponse:
         return self._system_agent_response(actor=None)

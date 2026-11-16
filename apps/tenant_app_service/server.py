@@ -31,6 +31,7 @@ from apps.tenant_app_service.routers import (
     abac,
     acl_shares,
     admin_system_tasks,
+    audit,
     api_connectors,
     artifact_context,
     auth,
@@ -142,6 +143,7 @@ app.include_router(observability.router)
 app.include_router(reports.router)
 app.include_router(notifications.router)
 app.include_router(admin_system_tasks.router)
+app.include_router(audit.router)
 app.include_router(scheduled_tasks.router)
 app.include_router(chat.router)
 app.include_router(hitl.router)

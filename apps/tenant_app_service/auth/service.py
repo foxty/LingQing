@@ -18,6 +18,9 @@ from apps.tenant_app_service.auth.password_verifier import BcryptPasswordVerifie
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.schemas import LoginRequest, LoginResponse
 from apps.tenant_app_service.auth.token import JwtTokenIssuer
+from apps.shared.audit_event.context import AuditRequestContext
+from apps.shared.audit_event.recorder import TenantAuditRecorder
+from apps.tenant_app_service.audit.record_helpers import record_auth_login_failure, record_auth_login_success
 from apps.tenant_app_service.tenant.repository import TenantRepository
 
 logger = get_logger(__name__)
@@ -42,7 +45,12 @@ class AuthService:
         self.tenant_repo = TenantRepository(db)
         self.token_issuer = token_issuer or JwtTokenIssuer(self.settings)
 
-    async def authenticate(self, credentials: LoginRequest) -> LoginResponse:
+    async def authenticate(
+        self,
+        credentials: LoginRequest,
+        *,
+        audit_context: AuditRequestContext | None = None,
+    ) -> LoginResponse:
         """Authenticate user and return JWT token.
 
         Login format: username@slug (e.g., "admin@demo")
@@ -65,10 +73,23 @@ class AuthService:
         )
 
         logger.info(f"Login attempt: {identity}@{tenant.slug}")
+        recorder = (
+            TenantAuditRecorder(self.db, tenant_id=tenant.id, request_context=audit_context)
+            if audit_context is not None
+            else None
+        )
 
         # Load auth record for status + password checks
         auth_record = await self.user_repo.get_auth_record(identity, tenant.id)
         if not auth_record:
+            if recorder is not None:
+                await record_auth_login_failure(
+                    recorder,
+                    attempted_identifier=credentials.username,
+                    failure_reason="invalid_credentials",
+                    tenant_id=tenant.id,
+                )
+                await self.db.commit()
             raise ValidationError("用户名或密码错误", {"code": "AUTH_INVALID_CREDENTIALS"})
 
         db_user, membership, credential = auth_record
@@ -87,7 +108,18 @@ class AuthService:
 
         auth_domain = db_auth_record_to_domain(db_user, membership, credential)
         verifier = BcryptPasswordVerifier()
-        user = auth_domain.authenticate(credentials.password, verifier)
+        try:
+            user = auth_domain.authenticate(credentials.password, verifier)
+        except AuthenticationError:
+            if recorder is not None:
+                await record_auth_login_failure(
+                    recorder,
+                    attempted_identifier=credentials.username,
+                    failure_reason="invalid_credentials",
+                    tenant_id=tenant.id,
+                )
+                await self.db.commit()
+            raise
 
         # Create JWT token
         access_token = self.token_issuer.issue(
@@ -100,6 +132,8 @@ class AuthService:
 
         # Update last login time
         await self.user_repo.update_last_login(user.id)
+        if recorder is not None:
+            await record_auth_login_success(recorder, user_id=user.id, auth_method="password")
         await self.db.commit()
 
         logger.info(f"User {identity} logged in successfully (tenant: {tenant.name})")

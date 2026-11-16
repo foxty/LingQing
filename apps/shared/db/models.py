@@ -210,14 +210,25 @@ class AuditEvent(Base):
     """Audit events for auth & provisioning changes."""
 
     __tablename__ = "audit_events"
-    __table_args__ = (Index("idx_audit_events_tenant_created", "tenant_id", "created_at"),)
+    __table_args__ = (
+        Index("idx_audit_events_tenant_created", "tenant_id", "created_at"),
+        Index("idx_audit_events_tenant_actor_created", "tenant_id", "actor_user_id", "created_at"),
+        Index("idx_audit_events_tenant_event_type_created", "tenant_id", "event_type", "created_at"),
+    )
 
     id: Mapped[int] = mapped_column(BigInteger, primary_key=True, autoincrement=True)
     tenant_id: Mapped[int] = mapped_column(Integer, ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False)
     actor_user_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True
     )
+    actor_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     event_type: Mapped[str] = mapped_column(String(100), nullable=False)
+    outcome: Mapped[str | None] = mapped_column(String(16), nullable=True)
+    client_ip: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    user_agent: Mapped[str | None] = mapped_column(String(512), nullable=True)
+    request_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    resource_type: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    resource_id: Mapped[str | None] = mapped_column(String(128), nullable=True)
     payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

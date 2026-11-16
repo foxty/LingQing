@@ -7,6 +7,8 @@ from fastapi import UploadFile
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_tenant_documents_path
+from apps.shared.audit_event.event_types import TenantAuditEventType
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import (
     InternalServiceError,
@@ -206,7 +208,7 @@ class DocumentService(TenantAwareService):
 
         file_content = await file.read()
         intake = DocumentIntake(self.tenant_id, self.db_session, self.file_storage)
-        return await intake.persist(
+        domain = await intake.persist(
             IntakeRequest(
                 collection_id=collection_id,
                 filename=file.filename,
@@ -216,6 +218,17 @@ class DocumentService(TenantAwareService):
                 on_duplicate="error",
             )
         )
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        await recorder.record(
+            event_type=TenantAuditEventType.KB_DOCUMENT_CREATE.value,
+            outcome=OUTCOME_SUCCESS,
+            actor_user_id=owner_id,
+            actor_type=ACTOR_TYPE_USER,
+            resource_type="document",
+            resource_id=str(domain.id),
+            payload={"title": domain.filename, "collection_id": collection_id},
+        )
+        return domain
 
     async def queue_document_reparse(self, document_id: int, *, triggered_by: str = "api") -> DocumentDomain:
         parse_pipeline = DocumentParsePipeline(self.tenant_id, self.db_session, self.file_storage)
@@ -440,6 +453,16 @@ class DocumentService(TenantAwareService):
             if delete_success:
                 deleted_count += 1
                 logger.info("Document deleted successfully: %s", document.id)
+                recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+                await recorder.record(
+                    event_type=TenantAuditEventType.KB_DOCUMENT_DELETE.value,
+                    outcome=OUTCOME_SUCCESS,
+                    actor_user_id=requester_id,
+                    actor_type=ACTOR_TYPE_USER,
+                    resource_type="document",
+                    resource_id=str(document.id),
+                    payload={"title_snapshot": document.filename},
+                )
                 await self._delete_document_resource_index(document.id)
             else:
                 raise InternalServiceError(f"Failed to delete document: {document.id}, {document.filename}")

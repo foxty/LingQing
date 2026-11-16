@@ -14,6 +14,8 @@ from sqlalchemy import select
 from sqlalchemy.sql.elements import ColumnElement
 from sqlglot.errors import ParseError
 
+from apps.shared.audit_event.event_types import TenantAuditEventType
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
@@ -451,6 +453,22 @@ class DataSourceService(TenantAwareService):
             raise ResourceNotFoundError(f"Data source {data_source_id} not found")
 
         logger.info(f"Updated data source {data_source_id} for tenant {self.tenant_id}")
+        incoming = update_data.model_dump(exclude_unset=True)
+        credential_fields = [k for k in (incoming.get("config") or {}) if "password" in k.lower() or "token" in k.lower()]
+        recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
+        await recorder.record(
+            event_type=TenantAuditEventType.DATASOURCE_UPDATE.value,
+            outcome=OUTCOME_SUCCESS,
+            actor_user_id=actor.user_id,
+            actor_type=ACTOR_TYPE_USER,
+            resource_type="datasource",
+            resource_id=str(data_source_id),
+            payload={
+                "change_summary": sorted(incoming.keys()),
+                "credentials_changed": bool(credential_fields),
+                "credential_field_names": credential_fields,
+            },
+        )
         return db_data_source_to_public_api_response(updated)
 
     async def delete_data_source_for_actor(
@@ -477,6 +495,16 @@ class DataSourceService(TenantAwareService):
 
         deleted = await self.data_source_repo.delete_by_id_and_tenant(data_source_id, self.tenant_id)
         logger.info(f"Deleted data source {data_source_id} for tenant {self.tenant_id}")
+        recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
+        await recorder.record(
+            event_type=TenantAuditEventType.DATASOURCE_DELETE.value,
+            outcome=OUTCOME_SUCCESS,
+            actor_user_id=actor.user_id,
+            actor_type=ACTOR_TYPE_USER,
+            resource_type="datasource",
+            resource_id=str(data_source_id),
+            payload={"name_snapshot": data_source.name},
+        )
         return deleted
 
     async def query_asset_for_actor(
@@ -621,6 +649,20 @@ class DataSourceService(TenantAwareService):
         )
 
         logger.info(f"Created data source '{data_source.name}' (ID: {data_source.id}) for tenant {self.tenant_id}")
+        recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
+        await recorder.record(
+            event_type=TenantAuditEventType.DATASOURCE_CREATE.value,
+            outcome=OUTCOME_SUCCESS,
+            actor_user_id=owner_id,
+            actor_type=ACTOR_TYPE_USER,
+            resource_type="datasource",
+            resource_id=str(data_source.id),
+            payload={
+                "name": data_source.name,
+                "connector_type": data_source.type,
+                "credentials_present": bool(data_source_data.config),
+            },
+        )
         return db_data_source_to_public_api_response(data_source)
 
     async def query_data_for_actor(

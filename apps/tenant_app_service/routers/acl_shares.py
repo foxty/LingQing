@@ -8,6 +8,8 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.audit_event.event_types import TenantAuditEventType
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.auth import get_current_user
@@ -380,6 +382,17 @@ async def share_resource(
     )
     db.add(grant)
     await db.flush()
+    if resource_type == RESOURCE_TYPE_DOCUMENT_COLLECTION:
+        recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
+        await recorder.record(
+            event_type=TenantAuditEventType.KB_DOCUMENT_ACCESS_POLICY_UPDATE.value,
+            outcome=OUTCOME_SUCCESS,
+            actor_user_id=current_user.id,
+            actor_type=ACTOR_TYPE_USER,
+            resource_type="document_collection",
+            resource_id=str(resource_id),
+            payload={"change_summary": "acl_share_created", "permission": request.permission},
+        )
     await db.commit()
 
     user_stmt = select(User.username).where(User.id == request.user_id)
@@ -510,5 +523,17 @@ async def revoke_resource_share(
     result = await db.execute(stmt)
     if not result.rowcount:
         raise ResourceNotFoundError(f"Share not found for user {user_id}")
+
+    if resource_type == RESOURCE_TYPE_DOCUMENT_COLLECTION:
+        recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
+        await recorder.record(
+            event_type=TenantAuditEventType.KB_DOCUMENT_ACCESS_POLICY_UPDATE.value,
+            outcome=OUTCOME_SUCCESS,
+            actor_user_id=current_user.id,
+            actor_type=ACTOR_TYPE_USER,
+            resource_type="document_collection",
+            resource_id=str(resource_id),
+            payload={"change_summary": "acl_share_revoked", "user_id": user_id},
+        )
 
     await db.commit()
