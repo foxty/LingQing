@@ -83,6 +83,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         tenant_id, user_id = _peek_auth_context(request)
         started = time.perf_counter()
         status_code = 500
+        from apps.shared.audit_event.context import (
+            AuditRequestContext,
+            reset_audit_context,
+            set_current_audit_context,
+        )
+
+        audit_ctx = AuditRequestContext.from_request(request)
+        audit_token = set_current_audit_context(audit_ctx)
 
         try:
             response = await call_next(request)
@@ -90,6 +98,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response.headers[REQUEST_ID_HEADER] = request_id
             return response
         finally:
+            reset_audit_context(audit_token)
             duration_ms = int((time.perf_counter() - started) * 1000)
             log_line = (
                 "HTTP request request_id=%s method=%s path=%s status=%s duration_ms=%s "

@@ -6,7 +6,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.audit_event.context import AuditRequestContext
+from apps.shared.audit_event.context import AuditRequestContext, resolve_audit_request_context
 from apps.shared.audit_event.event_types import RESERVED_EVENT_TYPES
 from apps.shared.audit_event.payload import sanitize_audit_payload
 from apps.shared.audit_event.repository import AuditEventRepository
@@ -30,7 +30,7 @@ class TenantAuditRecorder:
     ):
         self._db = db
         self._tenant_id = tenant_id
-        self._ctx = request_context or AuditRequestContext(client_ip=None, user_agent=None, request_id=None)
+        self._ctx = resolve_audit_request_context(request_context)
         self._repo = AuditEventRepository(db)
 
     async def record(
