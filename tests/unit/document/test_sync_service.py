@@ -66,7 +66,7 @@ async def test_apply_sync_diff_imports_same_filename_different_drive_ids(sync_se
         remote_files=remote,
     )
 
-    assert result == SyncDiffResult(added=2, updated=0, deleted=0, skipped=0)
+    assert result == SyncDiffResult(added=2, updated=0, deleted=0)
     assert sync_service._intake_remote_file.await_count == 2
     external_ids = {
         call.kwargs["external_file_id"]
@@ -89,7 +89,7 @@ async def test_apply_sync_diff_adds_new_files(sync_service: DocumentSyncService)
         remote_files=remote,
     )
 
-    assert result == SyncDiffResult(added=2, updated=0, deleted=0, skipped=0)
+    assert result == SyncDiffResult(added=2, updated=0, deleted=0)
     assert sync_service._sync_repo.create_external_file.await_count == 2
 
 
@@ -102,6 +102,8 @@ async def test_apply_sync_diff_skips_unchanged_files(sync_service: DocumentSyncS
         external_modified_at=modified_at,
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    sync_service._mapping_document_listable = AsyncMock(return_value=True)
+    sync_service._document_is_deleted = AsyncMock(return_value=False)
     drive_client = AsyncMock()
 
     with patch("apps.shared.document.sync_service.DocumentParsePipeline"):
@@ -112,7 +114,7 @@ async def test_apply_sync_diff_skips_unchanged_files(sync_service: DocumentSyncS
             remote_files=[_entry("file-a", modified_at=modified_at)],
         )
 
-    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped=1)
+    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped_unchanged=1)
     drive_client.download_file.assert_not_awaited()
 
 
@@ -134,7 +136,7 @@ async def test_apply_sync_diff_soft_deletes_removed_files(sync_service: Document
         remote_files=[],
     )
 
-    assert result == SyncDiffResult(added=0, updated=0, deleted=1, skipped=0)
+    assert result == SyncDiffResult(added=0, updated=0, deleted=1)
     sync_service._document_repo.soft_delete.assert_awaited_once_with(42, sync_service.tenant_id)
     sync_service._sync_repo.clear_external_file_document.assert_awaited_once_with(mapping)
 
@@ -147,6 +149,8 @@ async def test_apply_sync_diff_updates_modified_files(sync_service: DocumentSync
         external_modified_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    sync_service._mapping_document_listable = AsyncMock(return_value=True)
+    sync_service._document_is_deleted = AsyncMock(return_value=False)
     sync_service._update_existing_document = AsyncMock(return_value=True)
     sync_service._sync_repo.update_external_file = AsyncMock()
 
@@ -157,7 +161,7 @@ async def test_apply_sync_diff_updates_modified_files(sync_service: DocumentSync
         remote_files=[_entry("file-a", modified_at=datetime(2026, 2, 1, tzinfo=UTC))],
     )
 
-    assert result == SyncDiffResult(added=0, updated=1, deleted=0, skipped=0)
+    assert result == SyncDiffResult(added=0, updated=1, deleted=0)
     sync_service._update_existing_document.assert_awaited_once()
 
 
@@ -304,20 +308,61 @@ async def test_get_connector_requires_collection_read(sync_service: DocumentSync
 
 
 @pytest.mark.asyncio
-async def test_delete_connector_requires_connection_owner(sync_service: DocumentSyncService):
+async def test_resume_connector_sets_active_when_connection_active(sync_service: DocumentSyncService):
+    actor = ActorContext(tenant_id=1, user_id=5, user_role="member")
+    stopped = MagicMock(
+        id=9,
+        status="stopped",
+        source_connection=MagicMock(owner_id=5, status="active"),
+    )
+    sync_service._collection_service.require_collection_access = AsyncMock()
+    sync_service._sync_repo.get_connector_by_collection = AsyncMock(return_value=stopped)
+    sync_service._sync_repo.activate_connector = AsyncMock()
+    sync_service._sync_repo.get_connector = AsyncMock(return_value=stopped)
+    sync_service._connector_to_response = MagicMock(return_value=MagicMock())
+
+    sync_service.sync_connector = AsyncMock(return_value=MagicMock())
+
+    await sync_service.resume_connector(collection_id=20, actor=actor)
+
+    sync_service._sync_repo.activate_connector.assert_awaited_once_with(stopped)
+    sync_service.sync_connector.assert_awaited_once_with(connector_id=9, actor=actor)
+
+
+@pytest.mark.asyncio
+async def test_disconnect_connector_requires_connection_owner(sync_service: DocumentSyncService):
     sync_service._collection_service.require_collection_access = AsyncMock()
     sync_service._sync_repo.get_connector_by_collection = AsyncMock(
         return_value=MagicMock(
             source_connection=MagicMock(owner_id=5),
         )
     )
-    sync_service._sync_repo.stop_connector = AsyncMock()
+    sync_service._sync_repo.delete_connector_row = AsyncMock()
 
     with pytest.raises(AuthorizationError):
-        await sync_service.delete_connector(
+        await sync_service.disconnect_connector(
             collection_id=20,
             actor=ActorContext(tenant_id=1, user_id=7, user_role="member"),
         )
+
+
+@pytest.mark.asyncio
+async def test_pause_connector_sets_stopped(sync_service: DocumentSyncService):
+    actor = ActorContext(tenant_id=1, user_id=5, user_role="member")
+    active = MagicMock(
+        id=9,
+        status="active",
+        source_connection=MagicMock(owner_id=5),
+    )
+    sync_service._collection_service.require_collection_access = AsyncMock()
+    sync_service._sync_repo.get_connector_by_collection = AsyncMock(return_value=active)
+    sync_service._sync_repo.stop_connector = AsyncMock()
+    sync_service._sync_repo.get_connector = AsyncMock(return_value=active)
+    sync_service._connector_to_response = MagicMock(return_value=MagicMock())
+
+    await sync_service.pause_connector(collection_id=20, actor=actor)
+
+    sync_service._sync_repo.stop_connector.assert_awaited_once_with(active)
 
 
 @pytest.mark.asyncio
@@ -339,6 +384,76 @@ async def test_sync_connector_requires_connection_owner(sync_service: DocumentSy
 
 
 @pytest.mark.asyncio
+async def test_mapping_document_listable_requires_matching_collection(sync_service: DocumentSyncService):
+    sync_service._document_repo.get_by_id_and_tenant = AsyncMock(
+        return_value=MagicMock(collection_id=99, status="active")
+    )
+    eligible = await sync_service._mapping_document_listable(MagicMock(collection_id=20), 10)
+    assert eligible is False
+
+
+@pytest.mark.asyncio
+async def test_mapping_document_listable_rejects_deleted(sync_service: DocumentSyncService):
+    from apps.shared.document.types import DocumentStatus
+
+    sync_service._document_repo.get_by_id_and_tenant = AsyncMock(
+        return_value=MagicMock(collection_id=20, status=DocumentStatus.DELETED.value)
+    )
+    eligible = await sync_service._mapping_document_listable(MagicMock(collection_id=20), 10)
+    assert eligible is False
+
+
+@pytest.mark.asyncio
+async def test_apply_sync_diff_reattaches_when_revive_fails(sync_service: DocumentSyncService):
+    modified_at = datetime(2026, 1, 1, tzinfo=UTC)
+    mapping = MagicMock(
+        external_file_id="file-a",
+        document_id=42,
+        external_modified_at=modified_at,
+    )
+    sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    sync_service._mapping_document_listable = AsyncMock(return_value=True)
+    sync_service._document_is_deleted = AsyncMock(return_value=True)
+    sync_service._update_existing_document = AsyncMock(return_value=False)
+    sync_service._intake_remote_file = AsyncMock(return_value=MagicMock(id=88))
+    sync_service._sync_repo.update_external_file = AsyncMock()
+
+    result = await sync_service._apply_sync_diff(
+        connector=MagicMock(id=5, collection_id=20),
+        connection=MagicMock(owner_id=7),
+        drive_client=AsyncMock(),
+        remote_files=[_entry("file-a", modified_at=modified_at)],
+    )
+
+    assert result == SyncDiffResult(added=1, updated=0, deleted=0)
+    sync_service._intake_remote_file.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_apply_sync_diff_reattaches_when_mapping_document_missing(sync_service: DocumentSyncService):
+    modified_at = datetime(2026, 1, 1, tzinfo=UTC)
+    mapping = MagicMock(
+        external_file_id="file-a",
+        document_id=42,
+        external_modified_at=modified_at,
+    )
+    sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    sync_service._mapping_document_listable = AsyncMock(return_value=False)
+    sync_service._intake_remote_file = AsyncMock(return_value=MagicMock(id=99))
+    sync_service._sync_repo.update_external_file = AsyncMock()
+
+    result = await sync_service._apply_sync_diff(
+        connector=MagicMock(id=5, collection_id=20),
+        connection=MagicMock(owner_id=7),
+        drive_client=AsyncMock(),
+        remote_files=[_entry("file-a", modified_at=modified_at)],
+    )
+
+    assert result == SyncDiffResult(added=1, updated=0, deleted=0)
+    sync_service._intake_remote_file.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_apply_sync_diff_revives_deleted_file_with_unchanged_timestamp(sync_service: DocumentSyncService):
     modified_at = datetime(2026, 1, 1, tzinfo=UTC)
     mapping = MagicMock(
@@ -347,6 +462,7 @@ async def test_apply_sync_diff_revives_deleted_file_with_unchanged_timestamp(syn
         external_modified_at=modified_at,
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    sync_service._mapping_document_listable = AsyncMock(return_value=True)
     sync_service._document_is_deleted = AsyncMock(return_value=True)
     sync_service._update_existing_document = AsyncMock(return_value=True)
     sync_service._sync_repo.update_external_file = AsyncMock()
@@ -358,7 +474,7 @@ async def test_apply_sync_diff_revives_deleted_file_with_unchanged_timestamp(syn
         remote_files=[_entry("file-a", modified_at=modified_at)],
     )
 
-    assert result == SyncDiffResult(added=0, updated=1, deleted=0, skipped=0)
+    assert result == SyncDiffResult(added=0, updated=1, deleted=0)
     sync_service._update_existing_document.assert_awaited_once()
 
 

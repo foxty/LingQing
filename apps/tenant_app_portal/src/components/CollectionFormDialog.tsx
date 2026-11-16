@@ -12,7 +12,14 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { DocumentCollection } from '@/lib/documentCollectionsApi'
-import { useEffect, useState } from 'react'
+import {
+  buildCollectionFormSchema,
+  DOCUMENT_COLLECTION_DESCRIPTION_MAX_LENGTH,
+  DOCUMENT_COLLECTION_NAME_MAX_LENGTH,
+} from '@/lib/collectionFormSchema'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { useEffect, useMemo } from 'react'
+import { useForm } from 'react-hook-form'
 import { useTranslation } from 'react-i18next'
 
 i18n.addResourceBundle('en', 'translation', {
@@ -27,6 +34,9 @@ i18n.addResourceBundle('en', 'translation', {
       description: 'Description',
       descriptionPlaceholder: 'Optional description',
       nameRequired: 'Collection name is required',
+      nameTooLong: 'Name must be at most {{max}} characters',
+      descriptionTooLong: 'Description must be at most {{max}} characters',
+      charCount: '{{count}} / {{max}}',
       cancel: 'Cancel',
       create: 'Create',
       save: 'Save',
@@ -46,6 +56,9 @@ i18n.addResourceBundle('zh', 'translation', {
       description: '描述',
       descriptionPlaceholder: '可选描述',
       nameRequired: '请输入集合名称',
+      nameTooLong: '名称最多 {{max}} 个字符',
+      descriptionTooLong: '描述最多 {{max}} 个字符',
+      charCount: '{{count}} / {{max}}',
       cancel: '取消',
       create: '创建',
       save: '保存',
@@ -76,39 +89,53 @@ export default function CollectionFormDialog({
   onSubmit,
 }: CollectionFormDialogProps) {
   const { t } = useTranslation()
-  const [name, setName] = useState('')
-  const [description, setDescription] = useState('')
-  const [nameError, setNameError] = useState<string | null>(null)
+
+  const schema = useMemo(
+    () =>
+      buildCollectionFormSchema({
+        nameRequired: t('components.collectionFormDialog.nameRequired'),
+        nameTooLong: t('components.collectionFormDialog.nameTooLong', {
+          max: DOCUMENT_COLLECTION_NAME_MAX_LENGTH,
+        }),
+        descriptionTooLong: t('components.collectionFormDialog.descriptionTooLong', {
+          max: DOCUMENT_COLLECTION_DESCRIPTION_MAX_LENGTH,
+        }),
+      }),
+    [t]
+  )
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    watch,
+    formState: { errors },
+  } = useForm<CollectionFormValues>({
+    resolver: zodResolver(schema),
+    defaultValues: { name: '', description: '' },
+  })
+
+  const nameValue = watch('name') ?? ''
+  const descriptionValue = watch('description') ?? ''
 
   useEffect(() => {
     if (!open) return
     if (mode === 'edit' && collection) {
-      setName(collection.name)
-      setDescription(collection.description ?? '')
+      reset({
+        name: collection.name,
+        description: collection.description ?? '',
+      })
     } else {
-      setName('')
-      setDescription('')
+      reset({ name: '', description: '' })
     }
-    setNameError(null)
-  }, [open, mode, collection])
-
-  const handleSubmit = async (event: React.FormEvent) => {
-    event.preventDefault()
-    const trimmedName = name.trim()
-    if (!trimmedName) {
-      setNameError(t('components.collectionFormDialog.nameRequired'))
-      return
-    }
-    setNameError(null)
-    await onSubmit({ name: trimmedName, description: description.trim() })
-  }
+  }, [open, mode, collection, reset])
 
   const isCreate = mode === 'create'
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit((values) => onSubmit(values))}>
           <DialogHeader>
             <DialogTitle>
               {isCreate
@@ -127,12 +154,20 @@ export default function CollectionFormDialog({
               <Label htmlFor="collection-name">{t('components.collectionFormDialog.name')}</Label>
               <Input
                 id="collection-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
+                {...register('name')}
                 placeholder={t('components.collectionFormDialog.namePlaceholder')}
+                maxLength={DOCUMENT_COLLECTION_NAME_MAX_LENGTH}
                 autoFocus
               />
-              {nameError && <p className="text-sm text-destructive">{nameError}</p>}
+              <p className="text-xs text-muted-foreground text-right tabular-nums">
+                {t('components.collectionFormDialog.charCount', {
+                  count: nameValue.length,
+                  max: DOCUMENT_COLLECTION_NAME_MAX_LENGTH,
+                })}
+              </p>
+              {errors.name?.message && (
+                <p className="text-sm text-destructive">{errors.name.message}</p>
+              )}
             </div>
             <div className="space-y-2">
               <Label htmlFor="collection-description">
@@ -140,11 +175,20 @@ export default function CollectionFormDialog({
               </Label>
               <Textarea
                 id="collection-description"
-                value={description}
-                onChange={(e) => setDescription(e.target.value)}
+                {...register('description')}
                 placeholder={t('components.collectionFormDialog.descriptionPlaceholder')}
+                maxLength={DOCUMENT_COLLECTION_DESCRIPTION_MAX_LENGTH}
                 rows={3}
               />
+              <p className="text-xs text-muted-foreground text-right tabular-nums">
+                {t('components.collectionFormDialog.charCount', {
+                  count: descriptionValue.length,
+                  max: DOCUMENT_COLLECTION_DESCRIPTION_MAX_LENGTH,
+                })}
+              </p>
+              {errors.description?.message && (
+                <p className="text-sm text-destructive">{errors.description.message}</p>
+              )}
             </div>
           </div>
 

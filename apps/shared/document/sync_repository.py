@@ -15,7 +15,13 @@ from apps.shared.db.models import (
     DocumentSourceOAuthState,
     DocumentSyncConnector,
 )
-from apps.shared.document.sync_types import SENSITIVE_CONNECTION_CREDENTIAL_FIELDS
+from apps.shared.document.sync_types import (
+    CONNECTOR_ACTIVE,
+    CONNECTOR_STOPPED,
+    SENSITIVE_CONNECTION_CREDENTIAL_FIELDS,
+    SOURCE_CONNECTION_ACTIVE,
+    SOURCE_CONNECTION_REVOKED,
+)
 from apps.shared.utils.field_cipher import FieldCipher
 
 _SOURCE_CONNECTION_LOAD = (
@@ -174,7 +180,7 @@ class DocumentSyncRepository:
         return row
 
     async def revoke_connection(self, connection: DocumentSourceConnection) -> DocumentSourceConnection:
-        connection.status = "revoked"
+        connection.status = SOURCE_CONNECTION_REVOKED
         connection.oauth_credentials_enc = {}
         await self.db.flush()
         await self.db.refresh(connection)
@@ -183,7 +189,7 @@ class DocumentSyncRepository:
     async def revoke_connections_for_owner(self, tenant_id: int, owner_id: int) -> None:
         connections = await self.list_connections(tenant_id, owner_id=owner_id)
         for connection in connections:
-            if connection.status == "revoked":
+            if connection.status == SOURCE_CONNECTION_REVOKED:
                 continue
             await self.stop_connectors_for_connection(tenant_id, connection.id)
             await self.revoke_connection(connection)
@@ -286,7 +292,7 @@ class DocumentSyncRepository:
             source_folder_id=source_folder_id,
             source_folder_name=source_folder_name,
             include_subfolders=include_subfolders,
-            status="active",
+            status=CONNECTOR_ACTIVE,
         )
         self.db.add(row)
         await self.db.flush()
@@ -294,15 +300,25 @@ class DocumentSyncRepository:
         return row
 
     async def stop_connector(self, connector: DocumentSyncConnector) -> DocumentSyncConnector:
-        connector.status = "stopped"
+        connector.status = CONNECTOR_STOPPED
         await self.db.flush()
         await self.db.refresh(connector)
         return connector
 
+    async def activate_connector(self, connector: DocumentSyncConnector) -> DocumentSyncConnector:
+        connector.status = CONNECTOR_ACTIVE
+        await self.db.flush()
+        await self.db.refresh(connector)
+        return connector
+
+    async def delete_connector_row(self, connector: DocumentSyncConnector) -> None:
+        await self.db.delete(connector)
+        await self.db.flush()
+
     async def list_active_connectors(self, tenant_id: int | None = None) -> list[DocumentSyncConnector]:
         stmt = (
             select(DocumentSyncConnector)
-            .where(DocumentSyncConnector.status == "active")
+            .where(DocumentSyncConnector.status == CONNECTOR_ACTIVE)
             .options(
                 selectinload(DocumentSyncConnector.source_connection).selectinload(
                     DocumentSourceConnection.source_provider
@@ -336,7 +352,7 @@ class DocumentSyncRepository:
             )
         )
         for connector in result.scalars().all():
-            connector.status = "stopped"
+            connector.status = CONNECTOR_STOPPED
         await self.db.flush()
 
     # ---------- External file mappings ----------

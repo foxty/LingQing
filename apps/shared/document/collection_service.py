@@ -219,8 +219,10 @@ class DocumentCollectionService(TenantAwareService):
                     can_manage=can_manage,
                     has_drive_sync=connector is not None,
                     sync_folder_name=connector.source_folder_name if connector else None,
+                    sync_folder_id=connector.source_folder_id if connector else None,
                     sync_status=connector.status if connector else None,
                     last_synced_at=connector.last_synced_at.isoformat() if connector and connector.last_synced_at else None,
+                    last_sync_error=connector.last_sync_error if connector else None,
                 ),
             )
         return responses
@@ -273,8 +275,10 @@ class DocumentCollectionService(TenantAwareService):
             can_manage=can_manage,
             has_drive_sync=connector is not None,
             sync_folder_name=connector.source_folder_name if connector else None,
+            sync_folder_id=connector.source_folder_id if connector else None,
             sync_status=connector.status if connector else None,
             last_synced_at=connector.last_synced_at.isoformat() if connector and connector.last_synced_at else None,
+            last_sync_error=connector.last_sync_error if connector else None,
         )
 
     async def create_collection(

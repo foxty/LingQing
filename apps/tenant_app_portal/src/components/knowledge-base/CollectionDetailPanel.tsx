@@ -1,6 +1,5 @@
 import { DocumentTable } from '@/components/DocumentTable'
 import EmptyState from '@/components/EmptyState'
-import CollectionSyncPanel from '@/components/knowledge-base/CollectionSyncPanel'
 import ListDetailToolbar, { type ListDetailOverflowItem } from '@/components/ListDetailToolbar'
 import { Button } from '@/components/ui/button'
 import { UploadProgressNotifications } from '@/components/UploadProgressNotifications'
@@ -8,8 +7,6 @@ import { ACCEPT_FILE_TYPES } from '@/constants/documents'
 import type { CollectionDocumentsData } from '@/hooks/useCollectionDocumentsPage'
 import type { UploadProgress } from '@/hooks/useFileUpload'
 import type { DocumentCollection } from '@/lib/documentCollectionsApi'
-import { useAuth } from '@/hooks/useAuth'
-import { actionRules } from '@/lib/permissionRules'
 import { Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 
@@ -22,7 +19,6 @@ interface CollectionDetailPanelProps {
   selectedIds: Set<number>
   canUpload: boolean
   canDelete: boolean
-  canManageCollectionSync: boolean
   uploading: boolean
   onUpload: () => void
   onBatchDelete: () => void
@@ -44,7 +40,6 @@ export default function CollectionDetailPanel({
   selectedIds,
   canUpload,
   canDelete,
-  canManageCollectionSync,
   uploading,
   uploadProgress,
   onUpload,
@@ -57,8 +52,6 @@ export default function CollectionDetailPanel({
   onFileUpload,
 }: CollectionDetailPanelProps) {
   const { t } = useTranslation()
-  const { hasAny } = useAuth()
-  const canReadDocuments = hasAny(actionRules.canReadDocuments())
 
   const showEmptyCollection =
     !isLoading &&
@@ -68,14 +61,6 @@ export default function CollectionDetailPanel({
 
   return (
     <div className="space-y-4 min-w-0">
-      {canReadDocuments ? (
-        <CollectionSyncPanel
-          collectionId={collection.id}
-          documentCount={collection.document_count}
-          canManageCollection={canManageCollectionSync}
-        />
-      ) : null}
-
       <input
         id="file-upload"
         type="file"

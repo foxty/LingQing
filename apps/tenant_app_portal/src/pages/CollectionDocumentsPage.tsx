@@ -1,6 +1,10 @@
 import ContainerDetailHeader from '@/components/ContainerDetailHeader'
+import TruncatedTextPopover from '@/components/TruncatedTextPopover'
 import EmptyState from '@/components/EmptyState'
 import CollectionDetailPanel from '@/components/knowledge-base/CollectionDetailPanel'
+import CollectionDriveSyncPopover from '@/components/knowledge-base/CollectionDriveSyncPopover'
+import { useAuth } from '@/hooks/useAuth'
+import { actionRules } from '@/lib/permissionRules'
 import DocumentBatchDeleteDialog from '@/components/knowledge-base/DocumentBatchDeleteDialog'
 import { Button } from '@/components/ui/button'
 import { useCollectionDocumentsPage } from '@/hooks/useCollectionDocumentsPage'
@@ -31,6 +35,8 @@ export default function CollectionDocumentsPage() {
   const { t } = useTranslation()
   const navigate = useNavigate()
   const page = useCollectionDocumentsPage()
+  const { hasAny } = useAuth()
+  const canReadDocuments = hasAny(actionRules.canReadDocuments())
 
   if (!page.collectionsLoading && page.collectionId != null && !page.collection) {
     return (
@@ -50,6 +56,7 @@ export default function CollectionDocumentsPage() {
   if (!collection) {
     return <p className="text-center text-sm text-muted-foreground py-8">{t('common.loading')}</p>
   }
+
 
   const overflowItems = [
     {
@@ -72,9 +79,22 @@ export default function CollectionDocumentsPage() {
         parentLabel={t('knowledgeBase.title')}
         onParentNavigate={() => navigate('/knowledge')}
         title={collection.name}
+        titleAddon={
+          canReadDocuments ? (
+            <CollectionDriveSyncPopover
+              collectionId={collection.id}
+              documentCount={collection.document_count}
+              canManageCollection={page.canManageCollectionSync}
+            />
+          ) : null
+        }
         meta={
-          <div className="space-y-0.5">
-            {collection.description ? <p>{collection.description}</p> : null}
+          <div className="space-y-1.5">
+            <TruncatedTextPopover
+              text={collection.description}
+              maxChars={72}
+              className="text-muted-foreground block w-full max-w-3xl truncate"
+            />
             {collection.owner_name ? (
               <p>{t('knowledgeBase.ownerLabel', { name: collection.owner_name })}</p>
             ) : null}
@@ -91,7 +111,6 @@ export default function CollectionDocumentsPage() {
         selectedIds={page.selectedIds}
         canUpload={page.canUpload}
         canDelete={page.canDelete}
-        canManageCollectionSync={page.canManageCollectionSync}
         uploading={page.uploading}
         uploadProgress={page.uploadProgress}
         onUpload={page.triggerUpload}

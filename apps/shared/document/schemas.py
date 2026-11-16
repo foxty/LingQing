@@ -2,6 +2,10 @@
 
 from pydantic import BaseModel, Field
 
+from apps.shared.document.constants import (
+    DOCUMENT_COLLECTION_DESCRIPTION_MAX_LENGTH,
+    DOCUMENT_COLLECTION_NAME_MAX_LENGTH,
+)
 from apps.shared.document.types import BlockType, DocumentStatus, IntakeSource
 from apps.shared.schemas.pagination import PaginatedResponse
 
@@ -82,13 +86,16 @@ class DocumentSearchResult(BaseModel):
 
 
 class DocumentCollectionCreate(BaseModel):
-    name: str = Field(..., min_length=1, max_length=200)
-    description: str | None = Field(default=None, max_length=2000)
+    name: str = Field(..., min_length=1, max_length=DOCUMENT_COLLECTION_NAME_MAX_LENGTH)
+    description: str | None = Field(default=None, max_length=DOCUMENT_COLLECTION_DESCRIPTION_MAX_LENGTH)
 
 
 class DocumentCollectionUpdate(BaseModel):
-    name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = Field(default=None, max_length=2000)
+    name: str | None = Field(default=None, min_length=1, max_length=DOCUMENT_COLLECTION_NAME_MAX_LENGTH)
+    description: str | None = Field(
+        default=None,
+        max_length=DOCUMENT_COLLECTION_DESCRIPTION_MAX_LENGTH,
+    )
 
 
 class DocumentCollectionResponse(BaseModel):
@@ -103,8 +110,10 @@ class DocumentCollectionResponse(BaseModel):
     can_manage: bool = False
     has_drive_sync: bool = False
     sync_folder_name: str | None = None
+    sync_folder_id: str | None = None
     sync_status: str | None = None
     last_synced_at: str | None = None
+    last_sync_error: str | None = None
     created_at: str
     updated_at: str
 

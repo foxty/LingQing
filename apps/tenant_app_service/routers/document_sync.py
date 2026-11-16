@@ -146,16 +146,52 @@ async def get_sync_connector(
     return await service.get_connector(collection_id=collection_id, actor=_actor_from_user(current_user))
 
 
-@router.delete("/document-collections/{collection_id}/sync-connector", status_code=status.HTTP_204_NO_CONTENT)
+@router.post(
+    "/document-collections/{collection_id}/sync-connector/pause",
+    response_model=SyncConnectorResponse,
+)
 @transaction
-async def delete_sync_connector(
+async def pause_sync_connector(
     collection_id: int,
-    current_user: UserDTO = Depends(require_permission(Permissions.DOCUMENTS_READ)),
+    current_user: UserDTO = Depends(require_permission(Permissions.DOCUMENTS_WRITE)),
     db: AsyncSession = Depends(get_db),
     file_storage: FileStorage = Depends(get_file_storage_dependency),
 ):
     service = _create_service(db, current_user.tenant_id, file_storage)
-    await service.delete_connector(collection_id=collection_id, actor=_actor_from_user(current_user))
+    return await service.pause_connector(
+        collection_id=collection_id,
+        actor=_actor_from_user(current_user),
+    )
+
+
+@router.post(
+    "/document-collections/{collection_id}/sync-connector/resume",
+    response_model=SyncConnectorResponse,
+)
+@transaction
+async def resume_sync_connector(
+    collection_id: int,
+    current_user: UserDTO = Depends(require_permission(Permissions.DOCUMENTS_WRITE)),
+    db: AsyncSession = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage_dependency),
+):
+    service = _create_service(db, current_user.tenant_id, file_storage)
+    return await service.resume_connector(
+        collection_id=collection_id,
+        actor=_actor_from_user(current_user),
+    )
+
+
+@router.delete("/document-collections/{collection_id}/sync-connector", status_code=status.HTTP_204_NO_CONTENT)
+@transaction
+async def disconnect_sync_folder(
+    collection_id: int,
+    current_user: UserDTO = Depends(require_permission(Permissions.DOCUMENTS_WRITE)),
+    db: AsyncSession = Depends(get_db),
+    file_storage: FileStorage = Depends(get_file_storage_dependency),
+):
+    service = _create_service(db, current_user.tenant_id, file_storage)
+    await service.disconnect_connector(collection_id=collection_id, actor=_actor_from_user(current_user))
 
 
 @router.post("/document-sync/connectors/{connector_id}/sync", response_model=SyncConnectorResultResponse)

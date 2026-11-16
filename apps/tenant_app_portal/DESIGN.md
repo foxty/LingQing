@@ -16,7 +16,7 @@ Agent **contract**: classify the job → pick layout surface → pick feedback c
 3. **One shell** (§3). Embed/unauthenticated = no chrome.
 4. **One layout surface** (§4). Detail views: one modifier (`prose` | `metrics`).
 5. **Feedback** (§5): one channel per event.
-6. **Compose** (§6). No one-off control language.
+6. **Compose** (§6; controls detail in §6.1). No one-off control language.
 7. **Lint** (§8) pass/fail.
 
 Do not copy screenshot-specific fixes.
@@ -212,7 +212,7 @@ API errors: **`getApiErrorMessage` only** — no ad-hoc `response.data.detail`. 
 
 | Component | When | How |
 |---|---|---|
-| `Button` | §4 CTAs | One `default`/view; `destructive` = confirm modal only |
+| `Button` | §4 CTAs; compact rows §6.1 | One `default` per view/surface; pre-confirm destructive = outline (§6.1) |
 | `Input` / `Select` / `Textarea` / `Checkbox` | forms | label + control + help; invalid = `errorMsg` or rhf message |
 | `useNotification` | §5 transient | success/error/info/warning; + `getApiErrorMessage` before error toast |
 | `Alert` | §5 persistent | `destructive` errors; neutral inline success (e.g. test ok) |
@@ -224,9 +224,68 @@ API errors: **`getApiErrorMessage` only** — no ad-hoc `response.data.detail`. 
 | `ListIndexToolbar` / `ListDetailToolbar` | §4 Table layouts | shared toolbar components |
 | `ContainerDetailHeader` | list detail | identity only |
 | `ContainerRowActions` | list index rows | Share/Tags/Edit/Delete |
-| `Badge` / `Switch` / `Tabs` / `Dropdown` | status, peers, overflow | neutral badges; destructive in menu → confirm |
+| `Badge` | tags, counts, soft labels | Neutral `secondary` / `outline` — not row/sync **status** (use `StatusChip`) |
+| `StatusChip` | §6.1 operational status | Locked sizes + variant map; state logic in `lib/*` (e.g. `driveSyncDisplay`) |
+| `Switch` / `Tabs` / `Dropdown` | toggles, peers, overflow | Settings table status = `Switch` (§4); destructive ops in menu → `ConfirmationDialog` |
+| `uiControlPatterns` | §6.1 class recipes | Tailwind strings in `src/lib/uiControlPatterns.ts` — mirror this doc |
 
-**Button fills:** primary = accent fill; outline/secondary = surface+border; ghost = quiet wash; destructive = danger fill confirm-only; link = underline. Hover: OKLch L ±0.08; never fade text to muted on hover.
+**Button variants:** full matrix in §6.1. Shorthand: `default` = accent; `outline`/`secondary` = bordered; `ghost` = quiet (overflow, chip triggers); `destructive` **fill** only as confirm-dialog primary; link = underline. Hover: OKLch L ±0.08; never fade label to muted on hover.
+
+### §6.1 Controls — buttons, icon buttons, status chips (locked)
+
+**Code mirror:** `src/lib/uiControlPatterns.ts` (class recipes), `src/components/StatusChip.tsx` (chips). Reference surface: Drive sync (`drive-sync/*`, `CollectionDriveSyncListCell`, `driveSyncDisplay.ts`).
+
+#### Text buttons
+
+| Role | `Button` variant | When |
+|---|---|---|
+| Primary action | `default` | One main CTA per compact surface (popover footer, form, toolbar right) |
+| Secondary | `outline` | Peer ops on same row (Pause, Refresh outline) |
+| Quiet / overflow | `ghost` | Table row ⋮, popover **chip trigger** (wraps a chip, not a verb CTA) |
+| Irreversible (pre-confirm) | `outline` + `buttonDestructiveOutlineClass` | Opens `ConfirmationDialog` — **never** `variant="destructive"` on the control |
+| Irreversible (confirmed) | `destructive` | Only **inside** confirm dialog primary |
+
+**Compact action row** (popovers, narrow panels): `grid` not loose `flex-wrap` — avoids a lone destructive link on line 2.
+
+| Layout | Grid | Buttons |
+|---|---|---|
+| Three peers | `grid-cols-3 gap-1.5` | primary · outline · outline destructive |
+| Two peers | `grid-cols-2 gap-1.5` | primary · outline destructive (or two secondaries) |
+
+Compact labels: `size="sm"` + `buttonCompactActionClass` (`h-8 text-xs`); icon `h-3.5 w-3.5 shrink-0`; label `truncate`.
+
+#### Icon buttons
+
+| Tier | Classes | Icon | Use |
+|---|---|---|---|
+| Dense | `ghost` + `size="icon"` + `iconButtonDenseClass` | `h-3.5 w-3.5` | Beside a chip (info popover); ≥44px hit target via padding parent if needed |
+| Row | `ghost` + `size="sm"` + `iconButtonRowClass` | `h-4 w-4` | Table row actions, pagination |
+| Default | `size="icon"` (h-10) | `h-4 w-4` | Toolbars when not compact |
+
+Always `type="button"`, `aria-label` from i18n, Lucide `currentColor`. Error emphasis on the **icon** (`text-destructive`) only when the control is not itself destructive-filled.
+
+#### Status chips (`StatusChip` / `Badge`)
+
+Read-only state — not clickable except when wrapped by an explicit trigger (header chip → `Button` + `popoverChipTriggerClass`).
+
+| Semantic | `Badge` variant | Meaning |
+|---|---|---|
+| Healthy / on | `default` | Active sync, success path (product accent — counts toward §8 #1) |
+| Paused / neutral | `secondary` | Stopped, not connected yet |
+| Error / revoked | `destructive` | Sync error, account disconnected |
+
+| Size | Class constant | Height / type |
+|---|---|---|
+| Table cell | `statusChipTableClass` | `h-5`, `text-[11px]`, optional `truncate` on label |
+| Header trigger | `statusChipHeaderClass` | `h-6`, pairs with Cloud icon `h-3 w-3` |
+
+Chips: `font-normal`, `border-transparent`, `shadow-none`. **Do not** use filled destructive buttons for status; use chips or inline text.
+
+**Loading chip:** muted text + spinner — not a `Badge`.
+
+**Other status UIs:** document parse pipeline uses `PipelineStatusBadge` (dot + semantic wash). Do not reuse its palette for sync/`StatusChip`; when refactoring pipeline UI, either adopt `StatusChip` or document a second map in this section.
+
+**Control lint:** §8 #18–20 (single checklist — not duplicated here).
 
 ---
 
@@ -255,6 +314,9 @@ All user-visible strings via `i18n` (`en` + `zh`). Catalog summaries in UI local
 15. Settings: `SettingsPageShell` + `SettingsSection`; no loose `text-2xl` titles or page-level `ListIndexToolbar`.
 16. One feedback channel per event; `getApiErrorMessage`; toasts via `useNotification` only.
 17. Field validation and connection tests inline — not toast-only.
+18. Pre-confirm irreversible actions: `outline` + `buttonDestructiveOutlineClass` (§6.1) — no `destructive` fill on the triggering control; no popover/table solid destructive without confirm on that path (see also #3).
+19. Compact action rows (§6.1): `grid` layouts — no `flex-wrap` orphan ghost/red disconnect links.
+20. Operational status in lists/headers: `StatusChip` + §6.1 variant map — not ad-hoc `Badge` colors or one-off `text-[11px]` pills.
 
 ---
 
