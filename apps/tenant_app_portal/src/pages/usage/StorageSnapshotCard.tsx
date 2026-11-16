@@ -4,7 +4,7 @@ import { useMemo } from 'react'
 import ReactECharts from 'echarts-for-react'
 import type { EChartsOption } from 'echarts'
 import SettingsSection from '@/components/SettingsSection'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 
 i18n.addResourceBundle('en', 'translation', {
   settings: {
@@ -61,6 +61,7 @@ export default function StorageSnapshotCard({
   updatedAt,
 }: StorageSnapshotCardProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const pieOption = useMemo<EChartsOption | null>(() => {
     const documentStorageBytes = totalStorageBytes
     const databaseStorageBytes = null
@@ -119,7 +120,7 @@ export default function StorageSnapshotCard({
   return (
     <SettingsSection
       title={t('settings.usageTab.storageSnapshot')}
-      description={`${t('settings.usageTab.storageDesc')}${updatedAt ? t('settings.usageTab.updatedAt', { date: formatDate(updatedAt) }) : ''}`}
+      description={`${t('settings.usageTab.storageDesc')}${updatedAt ? t('settings.usageTab.updatedAt', { date: formatUserDateTime(updatedAt) }) : ''}`}
     >
       <div className="space-y-3 text-sm">
         {pieOption ? (

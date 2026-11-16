@@ -16,6 +16,7 @@ from apps.shared.auth.membership_access import (
 )
 from apps.shared.core.exceptions import ValidationError
 from apps.shared.domain.base_domain_model import BaseDomainModel
+from apps.tenant_app_service.auth.user_display_preferences import normalize_datetime_format
 
 
 class UserRole(enum.StrEnum):
@@ -44,6 +45,7 @@ class UserPreferences(BaseDomainModel):
     """Typed user preference payload."""
 
     timezone_iana: str | None = None
+    datetime_format: str | None = None
 
     @classmethod
     def from_raw(cls, raw: object) -> UserPreferences:
@@ -52,7 +54,8 @@ class UserPreferences(BaseDomainModel):
         timezone = raw.get("timezone_iana")
         if not isinstance(timezone, str):
             timezone = None
-        return cls(timezone_iana=timezone)
+        datetime_format = normalize_datetime_format(raw.get("datetime_format"))
+        return cls(timezone_iana=timezone, datetime_format=datetime_format)
 
 
 @dataclass

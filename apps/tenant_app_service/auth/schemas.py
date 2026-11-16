@@ -9,6 +9,7 @@ from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 from pydantic import BaseModel, Field, field_validator
 
 from apps.shared.schemas.user import UserDTO
+from apps.tenant_app_service.auth.user_display_preferences import ALLOWED_DATETIME_FORMATS
 
 
 class LoginRequest(BaseModel):
@@ -37,6 +38,7 @@ class ProfilePreferences(BaseModel):
     """Supported user preferences."""
 
     timezone_iana: str | None = None
+    datetime_format: str | None = None
 
 
 class ProfileResponse(BaseModel):
@@ -60,6 +62,7 @@ class UpdateProfilePreferencesRequest(BaseModel):
     """Profile preference update payload."""
 
     timezone_iana: str | None = None
+    datetime_format: str | None = None
 
     @field_validator("timezone_iana")
     @classmethod
@@ -73,6 +76,18 @@ class UpdateProfilePreferencesRequest(BaseModel):
             ZoneInfo(candidate)
         except ZoneInfoNotFoundError as exc:
             raise ValueError("timezone must be a valid IANA timezone") from exc
+        return candidate
+
+    @field_validator("datetime_format")
+    @classmethod
+    def validate_datetime_format(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        candidate = value.strip()
+        if not candidate:
+            raise ValueError("datetime_format cannot be empty")
+        if candidate not in ALLOWED_DATETIME_FORMATS:
+            raise ValueError("datetime_format is not supported")
         return candidate
 
 

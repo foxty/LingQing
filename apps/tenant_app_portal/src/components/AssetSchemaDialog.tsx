@@ -27,7 +27,7 @@ import {
 } from '@/lib/dataSourceApi'
 import { useEffect, useMemo, useState } from 'react'
 import { useNotification } from '@/hooks/useNotification'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 
 i18n.addResourceBundle('en', 'translation', {
   components: {
@@ -102,6 +102,7 @@ export default function AssetSchemaDialog({
   readOnly = false,
 }: AssetSchemaDialogProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const columns = asset.columns || []
   const sourceInfo = asset.source_info || {}
   const { showSuccess, showError } = useNotification()
@@ -234,7 +235,7 @@ export default function AssetSchemaDialog({
             </div>
             <div>
               <p className="text-xs text-muted-foreground mb-1">{t('components.assetSchemaDialog.createdAt')}</p>
-              <p className="text-sm font-medium">{formatDate(asset.created_at)}</p>
+              <p className="text-sm font-medium">{formatUserDateTime(asset.created_at)}</p>
             </div>
           </div>
 

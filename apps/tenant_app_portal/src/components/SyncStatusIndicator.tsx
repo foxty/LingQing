@@ -25,7 +25,7 @@ i18n.addResourceBundle('zh', 'translation', {
     },
   },
 }, true, true)
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 
 interface SyncStatusIndicatorProps {
   syncedAt?: string | null
@@ -41,6 +41,7 @@ export default function SyncStatusIndicator({
   unsyncedText,
 }: SyncStatusIndicatorProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const resolvedTitle = title ?? t('components.syncStatusIndicator.title')
   const resolvedUnsyncedText = unsyncedText ?? t('components.syncStatusIndicator.unsynced')
   const hasSynced = Boolean(syncedAt)
@@ -95,7 +96,7 @@ export default function SyncStatusIndicator({
             <div className="flex-1 min-w-0">
               {hasSynced && (
                 <div className="text-xs text-muted-foreground">
-                  {formatDate(syncedAt || undefined)}
+                  {formatUserDateTime(syncedAt || undefined)}
                 </div>
               )}
               {hasError && <div className="text-xs text-destructive break-words">{error}</div>}

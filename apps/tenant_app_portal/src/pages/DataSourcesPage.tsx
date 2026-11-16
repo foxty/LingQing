@@ -38,7 +38,7 @@ import { useResourceListTags } from '@/hooks/useResourceListTags'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
 import type { DataSource } from '@/lib/dataSourceApi'
 import { listAssets } from '@/lib/dataSourceApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { actionRules } from '@/lib/permissionRules'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import { Database, RefreshCw } from 'lucide-react'
@@ -117,6 +117,7 @@ const DATA_SOURCE_PAGE_SIZE = 10
 
 export default function DataSourcesPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const navigate = useNavigate()
   const { loading: authLoading, hasAny } = useAuth()
   const { dataSources, loading, page, total, totalPages, fetchDataSources, removeDataSource } =
@@ -340,7 +341,9 @@ export default function DataSourcesPage() {
                         <TruncatedTextPopover text={dataSource.description} emptyFallback="-" />
                       </TableCell>
                       <TableCell className="py-2.5 text-sm text-muted-foreground">
-                        {formatDate(dataSource.created_at)}
+                        <span className="tabular-nums">
+                          {formatUserDateTime(dataSource.created_at)}
+                        </span>
                       </TableCell>
                       <TableCell className="py-2.5 text-right">
                         <ContainerRowActions

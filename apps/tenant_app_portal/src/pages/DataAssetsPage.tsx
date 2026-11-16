@@ -31,7 +31,7 @@ import { actionRules } from '@/lib/permissionRules'
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { useAssets } from '@/hooks/useDataSources'
 import { useNotification } from '@/hooks/useNotification'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import {
   getDataSource,
   resolveAssetDescription,
@@ -171,6 +171,7 @@ i18n.addResourceBundle('zh', 'translation', {
 
 export default function DataAssetsPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { dataSourceId } = useParams<{ dataSourceId: string }>()
   const navigate = useNavigate()
   const { loading: authLoading, hasAny } = useAuth()
@@ -591,7 +592,7 @@ export default function DataAssetsPage() {
                       {asset.owner_name || '-'}
                     </TableCell>
                     <TableCell className="py-2.5 text-sm text-muted-foreground">
-                      {formatDate(asset.updated_at)}
+                      <span className="tabular-nums">{formatUserDateTime(asset.updated_at)}</span>
                     </TableCell>
                     <TableCell className="py-2.5 text-sm">{renderMetadataSyncStatus(asset)}</TableCell>
                     <TableCell className="py-2.5 text-sm">{renderVectorSyncStatus(asset)}</TableCell>

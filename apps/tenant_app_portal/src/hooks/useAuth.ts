@@ -1,6 +1,20 @@
-import { createContext, createElement, useContext, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  createContext,
+  createElement,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from 'react'
 import { User, ApiUser, convertApiUserToUser } from '@/types'
-import { getCurrentUserProfile, updateCurrentUserPreferences } from '@/lib/authApi'
+import {
+  currentUserProfileQueryKey,
+  fetchCurrentUserProfile,
+  hasAuthSession,
+  useCurrentUserProfile,
+} from '@/hooks/useCurrentUserProfile'
 
 interface AuthContextValue {
   user: User | null
@@ -16,12 +30,18 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined)
 
+function applyProfilePermissions(permissions: string[]) {
+  localStorage.setItem('permissions', JSON.stringify(permissions))
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
+  const queryClient = useQueryClient()
   const [user, setUser] = useState<User | null>(null)
   const [permissions, setPermissions] = useState<string[]>([])
   const [loading, setLoading] = useState(true)
 
-  // Load stored user and permissions on app init
+  const { data: profile } = useCurrentUserProfile({ enabled: hasAuthSession() })
+
   useEffect(() => {
     const storedUser = localStorage.getItem('user')
     const storedPermissions = localStorage.getItem('permissions')
@@ -42,33 +62,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   useEffect(() => {
-    const token = localStorage.getItem('token')
-    if (!token) return
-
-    const syncFromProfile = async () => {
-      try {
-        const profile = await getCurrentUserProfile()
-        setPermissions(profile.permissions)
-        localStorage.setItem('permissions', JSON.stringify(profile.permissions))
-
-        if (!profile.preferences?.timezone_iana) {
-          const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-          if (browserTimezone) {
-            await updateCurrentUserPreferences({ timezone_iana: browserTimezone })
-          }
-        }
-      } catch (error) {
-        console.error('Failed to refresh profile on bootstrap:', error)
-      }
-    }
-
-    void syncFromProfile()
-  }, [])
+    if (!profile) return
+    setPermissions(profile.permissions)
+    applyProfilePermissions(profile.permissions)
+  }, [profile])
 
   const login = (userData: User, token: string, perms: string[] = []) => {
     setUser(userData)
     setPermissions(perms)
-    // Store in API format for consistency with backend
     const apiUser: ApiUser = {
       id: userData.id,
       username: userData.username,
@@ -87,31 +88,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     localStorage.removeItem('user')
     localStorage.removeItem('token')
     localStorage.removeItem('permissions')
+    queryClient.removeQueries({ queryKey: currentUserProfileQueryKey })
 
-    // Clear all thread history for security
     Object.keys(localStorage)
       .filter((key) => key.startsWith('thread_'))
       .forEach((key) => localStorage.removeItem(key))
   }
 
-  // Load permissions from backend after login
   const refreshPermissions = async () => {
     try {
-      const profile = await getCurrentUserProfile()
-      setPermissions(profile.permissions)
-      localStorage.setItem('permissions', JSON.stringify(profile.permissions))
-      if (!profile.preferences?.timezone_iana) {
-        const browserTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
-        if (browserTimezone) {
-          await updateCurrentUserPreferences({ timezone_iana: browserTimezone })
-        }
-      }
+      const nextProfile = await fetchCurrentUserProfile(queryClient)
+      setPermissions(nextProfile.permissions)
+      applyProfilePermissions(nextProfile.permissions)
     } catch (error) {
       console.error('Failed to refresh permissions:', error)
     }
   }
 
-  // Permission checkers
   const hasPermission = (permission: string): boolean => {
     return permissions.includes(permission)
   }

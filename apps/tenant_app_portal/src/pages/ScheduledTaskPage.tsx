@@ -30,7 +30,7 @@ import {
   useTaskRunLogs,
 } from '@/hooks/useScheduledTasks'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { getScheduledTaskStatusClass } from '@/lib/scheduledTaskUi'
 import type {
   ScheduledTask,
@@ -202,13 +202,14 @@ function TaskRunLogDialog({
   run: ScheduledTaskRun
   onClose: () => void
 }) {
+  const formatUserDateTime = useFormatUserDateTime()
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>执行日志 — Run #{run.id}</DialogTitle>
           <DialogDescription>
-            {run.status === 'failed' ? '❌ 失败' : '✅ 成功'} · {formatDate(run.started_at)} · 耗时{' '}
+            {run.status === 'failed' ? '❌ 失败' : '✅ 成功'} · {formatUserDateTime(run.started_at)} · 耗时{' '}
             {formatDuration(run.duration_ms)}
           </DialogDescription>
         </DialogHeader>
@@ -231,6 +232,7 @@ function TaskRunLogDialog({
 
 export default function ScheduledTaskPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { taskId } = useParams()
   const location = useLocation()
   const navigate = useNavigate()
@@ -328,11 +330,11 @@ export default function ScheduledTaskPage() {
           <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span className="inline-flex items-center gap-1">
               <Calendar className="w-3.5 h-3.5" />
-              {t('scheduledTask.createdAt', { date: formatDate(task.created_at) })}
+              {t('scheduledTask.createdAt', { date: formatUserDateTime(task.created_at) })}
             </span>
             <span className="inline-flex items-center gap-1">
               <Clock3 className="w-3.5 h-3.5" />
-              {t('scheduledTask.nextRunAt', { date: formatDate(task.next_run_at) })}
+              {t('scheduledTask.nextRunAt', { date: formatUserDateTime(task.next_run_at) })}
             </span>
             <span>
               {t('scheduledTask.taskTypeLabel')}: <code>{task.task_type}</code>
@@ -436,16 +438,16 @@ export default function ScheduledTaskPage() {
             <span className="text-muted-foreground">{t('scheduledTask.scheduleTypeLabel')}:</span> {task.schedule_type}
           </div>
           <div>
-            <span className="text-muted-foreground">{t('scheduledTask.createdAtLabel')}:</span> {formatDate(task.created_at)}
+            <span className="text-muted-foreground">{t('scheduledTask.createdAtLabel')}:</span> {formatUserDateTime(task.created_at)}
           </div>
           <div>
-            <span className="text-muted-foreground">{t('scheduledTask.updatedAtLabel')}:</span> {formatDate(task.updated_at)}
+            <span className="text-muted-foreground">{t('scheduledTask.updatedAtLabel')}:</span> {formatUserDateTime(task.updated_at)}
           </div>
           <div>
-            <span className="text-muted-foreground">{t('scheduledTask.nextRunAtLabel')}:</span> {formatDate(task.next_run_at)}
+            <span className="text-muted-foreground">{t('scheduledTask.nextRunAtLabel')}:</span> {formatUserDateTime(task.next_run_at)}
           </div>
           <div>
-            <span className="text-muted-foreground">{t('scheduledTask.lastRunAtLabel')}:</span> {formatDate(task.last_run_at)}
+            <span className="text-muted-foreground">{t('scheduledTask.lastRunAtLabel')}:</span> {formatUserDateTime(task.last_run_at)}
           </div>
         </div>
 
@@ -507,8 +509,8 @@ export default function ScheduledTaskPage() {
                         {run.status}
                       </Badge>
                     </TableCell>
-                    <TableCell>{formatDate(run.started_at)}</TableCell>
-                    <TableCell>{run.finished_at ? formatDate(run.finished_at) : '—'}</TableCell>
+                    <TableCell>{formatUserDateTime(run.started_at)}</TableCell>
+                    <TableCell>{run.finished_at ? formatUserDateTime(run.finished_at) : '—'}</TableCell>
                     <TableCell>{formatDuration(run.duration_ms)}</TableCell>
                     <TableCell className="flex items-center gap-1.5">
                       {run.result?.has_logs && (

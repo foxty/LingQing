@@ -32,7 +32,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/u
 import { Label } from '@/components/ui/label'
 import { Textarea } from '@/components/ui/textarea'
 import type { ApiOperation, ApiOperationCallResponse } from '@/lib/apiConnectorApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { Braces, ExternalLink } from 'lucide-react'
 
 interface ApiOperationCallDialogProps {
@@ -59,6 +59,7 @@ export default function ApiOperationCallDialog({
   onCallOperation,
 }: ApiOperationCallDialogProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-3xl w-[95vw] h-[85vh] overflow-hidden p-0 !grid !grid-rows-[auto_minmax(0,1fr)_auto] gap-0">
@@ -100,7 +101,7 @@ export default function ApiOperationCallDialog({
                   </Badge>
                 </div>
                 <p className="mt-2 text-muted-foreground">
-                  last vector sync: {formatDate(selectedOperation.last_vector_synced_at)}
+                  last vector sync: {formatUserDateTime(selectedOperation.last_vector_synced_at)}
                 </p>
                 {selectedOperation.last_vector_sync_error && (
                   <p className="mt-1 text-red-600 break-all">

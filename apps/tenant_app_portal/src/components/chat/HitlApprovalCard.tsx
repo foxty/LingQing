@@ -70,7 +70,7 @@ import { AlertTriangle, CheckCircle2, Copy, XCircle } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { useHitlApproval } from '@/hooks/useHitlApproval'
 import { useNotification } from '@/hooks/useNotification'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { HitlPayload } from '@/types'
 import type { HitlApprovalResponse } from '@/lib/hitlApi'
 
@@ -83,6 +83,7 @@ interface HitlApprovalCardProps {
 
 export default function HitlApprovalCard({ hitl, onApproved, onRejected, className }: HitlApprovalCardProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const queryClient = useQueryClient()
   const { approve, reject, refresh, loading } = useHitlApproval()
   const { showNotification } = useNotification()
@@ -306,21 +307,21 @@ export default function HitlApprovalCard({ hitl, onApproved, onRejected, classNa
           {expiresAt && (
             <>
               <div className="opacity-70">{t('components.hitlApproval.expiresAt')}</div>
-              <div>{formatDate(expiresAt)}</div>
+              <div>{formatUserDateTime(expiresAt)}</div>
             </>
           )}
 
           {approval?.approved_at && (
             <>
               <div className="opacity-70">{t('components.hitlApproval.approvedAt')}</div>
-              <div>{formatDate(approval.approved_at)}</div>
+              <div>{formatUserDateTime(approval.approved_at)}</div>
             </>
           )}
 
           {approval?.rejected_at && (
             <>
               <div className="opacity-70">{t('components.hitlApproval.rejectedAt')}</div>
-              <div>{formatDate(approval.rejected_at)}</div>
+              <div>{formatUserDateTime(approval.rejected_at)}</div>
             </>
           )}
 

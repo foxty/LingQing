@@ -7,7 +7,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useNotification } from '@/hooks/useNotification'
 import { useReportDetail } from '@/hooks/useReports'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { preprocessMarkdown } from '@/lib/utils'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -185,6 +185,7 @@ function normalizeMarkdownUrls(content: string, baseUrl: string): string {
 
 export default function ReportPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { reportId } = useParams()
   const location = useLocation()
   const { showSuccess, showError } = useNotification()
@@ -251,7 +252,7 @@ export default function ReportPage() {
             <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
               <span className="inline-flex items-center gap-1">
                 <Calendar className="h-3.5 w-3.5" />
-                {formatDate(report.created_at)}
+                {formatUserDateTime(report.created_at)}
               </span>
               {reportOwner ? <span>{t('report.author', { name: reportOwner })}</span> : null}
               {report.source_thread_id && (

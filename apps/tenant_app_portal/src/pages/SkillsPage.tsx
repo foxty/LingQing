@@ -129,6 +129,7 @@ import EmptyState from '@/components/EmptyState'
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { Can } from '@/components/Can'
 import { useAuth } from '@/hooks/useAuth'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { actionRules } from '@/lib/permissionRules'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -460,6 +461,7 @@ function SkillCard({
   onEnvVars: (skill: Skill) => void
   toggleDisabled: boolean
 }) {
+  const formatUserDateTime = useFormatUserDateTime()
   const typeLabels: Record<string, string> = {
     builtin: t('skills.builtinType'),
     tenant: t('skills.tenantType'),
@@ -491,7 +493,8 @@ function SkillCard({
               )}
               {skill.updatedAt && (
                 <span>
-                  {t('skills.updatedAt')}: {new Date(skill.updatedAt).toLocaleDateString()}
+                  {t('skills.updatedAt')}:{' '}
+                  {formatUserDateTime(skill.updatedAt, { precision: 'date', fallback: '' })}
                 </span>
               )}
             </div>

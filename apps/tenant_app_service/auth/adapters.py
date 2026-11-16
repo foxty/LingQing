@@ -91,7 +91,10 @@ async def domain_user_to_profile_response(
         created_at=domain_user.created_at.isoformat(),
         updated_at=domain_user.updated_at.isoformat(),
         permissions=permissions,
-        preferences=ProfilePreferences(timezone_iana=domain_user.preferences.timezone_iana),
+        preferences=ProfilePreferences(
+            timezone_iana=domain_user.preferences.timezone_iana,
+            datetime_format=domain_user.preferences.datetime_format,
+        ),
     )
 
 

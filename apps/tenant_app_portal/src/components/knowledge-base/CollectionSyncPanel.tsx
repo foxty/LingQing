@@ -25,7 +25,7 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useNotification } from '@/hooks/useNotification'
 import { getApiErrorMessage } from '@/lib/api'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import {
   AlertCircle,
   Cloud,
@@ -170,6 +170,7 @@ export default function CollectionSyncPanel({
   canManageCollection = false,
 }: CollectionSyncPanelProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { user } = useAuth()
   const { showError } = useNotification()
   const { data: connector, isLoading: connectorLoading } = useCollectionSyncConnector(collectionId)
@@ -280,7 +281,7 @@ export default function CollectionSyncPanel({
     const syncMeta = connector.last_sync_error
       ? t('collectionSync.syncError', { error: connector.last_sync_error })
       : connector.last_synced_at
-        ? t('collectionSync.lastSynced', { time: formatDate(connector.last_synced_at) })
+        ? t('collectionSync.lastSynced', { time: formatUserDateTime(connector.last_synced_at) })
         : t('collectionSync.neverSynced')
 
     const tooltipLines = [
@@ -349,7 +350,7 @@ export default function CollectionSyncPanel({
                     {connector.last_sync_error ? (
                       <span className="text-destructive">{connector.last_sync_error}</span>
                     ) : connector.last_synced_at ? (
-                      t('collectionSync.lastSynced', { time: formatDate(connector.last_synced_at) })
+                      t('collectionSync.lastSynced', { time: formatUserDateTime(connector.last_synced_at) })
                     ) : (
                       t('collectionSync.neverSynced')
                     )}

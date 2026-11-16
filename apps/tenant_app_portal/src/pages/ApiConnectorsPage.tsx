@@ -29,7 +29,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useNotification } from '@/hooks/useNotification'
 import { useResourceListTags } from '@/hooks/useResourceListTags'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { ApiConnector } from '@/lib/apiConnectorApi'
 import { actionRules } from '@/lib/permissionRules'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
@@ -91,6 +91,7 @@ i18n.addResourceBundle('zh', 'translation', {
 
 export default function ApiConnectorsPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const {
     connectors,
     connectorsPage,
@@ -268,7 +269,9 @@ export default function ApiConnectorsPage() {
                         {connector.schema_source_type}
                       </TableCell>
                       <TableCell className="py-2.5 text-sm text-muted-foreground">
-                        {formatDate(connector.schema_last_synced_at)}
+                        <span className="tabular-nums">
+                          {formatUserDateTime(connector.schema_last_synced_at)}
+                        </span>
                       </TableCell>
                       <TableCell className="py-2.5 text-right">
                         <ContainerRowActions

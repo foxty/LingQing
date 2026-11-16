@@ -1,75 +1,97 @@
-import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import {
-  getCurrentUserProfile,
   changePassword,
   updateCurrentUserPreferences,
-  ProfileResponse,
-  ChangePasswordData,
+  type ChangePasswordData,
+  type ProfileResponse,
+  type UpdateProfilePreferencesRequest,
 } from '@/lib/authApi'
 import { getApiErrorMessage } from '@/lib/api'
 import { useNotification } from '@/hooks/useNotification'
 import i18n from '@/i18n/config'
+import {
+  currentUserProfileQueryKey,
+  useCurrentUserProfile,
+} from '@/hooks/useCurrentUserProfile'
+import { isValidIanaTimeZone } from '@/lib/timezones'
+import { isDateTimeFormatId } from '@/lib/datetimeFormats'
+
+export {
+  useCurrentUserProfile,
+  usePreferredTimezone,
+  usePreferredDateTimeFormat,
+} from '@/hooks/useCurrentUserProfile'
+export { useFormatUserDateTime, useUserDateTimeFormatOptions } from '@/hooks/useUserDateTimeFormat'
 
 export function useUserProfile() {
+  const queryClient = useQueryClient()
   const { showSuccess } = useNotification()
-  const [profile, setProfile] = useState<ProfileResponse | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const { data: profile, isLoading, isFetching, error, refetch } = useCurrentUserProfile()
 
-  const fetchProfile = async () => {
-    setLoading(true)
-    setError(null)
-    try {
-      const data = await getCurrentUserProfile()
-      setProfile(data)
-      return data
-    } catch (err: unknown) {
-      const errorMsg = getApiErrorMessage(err, i18n.t('userProfile.loadFailed'))
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }
+  const passwordMutation = useMutation({
+    mutationFn: (data: ChangePasswordData) => changePassword(data),
+    onSuccess: () => {
+      showSuccess(i18n.t('common.updateSuccess'))
+    },
+  })
+
+  const preferencesMutation = useMutation({
+    mutationFn: (payload: UpdateProfilePreferencesRequest) => updateCurrentUserPreferences(payload),
+    onSuccess: (data: ProfileResponse) => {
+      queryClient.setQueryData(currentUserProfileQueryKey, data)
+      showSuccess(i18n.t('common.updateSuccess'))
+    },
+  })
+
+  const fetchProfile = () => refetch()
 
   const handleChangePassword = async (data: ChangePasswordData) => {
-    setLoading(true)
-    setError(null)
     try {
-      await changePassword(data)
-      showSuccess(i18n.t('common.updateSuccess'))
+      await passwordMutation.mutateAsync(data)
     } catch (err: unknown) {
       const errorMsg = getApiErrorMessage(err, i18n.t('userProfile.passwordChangeFailed'))
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
+      throw new Error(errorMsg)
     }
   }
 
-  const handleUpdateTimezone = async (timezoneIana: string) => {
-    setLoading(true)
-    setError(null)
+  const handleUpdateDateTimePreferences = async (payload: {
+    timezone_iana: string
+    datetime_format: string
+  }) => {
+    if (!isValidIanaTimeZone(payload.timezone_iana)) {
+      throw new Error(i18n.t('userProfile.timezoneInvalid'))
+    }
+    if (!isDateTimeFormatId(payload.datetime_format)) {
+      throw new Error(i18n.t('userProfile.dateTimeFormatInvalid'))
+    }
     try {
-      const data = await updateCurrentUserPreferences({ timezone_iana: timezoneIana })
-      setProfile(data)
-      showSuccess(i18n.t('common.updateSuccess'))
-      return data
+      return await preferencesMutation.mutateAsync({
+        timezone_iana: payload.timezone_iana.trim(),
+        datetime_format: payload.datetime_format,
+      })
     } catch (err: unknown) {
-      const errorMsg = getApiErrorMessage(err, i18n.t('userProfile.timezoneUpdateFailed'))
-      setError(errorMsg)
-      throw err
-    } finally {
-      setLoading(false)
+      const errorMsg = getApiErrorMessage(err, i18n.t('userProfile.dateTimeUpdateFailed'))
+      throw new Error(errorMsg)
     }
   }
+
+  const loading =
+    isLoading || isFetching || passwordMutation.isPending || preferencesMutation.isPending
+
+  const errorMessage = error
+    ? getApiErrorMessage(error, i18n.t('userProfile.loadFailed'))
+    : passwordMutation.error
+      ? getApiErrorMessage(passwordMutation.error, i18n.t('userProfile.passwordChangeFailed'))
+      : preferencesMutation.error
+        ? getApiErrorMessage(preferencesMutation.error, i18n.t('userProfile.dateTimeUpdateFailed'))
+        : null
 
   return {
-    profile,
+    profile: profile ?? null,
     loading,
-    error,
+    error: errorMessage,
     fetchProfile,
     handleChangePassword,
-    handleUpdateTimezone,
+    handleUpdateDateTimePreferences,
   }
 }
