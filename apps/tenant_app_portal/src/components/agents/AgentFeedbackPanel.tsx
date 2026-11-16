@@ -32,7 +32,7 @@ import {
   useFeedbackStats,
 } from '@/hooks/useMessageFeedbackAnalysis'
 import { getApiErrorMessage } from '@/lib/api'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { FeedbackListItem } from '@/lib/feedbackApi'
 
 i18n.addResourceBundle(
@@ -229,7 +229,8 @@ export default function AgentFeedbackPanel({
   showAgentColumn = true,
   showStats = true,
 }: AgentFeedbackPanelProps) {
-  const { t, i18n: i18nInstance } = useTranslation()
+  const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { showError } = useNotification()
   const { data: agents = [] } = useAgents()
 
@@ -283,7 +284,6 @@ export default function AgentFeedbackPanel({
   const loadError = statsQuery.error || listQuery.error
   const isLoading = statsQuery.isLoading || listQuery.isLoading
   const isInitialListLoading = listQuery.isLoading && listCursor === undefined
-  const dateLocale = i18nInstance.language.startsWith('zh') ? 'zh-CN' : 'en-US'
 
   const handleRefresh = () => {
     setListCursor(undefined)
@@ -494,7 +494,7 @@ export default function AgentFeedbackPanel({
                       </Tooltip>
                     </TableCell>
                     <TableCell className="w-44 whitespace-nowrap text-sm tabular-nums text-muted-foreground">
-                      {formatDate(item.created_at, { locale: dateLocale, fallback: '' })}
+                      {formatUserDateTime(item.created_at, { fallback: '' })}
                     </TableCell>
                   </TableRow>
                 ))}

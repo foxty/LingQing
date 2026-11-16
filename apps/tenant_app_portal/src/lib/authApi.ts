@@ -37,6 +37,7 @@ export interface ProfileResponse {
   permissions: string[]
   preferences: {
     timezone_iana: string | null
+    datetime_format?: string | null
   }
 }
 
@@ -47,7 +48,8 @@ export interface ChangePasswordData {
 }
 
 export interface UpdateProfilePreferencesRequest {
-  timezone_iana: string | null
+  timezone_iana?: string | null
+  datetime_format?: string | null
 }
 
 // ============================================================================

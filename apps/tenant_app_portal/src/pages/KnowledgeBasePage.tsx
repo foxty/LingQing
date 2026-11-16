@@ -14,7 +14,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { COLLECTIONS_PAGE_SIZE, useCollectionsPage } from '@/hooks/useCollectionsPage'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import i18n from '@/i18n/config'
 import { Cloud, FolderOpen } from 'lucide-react'
@@ -142,6 +142,7 @@ i18n.addResourceBundle('zh', 'translation', {
 
 export default function KnowledgeBasePage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const page = useCollectionsPage()
 
   return (
@@ -257,8 +258,8 @@ export default function KnowledgeBasePage() {
                       {collection.description || '—'}
                     </p>
                   </TableCell>
-                  <TableCell className="py-2.5 text-sm hidden sm:table-cell">
-                    {formatDate(collection.updated_at)}
+                  <TableCell className="py-2.5 text-sm tabular-nums hidden sm:table-cell">
+                    {formatUserDateTime(collection.updated_at)}
                   </TableCell>
                   <TableCell className="py-2.5 text-right" onClick={(e) => e.stopPropagation()}>
                     <ContainerRowActions

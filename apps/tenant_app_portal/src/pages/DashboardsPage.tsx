@@ -14,7 +14,7 @@ import { useDashboards, useDeleteDashboard } from '@/hooks/useDashboard'
 import { useNotification } from '@/hooks/useNotification'
 import { actionRules, canDeleteOwnedArtifact } from '@/lib/permissionRules'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { DashboardListItem } from '@/lib/dashboardApi'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -62,6 +62,7 @@ import { Link } from 'react-router-dom'
 
 export default function DashboardsPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { user, hasAny } = useAuth()
   const canManageAllArtifacts = hasAny(actionRules.canManageAllArtifacts())
   const { data: dashboards = [], isLoading } = useDashboards()
@@ -129,7 +130,7 @@ export default function DashboardsPage() {
                     {dashboard.owner_username ?? dashboard.owner_id}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(dashboard.updated_at, { precision: 'datetime' })}
+                    {formatUserDateTime(dashboard.updated_at, { precision: 'datetime' })}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">

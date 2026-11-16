@@ -13,7 +13,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useDeleteReport, useReports } from '@/hooks/useReports'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
 import { actionRules, canDeleteOwnedArtifact } from '@/lib/permissionRules'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { Report } from '@/lib/reportsApi'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -57,6 +57,7 @@ import { Link } from 'react-router-dom'
 
 export default function ReportsPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { user, hasAny } = useAuth()
   const canManageAllArtifacts = hasAny(actionRules.canManageAllArtifacts())
   const { data: reports = [], isLoading } = useReports()
@@ -121,7 +122,7 @@ export default function ReportsPage() {
                     {report.owner_username ?? report.owner_id ?? '—'}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(report.updated_at, { precision: 'datetime' })}
+                    {formatUserDateTime(report.updated_at, { precision: 'datetime' })}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">

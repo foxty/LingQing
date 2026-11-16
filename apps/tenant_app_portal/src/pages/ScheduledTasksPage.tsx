@@ -17,7 +17,7 @@ import {
   useScheduledTasks,
 } from '@/hooks/useScheduledTasks'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { LiveAppJobTaskConfig, ScheduledTask } from '@/lib/scheduledTasksApi'
 import { getScheduledTaskStatusClass } from '@/lib/scheduledTaskUi'
 import { useTranslation } from 'react-i18next'
@@ -179,6 +179,7 @@ function getTaskTypeDisplay(task: ScheduledTask): React.ReactNode {
 
 export default function ScheduledTasksPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const status = searchParams.get('status') ?? undefined
@@ -325,11 +326,11 @@ export default function ScheduledTasksPage() {
                   <TableCell>
                     <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
                       <CalendarClock className="w-3.5 h-3.5" />
-                      {formatDate(task.next_run_at)}
+                      {formatUserDateTime(task.next_run_at)}
                     </span>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(task.last_run_at)}
+                    {formatUserDateTime(task.last_run_at)}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">

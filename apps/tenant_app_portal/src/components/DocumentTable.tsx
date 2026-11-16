@@ -115,7 +115,7 @@ import { useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { actionRules } from '@/lib/permissionRules'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 
 interface DocumentTableProps {
   data: PaginatedResponse<Document> | undefined
@@ -135,6 +135,7 @@ export function DocumentTable({
   onSelectionChange,
 }: DocumentTableProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const deleteMutation = useDeleteDocuments()
   const reparseMutation = useReparseDocument()
   const reindexMutation = useReindexDocument()
@@ -381,7 +382,9 @@ export function DocumentTable({
                 </TableCell>
                 <TableCell className="py-2.5">{renderSourceBadge(doc)}</TableCell>
                 <TableCell className="py-2.5 text-sm hidden lg:table-cell">{formatFileSize(doc.fileSize)}</TableCell>
-                <TableCell className="py-2.5 text-sm hidden md:table-cell">{formatDate(doc.updatedAt)}</TableCell>
+                <TableCell className="py-2.5 text-sm tabular-nums hidden md:table-cell">
+                  {formatUserDateTime(doc.updatedAt)}
+                </TableCell>
                 <TableCell className="py-2.5 text-sm">{renderPipelineStatus(doc)}</TableCell>
                 {showActions && (
                   <TableCell className="py-2.5 text-right">{renderRowActions(doc)}</TableCell>

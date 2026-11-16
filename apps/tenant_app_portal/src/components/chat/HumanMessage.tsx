@@ -1,6 +1,9 @@
 import { User, Paperclip } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Message } from '@/types'
 import { getMessageAttachedArtifacts } from '@/lib/messageAttachedArtifacts'
+import { usePreferredDateTimeFormat, usePreferredTimezone } from '@/hooks/useCurrentUserProfile'
+import { formatChatTimestamp } from '@/lib/dateTime'
 import ContextChip from './ContextChip'
 
 interface HumanMessageProps {
@@ -8,7 +11,17 @@ interface HumanMessageProps {
 }
 
 export default function HumanMessage({ message }: HumanMessageProps) {
+  const { i18n } = useTranslation()
+  const timeZone = usePreferredTimezone()
+  const dateTimeFormat = usePreferredDateTimeFormat()
   const contextResources = getMessageAttachedArtifacts(message.message_metadata)
+  const formattedTimestamp = message.timestamp
+    ? formatChatTimestamp(message.timestamp, {
+        timeZone,
+        locale: i18n.language,
+        formatId: dateTimeFormat,
+      })
+    : ''
 
   return (
     <div className="flex items-start space-x-3 flex-row-reverse space-x-reverse">
@@ -36,11 +49,11 @@ export default function HumanMessage({ message }: HumanMessageProps) {
             </div>
           )}
           <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-          {message.timestamp && (
+          {formattedTimestamp ? (
             <p className="mt-1 text-right text-xs tabular-nums text-primary-foreground/70">
-              {new Date(message.timestamp).toLocaleTimeString()}
+              {formattedTimestamp}
             </p>
-          )}
+          ) : null}
         </div>
       </div>
     </div>

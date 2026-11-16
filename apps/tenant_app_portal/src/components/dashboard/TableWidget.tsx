@@ -1,15 +1,18 @@
 import type { TableColumnConfig, TableDisplayConfig, TableValueFormat } from '@/lib/dashboardApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 
 interface TableWidgetProps {
   data: Array<Record<string, any>>
   displayConfig?: TableDisplayConfig
 }
 
+type ProfileDateFormatter = ReturnType<typeof useFormatUserDateTime>
+
 function formatTableValue(
   value: unknown,
-  format?: TableValueFormat,
-  defaultFormat?: TableValueFormat
+  format: TableValueFormat | undefined,
+  defaultFormat: TableValueFormat | undefined,
+  formatUserDateTime: ProfileDateFormatter
 ): string {
   const finalFormat = format ?? defaultFormat
 
@@ -29,8 +32,10 @@ function formatTableValue(
     return `${prefix}${label}${suffix}`
   }
 
+  // Dashboard config chooses granularity (date / time / datetime); profile supplies
+  // IANA timezone and display format preset for the viewer (same as other portal lists).
   if (formatType === 'datetime') {
-    const normalized = formatDate(value as string, {
+    const normalized = formatUserDateTime(value as string, {
       precision:
         finalFormat?.dateFormat === 'date'
           ? 'date'
@@ -67,6 +72,8 @@ function formatTableValue(
 }
 
 export default function TableWidget({ data, displayConfig }: TableWidgetProps) {
+  const formatUserDateTime = useFormatUserDateTime()
+
   if (!data.length) {
     return <div className="text-sm text-muted-foreground">No data.</div>
   }
@@ -140,7 +147,7 @@ export default function TableWidget({ data, displayConfig }: TableWidgetProps) {
                     maxWidth: col.maxWidth,
                   }}
                 >
-                  {formatTableValue(row[col.field], col.format, config.defaultFormat)}
+                  {formatTableValue(row[col.field], col.format, config.defaultFormat, formatUserDateTime)}
                 </td>
               ))}
             </tr>

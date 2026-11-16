@@ -238,12 +238,14 @@ class AuthService:
         user = await user_repo.get_by_id(user_id)
         logger.info(f"Password changed successfully for user {user.username} (ID: {user_id})")
 
-    async def update_profile_preferences(self, user_id: int, timezone_iana: str | None) -> UserDomain:
-        """Update user profile preferences."""
+    async def update_profile_preferences(self, user_id: int, preferences_patch: dict) -> UserDomain:
+        """Update user profile preferences (shallow merge into users.preferences JSON)."""
+        if not preferences_patch:
+            raise ValidationError("No preference fields to update")
         user_repo = UserRepository(self.db)
         updated = await user_repo.update_preferences(
             user_id=user_id,
-            preferences_patch={"timezone_iana": timezone_iana},
+            preferences_patch=preferences_patch,
         )
         if not updated:
             raise ValidationError("User not found")

@@ -11,7 +11,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { TokenUsageEventsResponse } from '@/lib/tenantApi'
 
 i18n.addResourceBundle('en', 'translation', {
@@ -81,6 +81,7 @@ export default function TokenTable({
   onPageChange,
 }: TokenTableProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const description = username
     ? t('settings.usageTab.tokenDetailsDescForUser', { days, username })
     : t('settings.usageTab.tokenDetailsDesc', { days })
@@ -119,7 +120,7 @@ export default function TokenTable({
                 {events?.rows?.length ? (
                   events.rows.map((row) => (
                     <TableRow key={row.event_id}>
-                      <TableCell>{formatDate(row.timestamp)}</TableCell>
+                      <TableCell>{formatUserDateTime(row.timestamp)}</TableCell>
                       <TableCell>{row.username || '-'}</TableCell>
                       <TableCell>{row.model_label || row.model_key || row.model_name || '-'}</TableCell>
                       <TableCell className="max-w-[220px] truncate" title={row.session_id}>

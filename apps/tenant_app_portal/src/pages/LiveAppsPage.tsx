@@ -12,7 +12,7 @@ import {
 import { useLiveApps } from '@/hooks/useLiveApps'
 import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
 import { getBackendUrl } from '@/lib/api'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { LiveApp } from '@/lib/liveAppsApi'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -108,6 +108,7 @@ function EnvironmentBadges({ app }: { app: LiveApp }) {
 
 export default function LiveAppsPage() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { data: apps = [], isLoading } = useLiveApps()
   const [sharingApp, setSharingApp] = useState<LiveApp | null>(null)
 
@@ -171,7 +172,7 @@ export default function LiveAppsPage() {
                     {app.sdk_version}
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(app.updated_at, { precision: 'datetime' })}
+                    {formatUserDateTime(app.updated_at, { precision: 'datetime' })}
                   </TableCell>
                   <TableCell className="text-right">
                     <Button

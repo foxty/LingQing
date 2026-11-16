@@ -1,6 +1,6 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { PipelineBadgeState } from '@/lib/documentPipelineStatus'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { useTranslation } from 'react-i18next'
 
 const STATE_STYLES: Record<
@@ -55,6 +55,7 @@ export default function PipelineStatusBadge({
   error,
 }: PipelineStatusBadgeProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const styles = STATE_STYLES[state]
 
   return (
@@ -74,7 +75,7 @@ export default function PipelineStatusBadge({
           <div className="font-medium mb-2.5">{title}</div>
           <div className="text-xs text-muted-foreground">{label}</div>
           {timestamp && (
-            <div className="text-xs text-muted-foreground">{formatDate(timestamp)}</div>
+            <div className="text-xs text-muted-foreground tabular-nums">{formatUserDateTime(timestamp)}</div>
           )}
           {error && <div className="text-xs text-destructive break-words">{error}</div>}
         </div>

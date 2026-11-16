@@ -110,7 +110,8 @@ async def update_profile_preferences(
 ):
     """Update current user's profile preferences."""
     auth_service = AuthService(db=db)
-    domain_user = await auth_service.update_profile_preferences(current_user.id, timezone_iana=request.timezone_iana)
+    preferences_patch = request.model_dump(exclude_unset=True)
+    domain_user = await auth_service.update_profile_preferences(current_user.id, preferences_patch)
 
     effective_rbac = await get_effective_rbac(db, current_user.tenant_id)
     role_perms = effective_rbac.roles.get(current_user.role, set())

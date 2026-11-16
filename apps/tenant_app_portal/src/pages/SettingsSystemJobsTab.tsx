@@ -28,7 +28,7 @@ import {
   useSystemTasks,
   useSystemTaskRunLogs,
 } from '@/hooks/useSystemTasks'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { LogStream, ScheduledTask, ScheduledTaskRun } from '@/lib/scheduledTasksApi'
 import { getScheduledTaskStatusClass } from '@/lib/scheduledTaskUi'
 import { useTranslation } from 'react-i18next'
@@ -180,13 +180,14 @@ function RunLogDialog({
   onClose: () => void
 }) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
         <DialogHeader>
           <DialogTitle>{t('systemJobs.logsTitle', { id: run.id })}</DialogTitle>
           <DialogDescription>
-            {formatDate(run.started_at)} · {formatDuration(run.duration_ms)}
+            {formatUserDateTime(run.started_at)} · {formatDuration(run.duration_ms)}
           </DialogDescription>
         </DialogHeader>
         <Tabs defaultValue="stdout" className="flex-1 min-h-0 flex flex-col">
@@ -208,6 +209,7 @@ function RunLogDialog({
 
 function RunResultDialog({ run, onClose }: { run: ScheduledTaskRun; onClose: () => void }) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   return (
     <Dialog open onOpenChange={(open) => !open && onClose()}>
       <DialogContent className="max-w-3xl max-h-[85vh] flex flex-col">
@@ -218,7 +220,7 @@ function RunResultDialog({ run, onClose }: { run: ScheduledTaskRun; onClose: () 
               {run.status}
             </Badge>
             <span className="ml-2">
-              {formatDate(run.started_at)} · {formatDuration(run.duration_ms)}
+              {formatUserDateTime(run.started_at)} · {formatDuration(run.duration_ms)}
             </span>
           </DialogDescription>
         </DialogHeader>
@@ -239,6 +241,7 @@ function RunResultDialog({ run, onClose }: { run: ScheduledTaskRun; onClose: () 
 
 function RunsDialog({ task, onClose }: { task: ScheduledTask; onClose: () => void }) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const [runsPage, setRunsPage] = useState(1)
   const runsPageSize = 20
   const runsQuery = useSystemTaskRuns(task.id, runsPage, runsPageSize)
@@ -288,8 +291,10 @@ function RunsDialog({ task, onClose }: { task: ScheduledTask; onClose: () => voi
                             {run.status}
                           </Badge>
                         </TableCell>
-                        <TableCell>{formatDate(run.started_at)}</TableCell>
-                        <TableCell>{run.finished_at ? formatDate(run.finished_at) : '—'}</TableCell>
+                        <TableCell className="tabular-nums">{formatUserDateTime(run.started_at)}</TableCell>
+                        <TableCell className="tabular-nums">
+                          {run.finished_at ? formatUserDateTime(run.finished_at) : '—'}
+                        </TableCell>
                         <TableCell>{formatDuration(run.duration_ms)}</TableCell>
                         <TableCell>
                           <div className="flex items-center gap-1">
@@ -347,6 +352,7 @@ function RunsDialog({ task, onClose }: { task: ScheduledTask; onClose: () => voi
 
 export default function SettingsSystemJobsTab() {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { data: tasks = [], isLoading, isError } = useSystemTasks()
   const pauseMutation = usePauseSystemTask()
   const resumeMutation = useResumeSystemTask()
@@ -445,11 +451,11 @@ export default function SettingsSystemJobsTab() {
                   <TableCell>
                     <span className="inline-flex items-center gap-1 text-sm text-muted-foreground">
                       <CalendarClock className="w-3.5 h-3.5" />
-                      {formatDate(task.next_run_at)}
+                      {formatUserDateTime(task.next_run_at)}
                     </span>
                   </TableCell>
                   <TableCell className="text-sm text-muted-foreground">
-                    {formatDate(task.last_run_at)}
+                    {formatUserDateTime(task.last_run_at)}
                   </TableCell>
                   <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-1">

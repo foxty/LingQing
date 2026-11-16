@@ -10,7 +10,7 @@ import {
 import { useDocumentParsed } from '@/hooks/useDocuments'
 import { normalizeApiErrorPayload } from '@/lib/api'
 import type { ApiParsedBlock } from '@/lib/documentsApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { AuthenticatedMarkdownImage } from '@/components/markdown/AuthenticatedMarkdownImage'
 import type { Document } from '@/types'
 import { useTranslation } from 'react-i18next'
@@ -59,6 +59,7 @@ export function DocumentParsedPreview({
   onOpenChange,
 }: DocumentParsedPreviewProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const { data, isLoading, error } = useDocumentParsed(open ? (document?.id ?? null) : null)
   const errorMessage = error
     ? normalizeApiErrorPayload((error as { response?: { data?: unknown } }).response?.data).message
@@ -79,7 +80,7 @@ export function DocumentParsedPreview({
             ) : null}
             <span>
               {data?.parser ? `${data.parser}` : t('knowledgeBase.parsedPreview')}
-              {data?.parsed_at ? ` · ${formatDate(data.parsed_at)}` : ''}
+              {data?.parsed_at ? ` · ${formatUserDateTime(data.parsed_at)}` : ''}
             </span>
           </DialogDescription>
         </DialogHeader>

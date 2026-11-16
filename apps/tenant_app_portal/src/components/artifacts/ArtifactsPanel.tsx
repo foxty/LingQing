@@ -40,7 +40,7 @@ import { Button } from '@/components/ui/button'
 import { ResizeHandle } from '@/components/ui/ResizeHandle'
 import { useResizable } from '@/hooks/useResizable'
 import type { AclShareResourceType } from '@/lib/aclSharesApi'
-import { formatDate } from '@/lib/dateTime'
+import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { Artifact } from '@/types'
 import { ChevronLeft, Share2, X } from 'lucide-react'
 import { useState } from 'react'
@@ -126,6 +126,7 @@ export default function ArtifactsPanel({
   sessionTitle,
 }: ArtifactsPanelProps) {
   const { t } = useTranslation()
+  const formatUserDateTime = useFormatUserDateTime()
   const [shareDialogOpen, setShareDialogOpen] = useState(false)
 
   // View mode is derived from selectedArtifact state
@@ -195,7 +196,7 @@ export default function ArtifactsPanel({
                     </div>
                     {artifact.created_at && (
                       <div className="text-xs text-muted-foreground">
-                        {formatDate(artifact.created_at)}
+                        {formatUserDateTime(artifact.created_at)}
                       </div>
                     )}
                   </button>
