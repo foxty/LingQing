@@ -201,6 +201,7 @@ export function DocumentTable({
     const view = getParsePipelineStatus(doc)
     return (
       <PipelineStatusBadge
+        phase="parse"
         state={view.state}
         label={t(view.labelKey)}
         title={t('knowledgeBase.parseStatus')}
@@ -251,6 +252,7 @@ export function DocumentTable({
     const view = getIndexPipelineStatus(doc)
     return (
       <PipelineStatusBadge
+        phase="index"
         state={view.state}
         label={t(view.labelKey)}
         title={t('knowledgeBase.indexStatus')}
@@ -261,7 +263,7 @@ export function DocumentTable({
   }
 
   const renderPipelineStatus = (doc: Document) => (
-    <div className="flex flex-col gap-1">
+    <div className="flex flex-row items-center gap-1">
       {renderParseStatus(doc)}
       {renderIndexStatus(doc)}
     </div>
@@ -351,7 +353,7 @@ export function DocumentTable({
               <TableHead className="h-10 w-24">{t('knowledgeBase.sourceColumn')}</TableHead>
               <TableHead className="h-10 w-20 hidden lg:table-cell">{t('knowledgeBase.size')}</TableHead>
               <TableHead className="h-10 w-36 hidden md:table-cell">{t('common.updateTime')}</TableHead>
-              <TableHead className="h-10 w-36">{t('knowledgeBase.pipelineStatus')}</TableHead>
+              <TableHead className="h-10 w-[4.5rem]">{t('knowledgeBase.pipelineStatus')}</TableHead>
               {showActions && (
                 <TableHead className="h-10 w-12 text-right">{t('common.action')}</TableHead>
               )}
