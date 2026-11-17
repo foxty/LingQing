@@ -1,7 +1,10 @@
+import '@/components/knowledge-base/collectionSyncI18n'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   createCollectionSyncConnector,
-  deleteCollectionSyncConnector,
+  disconnectCollectionSyncFolder,
+  pauseCollectionSyncConnector,
+  resumeCollectionSyncConnector,
   disconnectSourceConnection,
   getCollectionSyncConnector,
   getGoogleDriveAuthorizeUrl,
@@ -108,6 +111,7 @@ export function useCreateSyncConnector(collectionId: number) {
       queryClient.invalidateQueries({
         queryKey: ['document-sync', 'connector', collectionId, user?.tenantId],
       })
+      queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
       showSuccess(i18n.t('collectionSync.bindSuccess'))
     },
     onError: (error: unknown) => {
@@ -116,21 +120,62 @@ export function useCreateSyncConnector(collectionId: number) {
   })
 }
 
-export function useDeleteSyncConnector(collectionId: number) {
+export function usePauseSyncConnector(collectionId: number) {
   const { user } = useAuth()
   const queryClient = useQueryClient()
   const { showSuccess, showError } = useNotification()
 
   return useMutation({
-    mutationFn: () => deleteCollectionSyncConnector(collectionId),
+    mutationFn: () => pauseCollectionSyncConnector(collectionId),
     onSuccess: () => {
       queryClient.invalidateQueries({
         queryKey: ['document-sync', 'connector', collectionId, user?.tenantId],
       })
-      showSuccess(i18n.t('collectionSync.disconnectConnectorSuccess'))
+      queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+      showSuccess(i18n.t('collectionSync.pauseSuccess'))
     },
     onError: (error: unknown) => {
-      showError(getApiErrorMessage(error, i18n.t('collectionSync.disconnectConnectorFailed')))
+      showError(getApiErrorMessage(error, i18n.t('collectionSync.pauseFailed')))
+    },
+  })
+}
+
+export function useResumeSyncConnector(collectionId: number) {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const { showSuccess, showError } = useNotification()
+
+  return useMutation({
+    mutationFn: () => resumeCollectionSyncConnector(collectionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['document-sync', 'connector', collectionId, user?.tenantId],
+      })
+      queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+      showSuccess(i18n.t('collectionSync.resumeSuccess'))
+    },
+    onError: (error: unknown) => {
+      showError(getApiErrorMessage(error, i18n.t('collectionSync.resumeFailed')))
+    },
+  })
+}
+
+export function useDisconnectCollectionSyncFolder(collectionId: number) {
+  const { user } = useAuth()
+  const queryClient = useQueryClient()
+  const { showSuccess, showError } = useNotification()
+
+  return useMutation({
+    mutationFn: () => disconnectCollectionSyncFolder(collectionId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({
+        queryKey: ['document-sync', 'connector', collectionId, user?.tenantId],
+      })
+      queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
+      showSuccess(i18n.t('collectionSync.disconnectFolderSuccess'))
+    },
+    onError: (error: unknown) => {
+      showError(getApiErrorMessage(error, i18n.t('collectionSync.disconnectFolderFailed')))
     },
   })
 }
@@ -149,13 +194,19 @@ export function useTriggerSyncConnector(collectionId: number) {
       queryClient.invalidateQueries({ queryKey: ['documents', user?.tenantId] })
       queryClient.invalidateQueries({ queryKey: ['document-collections', user?.tenantId] })
       invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
-      showSuccess(
-        i18n.t('collectionSync.syncSuccess', {
-          added: result.added,
-          updated: result.updated,
-          deleted: result.deleted,
-        })
-      )
+      const changed = result.added + result.updated + result.deleted
+      if (changed === 0) {
+        const unchanged = result.skipped_unchanged ?? result.skipped
+        showSuccess(i18n.t('collectionSync.syncUpToDate', { skipped: unchanged }))
+      } else {
+        showSuccess(
+          i18n.t('collectionSync.syncSuccess', {
+            added: result.added,
+            updated: result.updated,
+            deleted: result.deleted,
+          })
+        )
+      }
     },
     onError: (error: unknown) => {
       showError(getApiErrorMessage(error, i18n.t('collectionSync.syncFailed')))

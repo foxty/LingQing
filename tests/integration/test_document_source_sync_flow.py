@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 from unittest.mock import AsyncMock, patch
 from urllib.parse import parse_qs, urlparse
 from uuid import uuid4
@@ -11,6 +12,7 @@ import pytest
 import pytest_asyncio
 
 from apps.shared.db.models import DocumentSourceConnection, DocumentSyncConnector
+from apps.shared.document.repository import DBDocumentRepository
 from apps.shared.document.sync_repository import DocumentSyncRepository
 from apps.shared.infra.external_files.port import ExternalFileEntry
 from apps.tenant_app_service.server import app
@@ -369,3 +371,305 @@ class TestDocumentSourceSyncFlow:
             headers=make_auth_headers(viewer_token),
         )
         assert sync_resp.status_code == 403, sync_resp.text
+
+    async def test_sync_reattaches_when_mapped_document_soft_deleted(self, document_sync_setup):
+        """Stale mapping + soft-deleted row must re-import so the collection list shows the Drive file."""
+        client = document_sync_setup["client"]
+        member_token = document_sync_setup["member_token"]
+        tenant = document_sync_setup["tenant"]
+        member = document_sync_setup["member"]
+
+        modified_at = datetime(2026, 3, 15, 12, 0, 0, tzinfo=UTC)
+        drive_filename = f"synced-{uuid4().hex[:8]}.pdf"
+        remote_entry = ExternalFileEntry(
+            external_id=f"remote-{uuid4().hex[:8]}",
+            name=drive_filename,
+            mime_type="application/pdf",
+            modified_at=modified_at,
+            parent_folder_id="folder-reattach",
+        )
+
+        async with document_sync_setup["session_factory"]() as session:
+            from tests.helpers.document_sync_fixtures import create_google_drive_provider
+
+            provider = await create_google_drive_provider(session, tenant_id=tenant.id)
+            repo = DocumentSyncRepository(session)
+            connection = await repo.upsert_connection(
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                provider_id=provider.id,
+                account_email=f"member-{uuid4().hex[:6]}@test-sync.example",
+                credentials={
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                    "expires_at": "2099-01-01T00:00:00+00:00",
+                },
+            )
+            collection = await create_document_collection(
+                session,
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                name=f"Reattach Collection {uuid4().hex[:6]}",
+            )
+            document = await create_document(
+                session,
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                collection_id=collection.id,
+                filename=drive_filename,
+                file_hash=f"orphan-hash-{uuid4().hex[:8]}",
+            )
+            connector = await repo.create_connector(
+                tenant_id=tenant.id,
+                source_connection_id=connection.id,
+                collection_id=collection.id,
+                source_folder_id="folder-reattach",
+                source_folder_name="Reattach Folder",
+                include_subfolders=True,
+            )
+            await repo.create_external_file(
+                tenant_id=tenant.id,
+                connector_id=connector.id,
+                document_id=document.id,
+                external_file_id=remote_entry.external_id,
+                external_name=remote_entry.name,
+                external_modified_at=modified_at,
+            )
+            await DBDocumentRepository(session).soft_delete(document.id, tenant.id)
+            await session.commit()
+            connector_id = connector.id
+            collection_id = collection.id
+
+        file_bytes = b"%PDF-1.4\n" + uuid4().bytes
+
+        with (
+            patch(
+                "apps.shared.document.sync_service.GoogleDriveClient.list_folder_tree",
+                new=AsyncMock(return_value=[remote_entry]),
+            ),
+            patch(
+                "apps.shared.document.sync_service.GoogleDriveClient.download_file",
+                new=AsyncMock(return_value=(drive_filename, file_bytes)),
+            ),
+        ):
+            sync_resp = await client.post(
+                f"/document-sync/connectors/{connector_id}/sync",
+                headers=make_auth_headers(member_token),
+            )
+        assert sync_resp.status_code == 200, sync_resp.text
+        sync_body = sync_resp.json()
+        assert sync_body["added"] + sync_body["updated"] >= 1
+
+        list_resp = await client.get(
+            "/documents",
+            params={"collection_id": collection_id, "page_size": 50},
+            headers=make_auth_headers(member_token),
+        )
+        assert list_resp.status_code == 200, list_resp.text
+        items = list_resp.json()["items"]
+        assert any(
+            item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items
+        )
+
+    async def test_sync_reimports_when_mapping_targets_other_collection(self, document_sync_setup):
+        """Mapping must be scoped to the connector collection — wrong collection_id triggers re-import."""
+        client = document_sync_setup["client"]
+        member_token = document_sync_setup["member_token"]
+        tenant = document_sync_setup["tenant"]
+        member = document_sync_setup["member"]
+
+        modified_at = datetime(2026, 4, 1, 8, 30, 0, tzinfo=UTC)
+        drive_filename = f"cross-{uuid4().hex[:8]}.pdf"
+        remote_entry = ExternalFileEntry(
+            external_id=f"remote-{uuid4().hex[:8]}",
+            name=drive_filename,
+            mime_type="application/pdf",
+            modified_at=modified_at,
+            parent_folder_id="folder-cross",
+        )
+
+        async with document_sync_setup["session_factory"]() as session:
+            from tests.helpers.document_sync_fixtures import create_google_drive_provider
+
+            provider = await create_google_drive_provider(session, tenant_id=tenant.id)
+            repo = DocumentSyncRepository(session)
+            connection = await repo.upsert_connection(
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                provider_id=provider.id,
+                account_email=f"member-{uuid4().hex[:6]}@test-sync.example",
+                credentials={
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                    "expires_at": "2099-01-01T00:00:00+00:00",
+                },
+            )
+            sync_collection = await create_document_collection(
+                session,
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                name=f"Sync Target {uuid4().hex[:6]}",
+            )
+            other_collection = await create_document_collection(
+                session,
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                name=f"Other Collection {uuid4().hex[:6]}",
+            )
+            other_doc = await create_document(
+                session,
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                collection_id=other_collection.id,
+                filename=drive_filename,
+                file_hash=f"other-hash-{uuid4().hex[:8]}",
+            )
+            connector = await repo.create_connector(
+                tenant_id=tenant.id,
+                source_connection_id=connection.id,
+                collection_id=sync_collection.id,
+                source_folder_id="folder-cross",
+                source_folder_name="Cross Folder",
+                include_subfolders=True,
+            )
+            await repo.create_external_file(
+                tenant_id=tenant.id,
+                connector_id=connector.id,
+                document_id=other_doc.id,
+                external_file_id=remote_entry.external_id,
+                external_name=remote_entry.name,
+                external_modified_at=modified_at,
+            )
+            await session.commit()
+            connector_id = connector.id
+            sync_collection_id = sync_collection.id
+
+        file_bytes = b"%PDF-1.4\n" + uuid4().bytes
+
+        with (
+            patch(
+                "apps.shared.document.sync_service.GoogleDriveClient.list_folder_tree",
+                new=AsyncMock(return_value=[remote_entry]),
+            ),
+            patch(
+                "apps.shared.document.sync_service.GoogleDriveClient.download_file",
+                new=AsyncMock(return_value=(drive_filename, file_bytes)),
+            ),
+        ):
+            sync_resp = await client.post(
+                f"/document-sync/connectors/{connector_id}/sync",
+                headers=make_auth_headers(member_token),
+            )
+        assert sync_resp.status_code == 200, sync_resp.text
+        assert sync_resp.json()["added"] >= 1
+
+        list_resp = await client.get(
+            "/documents",
+            params={"collection_id": sync_collection_id, "page_size": 50},
+            headers=make_auth_headers(member_token),
+        )
+        assert list_resp.status_code == 200, list_resp.text
+        items = list_resp.json()["items"]
+        assert any(
+            item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items
+        )
+
+    async def test_sync_reimports_when_mapping_has_no_document_id(self, document_sync_setup):
+        """Orphan mapping (document_id cleared) must re-import instead of counting as unchanged on Drive."""
+        client = document_sync_setup["client"]
+        member_token = document_sync_setup["member_token"]
+        tenant = document_sync_setup["tenant"]
+        member = document_sync_setup["member"]
+
+        modified_at = datetime(2026, 5, 10, 16, 0, 0, tzinfo=UTC)
+        drive_filename = f"cleared-{uuid4().hex[:8]}.pdf"
+        remote_entry = ExternalFileEntry(
+            external_id=f"remote-{uuid4().hex[:8]}",
+            name=drive_filename,
+            mime_type="application/pdf",
+            modified_at=modified_at,
+            parent_folder_id="folder-cleared",
+        )
+
+        async with document_sync_setup["session_factory"]() as session:
+            from tests.helpers.document_sync_fixtures import create_google_drive_provider
+
+            provider = await create_google_drive_provider(session, tenant_id=tenant.id)
+            repo = DocumentSyncRepository(session)
+            connection = await repo.upsert_connection(
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                provider_id=provider.id,
+                account_email=f"member-{uuid4().hex[:6]}@test-sync.example",
+                credentials={
+                    "access_token": "access-token",
+                    "refresh_token": "refresh-token",
+                    "expires_at": "2099-01-01T00:00:00+00:00",
+                },
+            )
+            collection = await create_document_collection(
+                session,
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                name=f"Cleared Mapping {uuid4().hex[:6]}",
+            )
+            document = await create_document(
+                session,
+                tenant_id=tenant.id,
+                owner_id=member.id,
+                collection_id=collection.id,
+                filename=drive_filename,
+                file_hash=f"cleared-hash-{uuid4().hex[:8]}",
+            )
+            connector = await repo.create_connector(
+                tenant_id=tenant.id,
+                source_connection_id=connection.id,
+                collection_id=collection.id,
+                source_folder_id="folder-cleared",
+                source_folder_name="Cleared Folder",
+                include_subfolders=True,
+            )
+            mapping = await repo.create_external_file(
+                tenant_id=tenant.id,
+                connector_id=connector.id,
+                document_id=document.id,
+                external_file_id=remote_entry.external_id,
+                external_name=remote_entry.name,
+                external_modified_at=modified_at,
+            )
+            await repo.clear_external_file_document(mapping)
+            assert mapping.document_id is None
+            await session.commit()
+            connector_id = connector.id
+            collection_id = collection.id
+
+        file_bytes = b"%PDF-1.4\n" + uuid4().bytes
+
+        with (
+            patch(
+                "apps.shared.document.sync_service.GoogleDriveClient.list_folder_tree",
+                new=AsyncMock(return_value=[remote_entry]),
+            ),
+            patch(
+                "apps.shared.document.sync_service.GoogleDriveClient.download_file",
+                new=AsyncMock(return_value=(drive_filename, file_bytes)),
+            ),
+        ):
+            sync_resp = await client.post(
+                f"/document-sync/connectors/{connector_id}/sync",
+                headers=make_auth_headers(member_token),
+            )
+        assert sync_resp.status_code == 200, sync_resp.text
+        sync_body = sync_resp.json()
+        assert sync_body["added"] + sync_body["updated"] >= 1
+
+        list_resp = await client.get(
+            "/documents",
+            params={"collection_id": collection_id, "page_size": 50},
+            headers=make_auth_headers(member_token),
+        )
+        assert list_resp.status_code == 200, list_resp.text
+        items = list_resp.json()["items"]
+        assert any(
+            item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items
+        )

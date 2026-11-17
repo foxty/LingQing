@@ -13,8 +13,10 @@ export interface DocumentCollection {
   can_manage: boolean
   has_drive_sync: boolean
   sync_folder_name: string | null
+  sync_folder_id: string | null
   sync_status: string | null
   last_synced_at: string | null
+  last_sync_error: string | null
   created_at: string
   updated_at: string
 }

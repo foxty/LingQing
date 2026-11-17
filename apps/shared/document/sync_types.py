@@ -3,10 +3,26 @@
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Literal
+from typing import Final, Literal
 
 ConnectionStatus = Literal["active", "revoked"]
 ConnectorStatus = Literal["active", "stopped"]
+
+
+class SourceConnectionStatus(StrEnum):
+    ACTIVE = "active"
+    REVOKED = "revoked"
+
+
+class DocumentSyncConnectorStatus(StrEnum):
+    ACTIVE = "active"
+    STOPPED = "stopped"
+
+
+SOURCE_CONNECTION_ACTIVE: Final = SourceConnectionStatus.ACTIVE.value
+SOURCE_CONNECTION_REVOKED: Final = SourceConnectionStatus.REVOKED.value
+CONNECTOR_ACTIVE: Final = DocumentSyncConnectorStatus.ACTIVE.value
+CONNECTOR_STOPPED: Final = DocumentSyncConnectorStatus.STOPPED.value
 
 
 class DocumentSourceProviderKey(StrEnum):

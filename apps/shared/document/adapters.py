@@ -125,8 +125,10 @@ def domain_collection_to_api(
     can_manage: bool = True,
     has_drive_sync: bool = False,
     sync_folder_name: str | None = None,
+    sync_folder_id: str | None = None,
     sync_status: str | None = None,
     last_synced_at: str | None = None,
+    last_sync_error: str | None = None,
 ) -> DocumentCollectionResponse:
     return DocumentCollectionResponse(
         id=domain.id,
@@ -140,8 +142,10 @@ def domain_collection_to_api(
         can_manage=can_manage,
         has_drive_sync=has_drive_sync,
         sync_folder_name=sync_folder_name,
+        sync_folder_id=sync_folder_id,
         sync_status=sync_status,
         last_synced_at=last_synced_at,
+        last_sync_error=last_sync_error,
         created_at=domain.created_at.isoformat(),
         updated_at=domain.updated_at.isoformat(),
     )

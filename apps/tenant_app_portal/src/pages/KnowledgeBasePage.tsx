@@ -1,9 +1,10 @@
 import ContainerRowActions from '@/components/ContainerRowActions'
+import TruncatedTextPopover from '@/components/TruncatedTextPopover'
 import CollectionsDialogs from '@/components/knowledge-base/CollectionsDialogs'
+import CollectionDriveSyncListCell from '@/components/knowledge-base/CollectionDriveSyncListCell'
 import ListIndexToolbar from '@/components/ListIndexToolbar'
 import PaginationBar from '@/components/PaginationBar'
 import TagChips from '@/components/TagChips'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Table,
@@ -17,8 +18,11 @@ import { COLLECTIONS_PAGE_SIZE, useCollectionsPage } from '@/hooks/useCollection
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import i18n from '@/i18n/config'
-import { Cloud, FolderOpen } from 'lucide-react'
+import { FolderOpen } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+
+const COLLECTION_LIST_NAME_MAX_CHARS = 56
+const COLLECTION_LIST_DESC_MAX_CHARS = 72
 
 i18n.addResourceBundle('en', 'translation', {
   knowledgeBase: {
@@ -67,14 +71,11 @@ i18n.addResourceBundle('en', 'translation', {
     driveConnected: 'Google Drive connected successfully',
     driveConnectError: 'Failed to connect Google Drive',
     nameCol: 'Name',
-    docsCol: 'Documents',
+    docsCol: 'Docs',
     ownerCol: 'Owner',
     syncCol: 'Drive Sync',
     descCol: 'Description',
     updatedCol: 'Updated',
-    syncActive: 'Synced',
-    syncStopped: 'Stopped',
-    syncFolder: 'Folder: {{name}}',
     noMatchingCollections: 'No matching collections',
     openCollection: 'Open collection {{name}}',
   },
@@ -132,9 +133,6 @@ i18n.addResourceBundle('zh', 'translation', {
     syncCol: 'Drive 同步',
     descCol: '描述',
     updatedCol: '更新时间',
-    syncActive: '已同步',
-    syncStopped: '已停止',
-    syncFolder: '文件夹：{{name}}',
     noMatchingCollections: '没有匹配的集合',
     openCollection: '打开集合 {{name}}',
   },
@@ -186,17 +184,36 @@ export default function KnowledgeBasePage() {
         </p>
       ) : (
         <div className="space-y-3">
-        <div className="overflow-hidden rounded-lg border bg-card">
-          <Table className="table-fixed w-full">
+        <div className="overflow-x-auto rounded-lg border bg-card">
+          <Table className="table-fixed w-full min-w-[48rem]">
+            <colgroup>
+              <col className="w-[22%]" />
+              <col className="w-14" />
+              <col className="w-[7.5rem]" />
+              <col className="w-[11rem]" />
+              <col className="w-[22%]" />
+              <col className="w-[8.5rem]" />
+              <col className="w-[6.5rem]" />
+            </colgroup>
             <TableHeader>
               <TableRow className="hover:bg-transparent">
-                <TableHead className="h-10 w-[34%] min-w-[12rem]">{t('knowledgeBase.nameCol')}</TableHead>
-                <TableHead className="h-10 w-20 text-center">{t('knowledgeBase.docsCol')}</TableHead>
-                <TableHead className="h-10 w-28 hidden md:table-cell">{t('knowledgeBase.ownerCol')}</TableHead>
-                <TableHead className="h-10 w-36 hidden lg:table-cell">{t('knowledgeBase.syncCol')}</TableHead>
-                <TableHead className="h-10 hidden xl:table-cell">{t('knowledgeBase.descCol')}</TableHead>
-                <TableHead className="h-10 w-36 hidden sm:table-cell">{t('knowledgeBase.updatedCol')}</TableHead>
-                <TableHead className="h-10 w-28 text-right">{t('common.action')}</TableHead>
+                <TableHead className="h-10 whitespace-nowrap">{t('knowledgeBase.nameCol')}</TableHead>
+                <TableHead className="h-10 px-1 text-center whitespace-nowrap">
+                  {t('knowledgeBase.docsCol')}
+                </TableHead>
+                <TableHead className="h-10 hidden md:table-cell whitespace-nowrap">
+                  {t('knowledgeBase.ownerCol')}
+                </TableHead>
+                <TableHead className="h-10 hidden lg:table-cell whitespace-nowrap">
+                  {t('knowledgeBase.syncCol')}
+                </TableHead>
+                <TableHead className="h-10 hidden xl:table-cell whitespace-nowrap">
+                  {t('knowledgeBase.descCol')}
+                </TableHead>
+                <TableHead className="h-10 hidden sm:table-cell whitespace-nowrap">
+                  {t('knowledgeBase.updatedCol')}
+                </TableHead>
+                <TableHead className="h-10 text-right whitespace-nowrap">{t('common.action')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
@@ -211,8 +228,13 @@ export default function KnowledgeBasePage() {
                     >
                       <FolderOpen className="w-4 h-4 shrink-0 mt-0.5 text-muted-foreground" />
                       <div className="min-w-0 flex-1 space-y-1">
-                        <span className="text-sm font-medium truncate block group-hover:underline">
-                          {collection.name}
+                        <span
+                          className="text-sm font-medium truncate block group-hover:underline"
+                          title={collection.name}
+                        >
+                          {collection.name.length > COLLECTION_LIST_NAME_MAX_CHARS
+                            ? `${collection.name.slice(0, COLLECTION_LIST_NAME_MAX_CHARS)}…`
+                            : collection.name}
                         </span>
                         {page.canReadTags && (page.collectionTagsMap[collection.id]?.length || 0) > 0 ? (
                           <TagChips
@@ -232,31 +254,14 @@ export default function KnowledgeBasePage() {
                     {collection.owner_name || '—'}
                   </TableCell>
                   <TableCell className="py-2.5 hidden lg:table-cell">
-                    {collection.has_drive_sync ? (
-                      <div className="space-y-0.5 min-w-0">
-                        <Badge variant="outline" className="h-5 gap-1 px-1.5 text-[11px] font-normal">
-                          <Cloud className="h-3 w-3" />
-                          {collection.sync_status === 'active'
-                            ? t('knowledgeBase.syncActive')
-                            : t('knowledgeBase.syncStopped')}
-                        </Badge>
-                        {collection.sync_folder_name ? (
-                          <p
-                            className="text-xs text-muted-foreground truncate"
-                            title={collection.sync_folder_name}
-                          >
-                            {t('knowledgeBase.syncFolder', { name: collection.sync_folder_name })}
-                          </p>
-                        ) : null}
-                      </div>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">—</span>
-                    )}
+                    <CollectionDriveSyncListCell collection={collection} />
                   </TableCell>
                   <TableCell className="py-2.5 hidden xl:table-cell max-w-0">
-                    <p className="text-sm text-muted-foreground truncate" title={collection.description ?? undefined}>
-                      {collection.description || '—'}
-                    </p>
+                    <TruncatedTextPopover
+                      text={collection.description}
+                      maxChars={COLLECTION_LIST_DESC_MAX_CHARS}
+                      className="text-muted-foreground"
+                    />
                   </TableCell>
                   <TableCell className="py-2.5 text-sm tabular-nums hidden sm:table-cell">
                     {formatUserDateTime(collection.updated_at)}

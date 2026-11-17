@@ -101,6 +101,7 @@ async def test_list_folder_tree_includes_shared_drive_params():
 
     assert captured.get("supportsAllDrives") == "true"
     assert captured.get("includeItemsFromAllDrives") == "true"
+    assert captured.get("corpora") == "allDrives"
 
 
 async def test_download_file_includes_shared_drive_params():

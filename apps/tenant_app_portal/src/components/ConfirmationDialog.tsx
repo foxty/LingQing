@@ -67,7 +67,11 @@ export function ConfirmationDialog<T>({
       <AlertDialogContent>
         <AlertDialogHeader>
           <AlertDialogTitle>{title}</AlertDialogTitle>
-          <AlertDialogDescription>{description(item)}</AlertDialogDescription>
+          <AlertDialogDescription asChild>
+            <div className="min-w-0 space-y-2 text-left text-sm text-muted-foreground break-words">
+              {description(item)}
+            </div>
+          </AlertDialogDescription>
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel disabled={isLoading}>{cancelLabel}</AlertDialogCancel>

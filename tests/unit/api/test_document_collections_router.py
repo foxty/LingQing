@@ -44,8 +44,10 @@ def app(monkeypatch):
                 can_manage=True,
                 has_drive_sync=False,
                 sync_folder_name=None,
+                sync_folder_id=None,
                 sync_status=None,
                 last_synced_at=None,
+                last_sync_error=None,
                 created_at="2026-01-01T00:00:00Z",
                 updated_at="2026-01-01T00:00:00Z",
             )

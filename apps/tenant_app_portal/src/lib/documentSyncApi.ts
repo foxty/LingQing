@@ -1,4 +1,5 @@
 import api from './api'
+import type { ConnectorStatus, SourceConnectionStatus } from './documentSyncConstants'
 
 export interface DriveAuthorizeResponse {
   authorize_url: string
@@ -15,7 +16,7 @@ export interface DocumentSourceConnection {
   provider_id: number
   provider: string
   account_email: string | null
-  status: string
+  status: SourceConnectionStatus
   created_at: string
   updated_at: string
 }
@@ -27,12 +28,13 @@ export interface SyncConnector {
   source_folder_id: string
   source_folder_name: string
   include_subfolders: boolean
-  status: string
+  status: ConnectorStatus
   last_synced_at: string | null
   last_sync_error: string | null
   connection_owner_id: number
   connection_owner_username: string | null
   account_email: string | null
+  source_connection_status: SourceConnectionStatus | null
   created_at: string
   updated_at: string
 }
@@ -50,6 +52,7 @@ export interface SyncConnectorResult {
   updated: number
   deleted: number
   skipped: number
+  skipped_unchanged?: number
 }
 
 export async function getGoogleDriveAuthorizeUrl(): Promise<DriveAuthorizeResponse> {
@@ -93,8 +96,23 @@ export async function createCollectionSyncConnector(
   return response.data
 }
 
-export async function deleteCollectionSyncConnector(collectionId: number): Promise<void> {
+export async function pauseCollectionSyncConnector(collectionId: number): Promise<SyncConnector> {
+  const response = await api.post<SyncConnector>(
+    `/document-collections/${collectionId}/sync-connector/pause`
+  )
+  return response.data
+}
+
+/** Unbinds the Drive folder from this collection (deletes the connector row). */
+export async function disconnectCollectionSyncFolder(collectionId: number): Promise<void> {
   await api.delete(`/document-collections/${collectionId}/sync-connector`)
+}
+
+export async function resumeCollectionSyncConnector(collectionId: number): Promise<SyncConnector> {
+  const response = await api.post<SyncConnector>(
+    `/document-collections/${collectionId}/sync-connector/resume`
+  )
+  return response.data
 }
 
 export async function triggerConnectorSync(connectorId: number): Promise<SyncConnectorResult> {

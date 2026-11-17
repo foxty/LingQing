@@ -28,14 +28,14 @@ export default function DocumentBatchDeleteDialog({
           <>
             <Trans i18nKey="knowledgeBase.confirmBatchDeleteDesc" count={docIds?.length || 0} />
             {driveLinkedCount > 0 ? (
-              <span className="text-amber-600 mt-2 block">
+              <p className="text-xs leading-snug text-amber-800 dark:text-amber-200">
                 {t('knowledgeBase.batchDriveDeleteWarning', { count: driveLinkedCount })}
-              </span>
+              </p>
             ) : null}
-            <div className="mt-2 max-h-32 overflow-y-auto text-sm">
-              <ul className="list-disc list-inside space-y-1">
+            <div className="max-h-32 min-w-0 overflow-y-auto text-sm">
+              <ul className="list-disc space-y-1 pl-4">
                 {selectedDocs.slice(0, 5).map((doc) => (
-                  <li key={doc.id} className="truncate">
+                  <li key={doc.id} className="break-words">
                     <span className="font-mono text-xs text-muted-foreground mr-1.5">#{doc.id}</span>
                     {doc.filename}
                   </li>
@@ -47,7 +47,7 @@ export default function DocumentBatchDeleteDialog({
                 )}
               </ul>
             </div>
-            <span className="text-red-600 mt-2 block">{t('knowledgeBase.irreversible')}</span>
+            <p className="text-sm text-destructive">{t('knowledgeBase.irreversible')}</p>
           </>
         )
       }}

@@ -12,6 +12,11 @@ export function driveFileViewUrl(externalFileId: string): string {
   return `https://drive.google.com/file/d/${externalFileId}/view`
 }
 
+/** Derive a browser URL for a Google Drive folder. */
+export function driveFolderViewUrl(folderId: string): string {
+  return `https://drive.google.com/drive/folders/${folderId}`
+}
+
 /** Paginated response envelope (shared with other list APIs). */
 export type PaginatedResponse<T> = PaginatedListResponse<T>
 

@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-11T01:35:43.032918+00:00",
+  "generated_at": "2026-11-16T11:43:52.392949+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -64,7 +64,7 @@
     },
     {
       "operation_key": "DELETE_/document-collections/{collection_id}/sync-connector",
-      "summary": "Delete Sync Connector",
+      "summary": "Disconnect Sync Folder",
       "risk_level": "write"
     },
     {
@@ -740,6 +740,16 @@
     {
       "operation_key": "POST_/document-collections/{collection_id}/sync-connector",
       "summary": "Create Sync Connector",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/document-collections/{collection_id}/sync-connector/pause",
+      "summary": "Pause Sync Connector",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/document-collections/{collection_id}/sync-connector/resume",
+      "summary": "Resume Sync Connector",
       "risk_level": "write"
     },
     {

@@ -6,6 +6,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from apps.shared.document.sync_types import ConnectionStatus, ConnectorStatus
+
 
 class GoogleDriveSourceConfigRequest(BaseModel):
     client_id: str = Field(..., min_length=1)
@@ -38,7 +40,7 @@ class DocumentSourceConnectionResponse(BaseModel):
     provider_id: int
     provider: str
     account_email: str | None
-    status: str
+    status: ConnectionStatus
     created_at: datetime
     updated_at: datetime
 
@@ -57,12 +59,13 @@ class SyncConnectorResponse(BaseModel):
     source_folder_id: str
     source_folder_name: str
     include_subfolders: bool
-    status: str
+    status: ConnectorStatus
     last_synced_at: datetime | None
     last_sync_error: str | None
     connection_owner_id: int
     connection_owner_username: str | None = None
     account_email: str | None = None
+    source_connection_status: ConnectionStatus | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -73,3 +76,4 @@ class SyncConnectorResultResponse(BaseModel):
     updated: int
     deleted: int
     skipped: int
+    skipped_unchanged: int = 0

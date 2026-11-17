@@ -12,6 +12,7 @@ from apps.shared.document.intake import DocumentIntake
 from apps.shared.document.manifest import write_blocks_json
 from apps.shared.document.parse_pipeline import DocumentParsePipeline
 from apps.shared.document.sync_service import DocumentSyncService, SyncDiffResult
+from tests.unit.document.sync_diff_test_helpers import stub_healthy_listable_mapping
 from apps.shared.infra.external_files.google_drive import GOOGLE_MIME_DOCUMENT
 from apps.shared.infra.external_files.port import ExternalFileEntry
 from apps.shared.infra.storage.file_storage import LocalFileStorage
@@ -114,6 +115,7 @@ async def test_apply_sync_diff_skips_download_when_timestamp_unchanged(sync_serv
         external_modified_at=modified_at,
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    stub_healthy_listable_mapping(sync_service)
     drive_client = AsyncMock()
 
     with patch("apps.shared.document.sync_service.DocumentParsePipeline"):
@@ -124,7 +126,7 @@ async def test_apply_sync_diff_skips_download_when_timestamp_unchanged(sync_serv
             remote_files=[_entry("file-a", modified_at=modified_at)],
         )
 
-    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped=1)
+    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped_unchanged=1)
     drive_client.download_file.assert_not_awaited()
 
 
@@ -140,10 +142,12 @@ async def test_apply_sync_diff_skips_update_when_hash_unchanged_after_timestamp_
         external_modified_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
-    sync_service._document_is_deleted = AsyncMock(return_value=False)
+    stub_healthy_listable_mapping(sync_service)
     sync_service._document_repo.get_by_id_and_tenant = AsyncMock(
         return_value=SimpleNamespace(
             id=10,
+            collection_id=20,
+            status="active",
             file_hash=file_hash,
             filename="file-a.pdf",
             file_url="10/original/file-a.pdf",
@@ -165,7 +169,7 @@ async def test_apply_sync_diff_skips_update_when_hash_unchanged_after_timestamp_
             remote_files=[_entry("file-a", modified_at=datetime(2026, 2, 1, tzinfo=UTC))],
         )
 
-    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped=1)
+    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped_other=1)
     drive_client.download_file.assert_awaited_once()
     parse_pipeline.queue_document_reparse.assert_not_awaited()
     sync_service._sync_repo.update_external_file.assert_awaited_once()
@@ -180,6 +184,7 @@ async def test_apply_sync_diff_logs_skip_unchanged(sync_service: DocumentSyncSer
         external_modified_at=modified_at,
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
+    stub_healthy_listable_mapping(sync_service)
 
     with patch("apps.shared.document.sync_service.DocumentParsePipeline"):
         with caplog.at_level("INFO"):
@@ -204,10 +209,12 @@ async def test_apply_sync_diff_logs_hash_match_skip(sync_service: DocumentSyncSe
         external_modified_at=datetime(2026, 1, 1, tzinfo=UTC),
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
-    sync_service._document_is_deleted = AsyncMock(return_value=False)
+    stub_healthy_listable_mapping(sync_service)
     sync_service._document_repo.get_by_id_and_tenant = AsyncMock(
         return_value=SimpleNamespace(
             id=10,
+            collection_id=20,
+            status="active",
             file_hash=file_hash,
             filename="file-a.pdf",
             file_url="10/original/file-a.pdf",
@@ -242,7 +249,7 @@ async def test_apply_sync_diff_refreshes_mapping_metadata_before_skip(
         external_name="Old Title",
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
-    sync_service._document_is_deleted = AsyncMock(return_value=False)
+    stub_healthy_listable_mapping(sync_service)
     sync_service._sync_repo.update_external_file = AsyncMock()
     drive_client = AsyncMock()
 
@@ -261,7 +268,7 @@ async def test_apply_sync_diff_refreshes_mapping_metadata_before_skip(
             ],
         )
 
-    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped=1)
+    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped_unchanged=1)
     drive_client.download_file.assert_not_awaited()
     sync_service._sync_repo.update_external_file.assert_awaited()
     first_call = sync_service._sync_repo.update_external_file.await_args_list[0]
@@ -281,10 +288,12 @@ async def test_apply_sync_diff_null_timestamp_binary_still_downloads(sync_servic
         external_modified_at=None,
     )
     sync_service._sync_repo.list_external_files = AsyncMock(return_value=[mapping])
-    sync_service._document_is_deleted = AsyncMock(return_value=False)
+    stub_healthy_listable_mapping(sync_service)
     sync_service._document_repo.get_by_id_and_tenant = AsyncMock(
         return_value=SimpleNamespace(
             id=10,
+            collection_id=20,
+            status="active",
             file_hash=file_hash,
             filename="file-a.pdf",
             file_url="10/original/file-a.pdf",
@@ -306,7 +315,7 @@ async def test_apply_sync_diff_null_timestamp_binary_still_downloads(sync_servic
             remote_files=[_entry("file-a", modified_at=modified_at)],
         )
 
-    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped=1)
+    assert result == SyncDiffResult(added=0, updated=0, deleted=0, skipped_other=1)
     drive_client.download_file.assert_awaited_once()
     parse_pipeline.queue_document_reparse.assert_not_awaited()
     sync_service._sync_repo.update_external_file.assert_awaited_once_with(

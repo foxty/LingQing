@@ -194,6 +194,8 @@ class GoogleDriveClient:
                     "q": f"'{current_folder}' in parents and trashed = false",
                     "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,parents)",
                     "pageSize": 200,
+                    # Required so shared / team folders (not only My Drive) return children.
+                    "corpora": "allDrives",
                     **_shared_drive_params(),
                 }
                 if page_token:

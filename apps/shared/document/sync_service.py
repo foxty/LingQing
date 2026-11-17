@@ -42,7 +42,12 @@ from apps.shared.document.sync_schemas import (
     SyncConnectorResponse,
     SyncConnectorResultResponse,
 )
-from apps.shared.document.sync_types import DEFAULT_DOCUMENT_SOURCE_PROVIDER
+from apps.shared.document.sync_types import (
+    CONNECTOR_ACTIVE,
+    CONNECTOR_STOPPED,
+    DEFAULT_DOCUMENT_SOURCE_PROVIDER,
+    SOURCE_CONNECTION_ACTIVE,
+)
 from apps.shared.document.types import DocumentStatus
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import ABAC_ACTION_READ, AUTHZ_ACTION_MANAGE
@@ -62,7 +67,12 @@ class SyncDiffResult:
     added: int = 0
     updated: int = 0
     deleted: int = 0
-    skipped: int = 0
+    skipped_unchanged: int = 0
+    skipped_other: int = 0
+
+    @property
+    def skipped(self) -> int:
+        return self.skipped_unchanged + self.skipped_other
 
 
 class DocumentSyncService(TenantAwareService):
@@ -234,17 +244,17 @@ class DocumentSyncService(TenantAwareService):
             provider_id=provider.id,
             account_email=account_email,
             credentials=credentials,
-            status="active",
+            status=SOURCE_CONNECTION_ACTIVE,
         )
         return self.tenant_id, oauth_state.user_id
 
     async def list_connections(self, *, owner_id: int) -> list[DocumentSourceConnectionResponse]:
         rows = await self._sync_repo.list_connections(self.tenant_id, owner_id=owner_id)
-        return [self._connection_to_response(row) for row in rows if row.status == "active"]
+        return [self._connection_to_response(row) for row in rows if row.status == SOURCE_CONNECTION_ACTIVE]
 
     async def get_picker_config(self, *, connection_id: int, owner_id: int) -> DrivePickerConfigResponse:
         connection = await self._sync_repo.get_connection(self.tenant_id, connection_id)
-        if connection is None or connection.status != "active":
+        if connection is None or connection.status != SOURCE_CONNECTION_ACTIVE:
             raise ResourceNotFoundError("Source connection not found or inactive")
         if connection.owner_id != owner_id:
             raise AuthorizationError("Cannot use another user's source connection")
@@ -282,7 +292,7 @@ class DocumentSyncService(TenantAwareService):
                 {"code": "SYNC_CONNECTOR_EXISTS"},
             )
         connection = await self._sync_repo.get_connection(self.tenant_id, request.source_connection_id)
-        if connection is None or connection.status != "active":
+        if connection is None or connection.status != SOURCE_CONNECTION_ACTIVE:
             raise ResourceNotFoundError("Source connection not found or inactive")
         if connection.owner_id != actor.user_id:
             raise AuthorizationError("Cannot bind another user's source connection")
@@ -310,17 +320,55 @@ class DocumentSyncService(TenantAwareService):
             return None
         return self._connector_to_response(connector)
 
-    async def delete_connector(self, *, collection_id: int, actor: ActorContext) -> None:
+    async def pause_connector(self, *, collection_id: int, actor: ActorContext) -> SyncConnectorResponse:
         await self._collection_service.require_collection_access(
             collection_id=collection_id,
             actor=actor,
-            action=ABAC_ACTION_READ,
+            action=AUTHZ_ACTION_MANAGE,
         )
         connector = await self._sync_repo.get_connector_by_collection(self.tenant_id, collection_id)
         if connector is None:
             raise ResourceNotFoundError("Sync connector not found")
-        self._require_connector_connection_owner(connector, actor)
+        if connector.status == CONNECTOR_STOPPED:
+            return self._connector_to_response(connector)
         await self._sync_repo.stop_connector(connector)
+        connector = await self._sync_repo.get_connector(self.tenant_id, connector.id)
+        assert connector is not None
+        return self._connector_to_response(connector)
+
+    async def disconnect_connector(self, *, collection_id: int, actor: ActorContext) -> None:
+        """Remove the collection's folder binding (connector row). Does not delete imported documents."""
+        await self._collection_service.require_collection_access(
+            collection_id=collection_id,
+            actor=actor,
+            action=AUTHZ_ACTION_MANAGE,
+        )
+        connector = await self._sync_repo.get_connector_by_collection(self.tenant_id, collection_id)
+        if connector is None:
+            raise ResourceNotFoundError("Sync connector not found")
+        await self._sync_repo.delete_connector_row(connector)
+
+    async def resume_connector(self, *, collection_id: int, actor: ActorContext) -> SyncConnectorResponse:
+        await self._collection_service.require_collection_access(
+            collection_id=collection_id,
+            actor=actor,
+            action=AUTHZ_ACTION_MANAGE,
+        )
+        connector = await self._sync_repo.get_connector_by_collection(self.tenant_id, collection_id)
+        if connector is None:
+            raise ResourceNotFoundError("Sync connector not found")
+        if connector.status == CONNECTOR_ACTIVE:
+            return self._connector_to_response(connector)
+        connection = connector.source_connection
+        if connection is None or connection.status != SOURCE_CONNECTION_ACTIVE:
+            raise ValidationError(
+                "Reconnect Google Drive before resuming folder sync",
+                {"code": "SOURCE_CONNECTION_INACTIVE"},
+            )
+        await self._sync_repo.activate_connector(connector)
+        connector = await self._sync_repo.get_connector(self.tenant_id, connector.id)
+        assert connector is not None
+        return self._connector_to_response(connector)
 
     async def sync_connector(
         self,
@@ -343,15 +391,14 @@ class DocumentSyncService(TenantAwareService):
                 )
                 return None
             raise ValidationError("Sync already in progress", {"code": "SYNC_IN_PROGRESS"})
-        if connector.status != "active":
+        if connector.status != CONNECTOR_ACTIVE:
             raise ValidationError("Sync connector is not active", {"code": "SYNC_CONNECTOR_STOPPED"})
         if actor is not None:
             await self._collection_service.require_collection_access(
                 collection_id=connector.collection_id,
                 actor=actor,
-                action=ABAC_ACTION_READ,
+                action=AUTHZ_ACTION_MANAGE,
             )
-            self._require_connector_connection_owner(connector, actor)
 
         try:
             diff = await self._run_connector_sync(connector)
@@ -379,6 +426,7 @@ class DocumentSyncService(TenantAwareService):
             updated=diff.updated,
             deleted=diff.deleted,
             skipped=diff.skipped,
+            skipped_unchanged=diff.skipped_unchanged,
         )
 
     async def sync_all_active_connectors(self, *, skip_if_locked: bool = True) -> list[SyncConnectorResultResponse]:
@@ -404,7 +452,7 @@ class DocumentSyncService(TenantAwareService):
 
     async def _run_connector_sync(self, connector) -> SyncDiffResult:
         connection = connector.source_connection
-        if connection is None or connection.status != "active":
+        if connection is None or connection.status != SOURCE_CONNECTION_ACTIVE:
             raise ValidationError("Source connection is not active")
 
         access_token = await self._resolve_access_token(connection)
@@ -413,6 +461,13 @@ class DocumentSyncService(TenantAwareService):
                 connector.source_folder_id,
                 include_subfolders=connector.include_subfolders,
             )
+            if not remote_files:
+                logger.info(
+                    "document_sync_no_remote_files tenant_id=%s connector_id=%s folder_id=%s",
+                    self.tenant_id,
+                    connector.id,
+                    connector.source_folder_id,
+                )
             return await self._apply_sync_diff(
                 connector=connector,
                 connection=connection,
@@ -470,6 +525,54 @@ class DocumentSyncService(TenantAwareService):
             expires_at = expires_at.replace(tzinfo=UTC)
         return datetime.now(UTC) >= expires_at - timedelta(minutes=2)
 
+    async def _mapping_document_listable(self, connector, document_id: int | None) -> bool:
+        """True when the mapped document exists, is in this collection, and is not soft-deleted."""
+        if document_id is None:
+            return False
+        document = await self._document_repo.get_by_id_and_tenant(document_id, self.tenant_id)
+        if document is None:
+            return False
+        if document.collection_id != connector.collection_id:
+            return False
+        return document.status != DocumentStatus.DELETED.value
+
+    async def _reattach_external_mapping(
+        self,
+        *,
+        result: SyncDiffResult,
+        intake: DocumentIntake,
+        connector,
+        connection,
+        drive_client: GoogleDriveClient,
+        mapping,
+        remote: ExternalFileEntry,
+    ) -> None:
+        """Import Drive file again when the external mapping points at a missing or invalid document."""
+        added_doc = await self._intake_remote_file(
+            intake=intake,
+            connector=connector,
+            connection=connection,
+            drive_client=drive_client,
+            remote=remote,
+        )
+        if added_doc is None:
+            result.skipped_other += 1
+            return
+        await self._sync_repo.update_external_file(
+            mapping,
+            document_id=added_doc.id,
+            external_name=remote.name,
+            external_modified_at=remote.modified_at,
+        )
+        logger.info(
+            "document_sync_reattached tenant_id=%s connector_id=%s external_file_id=%s document_id=%s",
+            self.tenant_id,
+            connector.id,
+            remote.external_id,
+            added_doc.id,
+        )
+        result.added += 1
+
     async def _apply_sync_diff(
         self,
         *,
@@ -497,7 +600,7 @@ class DocumentSyncService(TenantAwareService):
                     remote=remote,
                 )
                 if added_doc is None:
-                    result.skipped += 1
+                    result.skipped_other += 1
                     continue
                 await self._sync_repo.create_external_file(
                     tenant_id=self.tenant_id,
@@ -518,7 +621,13 @@ class DocumentSyncService(TenantAwareService):
                 continue
 
             needs_revive = await self._document_is_deleted(mapping.document_id)
-            if self._is_unchanged(mapping.external_modified_at, remote.modified_at) and not needs_revive:
+            listable = await self._mapping_document_listable(connector, mapping.document_id)
+
+            if (
+                listable
+                and self._is_unchanged(mapping.external_modified_at, remote.modified_at)
+                and not needs_revive
+            ):
                 if remote.modified_at is not None or remote.name != mapping.external_name:
                     await self._sync_repo.update_external_file(
                         mapping,
@@ -532,7 +641,7 @@ class DocumentSyncService(TenantAwareService):
                     external_id,
                     mapping.document_id,
                 )
-                result.skipped += 1
+                result.skipped_unchanged += 1
                 continue
 
             if mapping.document_id is None:
@@ -544,7 +653,7 @@ class DocumentSyncService(TenantAwareService):
                     remote=remote,
                 )
                 if added_doc is None:
-                    result.skipped += 1
+                    result.skipped_other += 1
                     continue
                 await self._sync_repo.update_external_file(
                     mapping,
@@ -578,7 +687,27 @@ class DocumentSyncService(TenantAwareService):
                 if updated:
                     result.updated += 1
                 else:
-                    result.skipped += 1
+                    await self._reattach_external_mapping(
+                        result=result,
+                        intake=intake,
+                        connector=connector,
+                        connection=connection,
+                        drive_client=drive_client,
+                        mapping=mapping,
+                        remote=remote,
+                    )
+                continue
+
+            if not listable:
+                await self._reattach_external_mapping(
+                    result=result,
+                    intake=intake,
+                    connector=connector,
+                    connection=connection,
+                    drive_client=drive_client,
+                    mapping=mapping,
+                    remote=remote,
+                )
                 continue
 
             updated = await self._update_existing_document(
@@ -596,7 +725,7 @@ class DocumentSyncService(TenantAwareService):
             if updated:
                 result.updated += 1
             else:
-                result.skipped += 1
+                result.skipped_other += 1
 
         for external_id, mapping in mapping_by_external_id.items():
             if external_id in remote_by_id:
@@ -785,6 +914,7 @@ class DocumentSyncService(TenantAwareService):
             connection_owner_id=connection.owner_id if connection is not None else 0,
             connection_owner_username=owner_username,
             account_email=connection.account_email if connection is not None else None,
+            source_connection_status=connection.status if connection is not None else None,
             created_at=connector.created_at,
             updated_at=connector.updated_at,
         )

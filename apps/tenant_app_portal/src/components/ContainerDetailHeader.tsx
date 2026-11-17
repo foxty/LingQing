@@ -5,6 +5,7 @@ interface ContainerDetailHeaderProps {
   parentLabel: string
   onParentNavigate: () => void
   title: string
+  titleAddon?: ReactNode
   meta?: ReactNode
 }
 
@@ -12,6 +13,7 @@ export default function ContainerDetailHeader({
   parentLabel,
   onParentNavigate,
   title,
+  titleAddon,
   meta,
 }: ContainerDetailHeaderProps) {
   return (
@@ -29,7 +31,10 @@ export default function ContainerDetailHeader({
       </nav>
 
       <div className="min-w-0 space-y-1">
-        <h1 className="text-2xl font-semibold truncate">{title}</h1>
+        <div className="flex items-center gap-2 min-w-0">
+          <h1 className="text-2xl font-semibold truncate min-w-0">{title}</h1>
+          {titleAddon ? <div className="shrink-0">{titleAddon}</div> : null}
+        </div>
         {meta ? <div className="text-sm text-muted-foreground">{meta}</div> : null}
       </div>
     </div>
