@@ -16,7 +16,7 @@ from apps.shared.db.models import Tenant, User
 from apps.shared.db.session import get_db
 from apps.shared.domain.actor import ActorContext
 from apps.shared.schemas.user import UserDTO
-from apps.shared.search.search_service import SearchService
+from apps.shared.search.retrieval_service import SearchService
 from apps.shared.utils.pagination import PaginationRequest
 from apps.tenant_app_service.server import app
 
@@ -167,7 +167,7 @@ async def search_api_connector_env(async_db_session: AsyncSession):
         await seed_session.commit()
 
         # Sync resource_index records to populate tokenized_content for FTS
-        from apps.shared.search.indexing_service import ResourceIndexService
+        from apps.shared.search.sync_service import ResourceIndexService
         from tests.stub_embeddings import StubEmbeddings
 
         stub = StubEmbeddings()

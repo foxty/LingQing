@@ -205,7 +205,7 @@ class DocumentIntake:
         )
 
     async def _index_service(self):
-        from apps.shared.search.indexing_service import ResourceIndexService
+        from apps.shared.search.sync_service import ResourceIndexService
 
         return await ResourceIndexService.create(
             tenant_id=self.tenant_id,

@@ -1,10 +1,10 @@
-"""Resource index service — ingest-side indexing and vector sync.
+"""Resource index sync — publish catalog rows to FTS and vector stores.
 
-Owns ResourceIndex CRUD and drives vector/FTS synchronization. Query-time
-hybrid search lives in :mod:`apps.shared.search.search_service`.
+Owns ResourceIndex CRUD and drives publish (vector sync) jobs. Hybrid retrieval
+lives in :mod:`apps.shared.search.retrieval_service`.
 
-Flow 1 (upload/sync): Parse resource → save raw_content to ResourceIndex
-Flow 2 (sync job): Read raw_content → tokenize + chunk → save to FTS + Vector DB
+Flow 1 (register): Persist raw_content on ResourceIndex (from document parse or asset sync)
+Flow 2 (publish): Read raw_content → lexical text + chunks → FTS + Chroma
 """
 
 import hashlib
@@ -39,7 +39,7 @@ from apps.shared.infra.rag.rag_manager import RAGManager
 from apps.shared.infra.storage import FileStorage
 from apps.shared.llm_providers.embedding_resolver import resolve_tenant_embeddings
 from apps.shared.search.adapters import db_to_domain, domain_to_response
-from apps.shared.search.parser import ResourceParser
+from apps.shared.search.publish import SearchContentBuilder
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.search.schemas import (
     ResourceIndexCreateDTO,
@@ -57,13 +57,13 @@ def _compute_content_hash(content: str) -> str:
 
 
 class ResourceIndexService:
-    """Service for resource index CRUD and vector sync scheduling.
+    """Catalog CRUD and publish (vector sync) for ``ResourceIndex`` rows.
 
     Design:
     - Accepts DTOs, converts to domain models
     - Orchestrates repository operations
     - Handles content change detection for stale marking
-    - Drives vector/FTS synchronization from ResourceIndex records
+    - Publishes lexical + vector search content from ``raw_content``
     """
 
     def __init__(
@@ -103,7 +103,7 @@ class ResourceIndexService:
     async def create_or_update(self, dto: ResourceIndexCreateDTO) -> ResourceIndexResponse:
         """Create or update a resource index record.
 
-        Flow 1: Store raw_content from parser. Tokenization happens in Flow 2.
+        Flow 1: Store raw_content from upstream parse. Publish runs in Flow 2.
         """
         content_updated_at = datetime.now(UTC)
 
@@ -317,7 +317,7 @@ class ResourceIndexService:
                 item.resource_id,
             )
 
-            # Use ResourceParser to generate tokenized_content and chunks from raw_content
+            # Build tokenized_content and vector chunks from raw_content
             blocks_document = None
             if item.raw_content and is_manifest_pointer(item.raw_content):
                 if not self.file_storage:
@@ -331,8 +331,8 @@ class ResourceIndexService:
                     tenant_id=self.tenant_id,
                 )
 
-            parser = ResourceParser(file_storage=self.file_storage)
-            parse_result = parser.from_raw(
+            builder = SearchContentBuilder(file_storage=self.file_storage)
+            built = builder.build(
                 item.raw_content,
                 item.resource_type,
                 source_parser=item.source_parser or DEFAULT_DOCUMENT_PARSER,
@@ -357,10 +357,10 @@ class ResourceIndexService:
                         **(chunk.metadata or {}),
                         **base_meta,
                         META_CHUNK_INDEX: i,
-                        META_TOTAL_CHUNKS: len(parse_result.chunks),
+                        META_TOTAL_CHUNKS: len(built.chunks),
                     },
                 )
-                for i, chunk in enumerate(parse_result.chunks)
+                for i, chunk in enumerate(built.chunks)
             ]
             payload = IndexUpsertPayload(records=records)
             await self._upsert_to_vectordb(payload)
@@ -373,7 +373,7 @@ class ResourceIndexService:
             await self._repo.update_vector_synced(
                 item.id,
                 vector_content_hash=content_hash,
-                tokenized_content=parse_result.tokenized_content,
+                tokenized_content=built.tokenized_content,
             )
 
             elapsed = time.time() - start_time
@@ -381,7 +381,7 @@ class ResourceIndexService:
                 "Sync completed: type=%s, resource_id=%d, chunks=%d, time=%.2fs",
                 item.resource_type,
                 item.resource_id,
-                len(parse_result.chunks),
+                len(built.chunks),
                 elapsed,
             )
             return {"success": True, "id": item.id}

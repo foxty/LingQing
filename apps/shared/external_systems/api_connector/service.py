@@ -77,7 +77,7 @@ from apps.shared.search.schemas import ResourceIndexCreateDTO
 from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
 
 if TYPE_CHECKING:
-    from apps.shared.search.indexing_service import ResourceIndexService
+    from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
 
@@ -99,7 +99,7 @@ class ApiConnectorService:
     async def _get_resource_index_service(self) -> ResourceIndexService:
         """Lazy-initialize ResourceIndexService."""
         if self._resource_index_service is None:
-            from apps.shared.search.indexing_service import ResourceIndexService
+            from apps.shared.search.sync_service import ResourceIndexService
 
             self._resource_index_service = await ResourceIndexService.create(
                 tenant_id=self.tenant_id,

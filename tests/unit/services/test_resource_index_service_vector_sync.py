@@ -16,7 +16,7 @@ from apps.shared.infra.rag.metadata_keys import (
     META_TENANT_ID,
     META_TOTAL_CHUNKS,
 )
-from apps.shared.search.indexing_service import ResourceIndexService
+from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.search.schemas import ResourceIndexPendingItem
 from tests.stub_embeddings import StubEmbeddings
 
@@ -30,7 +30,7 @@ async def test_sync_single_item_deletes_old_vectors_before_adding_new():
     mock_rag_manager = AsyncMock()
 
     # Mock RAGManager at class level before service instantiation
-    with patch("apps.shared.search.indexing_service.RAGManager", return_value=mock_rag_manager):
+    with patch("apps.shared.search.sync_service.RAGManager", return_value=mock_rag_manager):
         # Create service instance (RAGManager will be mocked)
         service = ResourceIndexService(tenant_id=1, db_session=mock_db_session, embeddings=StubEmbeddings())
         service._repo = mock_repo
@@ -56,10 +56,10 @@ async def test_sync_single_item_deletes_old_vectors_before_adding_new():
             parent_id=None,
         )
 
-        # Patch ResourceParser
-        with patch("apps.shared.search.indexing_service.ResourceParser") as mock_parser_class:
+        # Patch SearchContentBuilder
+        with patch("apps.shared.search.sync_service.SearchContentBuilder") as mock_parser_class:
             mock_parser = MagicMock()
-            mock_parser.from_raw.return_value = mock_parse_result
+            mock_parser.build.return_value = mock_parse_result
             mock_parser_class.return_value = mock_parser
 
             # Call _sync_single_item
@@ -102,7 +102,7 @@ async def test_sync_single_item_handles_removal_failure_gracefully():
     mock_rag_manager.remove_by_resource.side_effect = Exception("Removal failed")
 
     # Mock RAGManager at class level before service instantiation
-    with patch("apps.shared.search.indexing_service.RAGManager", return_value=mock_rag_manager):
+    with patch("apps.shared.search.sync_service.RAGManager", return_value=mock_rag_manager):
         # Create service instance (RAGManager will be mocked)
         service = ResourceIndexService(tenant_id=1, db_session=mock_db_session, embeddings=StubEmbeddings())
         service._repo = mock_repo
@@ -124,10 +124,10 @@ async def test_sync_single_item_handles_removal_failure_gracefully():
             parent_id=None,
         )
 
-        # Patch ResourceParser
-        with patch("apps.shared.search.indexing_service.ResourceParser") as mock_parser_class:
+        # Patch SearchContentBuilder
+        with patch("apps.shared.search.sync_service.SearchContentBuilder") as mock_parser_class:
             mock_parser = MagicMock()
-            mock_parser.from_raw.return_value = mock_parse_result
+            mock_parser.build.return_value = mock_parse_result
             mock_parser_class.return_value = mock_parser
 
             # Call _sync_single_item - should handle exception and mark as failed
@@ -150,7 +150,7 @@ async def test_sync_single_item_updates_repo_after_successful_sync():
     mock_rag_manager = AsyncMock()
 
     # Mock RAGManager at class level before service instantiation
-    with patch("apps.shared.search.indexing_service.RAGManager", return_value=mock_rag_manager):
+    with patch("apps.shared.search.sync_service.RAGManager", return_value=mock_rag_manager):
         # Create service instance (RAGManager will be mocked)
         service = ResourceIndexService(tenant_id=1, db_session=mock_db_session, embeddings=StubEmbeddings())
         service._repo = mock_repo
@@ -172,10 +172,10 @@ async def test_sync_single_item_updates_repo_after_successful_sync():
             parent_id=None,
         )
 
-        # Patch ResourceParser
-        with patch("apps.shared.search.indexing_service.ResourceParser") as mock_parser_class:
+        # Patch SearchContentBuilder
+        with patch("apps.shared.search.sync_service.SearchContentBuilder") as mock_parser_class:
             mock_parser = MagicMock()
-            mock_parser.from_raw.return_value = mock_parse_result
+            mock_parser.build.return_value = mock_parse_result
             mock_parser_class.return_value = mock_parser
 
             # Call _sync_single_item
@@ -199,7 +199,7 @@ async def test_sync_single_item_vector_metadata_includes_resource_id():
     mock_repo = AsyncMock()
     mock_rag_manager = AsyncMock()
 
-    with patch("apps.shared.search.indexing_service.RAGManager", return_value=mock_rag_manager):
+    with patch("apps.shared.search.sync_service.RAGManager", return_value=mock_rag_manager):
         service = ResourceIndexService(tenant_id=1, db_session=mock_db_session, embeddings=StubEmbeddings())
         service._repo = mock_repo
 
@@ -220,9 +220,9 @@ async def test_sync_single_item_vector_metadata_includes_resource_id():
             parent_id=10,
         )
 
-        with patch("apps.shared.search.indexing_service.ResourceParser") as mock_parser_class:
+        with patch("apps.shared.search.sync_service.SearchContentBuilder") as mock_parser_class:
             mock_parser = MagicMock()
-            mock_parser.from_raw.return_value = mock_parse_result
+            mock_parser.build.return_value = mock_parse_result
             mock_parser_class.return_value = mock_parser
 
             result = await service._sync_single_item(pending_item)
@@ -257,7 +257,7 @@ async def test_sync_single_item_marks_failed_when_raw_content_missing():
     mock_repo = AsyncMock()
     mock_rag_manager = AsyncMock()
 
-    with patch("apps.shared.search.indexing_service.RAGManager", return_value=mock_rag_manager):
+    with patch("apps.shared.search.sync_service.RAGManager", return_value=mock_rag_manager):
         service = ResourceIndexService(tenant_id=2, db_session=MagicMock(), embeddings=StubEmbeddings())
         service._repo = mock_repo
 
@@ -278,7 +278,7 @@ async def test_sync_all_pending_stops_when_same_item_is_returned():
     mock_rag_manager = AsyncMock()
     stuck_item = _pending_item(raw_content=None)
 
-    with patch("apps.shared.search.indexing_service.RAGManager", return_value=mock_rag_manager):
+    with patch("apps.shared.search.sync_service.RAGManager", return_value=mock_rag_manager):
         service = ResourceIndexService(tenant_id=2, db_session=MagicMock(), embeddings=StubEmbeddings())
         service._repo = mock_repo
         service.list_pending_items = AsyncMock(return_value=[stuck_item])

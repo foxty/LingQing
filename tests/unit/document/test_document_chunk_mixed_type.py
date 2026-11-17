@@ -1,7 +1,7 @@
 """Unit tests for document chunk block types."""
 
 from apps.shared.document.schemas import DocumentChunk
-from apps.shared.search.search_service import _document_chunk_from_vector
+from apps.shared.search.retrieval_service import _document_chunk_from_vector
 
 
 def test_document_chunk_accepts_mixed_block_type():

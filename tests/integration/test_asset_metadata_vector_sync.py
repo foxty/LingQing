@@ -31,7 +31,7 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.tasks.domain import TaskExecutionContext
 from apps.shared.domain.value_objects import AssetMetaVO, AssetType, ColumnVO, DataType
 from apps.shared.infra.rag.rag_manager import RAGManager
-from apps.shared.search.indexing_service import ResourceIndexService
+from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.tasks.system.jobs.vector_sync import sync_to_vector_db
 from tests.integration.tool_integration_helpers import SessionContext
 

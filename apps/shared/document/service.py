@@ -38,8 +38,8 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import ABAC_ACTION_READ, ABAC_ACTION_WRITE, RESOURCE_TYPE_DOCUMENT
 from apps.shared.infra.storage import FileStorage
 from apps.shared.infra.storage.paths import resolve_storage_ref
-from apps.shared.search.indexing_service import ResourceIndexService
 from apps.shared.search.repository import ResourceIndexRepository
+from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
 

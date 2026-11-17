@@ -579,7 +579,7 @@ def resolve_tenant_embeddings_stub(monkeypatch):
 
     for patch_target in (
         "apps.shared.llm_providers.embedding_resolver.resolve_tenant_embeddings",
-        "apps.shared.search.indexing_service.resolve_tenant_embeddings",
+        "apps.shared.search.sync_service.resolve_tenant_embeddings",
         "apps.tenant_app_service.routers.search.resolve_tenant_embeddings",
     ):
         monkeypatch.setattr(patch_target, _resolve_tenant_embeddings)

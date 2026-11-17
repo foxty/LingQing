@@ -1,4 +1,4 @@
-"""Unified Search Service for documents, assets, and API connector metadata.
+"""Hybrid retrieval for documents, assets, and API connector metadata.
 
 Provides hybrid search combining:
 - PostgreSQL FTS (fast keyword/metadata search) via ResourceIndex JOIN source tables
@@ -37,7 +37,7 @@ from apps.shared.external_systems.data_source.schemas import RAGSourceType
 from apps.shared.external_systems.data_source.service import AssetAccessScope, DataSourceService
 from apps.shared.infra.rag import RAGManager
 from apps.shared.infra.rag.metadata_keys import META_RESOURCE_ID
-from apps.shared.search.parser import prepare_search_queries
+from apps.shared.search.query import prepare_search_queries
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.search.schemas import (
     ApiConnectorSearchResult,

@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from apps.shared.document.collection_service import DocumentAccessScope
-from apps.shared.search.search_service import SearchService
+from apps.shared.search.retrieval_service import SearchService
 
 
 @pytest.mark.asyncio
@@ -95,7 +95,7 @@ async def test_get_resource_context_chunks_for_anchors_checks_document_collectio
     collection_service.require_document_access = AsyncMock(side_effect=AuthorizationError("denied"))
 
     monkeypatch.setattr(
-        "apps.shared.search.search_service.DocumentCollectionService",
+        "apps.shared.search.retrieval_service.DocumentCollectionService",
         lambda tenant_id, session: collection_service,
     )
 

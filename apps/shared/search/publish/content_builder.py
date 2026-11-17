@@ -1,7 +1,8 @@
-"""Resource-aware chunking for vector indexing."""
+"""Build FTS text and vector chunks from catalog raw_content."""
 
 from __future__ import annotations
 
+from dataclasses import dataclass, field
 from typing import NotRequired, TypedDict
 
 from langchain_core.documents import Document
@@ -22,10 +23,49 @@ from apps.shared.domain.types import (
     SearchableResourceType,
 )
 from apps.shared.infra.storage import FileStorage
-from apps.shared.search.parser.extraction import extract_text_from_raw
-from apps.shared.search.parser.normalization import normalize_for_embedding
-from apps.shared.search.parser.tokenization import unified_tokenize
-from apps.shared.search.parser.types import ParseResult
+from apps.shared.search.publish.text import (
+    extract_text_from_raw,
+    normalize_for_embedding,
+    unified_tokenize,
+)
+
+
+@dataclass
+class BuiltSearchContent:
+    """Lexical index text and vector chunks produced from :attr:`ResourceIndex.raw_content`."""
+
+    tokenized_content: str
+    chunks: list[Document] = field(default_factory=list)
+
+
+def _document_filename_for_fts(raw_content: dict) -> str:
+    """Original upload filename for FTS indexing (metadata only, not chunk bodies)."""
+    meta = raw_content.get("meta")
+    if isinstance(meta, dict):
+        name = meta.get("filename")
+        if isinstance(name, str) and name.strip():
+            return name.strip()
+    name = raw_content.get("filename")
+    if isinstance(name, str) and name.strip():
+        return name.strip()
+    return ""
+
+
+def _text_for_tokenized_index(
+    body_text: str,
+    raw_content: dict,
+    resource_type: SearchableResourceType,
+) -> str:
+    """Build plain text input for jieba/FTS, including document filename when present."""
+    if resource_type != RESOURCE_TYPE_DOCUMENT:
+        return body_text or ""
+    filename = _document_filename_for_fts(raw_content)
+    if not filename:
+        return body_text or ""
+    body = (body_text or "").strip()
+    if not body:
+        return filename
+    return f"{filename}\n\n{body}"
 
 
 class IndexedChunkMetadata(TypedDict):
@@ -37,8 +77,8 @@ class IndexedChunkMetadata(TypedDict):
     image_uri: NotRequired[str]
 
 
-class ResourceParser:
-    """Factory for parsing different resource types."""
+class SearchContentBuilder:
+    """Build lexical + vector payloads for a :class:`ResourceIndex` row."""
 
     DEFAULT_CHUNK_SIZE = DEFAULT_CHUNK_SIZE
     DEFAULT_CHUNK_OVERLAP = DEFAULT_CHUNK_OVERLAP
@@ -63,25 +103,26 @@ class ResourceParser:
             separators=["\n\n", "\n", "。", "？", "！", " ", ""],
         )
 
-    def from_raw(
+    def build(
         self,
         raw_content: dict,
         resource_type: SearchableResourceType,
         source_parser: str = DEFAULT_DOCUMENT_PARSER,
         blocks_document: dict | None = None,
-    ) -> ParseResult:
+    ) -> BuiltSearchContent:
         if blocks_document is not None:
             text = extract_text_from_blocks(blocks_document)
         else:
             text = extract_text_from_raw(raw_content)
-        tokenized_content = unified_tokenize(text)
+        fts_text = _text_for_tokenized_index(text, raw_content, resource_type)
+        tokenized_content = unified_tokenize(fts_text)
         chunks = self._chunk_from_raw(
             raw_content,
             resource_type,
             source_parser,
             blocks_document=blocks_document,
         )
-        return ParseResult(tokenized_content=tokenized_content, chunks=chunks)
+        return BuiltSearchContent(tokenized_content=tokenized_content, chunks=chunks)
 
     def _chunk_from_raw(
         self,

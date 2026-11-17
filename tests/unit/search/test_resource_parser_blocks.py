@@ -2,27 +2,27 @@
 
 from apps.shared.document.manifest import build_blocks_document, build_manifest_pointer
 from apps.shared.domain.types import RESOURCE_TYPE_DOCUMENT
-from apps.shared.search.parser import ResourceParser, extract_text_from_raw
+from apps.shared.search.publish import SearchContentBuilder, extract_text_from_raw
 
 
 def test_resource_parser_uses_env_chunk_settings(monkeypatch):
-    monkeypatch.setattr("apps.shared.search.parser.resource_parser.apps.config.EnvConfig.DOCUMENT_CHUNK_SIZE", 256)
-    monkeypatch.setattr("apps.shared.search.parser.resource_parser.apps.config.EnvConfig.DOCUMENT_CHUNK_OVERLAP", 32)
+    monkeypatch.setattr("apps.shared.search.publish.content_builder.apps.config.EnvConfig.DOCUMENT_CHUNK_SIZE", 256)
+    monkeypatch.setattr("apps.shared.search.publish.content_builder.apps.config.EnvConfig.DOCUMENT_CHUNK_OVERLAP", 32)
     monkeypatch.setattr(
-        "apps.shared.search.parser.resource_parser.apps.config.EnvConfig.DOCUMENT_CHUNK_MIN_CHARS",
+        "apps.shared.search.publish.content_builder.apps.config.EnvConfig.DOCUMENT_CHUNK_MIN_CHARS",
         40,
     )
     monkeypatch.setattr(
-        "apps.shared.search.parser.resource_parser.apps.config.EnvConfig.DOCUMENT_TABLE_MAX_CHARS",
+        "apps.shared.search.publish.content_builder.apps.config.EnvConfig.DOCUMENT_TABLE_MAX_CHARS",
         1500,
     )
 
-    parser = ResourceParser()
+    builder = SearchContentBuilder()
 
-    assert parser._chunk_size == 256
-    assert parser._chunk_overlap == 32
-    assert parser._min_chars == 40
-    assert parser._table_max_chars == 1500
+    assert builder._chunk_size == 256
+    assert builder._chunk_overlap == 32
+    assert builder._min_chars == 40
+    assert builder._table_max_chars == 1500
 
 
 def test_extract_text_legacy_inline():
@@ -57,9 +57,9 @@ def test_from_raw_tokenizes_blocks_document_text():
         filename="report.pdf",
         parser="docling",
     )
-    parser = ResourceParser()
+    builder = SearchContentBuilder()
 
-    result = parser.from_raw(
+    result = builder.build(
         pointer,
         RESOURCE_TYPE_DOCUMENT,
         source_parser="docling",
@@ -69,6 +69,7 @@ def test_from_raw_tokenizes_blocks_document_text():
     assert "north" in result.tokenized_content
     assert "revenu" in result.tokenized_content
     assert "overview" in result.tokenized_content
+    assert "report" in result.tokenized_content
 
 
 def test_chunk_blocks_document_marks_table_metadata():
@@ -85,9 +86,9 @@ def test_chunk_blocks_document_marks_table_metadata():
         filename="report.pdf",
         parser="docling",
     )
-    parser = ResourceParser()
+    builder = SearchContentBuilder()
 
-    result = parser.from_raw(
+    result = builder.build(
         pointer,
         RESOURCE_TYPE_DOCUMENT,
         source_parser="docling",
@@ -99,13 +100,13 @@ def test_chunk_blocks_document_marks_table_metadata():
 
 
 def test_from_raw_splits_long_inline_document_text():
-    parser = ResourceParser(chunk_size=128, chunk_overlap=16, min_chars=1)
+    builder = SearchContentBuilder(chunk_size=128, chunk_overlap=16, min_chars=1)
     raw_content = {
         "text": " ".join(f"segment-{index}" for index in range(80)),
         "meta": {"filename": "long.txt"},
     }
 
-    result = parser.from_raw(raw_content, RESOURCE_TYPE_DOCUMENT)
+    result = builder.build(raw_content, RESOURCE_TYPE_DOCUMENT)
 
     assert len(result.chunks) > 1
     assert all(chunk.metadata.get("chunk_index") is not None for chunk in result.chunks)
@@ -128,8 +129,8 @@ def test_chunk_blocks_document_indexes_image_caption():
         filename="report.pdf",
         parser="default",
     )
-    parser = ResourceParser()
-    result = parser.from_raw(
+    builder = SearchContentBuilder()
+    result = builder.build(
         pointer,
         RESOURCE_TYPE_DOCUMENT,
         source_parser="default",
@@ -169,8 +170,8 @@ def test_chunk_blocks_document_indexes_image_near_label():
         filename="lanes.pptx",
         parser="docling",
     )
-    parser = ResourceParser(min_chars=1)
-    result = parser.from_raw(
+    builder = SearchContentBuilder(min_chars=1)
+    result = builder.build(
         pointer,
         RESOURCE_TYPE_DOCUMENT,
         source_parser="docling",
@@ -198,8 +199,8 @@ def test_chunk_blocks_document_preserves_page_metadata():
         filename="report.pdf",
         parser="docling",
     )
-    parser = ResourceParser()
-    result = parser.from_raw(
+    builder = SearchContentBuilder()
+    result = builder.build(
         pointer,
         RESOURCE_TYPE_DOCUMENT,
         source_parser="docling",

@@ -1,7 +1,7 @@
-"""Tests for ResourceParser - unified parsing for FTS and vector indexing.
+"""Tests for SearchContentBuilder - unified parsing for FTS and vector indexing.
 
 This test suite documents the raw_content format contract and ensures
-ResourceParser correctly handles all supported resource types.
+SearchContentBuilder correctly handles all supported resource types.
 """
 
 from langchain_core.documents import Document
@@ -11,16 +11,16 @@ from apps.shared.domain.types import (
     RESOURCE_TYPE_ASSET,
     RESOURCE_TYPE_DOCUMENT,
 )
-from apps.shared.search.parser import (
-    ParseResult,
-    ResourceParser,
+from apps.shared.search.publish import (
+    BuiltSearchContent,
+    SearchContentBuilder,
     extract_text_from_raw,
     normalize_for_embedding,
-    prepare_search_queries,
     preprocess_for_fts,
     preprocess_text,
     unified_tokenize,
 )
+from apps.shared.search.query import prepare_search_queries
 
 
 class TestNormalizeForEmbedding:
@@ -225,29 +225,42 @@ class TestExtractTextFromRaw:
         assert "postgres" in result
 
 
-class TestResourceParserFromRaw:
-    """Tests for ResourceParser.from_raw() - Flow 2 processing."""
+class TestSearchContentBuilderFromRaw:
+    """Tests for SearchContentBuilder.build() — publish (sync) path."""
 
     def test_from_raw_document(self):
         """Test processing document raw_content."""
-        parser = ResourceParser()
+        builder = SearchContentBuilder()
         raw_content = {
             "text": "This is document content for testing.",
             "filename": "test.txt",
             "type": "document",
         }
 
-        result = parser.from_raw(raw_content, RESOURCE_TYPE_DOCUMENT)
+        result = builder.build(raw_content, RESOURCE_TYPE_DOCUMENT)
 
-        assert isinstance(result, ParseResult)
+        assert isinstance(result, BuiltSearchContent)
         assert isinstance(result.tokenized_content, str)
         assert len(result.chunks) == 1
         assert isinstance(result.chunks[0], Document)
         assert result.chunks[0].page_content == "this is document content for testing."
 
+    def test_from_raw_document_includes_filename_in_tokenized_content(self):
+        """Filename is indexed for FTS even when absent from parsed body text."""
+        builder = SearchContentBuilder()
+        raw_content = {
+            "text": "Body without the filename keywords.",
+            "meta": {"filename": "test_resume_f7a2c8d1_数据开发工程师.pdf"},
+        }
+
+        result = builder.build(raw_content, RESOURCE_TYPE_DOCUMENT)
+
+        assert "f7a2c8d1" in result.tokenized_content
+        assert "数据开发" in result.tokenized_content or "工程师" in result.tokenized_content
+
     def test_from_raw_asset(self):
         """Test processing asset raw_content."""
-        parser = ResourceParser()
+        builder = SearchContentBuilder()
         raw_content = {
             "text": "users (table)\nUser data table\nColumns: id, name\nData source: postgres",
             "asset_name": "users",
@@ -256,9 +269,9 @@ class TestResourceParserFromRaw:
             "type": "asset",
         }
 
-        result = parser.from_raw(raw_content, RESOURCE_TYPE_ASSET)
+        result = builder.build(raw_content, RESOURCE_TYPE_ASSET)
 
-        assert isinstance(result, ParseResult)
+        assert isinstance(result, BuiltSearchContent)
         assert isinstance(result.tokenized_content, str)
         assert len(result.chunks) == 1
         assert isinstance(result.chunks[0], Document)
@@ -266,7 +279,7 @@ class TestResourceParserFromRaw:
 
     def test_from_raw_api_connector(self):
         """Test processing API connector raw_content."""
-        parser = ResourceParser()
+        builder = SearchContentBuilder()
         raw_content = {
             "text": "GET /api/users\nGet all users\nTags: users, api\nConnector: test_api",
             "method": "GET",
@@ -276,9 +289,9 @@ class TestResourceParserFromRaw:
             "type": "api_connector",
         }
 
-        result = parser.from_raw(raw_content, RESOURCE_TYPE_API_CONNECTOR)
+        result = builder.build(raw_content, RESOURCE_TYPE_API_CONNECTOR)
 
-        assert isinstance(result, ParseResult)
+        assert isinstance(result, BuiltSearchContent)
         assert isinstance(result.tokenized_content, str)
         assert len(result.chunks) == 1
         assert isinstance(result.chunks[0], Document)
@@ -286,17 +299,17 @@ class TestResourceParserFromRaw:
 
     def test_from_raw_empty_content(self):
         """Test processing empty raw_content."""
-        parser = ResourceParser()
+        builder = SearchContentBuilder()
 
-        result = parser.from_raw({}, RESOURCE_TYPE_DOCUMENT)
+        result = builder.build({}, RESOURCE_TYPE_DOCUMENT)
 
-        assert isinstance(result, ParseResult)
+        assert isinstance(result, BuiltSearchContent)
         assert result.tokenized_content == ""
         assert result.chunks == []
 
     def test_from_raw_preserves_metadata(self):
         """Test that metadata is preserved in chunks."""
-        parser = ResourceParser()
+        builder = SearchContentBuilder()
         raw_content = {
             "text": "Asset content",
             "meta": {
@@ -307,7 +320,7 @@ class TestResourceParserFromRaw:
             },
         }
 
-        result = parser.from_raw(raw_content, RESOURCE_TYPE_ASSET)
+        result = builder.build(raw_content, RESOURCE_TYPE_ASSET)
 
         assert result.chunks[0].metadata.get("asset_name") == "test_table"
         assert result.chunks[0].metadata.get("asset_type") == "table"
