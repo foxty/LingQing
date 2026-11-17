@@ -1,7 +1,7 @@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import type { PipelineBadgeState } from '@/lib/documentPipelineStatus'
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
-import { useTranslation } from 'react-i18next'
+import { Database, FileText, Loader2 } from 'lucide-react'
 
 const STATE_STYLES: Record<
   PipelineBadgeState,
@@ -40,6 +40,7 @@ const STATE_STYLES: Record<
 }
 
 interface PipelineStatusBadgeProps {
+  phase: 'parse' | 'index'
   state: PipelineBadgeState
   label: string
   title: string
@@ -48,37 +49,44 @@ interface PipelineStatusBadgeProps {
 }
 
 export default function PipelineStatusBadge({
+  phase,
   state,
   label,
   title,
   timestamp,
   error,
 }: PipelineStatusBadgeProps) {
-  const { t } = useTranslation()
   const formatUserDateTime = useFormatUserDateTime()
   const styles = STATE_STYLES[state]
+  const PhaseIcon = phase === 'parse' ? FileText : Database
+  const showSpinner = state === 'running'
 
   return (
     <Popover>
       <PopoverTrigger asChild>
         <button
           type="button"
-          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded border text-xs font-medium cursor-pointer transition-colors ${styles.text} ${styles.bg} ${styles.border}`}
-          title={t('components.syncStatusIndicator.clickForDetails')}
+          aria-label={`${title}: ${label}`}
+          className={`relative inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-md border transition-colors cursor-pointer ${styles.text} ${styles.bg} ${styles.border}`}
         >
-          <span className={`w-1.5 h-1.5 rounded-full ${styles.dot}`} />
-          {label}
+          {showSpinner ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" aria-hidden />
+          ) : (
+            <PhaseIcon className="h-3.5 w-3.5" aria-hidden />
+          )}
+          <span
+            className={`absolute -bottom-0.5 -right-0.5 h-2 w-2 rounded-full border border-background ${styles.dot}`}
+            aria-hidden
+          />
         </button>
       </PopoverTrigger>
-      <PopoverContent className="w-64 p-3" align="start">
-        <div className="space-y-2 text-sm">
-          <div className="font-medium mb-2.5">{title}</div>
-          <div className="text-xs text-muted-foreground">{label}</div>
-          {timestamp && (
-            <div className="text-xs text-muted-foreground tabular-nums">{formatUserDateTime(timestamp)}</div>
-          )}
-          {error && <div className="text-xs text-destructive break-words">{error}</div>}
-        </div>
+      <PopoverContent className="w-64 space-y-2 p-3 text-sm" align="start">
+        <div className="font-medium">{title}</div>
+        <div className="text-xs text-muted-foreground">{label}</div>
+        {timestamp ? (
+          <div className="text-xs tabular-nums text-muted-foreground">{formatUserDateTime(timestamp)}</div>
+        ) : null}
+        {error ? <div className="text-xs text-destructive break-words">{error}</div> : null}
       </PopoverContent>
     </Popover>
   )
