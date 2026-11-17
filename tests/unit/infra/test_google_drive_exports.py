@@ -8,6 +8,7 @@ from apps.shared.infra.external_files.google_drive import (
     EXPORT_EXTENSION_BY_MIME,
     GOOGLE_MIME_DOCUMENT,
     GOOGLE_MIME_PRESENTATION,
+    GOOGLE_MIME_SHORTCUT,
     GOOGLE_MIME_SPREADSHEET,
     GOOGLE_NATIVE_EXPORT_MIMES,
     _parse_drive_timestamp,
@@ -46,6 +47,7 @@ def test_is_supported_drive_file():
     assert is_supported_drive_file("notes.docx", "application/octet-stream") is True
     assert is_supported_drive_file("Sheet", GOOGLE_MIME_SPREADSHEET) is True
     assert is_supported_drive_file("video.mp4", "video/mp4") is False
+    assert is_supported_drive_file("Meeting Notes", GOOGLE_MIME_SHORTCUT) is False
 
 
 def test_is_google_native_mime():

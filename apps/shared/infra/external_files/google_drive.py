@@ -24,6 +24,7 @@ GOOGLE_TOKEN_URL = "https://oauth2.googleapis.com/token"
 GOOGLE_DRIVE_API_BASE = "https://www.googleapis.com/drive/v3"
 
 GOOGLE_MIME_FOLDER = "application/vnd.google-apps.folder"
+GOOGLE_MIME_SHORTCUT = "application/vnd.google-apps.shortcut"
 GOOGLE_MIME_DOCUMENT = "application/vnd.google-apps.document"
 GOOGLE_MIME_SPREADSHEET = "application/vnd.google-apps.spreadsheet"
 GOOGLE_MIME_PRESENTATION = "application/vnd.google-apps.presentation"
@@ -181,10 +182,50 @@ class GoogleDriveClient:
         user = response.json().get("user") or {}
         return user.get("emailAddress")
 
+    async def _get_file_metadata(self, file_id: str) -> dict[str, Any]:
+        response = await self._request(
+            "GET",
+            f"{GOOGLE_DRIVE_API_BASE}/files/{file_id}",
+            params={"fields": "id,name,mimeType,modifiedTime", **_shared_drive_params()},
+        )
+        return response.json()
+
+    async def _entry_from_shortcut(
+        self,
+        item: dict[str, Any],
+        *,
+        parent_folder_id: str,
+        target_metadata_cache: dict[str, dict[str, Any]],
+    ) -> ExternalFileEntry | None:
+        """Resolve a Drive shortcut to a supported target file entry."""
+        shortcut_details = item.get("shortcutDetails") or {}
+        target_id = shortcut_details.get("targetId")
+        target_mime = shortcut_details.get("targetMimeType") or ""
+        shortcut_name = item.get("name", "")
+        if not target_id:
+            return None
+        if not is_supported_drive_file(shortcut_name, target_mime):
+            return None
+        if target_id not in target_metadata_cache:
+            target_metadata_cache[target_id] = await self._get_file_metadata(target_id)
+        target = target_metadata_cache[target_id]
+        target_name = target.get("name") or shortcut_name
+        target_mime = target.get("mimeType") or target_mime
+        if not is_supported_drive_file(target_name, target_mime):
+            return None
+        return ExternalFileEntry(
+            external_id=target_id,
+            name=target_name,
+            mime_type=target_mime,
+            modified_at=_parse_drive_timestamp(target.get("modifiedTime")),
+            parent_folder_id=parent_folder_id,
+        )
+
     async def list_folder_tree(self, folder_id: str, *, include_subfolders: bool = True) -> list[ExternalFileEntry]:
         """Walk folder and return supported files, optionally recursing into subfolders."""
-        files: list[ExternalFileEntry] = []
+        entries_by_id: dict[str, ExternalFileEntry] = {}
         folder_queue: deque[str] = deque([folder_id])
+        target_metadata_cache: dict[str, dict[str, Any]] = {}
 
         while folder_queue:
             current_folder = folder_queue.popleft()
@@ -192,7 +233,10 @@ class GoogleDriveClient:
             while True:
                 params: dict[str, Any] = {
                     "q": f"'{current_folder}' in parents and trashed = false",
-                    "fields": "nextPageToken,files(id,name,mimeType,modifiedTime,parents)",
+                    "fields": (
+                        "nextPageToken,"
+                        "files(id,name,mimeType,modifiedTime,parents,shortcutDetails)"
+                    ),
                     "pageSize": 200,
                     # Required so shared / team folders (not only My Drive) return children.
                     "corpora": "allDrives",
@@ -210,22 +254,29 @@ class GoogleDriveClient:
                         if include_subfolders:
                             folder_queue.append(item["id"])
                         continue
+                    if mime_type == GOOGLE_MIME_SHORTCUT:
+                        entry = await self._entry_from_shortcut(
+                            item,
+                            parent_folder_id=current_folder,
+                            target_metadata_cache=target_metadata_cache,
+                        )
+                        if entry is not None:
+                            entries_by_id[entry.external_id] = entry
+                        continue
                     if not is_supported_drive_file(name, mime_type):
                         continue
-                    files.append(
-                        ExternalFileEntry(
-                            external_id=item["id"],
-                            name=name,
-                            mime_type=mime_type,
-                            modified_at=_parse_drive_timestamp(item.get("modifiedTime")),
-                            parent_folder_id=current_folder,
-                        )
+                    entries_by_id[item["id"]] = ExternalFileEntry(
+                        external_id=item["id"],
+                        name=name,
+                        mime_type=mime_type,
+                        modified_at=_parse_drive_timestamp(item.get("modifiedTime")),
+                        parent_folder_id=current_folder,
                     )
                 page_token = payload.get("nextPageToken")
                 if not page_token:
                     break
 
-        return files
+        return list(entries_by_id.values())
 
     async def download_file(self, entry: ExternalFileEntry) -> tuple[str, bytes]:
         filename = export_filename(entry.name, entry.mime_type)
