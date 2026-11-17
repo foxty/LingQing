@@ -12,7 +12,7 @@ from apps.shared.db.models import User
 from apps.shared.document.collection_service import DocumentAccessScope, DocumentCollectionService
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import ABAC_ACTION_READ
-from apps.shared.search.search_service import SearchService
+from apps.shared.search.retrieval_service import SearchService
 from tests.helpers.document_fixtures import create_document_collection, create_tenant_user
 
 

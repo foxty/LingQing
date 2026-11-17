@@ -1,16 +1,19 @@
-"""Search module — resource indexing (write path) and hybrid search (read path)."""
+"""Search — catalog sync (publish) and hybrid retrieval (query).
+
+- :mod:`sync_service` — ``ResourceIndex`` CRUD and publish to FTS + Chroma
+- :mod:`retrieval_service` — hybrid search for documents, assets, API operations
+- :mod:`publish` — build lexical text and chunks from ``raw_content``
+"""
 
 from apps.shared.search.repository import ResourceIndexRepository
-from apps.shared.search.search_service import SearchService
+from apps.shared.search.retrieval_service import SearchService
+from apps.shared.search.sync_service import ResourceIndexService
 
+SearchSyncService = ResourceIndexService
 
-# Lazy import to avoid circular dependency with data_source module
-def __getattr__(name: str):
-    if name in {"ResourceIndexService", "SearchIndexService"}:
-        from apps.shared.search.indexing_service import ResourceIndexService
-
-        return ResourceIndexService
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
-
-
-__all__ = ["ResourceIndexRepository", "ResourceIndexService", "SearchService"]
+__all__ = [
+    "ResourceIndexRepository",
+    "ResourceIndexService",
+    "SearchService",
+    "SearchSyncService",
+]

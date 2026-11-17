@@ -54,7 +54,7 @@ from apps.config import EnvConfig, get_file_storage
 from apps.shared.db.models import AssetMetadata, DataSource, Document, ResourceIndex, TaskRun
 from apps.shared.db.session import app_db_session
 from apps.shared.domain.types import RESOURCE_TYPE_ASSET, RESOURCE_TYPE_DOCUMENT
-from apps.shared.search.indexing_service import ResourceIndexService
+from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.tasks.system.handler_result import SystemTaskHandlerResult
 from apps.shared.tasks.system.jobs.vector_sync import cleanup_orphaned_vectors, sync_to_vector_db
 from apps.shared.utils.logger import get_logger

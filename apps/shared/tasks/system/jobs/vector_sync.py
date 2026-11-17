@@ -29,7 +29,7 @@ from apps.shared.domain.types import (
     RESOURCE_TYPE_DOCUMENT,
     IndexSourceType,
 )
-from apps.shared.search.indexing_service import ResourceIndexService
+from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.tasks.domain import TaskExecutionContext
 from apps.shared.tasks.system.handler_result import (
     SystemTaskHandlerResult,

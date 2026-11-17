@@ -10,7 +10,7 @@ from apps.shared.db.models import Document, ResourceIndex
 from apps.shared.document.types import DEFAULT_DOCUMENT_PARSER
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_ASSET, RESOURCE_TYPE_DOCUMENT
 from apps.shared.search.domain import VectorStatus
-from apps.shared.search.parser import unified_tokenize
+from apps.shared.search.publish.text import unified_tokenize
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)

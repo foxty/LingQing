@@ -9,7 +9,7 @@ import pytest
 from langchain_core.documents import Document
 
 from apps.shared.infra.rag.metadata_keys import META_RESOURCE_ID, META_RESOURCE_TYPE
-from apps.shared.search.search_service import SearchService
+from apps.shared.search.retrieval_service import SearchService
 
 _NOW = datetime.now(UTC)
 _TEST_ASSET_ID = 42

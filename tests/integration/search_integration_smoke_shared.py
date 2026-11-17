@@ -29,7 +29,7 @@ from apps.shared.infra.rag.index_payload import IndexRecordPayload, IndexUpsertP
 from apps.shared.infra.rag.rag_manager import RAGManager
 from apps.shared.schemas.user import UserDTO
 from apps.shared.search.schemas import ResourceIndexCreateDTO
-from apps.shared.search.search_service import SearchService
+from apps.shared.search.retrieval_service import SearchService
 from apps.tenant_app_service.server import app
 from tests.integration.search_integration_smoke_utils import (
     assert_column_exists,
@@ -163,7 +163,7 @@ async def search_integration_smoke_env(async_db_session: AsyncSession, monkeypat
 
     for patch_target in (
         "apps.shared.llm_providers.embedding_resolver.resolve_tenant_embeddings",
-        "apps.shared.search.indexing_service.resolve_tenant_embeddings",
+        "apps.shared.search.sync_service.resolve_tenant_embeddings",
         "apps.tenant_app_service.routers.search.resolve_tenant_embeddings",
     ):
         monkeypatch.setattr(patch_target, _resolve_tenant_embeddings)
@@ -255,7 +255,7 @@ async def search_integration_smoke_env(async_db_session: AsyncSession, monkeypat
             )
             api_case_to_id[case["case_id"]] = created.id
 
-        from apps.shared.search.indexing_service import ResourceIndexService
+        from apps.shared.search.sync_service import ResourceIndexService
 
         indexing_svc = ResourceIndexService(
             tenant_id=tenant.id, db_session=seed_session, embeddings=keyword_embeddings

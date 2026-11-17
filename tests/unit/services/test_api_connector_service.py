@@ -37,7 +37,7 @@ async def test_create_connector_encrypts_sensitive_fields(async_db_session, mock
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         created = await service.create_connector(
             owner_id=user.id,
@@ -72,7 +72,7 @@ async def test_create_connector_accepts_pydantic_no_auth_schema(async_db_session
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         created = await service.create_connector(
             owner_id=user.id,
@@ -101,7 +101,7 @@ async def test_get_connector_for_actor_includes_owner_name(async_db_session, moc
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         created = await service.create_connector(
             owner_id=user.id,
@@ -133,7 +133,7 @@ async def test_sync_operations_from_openapi_upload_creates_index_rows(async_db_s
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         connector = await service.create_connector(
             owner_id=user.id,
@@ -203,7 +203,7 @@ async def test_add_manual_operation_rejects_invalid_method(async_db_session, moc
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         connector = await service.create_connector(
             owner_id=user.id,
@@ -242,7 +242,7 @@ async def test_sync_keeps_disabled_imported_and_manual_operations(async_db_sessi
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         connector = await service.create_connector(
             owner_id=user.id,
@@ -344,7 +344,7 @@ async def test_sync_operations_returns_updated_staled_and_unchanged_counts(async
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         connector = await service.create_connector(
             owner_id=user.id,
@@ -432,7 +432,7 @@ async def test_sync_uses_method_and_path_as_identity_when_operation_id_changes(
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         connector = await service.create_connector(
             owner_id=user.id,
@@ -513,7 +513,7 @@ async def test_sync_treats_same_path_with_different_methods_as_distinct(async_db
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         connector = await service.create_connector(
             owner_id=user.id,
@@ -578,7 +578,7 @@ async def test_operation_update_delete_guard_and_status_validation(async_db_sess
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
         connector = await service.create_connector(
             owner_id=user.id,
@@ -688,7 +688,7 @@ async def test_update_connector_does_not_preserve_when_client_sends_masked_value
 
     original_secret = "my-secret-key-12345"
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
 
         # Step 1: Create connector with real secret
@@ -765,7 +765,7 @@ async def test_update_connector_preserves_secret_when_ui_omits_nested_key(
 
     original_secret = "my-secret-key-12345"
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
 
         created = await service.create_connector(
@@ -824,7 +824,7 @@ async def test_update_connector_allows_changing_secret_with_real_value(async_db_
     original_secret = "old-secret-key"
     new_secret = "new-secret-key-67890"
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
 
         # Create with old secret
@@ -871,7 +871,7 @@ async def test_update_connector_mixed_omit_and_real_values(async_db_session, moc
     async_db_session.add(user)
     await async_db_session.flush()
 
-    with patch("apps.shared.search.indexing_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
         service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
 
         # Create connector with multiple secrets

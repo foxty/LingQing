@@ -50,7 +50,7 @@ from apps.shared.search.schemas import ResourceIndexCreateDTO
 from apps.shared.utils.logger import get_logger
 
 if TYPE_CHECKING:
-    from apps.shared.search.indexing_service import ResourceIndexService
+    from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.utils.pagination import PaginationRequest
 
 logger = get_logger(__name__)
@@ -103,7 +103,7 @@ class AssetMetadataService(TenantAwareService):
     async def _get_resource_index_service(self) -> "ResourceIndexService":
         """Lazy-initialize ResourceIndexService."""
         if self._resource_index_service is None:
-            from apps.shared.search.indexing_service import ResourceIndexService
+            from apps.shared.search.sync_service import ResourceIndexService
 
             self._resource_index_service = await ResourceIndexService.create(
                 tenant_id=self.tenant_id,

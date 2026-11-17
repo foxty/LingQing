@@ -2,7 +2,7 @@ from types import SimpleNamespace
 
 from apps.shared.document.schemas import DocumentChunk, DocumentSearchResult
 from apps.shared.search.schemas import ApiConnectorSearchResult, AssetSearchResult
-from apps.shared.search.search_service import SearchService
+from apps.shared.search.retrieval_service import SearchService
 
 
 def test_shared_rrf_helper_scores_and_sources():

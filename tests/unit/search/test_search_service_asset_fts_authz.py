@@ -6,7 +6,7 @@ from uuid import uuid4
 import pytest
 
 from apps.shared.external_systems.data_source.service import AssetAccessScope
-from apps.shared.search.search_service import SearchService
+from apps.shared.search.retrieval_service import SearchService
 
 
 @pytest.mark.asyncio
@@ -99,7 +99,7 @@ async def test_get_resource_context_chunks_for_anchors_checks_asset_data_source_
     data_source_service.require_asset_access = AsyncMock(side_effect=AuthorizationError("denied"))
 
     monkeypatch.setattr(
-        "apps.shared.search.search_service.DataSourceService",
+        "apps.shared.search.retrieval_service.DataSourceService",
         lambda tenant_id, data_source_repo, asset_repo: data_source_service,
     )
 

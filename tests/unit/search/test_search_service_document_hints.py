@@ -8,7 +8,7 @@ from langchain_core.documents import Document
 from apps.shared.document.schemas import DocumentChunk, DocumentSearchResult
 from apps.shared.domain.types import RESOURCE_TYPE_DOCUMENT
 from apps.shared.search.schemas import ResourceContextChunk
-from apps.shared.search.search_service import (
+from apps.shared.search.retrieval_service import (
     MAX_DOCUMENT_CONTEXT_ANCHORS,
     MAX_DOCUMENT_CONTEXT_CHUNKS,
     SearchService,
