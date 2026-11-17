@@ -52,6 +52,11 @@ i18n.addResourceBundle(
       bindSuccess: 'Folder bound for sync',
       bindFailed: 'Failed to bind folder',
       connectFailed: 'Failed to start Google Drive authorization',
+      connectionOwnerFallback: 'the account owner',
+      accountOwnerReconnectHint:
+        'Only {{owner}} can reconnect this Google account. Collection managers can still disconnect the folder.',
+      syncViewOnlyHint:
+        'Drive folder is linked under {{owner}}. You need collection manage access to pause, sync, or disconnect the folder.',
       listInfoAria: 'Drive sync details',
       listInfoManageHint: 'Open the collection for Resume sync, Sync now, or other actions.',
       listSyncFolder: 'Folder: {{name}}',
@@ -114,6 +119,11 @@ i18n.addResourceBundle(
       bindSuccess: '文件夹已绑定同步',
       bindFailed: '绑定文件夹失败',
       connectFailed: '启动 Google Drive 授权失败',
+      connectionOwnerFallback: '账号所有者',
+      accountOwnerReconnectHint:
+        '仅 {{owner}} 可重新连接 Google 账号。集合管理员仍可断开文件夹绑定。',
+      syncViewOnlyHint:
+        'Drive 文件夹由 {{owner}} 的账号绑定。需要集合管理权限方可暂停、同步或断开文件夹。',
       listInfoAria: 'Drive 同步详情',
       listInfoManageHint: '打开集合可进行恢复同步、立即同步等操作。',
       listSyncFolder: '文件夹：{{name}}',

@@ -37,7 +37,11 @@ export function useCollectionDriveSync({
     activeConnection,
   })
 
-  const canManageConnector = connector != null && user?.id === connector.connection_owner_id
+  const canManageFolderSync = Boolean(canManageCollection && connector)
+  const canManageConnectionAccount =
+    connector != null
+      ? user?.id === connector.connection_owner_id
+      : activeConnection != null
   const connectorOwnerLabel = connector
     ? formatDriveConnectionOwnerLabel(
         t,
@@ -62,7 +66,8 @@ export function useCollectionDriveSync({
     connector,
     connectorLoading,
     connectorOwnerLabel,
-    canManageConnector,
+    canManageFolderSync,
+    canManageConnectionAccount,
     activeConnection,
     user,
     triggerState,

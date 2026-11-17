@@ -62,7 +62,8 @@ export default function CollectionDriveSyncPopover({
             <CollectionDriveSyncConnectorBody
               connector={sync.connector}
               connectorOwnerLabel={sync.connectorOwnerLabel}
-              canManageConnector={sync.canManageConnector}
+              canManageFolderSync={sync.canManageFolderSync}
+              canManageConnectionAccount={sync.canManageConnectionAccount}
               isBusy={sync.isBusy}
               syncPending={sync.syncPending}
               resumePending={sync.resumePending}

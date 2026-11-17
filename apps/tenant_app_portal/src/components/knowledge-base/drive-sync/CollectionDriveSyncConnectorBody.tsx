@@ -14,7 +14,8 @@ import { useTranslation } from 'react-i18next'
 export function CollectionDriveSyncConnectorBody({
   connector,
   connectorOwnerLabel,
-  canManageConnector,
+  canManageFolderSync,
+  canManageConnectionAccount,
   isBusy,
   syncPending,
   resumePending,
@@ -29,7 +30,8 @@ export function CollectionDriveSyncConnectorBody({
 }: {
   connector: SyncConnector
   connectorOwnerLabel: string | null
-  canManageConnector: boolean
+  canManageFolderSync: boolean
+  canManageConnectionAccount: boolean
   isBusy: boolean
   syncPending: boolean
   resumePending: boolean
@@ -83,7 +85,7 @@ export function CollectionDriveSyncConnectorBody({
           {summary}
         </p>
       ) : null}
-      {canManageConnector ? (
+      {canManageFolderSync ? (
         <div className="border-t pt-3">
           {connector.status === CONNECTOR_STATUS.ACTIVE ? (
             <div className="grid grid-cols-3 gap-1.5">
@@ -155,23 +157,31 @@ export function CollectionDriveSyncConnectorBody({
                 </Button>
               ) : null}
               {state === 'stopped-disconnected' ? (
-                <Button
-                  type="button"
-                  size="sm"
-                  variant="default"
-                  className="h-8 gap-1.5"
-                  onClick={onConnect}
-                  disabled={isBusy}
-                >
-                  {authorizePending ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <>
-                      <Link2 className="h-3.5 w-3.5" />
-                      {t('collectionSync.connect')}
-                    </>
-                  )}
-                </Button>
+                canManageConnectionAccount ? (
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="default"
+                    className="h-8 gap-1.5"
+                    onClick={onConnect}
+                    disabled={isBusy}
+                  >
+                    {authorizePending ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <>
+                        <Link2 className="h-3.5 w-3.5" />
+                        {t('collectionSync.connect')}
+                      </>
+                    )}
+                  </Button>
+                ) : (
+                  <p className="col-span-2 text-xs leading-snug text-muted-foreground">
+                    {t('collectionSync.accountOwnerReconnectHint', {
+                      owner: connectorOwnerLabel ?? t('collectionSync.connectionOwnerFallback'),
+                    })}
+                  </p>
+                )
               ) : null}
               <Button
                 type="button"
@@ -187,7 +197,13 @@ export function CollectionDriveSyncConnectorBody({
             </div>
           )}
         </div>
-      ) : null}
+      ) : (
+        <p className="border-t pt-3 text-xs leading-snug text-muted-foreground">
+          {t('collectionSync.syncViewOnlyHint', {
+            owner: connectorOwnerLabel ?? t('collectionSync.connectionOwnerFallback'),
+          })}
+        </p>
+      )}
     </div>
   )
 }

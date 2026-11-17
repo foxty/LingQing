@@ -327,20 +327,22 @@ async def test_resume_connector_sets_active_when_connection_active(sync_service:
 
 
 @pytest.mark.asyncio
-async def test_disconnect_connector_requires_connection_owner(sync_service: DocumentSyncService):
+async def test_disconnect_connector_allowed_for_collection_manager_not_connection_owner(
+    sync_service: DocumentSyncService,
+):
     sync_service._collection_service.require_collection_access = AsyncMock()
-    sync_service._sync_repo.get_connector_by_collection = AsyncMock(
-        return_value=MagicMock(
-            source_connection=MagicMock(owner_id=5),
-        )
+    connector = MagicMock(
+        source_connection=MagicMock(owner_id=5),
     )
+    sync_service._sync_repo.get_connector_by_collection = AsyncMock(return_value=connector)
     sync_service._sync_repo.delete_connector_row = AsyncMock()
 
-    with pytest.raises(AuthorizationError):
-        await sync_service.disconnect_connector(
-            collection_id=20,
-            actor=ActorContext(tenant_id=1, user_id=7, user_role="member"),
-        )
+    await sync_service.disconnect_connector(
+        collection_id=20,
+        actor=ActorContext(tenant_id=1, user_id=7, user_role="member"),
+    )
+
+    sync_service._sync_repo.delete_connector_row.assert_awaited_once_with(connector)
 
 
 @pytest.mark.asyncio
@@ -363,7 +365,9 @@ async def test_pause_connector_sets_stopped(sync_service: DocumentSyncService):
 
 
 @pytest.mark.asyncio
-async def test_sync_connector_requires_connection_owner(sync_service: DocumentSyncService):
+async def test_sync_connector_allowed_for_collection_manager_not_connection_owner(
+    sync_service: DocumentSyncService,
+):
     connector = MagicMock(
         id=3,
         collection_id=20,
@@ -372,12 +376,15 @@ async def test_sync_connector_requires_connection_owner(sync_service: DocumentSy
     )
     sync_service._sync_repo.acquire_connector_sync_lock = AsyncMock(return_value=connector)
     sync_service._collection_service.require_collection_access = AsyncMock()
+    sync_service._run_connector_sync = AsyncMock(return_value=SyncDiffResult())
+    sync_service._sync_repo.update_connector_sync_state = AsyncMock()
 
-    with pytest.raises(AuthorizationError):
-        await sync_service.sync_connector(
-            connector_id=3,
-            actor=ActorContext(tenant_id=1, user_id=7, user_role="member"),
-        )
+    await sync_service.sync_connector(
+        connector_id=3,
+        actor=ActorContext(tenant_id=1, user_id=7, user_role="member"),
+    )
+
+    sync_service._collection_service.require_collection_access.assert_awaited()
 
 
 @pytest.mark.asyncio

@@ -329,7 +329,6 @@ class DocumentSyncService(TenantAwareService):
         connector = await self._sync_repo.get_connector_by_collection(self.tenant_id, collection_id)
         if connector is None:
             raise ResourceNotFoundError("Sync connector not found")
-        self._require_connector_connection_owner(connector, actor)
         if connector.status == CONNECTOR_STOPPED:
             return self._connector_to_response(connector)
         await self._sync_repo.stop_connector(connector)
@@ -347,7 +346,6 @@ class DocumentSyncService(TenantAwareService):
         connector = await self._sync_repo.get_connector_by_collection(self.tenant_id, collection_id)
         if connector is None:
             raise ResourceNotFoundError("Sync connector not found")
-        self._require_connector_connection_owner(connector, actor)
         await self._sync_repo.delete_connector_row(connector)
 
     async def resume_connector(self, *, collection_id: int, actor: ActorContext) -> SyncConnectorResponse:
@@ -359,7 +357,6 @@ class DocumentSyncService(TenantAwareService):
         connector = await self._sync_repo.get_connector_by_collection(self.tenant_id, collection_id)
         if connector is None:
             raise ResourceNotFoundError("Sync connector not found")
-        self._require_connector_connection_owner(connector, actor)
         if connector.status == CONNECTOR_ACTIVE:
             return self._connector_to_response(connector)
         connection = connector.source_connection
@@ -400,9 +397,8 @@ class DocumentSyncService(TenantAwareService):
             await self._collection_service.require_collection_access(
                 collection_id=connector.collection_id,
                 actor=actor,
-                action=ABAC_ACTION_READ,
+                action=AUTHZ_ACTION_MANAGE,
             )
-            self._require_connector_connection_owner(connector, actor)
 
         try:
             diff = await self._run_connector_sync(connector)
