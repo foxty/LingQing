@@ -47,7 +47,7 @@ def test_is_supported_drive_file():
     assert is_supported_drive_file("notes.docx", "application/octet-stream") is True
     assert is_supported_drive_file("Sheet", GOOGLE_MIME_SPREADSHEET) is True
     assert is_supported_drive_file("video.mp4", "video/mp4") is False
-    assert is_supported_drive_file("Meeting Notes", GOOGLE_MIME_SHORTCUT) is False
+    assert is_supported_drive_file("notes shortcut", GOOGLE_MIME_SHORTCUT) is False
 
 
 def test_is_google_native_mime():

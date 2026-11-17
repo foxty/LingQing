@@ -91,28 +91,29 @@ async def test_list_folder_tree_parses_iso8601_modified_time():
 
 async def test_list_folder_tree_resolves_supported_shortcut_to_target():
     def handler(request: httpx.Request) -> httpx.Response:
-        url = str(request.url)
-        if request.url.path.endswith("/files/notes-target-id"):
+        if request.url.path.endswith("/files/doc-target-001"):
             return httpx.Response(
                 200,
                 json={
-                    "id": "notes-target-id",
-                    "name": "Meet - Notes by Gemini",
+                    "id": "doc-target-001",
+                    "name": "Team sync notes",
                     "mimeType": GOOGLE_MIME_DOCUMENT,
                     "modifiedTime": "2026-11-10T08:00:00.000Z",
                 },
             )
-        if "/files" in url and "alt=media" not in url and "/export" not in url:
+        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(
+            request.url
+        ):
             return httpx.Response(
                 200,
                 json={
                     "files": [
                         {
-                            "id": "shortcut-id",
-                            "name": "Meet - Notes by Gemini",
+                            "id": "shortcut-001",
+                            "name": "Team sync notes",
                             "mimeType": GOOGLE_MIME_SHORTCUT,
                             "shortcutDetails": {
-                                "targetId": "notes-target-id",
+                                "targetId": "doc-target-001",
                                 "targetMimeType": GOOGLE_MIME_DOCUMENT,
                             },
                         }
@@ -123,28 +124,29 @@ async def test_list_folder_tree_resolves_supported_shortcut_to_target():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         async with GoogleDriveClient(access_token="token", http_client=http_client) as client:
-            files = await client.list_folder_tree("meet-folder", include_subfolders=False)
+            files = await client.list_folder_tree("test-folder-001", include_subfolders=False)
 
     assert len(files) == 1
-    assert files[0].external_id == "notes-target-id"
+    assert files[0].external_id == "doc-target-001"
     assert files[0].mime_type == GOOGLE_MIME_DOCUMENT
     assert files[0].modified_at is not None
 
 
 async def test_list_folder_tree_skips_shortcut_to_unsupported_target():
     def handler(request: httpx.Request) -> httpx.Response:
-        url = str(request.url)
-        if "/files" in url and "alt=media" not in url and "/export" not in url:
+        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(
+            request.url
+        ):
             return httpx.Response(
                 200,
                 json={
                     "files": [
                         {
-                            "id": "recording-shortcut",
-                            "name": "Meet - Recording",
+                            "id": "shortcut-video-001",
+                            "name": "Session recording",
                             "mimeType": GOOGLE_MIME_SHORTCUT,
                             "shortcutDetails": {
-                                "targetId": "video-target-id",
+                                "targetId": "video-target-001",
                                 "targetMimeType": "video/mp4",
                             },
                         }
@@ -155,41 +157,42 @@ async def test_list_folder_tree_skips_shortcut_to_unsupported_target():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         async with GoogleDriveClient(access_token="token", http_client=http_client) as client:
-            files = await client.list_folder_tree("meet-folder", include_subfolders=False)
+            files = await client.list_folder_tree("test-folder-002", include_subfolders=False)
 
     assert files == []
 
 
 async def test_list_folder_tree_dedupes_direct_file_and_shortcut_target():
     def handler(request: httpx.Request) -> httpx.Response:
-        url = str(request.url)
-        if request.url.path.endswith("/files/shared-doc-id"):
+        if request.url.path.endswith("/files/doc-target-002"):
             return httpx.Response(
                 200,
                 json={
-                    "id": "shared-doc-id",
-                    "name": "Playbook",
+                    "id": "doc-target-002",
+                    "name": "Ops playbook",
                     "mimeType": GOOGLE_MIME_DOCUMENT,
                     "modifiedTime": "2026-11-01T10:00:00.000Z",
                 },
             )
-        if "/files" in url and "alt=media" not in url and "/export" not in url:
+        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(
+            request.url
+        ):
             return httpx.Response(
                 200,
                 json={
                     "files": [
                         {
-                            "id": "shared-doc-id",
-                            "name": "Playbook",
+                            "id": "doc-target-002",
+                            "name": "Ops playbook",
                             "mimeType": GOOGLE_MIME_DOCUMENT,
                             "modifiedTime": "2026-11-01T10:00:00.000Z",
                         },
                         {
-                            "id": "shortcut-to-same",
-                            "name": "Playbook",
+                            "id": "shortcut-002",
+                            "name": "Ops playbook",
                             "mimeType": GOOGLE_MIME_SHORTCUT,
                             "shortcutDetails": {
-                                "targetId": "shared-doc-id",
+                                "targetId": "doc-target-002",
                                 "targetMimeType": GOOGLE_MIME_DOCUMENT,
                             },
                         },
@@ -200,10 +203,10 @@ async def test_list_folder_tree_dedupes_direct_file_and_shortcut_target():
 
     async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as http_client:
         async with GoogleDriveClient(access_token="token", http_client=http_client) as client:
-            files = await client.list_folder_tree("folder", include_subfolders=False)
+            files = await client.list_folder_tree("test-folder-003", include_subfolders=False)
 
     assert len(files) == 1
-    assert files[0].external_id == "shared-doc-id"
+    assert files[0].external_id == "doc-target-002"
 
 
 async def test_list_folder_tree_includes_shared_drive_params():
