@@ -36,17 +36,17 @@ def tenant_docs_root(tmp_path, monkeypatch):
 
 
 def test_remove_empty_parents_removes_nested_orphan_tree(tenant_docs_root):
-    nested = tenant_docs_root / "CMS Search - 2026" / "09"
+    nested = tenant_docs_root / "Workshop notes - 2026" / "09"
     nested.mkdir(parents=True)
 
     removed = _remove_empty_parents(nested, stop_at=tenant_docs_root, dry_run=False)
 
     assert removed == 2
-    assert not (tenant_docs_root / "CMS Search - 2026").exists()
+    assert not (tenant_docs_root / "Workshop notes - 2026").exists()
 
 
 def test_cleanup_orphan_document_dirs_removes_empty_title_folders(tenant_docs_root):
-    orphan = tenant_docs_root / "CMS Search - 2026"
+    orphan = tenant_docs_root / "Workshop notes - 2026"
     (orphan / "09").mkdir(parents=True)
     (tenant_docs_root / "7").mkdir()
     (tenant_docs_root / "7" / "original").mkdir(parents=True)
@@ -59,7 +59,7 @@ def test_cleanup_orphan_document_dirs_removes_empty_title_folders(tenant_docs_ro
 
 
 def test_cleanup_orphan_document_dirs_skips_non_empty_title_folder(tenant_docs_root):
-    orphan = tenant_docs_root / "CMS Search - 2026"
+    orphan = tenant_docs_root / "Workshop notes - 2026"
     orphan.mkdir()
     (orphan / "notes.docx").write_bytes(b"still here")
 
@@ -71,8 +71,8 @@ def test_cleanup_orphan_document_dirs_skips_non_empty_title_folder(tenant_docs_r
 
 @pytest.mark.asyncio
 async def test_migrate_tenant_moves_nested_flat_file_and_cleans_parents(tenant_docs_root, monkeypatch):
-    raw_filename = "CMS Search - 2026/09/01 notes.docx"
-    old_relative = "CMS Search - 2026/09/01 notes.docx"
+    raw_filename = "Workshop notes - 2026/09/01 session.docx"
+    old_relative = "Workshop notes - 2026/09/01 session.docx"
     old_path = tenant_docs_root / old_relative
     old_path.parent.mkdir(parents=True, exist_ok=True)
     old_path.write_bytes(b"migrated-content")
@@ -99,18 +99,18 @@ async def test_migrate_tenant_moves_nested_flat_file_and_cleans_parents(tenant_d
 
     migrated, skipped, missing = await migrate_tenant(1, dry_run=False)
 
-    new_path = tenant_docs_root / "7" / "original" / "CMS Search - 2026 - 09 - 01 notes.docx"
+    new_path = tenant_docs_root / "7" / "original" / "Workshop notes - 2026 - 09 - 01 session.docx"
     assert migrated == 1
     assert skipped == 0
     assert missing == 0
     assert new_path.exists()
     assert new_path.read_bytes() == b"migrated-content"
     assert not old_path.exists()
-    assert not (tenant_docs_root / "CMS Search - 2026").exists()
+    assert not (tenant_docs_root / "Workshop notes - 2026").exists()
 
     update_kwargs = mock_repo.update_document_file.await_args.kwargs
-    assert update_kwargs["filename"] == "CMS Search - 2026 - 09 - 01 notes.docx"
-    assert update_kwargs["file_url"] == "7/original/CMS Search - 2026 - 09 - 01 notes.docx"
+    assert update_kwargs["filename"] == "Workshop notes - 2026 - 09 - 01 session.docx"
+    assert update_kwargs["file_url"] == "7/original/Workshop notes - 2026 - 09 - 01 session.docx"
 
 
 @pytest.mark.asyncio

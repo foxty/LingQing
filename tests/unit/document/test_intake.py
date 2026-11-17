@@ -154,10 +154,8 @@ async def test_persist_maps_integrity_error_to_duplicate(intake: DocumentIntake)
 
 @pytest.mark.asyncio
 async def test_persist_flattens_gemini_filename_and_saves_under_doc_original(intake: DocumentIntake, monkeypatch):
-    gemini_raw = "CMS Search & DLP Knowledge Sharing Session - 2026/09/01 11:01 CST - Notes by Gemini.docx"
-    stored_filename = (
-        "CMS Search & DLP Knowledge Sharing Session - 2026 - 09 - 01 11:01 CST - Notes by Gemini.docx"
-    )
+    gemini_raw = "Team knowledge sync - 2026/09/01 11:01 UTC - Notes by Gemini.docx"
+    stored_filename = "Team knowledge sync - 2026 - 09 - 01 11:01 UTC - Notes by Gemini.docx"
     expected_key = f"7/original/{stored_filename}"
 
     intake._document_repo.find_by_hash = AsyncMock(return_value=None)
