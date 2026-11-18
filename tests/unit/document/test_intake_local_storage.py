@@ -74,8 +74,8 @@ async def test_persist_does_not_create_title_folders_for_gemini_filename(tenant_
     intake = DocumentIntake(tenant_id=1, db_session=AsyncMock(), file_storage=storage)
     intake._document_repo.find_by_hash = AsyncMock(return_value=None)
 
-    gemini_raw = "Peak Season Review - 2026/08/06 12:56 HKT - Notes by Gemini.docx"
-    stored_filename = "Peak Season Review - 2026 - 08 - 06 12:56 HKT - Notes by Gemini.docx"
+    gemini_raw = "Ops review call - 2026/08/06 12:56 UTC - Notes by Gemini.docx"
+    stored_filename = "Ops review call - 2026 - 08 - 06 12:56 UTC - Notes by Gemini.docx"
 
     created_db = MagicMock()
     created_db.id = 8
@@ -108,4 +108,4 @@ async def test_persist_does_not_create_title_folders_for_gemini_filename(tenant_
 
     saved_path = tenant_docs_root / "8" / "original" / stored_filename
     assert saved_path.exists()
-    assert not (tenant_docs_root / "Peak Season Review - 2026").exists()
+    assert not (tenant_docs_root / "Ops review call - 2026").exists()

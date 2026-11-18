@@ -22,8 +22,8 @@ def test_document_original_relative_key_flattens_path_like_names():
 
 
 def test_normalize_document_filename_flattens_gemini_note_paths():
-    raw = "CMS Search & DLP Knowledge Sharing Session - 2026/09/01 11:01 CST - Notes by Gemini.docx"
-    expected = "CMS Search & DLP Knowledge Sharing Session - 2026 - 09 - 01 11:01 CST - Notes by Gemini.docx"
+    raw = "Team knowledge sync - 2026/09/01 11:01 UTC - Notes by Gemini.docx"
+    expected = "Team knowledge sync - 2026 - 09 - 01 11:01 UTC - Notes by Gemini.docx"
     assert normalize_document_filename(raw) == expected
     assert document_original_relative_key(7, raw) == f"7/original/{expected}"
 
