@@ -154,10 +154,11 @@ async def iter_audit_export_csv(
     filter_summary: dict | None = None,
     stats: AuditExportStats | None = None,
 ) -> AsyncIterator[bytes]:
-    """Stream audit CSV with UTF-8 BOM; records ``audit.log.export`` in the export session."""
+    """Stream audit CSV with UTF-8 BOM; records ``audit.log.export`` before streaming row data."""
     yield UTF8_BOM.encode("utf-8")
     exporter = CsvTableExporter()
     exporter.write_header(AUDIT_EXPORT_HEADERS)
+    data_chunk: bytes | None = None
 
     async with app_db_session() as db:
         repo = AuditEventRepository(db)
@@ -183,12 +184,6 @@ async def iter_audit_export_csv(
                 to_dt=to_dt,
             )
 
-        for row in rows:
-            exporter.append_row(_row_to_csv_cells(row))
-        chunk = exporter.flush_chunk()
-        if chunk:
-            yield chunk
-
         if actor_context_user_id is not None:
             recorder = TenantAuditRecorder(
                 db,
@@ -209,3 +204,10 @@ async def iter_audit_export_csv(
                     "total_matched": stats.total_matched,
                 },
             )
+
+        for row in rows:
+            exporter.append_row(_row_to_csv_cells(row))
+        data_chunk = exporter.flush_chunk()
+
+    if data_chunk:
+        yield data_chunk

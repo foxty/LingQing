@@ -63,6 +63,14 @@ def _should_drop_key(key: str) -> bool:
     return _SENSITIVE_KEY_RE.search(key_l) is not None
 
 
+def _sanitize_nested_value(value: Any) -> Any:
+    if isinstance(value, Mapping):
+        return sanitize_audit_payload(value) or {}
+    if isinstance(value, list):
+        return [_sanitize_nested_value(item) for item in value]
+    return value
+
+
 def sanitize_audit_payload(payload: Mapping[str, Any] | None) -> dict | None:
     """Strip secret-bearing keys/values from audit payload before persistence."""
     if payload is None:
@@ -71,15 +79,5 @@ def sanitize_audit_payload(payload: Mapping[str, Any] | None) -> dict | None:
     for key, value in payload.items():
         if _should_drop_key(key):
             continue
-        if isinstance(value, Mapping):
-            nested = sanitize_audit_payload(value)
-            if nested:
-                cleaned[key] = nested
-            continue
-        if isinstance(value, list):
-            cleaned[key] = [
-                sanitize_audit_payload(item) if isinstance(item, Mapping) else item for item in value
-            ]
-            continue
-        cleaned[key] = value
+        cleaned[key] = _sanitize_nested_value(value)
     return cleaned or {}

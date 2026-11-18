@@ -33,6 +33,11 @@ def test_sanitize_audit_payload_keeps_credential_metadata():
     assert "password" not in cleaned
 
 
+def test_sanitize_audit_payload_nested_list_of_dicts():
+    cleaned = sanitize_audit_payload({"rows": [[{"password": "hunter2"}]]})
+    assert cleaned["rows"] == [[{}]]
+
+
 def test_slack_integration_update_payload_shape():
     cleaned = sanitize_audit_payload(
         {

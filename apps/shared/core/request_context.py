@@ -17,16 +17,24 @@ from apps.shared.utils.logger import get_logger
 logger = get_logger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
+REQUEST_ID_MAX_LENGTH = 100
+
+
+def _clip_request_id(value: str) -> str:
+    return value[:REQUEST_ID_MAX_LENGTH]
 
 
 def get_or_create_request_id(request: Request) -> str:
     """Return the inbound request id or generate one for this request."""
     existing = getattr(request.state, "request_id", None)
     if isinstance(existing, str) and existing.strip():
-        return existing
+        return _clip_request_id(existing.strip())
 
     header_value = request.headers.get(REQUEST_ID_HEADER)
-    request_id = header_value.strip() if isinstance(header_value, str) and header_value.strip() else uuid4().hex
+    if isinstance(header_value, str) and header_value.strip():
+        request_id = _clip_request_id(header_value.strip())
+    else:
+        request_id = uuid4().hex
     request.state.request_id = request_id
     return request_id
 
