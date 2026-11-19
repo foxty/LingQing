@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-19T05:31:06.242388+00:00",
+  "generated_at": "2026-11-19T07:12:23.038759+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -10987,10 +10987,17 @@
           },
           {
             "name": "start_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range start (UTC)",
               "title": "Start Time"
             },
@@ -10998,14 +11005,40 @@
           },
           {
             "name": "end_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range end (UTC)",
               "title": "End Time"
             },
             "description": "Range end (UTC)"
+          },
+          {
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 90,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rolling window when start_time/end_time omitted (default 30, max 90)",
+              "title": "Days"
+            },
+            "description": "Rolling window when start_time/end_time omitted (default 30, max 90)"
           }
         ]
       },
@@ -11087,10 +11120,17 @@
           },
           {
             "name": "start_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range start (UTC)",
               "title": "Start Time"
             },
@@ -11098,14 +11138,40 @@
           },
           {
             "name": "end_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range end (UTC)",
               "title": "End Time"
             },
             "description": "Range end (UTC)"
+          },
+          {
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 90,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rolling window when start_time/end_time omitted (default 30, max 90)",
+              "title": "Days"
+            },
+            "description": "Rolling window when start_time/end_time omitted (default 30, max 90)"
           }
         ]
       },
@@ -11160,10 +11226,17 @@
           },
           {
             "name": "start_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range start (UTC)",
               "title": "Start Time"
             },
@@ -11171,14 +11244,40 @@
           },
           {
             "name": "end_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range end (UTC)",
               "title": "End Time"
             },
             "description": "Range end (UTC)"
+          },
+          {
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 90,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rolling window when start_time/end_time omitted (default 30, max 90)",
+              "title": "Days"
+            },
+            "description": "Rolling window when start_time/end_time omitted (default 30, max 90)"
           }
         ]
       },
@@ -12391,10 +12490,17 @@
           },
           {
             "name": "start_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range start (UTC)",
               "title": "Start Time"
             },
@@ -12402,14 +12508,40 @@
           },
           {
             "name": "end_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range end (UTC)",
               "title": "End Time"
             },
             "description": "Range end (UTC)"
+          },
+          {
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 90,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rolling window when start_time/end_time omitted (default 30, max 90)",
+              "title": "Days"
+            },
+            "description": "Rolling window when start_time/end_time omitted (default 30, max 90)"
           }
         ]
       },
@@ -12496,10 +12628,17 @@
           },
           {
             "name": "start_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range start (UTC)",
               "title": "Start Time"
             },
@@ -12507,14 +12646,40 @@
           },
           {
             "name": "end_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range end (UTC)",
               "title": "End Time"
             },
             "description": "Range end (UTC)"
+          },
+          {
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 90,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rolling window when start_time/end_time omitted (default 30, max 90)",
+              "title": "Days"
+            },
+            "description": "Rolling window when start_time/end_time omitted (default 30, max 90)"
           }
         ]
       },
@@ -12574,10 +12739,17 @@
           },
           {
             "name": "start_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range start (UTC)",
               "title": "Start Time"
             },
@@ -12585,14 +12757,40 @@
           },
           {
             "name": "end_time",
-            "required": true,
+            "required": false,
             "schema": {
-              "type": "string",
-              "format": "date-time",
+              "anyOf": [
+                {
+                  "type": "string",
+                  "format": "date-time"
+                },
+                {
+                  "type": "null"
+                }
+              ],
               "description": "Range end (UTC)",
               "title": "End Time"
             },
             "description": "Range end (UTC)"
+          },
+          {
+            "name": "days",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer",
+                  "maximum": 90,
+                  "minimum": 1
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Rolling window when start_time/end_time omitted (default 30, max 90)",
+              "title": "Days"
+            },
+            "description": "Rolling window when start_time/end_time omitted (default 30, max 90)"
           }
         ]
       },
