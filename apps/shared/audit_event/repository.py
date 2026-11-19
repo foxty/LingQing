@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.db.models import AuditEvent, User, User
+from apps.shared.db.models import AuditEvent, User
 
 DEFAULT_PAGE_SIZE = 20
 EXPORT_MAX_ROWS = 1000
