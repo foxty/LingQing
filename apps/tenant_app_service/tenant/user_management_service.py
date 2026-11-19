@@ -11,13 +11,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.audit_event.event_types import TenantAuditEventType
 from apps.shared.audit_event.payload import mask_email
 from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
-from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
 from apps.shared.authz.ta_rbac import DEFAULT_ROLE_PERMISSIONS
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import DuplicateResourceError, ResourceNotFoundError, ValidationError
 from apps.shared.db.models import TenantMembership, User
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
+from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
 from apps.tenant_app_service.auth.domain import (
     MembershipStatus,
     UserRole,

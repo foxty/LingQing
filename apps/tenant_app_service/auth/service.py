@@ -6,11 +6,14 @@ from jose import JWTError, jwt
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_settings
+from apps.shared.audit_event.context import AuditRequestContext
+from apps.shared.audit_event.recorder import TenantAuditRecorder
 from apps.shared.core.exceptions import (
     AuthenticationError,
     ValidationError,
 )
 from apps.shared.utils.logger import get_logger
+from apps.tenant_app_service.audit.record_helpers import record_auth_login_failure, record_auth_login_success
 from apps.tenant_app_service.auth.adapters import db_auth_record_to_domain, db_user_to_domain, domain_user_to_api
 from apps.tenant_app_service.auth.domain import TokenIssuer, UserDomain, UserPreferences, native_login_allowed
 from apps.tenant_app_service.auth.password_validator import validate_password_complexity
@@ -18,9 +21,6 @@ from apps.tenant_app_service.auth.password_verifier import BcryptPasswordVerifie
 from apps.tenant_app_service.auth.repository import UserRepository
 from apps.tenant_app_service.auth.schemas import LoginRequest, LoginResponse
 from apps.tenant_app_service.auth.token import JwtTokenIssuer
-from apps.shared.audit_event.context import AuditRequestContext
-from apps.shared.audit_event.recorder import TenantAuditRecorder
-from apps.tenant_app_service.audit.record_helpers import record_auth_login_failure, record_auth_login_success
 from apps.tenant_app_service.tenant.repository import TenantRepository
 
 logger = get_logger(__name__)

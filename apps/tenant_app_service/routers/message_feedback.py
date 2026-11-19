@@ -10,9 +10,8 @@ from apps.shared.audit_event.context import AuditRequestContext
 from apps.shared.audit_event.event_types import TenantAuditEventType
 from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
-from apps.shared.db.session import app_db_session
 from apps.shared.core.auth import require_permission
-from apps.shared.db.session import get_db
+from apps.shared.db.session import app_db_session, get_db
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.message_feedback.schemas import (
     FeedbackListResponse,

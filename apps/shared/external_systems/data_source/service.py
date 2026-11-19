@@ -16,7 +16,6 @@ from sqlglot.errors import ParseError
 
 from apps.shared.audit_event.event_types import TenantAuditEventType
 from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
-from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
@@ -63,6 +62,7 @@ from apps.shared.infra.analytics_db.manager_factory import get_db_manager_for_da
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
 from apps.shared.utils.sql_utils import extract_table_references, validate_read_only_sql
+from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
 
 from .repository import (
     AssetMetadataRepository,

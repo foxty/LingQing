@@ -7,6 +7,7 @@ from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_settings
+from apps.shared.audit_event.context import AuditRequestContext
 from apps.shared.authz.ta_rbac import get_effective_rbac
 from apps.shared.core.auth import get_current_user, set_access_token_cookie
 from apps.shared.core.rate_limit import rate_limiter
@@ -29,7 +30,6 @@ from apps.tenant_app_service.auth.schemas import (
     ResetPasswordRequest,
     UpdateProfilePreferencesRequest,
 )
-from apps.shared.audit_event.context import AuditRequestContext
 from apps.tenant_app_service.auth.service import AuthService
 from apps.tenant_app_service.sso.dtos import (
     ResolveTenantMethodsRequest,
