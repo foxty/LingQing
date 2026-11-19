@@ -10,6 +10,7 @@ import {
 } from '@/hooks/useAgentUsage'
 import TenantUserFilterCombobox from '@/components/TenantUserFilterCombobox'
 import TimeRangePicker from '@/components/TimeRangePicker'
+import { USAGE_TOKEN_TIME_RANGE_PRESET_VALUES } from '@/lib/timeRangeUtils'
 import { useTokenUsageTimeRange } from '@/hooks/useTokenUsageTimeRange'
 import TokenTrendChart from '@/pages/usage/TokenTrendChart'
 import TokenTable from '@/pages/usage/TokenTable'
@@ -65,6 +66,7 @@ export default function AgentUsagePanel({ agentId, enabled = true }: AgentUsageP
           <TimeRangePicker
             className="min-w-[220px]"
             value={timeRange}
+            presets={USAGE_TOKEN_TIME_RANGE_PRESET_VALUES}
             onChange={(next) => {
               setPage(1)
               setTimeRange(next)

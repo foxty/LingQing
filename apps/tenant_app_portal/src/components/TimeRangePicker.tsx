@@ -70,13 +70,15 @@ const TIME_PRESETS = [
   { value: 'this_month' },
   { value: 'last_month' },
   { value: 'this_year' },
-]
+] as const
 
 interface TimeRangePickerProps {
   value?: TimeRangeValue | null
   onChange: (value: TimeRangeValue) => void
   precision?: 'date' | 'datetime'
   className?: string
+  /** When set, only these preset keys are shown (e.g. usage pages omit ``this_year``). */
+  presets?: readonly string[]
 }
 
 export default function TimeRangePicker({
@@ -84,6 +86,7 @@ export default function TimeRangePicker({
   onChange,
   precision: defaultPrecision = 'datetime',
   className,
+  presets,
 }: TimeRangePickerProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -95,6 +98,13 @@ export default function TimeRangePicker({
     () => formatTimeRangeSummary(value ?? null, defaultPrecision, t),
     [value, defaultPrecision, t]
   )
+  const visiblePresets = useMemo(() => {
+    if (!presets?.length) {
+      return TIME_PRESETS
+    }
+    const allowed = new Set(presets)
+    return TIME_PRESETS.filter((preset) => allowed.has(preset.value))
+  }, [presets])
   const current = value ?? { mode: 'relative', preset: 'last_7_days' }
 
   /**
@@ -176,7 +186,7 @@ export default function TimeRangePicker({
           <div className="space-y-2">
             <div className="text-sm font-medium">{t('components.timeRangePicker.presets')}</div>
             <div className="grid gap-2">
-              {TIME_PRESETS.map((preset) => (
+              {visiblePresets.map((preset) => (
                 <Button
                   key={preset.value}
                   variant={

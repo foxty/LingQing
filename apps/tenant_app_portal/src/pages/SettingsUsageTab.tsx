@@ -8,6 +8,7 @@ import SettingsSection from '@/components/SettingsSection'
 import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import TimeRangePicker from '@/components/TimeRangePicker'
+import { USAGE_TOKEN_TIME_RANGE_PRESET_VALUES } from '@/lib/timeRangeUtils'
 import { useTenantStats } from '@/hooks/useTenantStats'
 import {
   useTenantTokenDaily,
@@ -139,6 +140,7 @@ export default function SettingsUsageTab() {
       <TimeRangePicker
         className="min-w-[220px]"
         value={timeRange}
+        presets={USAGE_TOKEN_TIME_RANGE_PRESET_VALUES}
         onChange={(next) => {
           setPage(1)
           setTimeRange(next)

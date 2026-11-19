@@ -61,10 +61,7 @@ def resolve_usage_time_range(
     has_end = end_time is not None
     if has_start or has_end:
         if not (has_start and has_end):
-            raise ValidationError(
-                "start_time and end_time must be provided together",
-                {"start_time": start_time, "end_time": end_time},
-            )
+            raise ValidationError("start_time and end_time must be provided together")
         window = validate_time_range_window(start_time, end_time)
         _enforce_max_span(window.start_time, window.end_time)
         return window

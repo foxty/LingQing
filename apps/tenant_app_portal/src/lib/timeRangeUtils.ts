@@ -134,6 +134,21 @@ export function resolveTimeRangeToIsoBounds(
   return {}
 }
 
+const TIME_RANGE_PRESET_VALUES = [
+  'today',
+  'yesterday',
+  'last_7_days',
+  'last_30_days',
+  'this_month',
+  'last_month',
+  'this_year',
+] as const
+
+/** Presets exposed on token-usage pages (API aggregation capped at 90 days). */
+export const USAGE_TOKEN_TIME_RANGE_PRESET_VALUES = TIME_RANGE_PRESET_VALUES.filter(
+  (preset) => preset !== 'this_year'
+)
+
 /** Default token-usage filter (matches legacy 30-day window). */
 export const DEFAULT_USAGE_TIME_RANGE: TimeRangeValue = {
   mode: 'relative',
