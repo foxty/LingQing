@@ -99,10 +99,9 @@ def test_this_year_explicit_bounds_exceed_usage_cap():
     from apps.shared.core.exceptions import ValidationError
     from apps.tenant_app_service.routers.deps.time_range import resolve_usage_time_range
 
-    end = datetime.now(UTC)
-    start = datetime(end.year, 1, 1, tzinfo=UTC)
-    span_days = (end - start).days
-    assert span_days > MAX_USAGE_WINDOW_DAYS
+    end = datetime(2026, 11, 19, tzinfo=UTC)
+    start = datetime(2026, 1, 1, tzinfo=UTC)
+    assert (end - start).days > MAX_USAGE_WINDOW_DAYS
 
     with pytest.raises(ValidationError, match="must not exceed"):
         resolve_usage_time_range(start_time=start, end_time=end, days=None)
