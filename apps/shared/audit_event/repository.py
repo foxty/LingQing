@@ -7,7 +7,7 @@ from datetime import datetime
 from sqlalchemy import desc, func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.db.models import AuditEvent
+from apps.shared.db.models import AuditEvent, User, User
 
 DEFAULT_PAGE_SIZE = 20
 EXPORT_MAX_ROWS = 1000
@@ -115,7 +115,7 @@ class AuditEventRepository:
         to_dt: datetime | None = None,
         page: int = 1,
         page_size: int = DEFAULT_PAGE_SIZE,
-    ) -> tuple[list[AuditEvent], int]:
+    ) -> tuple[list[tuple[AuditEvent, str | None]], int]:
         total = await self.count_filtered(
             tenant_id=tenant_id,
             actor_user_id=actor_user_id,
@@ -129,19 +129,25 @@ class AuditEventRepository:
         page_size = max(1, min(page_size, 100))
         offset = (page - 1) * page_size
         stmt = (
-            self._filtered_stmt(
-                tenant_id=tenant_id,
-                actor_user_id=actor_user_id,
-                event_type=event_type,
-                from_dt=from_dt,
-                to_dt=to_dt,
+            select(AuditEvent, User.username)
+            .select_from(AuditEvent)
+            .outerjoin(
+                User,
+                (AuditEvent.actor_user_id == User.id) & (User.tenant_id == AuditEvent.tenant_id),
             )
-            .order_by(desc(AuditEvent.created_at), desc(AuditEvent.id))
-            .offset(offset)
-            .limit(page_size)
+            .where(AuditEvent.tenant_id == tenant_id)
         )
+        if actor_user_id is not None:
+            stmt = stmt.where(AuditEvent.actor_user_id == actor_user_id)
+        if event_type:
+            stmt = stmt.where(AuditEvent.event_type == event_type)
+        if from_dt is not None:
+            stmt = stmt.where(AuditEvent.created_at >= from_dt)
+        if to_dt is not None:
+            stmt = stmt.where(AuditEvent.created_at <= to_dt)
+        stmt = stmt.order_by(desc(AuditEvent.created_at), desc(AuditEvent.id)).offset(offset).limit(page_size)
         result = await self.db.execute(stmt)
-        return list(result.scalars().all()), total
+        return [(event, username) for event, username in result.all()], total
 
     async def list_for_export(
         self,

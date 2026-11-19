@@ -114,7 +114,6 @@ export default function SettingsAuditLogsTab() {
   const [page, setPage] = useState(1)
   const [eventType, setEventType] = useState('')
   const [actorUserId, setActorUserId] = useState<number | undefined>(undefined)
-  const [actorUsernames, setActorUsernames] = useState<Record<number, string>>({})
   const [timeRange, setTimeRange] = useState<TimeRangeValue | null>(null)
   const isoBounds = useMemo(() => resolveTimeRangeToIsoBounds(timeRange, 'datetime'), [timeRange])
 
@@ -146,6 +145,7 @@ export default function SettingsAuditLogsTab() {
   })
 
   const rows: AuditEventDTO[] = data?.items ?? []
+  const auditTotalPages = data?.total_pages ?? 0
 
   const handleExport = async () => {
     try {
@@ -203,12 +203,9 @@ export default function SettingsAuditLogsTab() {
           <TenantUserFilterCombobox
             className="w-full min-w-0"
             value={actorUserId}
-            onChange={(id, username) => {
+            onChange={(id) => {
               setPage(1)
               setActorUserId(id)
-              if (id != null && username) {
-                setActorUsernames((prev) => ({ ...prev, [id]: username }))
-              }
             }}
           />
           <div className="flex min-w-0 flex-col gap-1 min-[480px]:col-span-2 xl:col-span-1">
@@ -274,9 +271,8 @@ export default function SettingsAuditLogsTab() {
                 rows.map((row) => {
                   const payloadText = formatAuditPayload(row.payload)
                   const actorLabel =
-                    row.actor_user_id != null
-                      ? actorUsernames[row.actor_user_id] ?? row.actor_user_id
-                      : '—'
+                    row.actor_username ??
+                    (row.actor_user_id != null ? String(row.actor_user_id) : row.actor_type ?? '—')
                   return (
                     <TableRow key={row.id}>
                       <TableCell>{formatDt(row.created_at)}</TableCell>
@@ -300,14 +296,15 @@ export default function SettingsAuditLogsTab() {
           </Table>
         )}
 
-        {data && data.total_pages > 1 ? (
-          <div className="mt-4">
+        {!isLoading && data && data.total > 0 ? (
+          <div className="mt-4 border-t border-border pt-3">
             <PaginationBar
-              page={data.page}
-              pageSize={data.page_size}
+              page={page}
+              pageSize={PAGE_SIZE}
               total={data.total}
-              totalPages={data.total_pages}
+              totalPages={auditTotalPages}
               onPageChange={setPage}
+              showWhenSinglePage={false}
             />
           </div>
         ) : null}

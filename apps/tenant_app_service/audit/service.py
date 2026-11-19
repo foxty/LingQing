@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import json
-import math
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
 from datetime import datetime
@@ -20,6 +19,7 @@ from apps.shared.audit_event.recorder import (
 from apps.shared.audit_event.repository import DEFAULT_PAGE_SIZE, AuditEventRepository
 from apps.shared.db.models import AuditEvent
 from apps.shared.db.session import app_db_session
+from apps.shared.schemas.pagination import PaginatedResponse
 from apps.shared.utils.structured_export import CsvTableExporter
 from apps.tenant_app_service.audit.schemas import AuditEventItem, AuditEventListResponse
 
@@ -48,11 +48,12 @@ class AuditExportStats:
     exported_count: int
 
 
-def _to_item(row: AuditEvent) -> AuditEventItem:
+def _to_item(row: AuditEvent, *, actor_username: str | None = None) -> AuditEventItem:
     return AuditEventItem(
         id=row.id,
         tenant_id=row.tenant_id,
         actor_user_id=row.actor_user_id,
+        actor_username=actor_username,
         actor_type=row.actor_type,
         event_type=row.event_type,
         outcome=row.outcome,
@@ -93,9 +94,9 @@ class TenantAuditQueryService:
             page=page,
             page_size=page_size,
         )
-        total_pages = math.ceil(total / page_size) if total else 0
+        total_pages = PaginatedResponse.calculate_total_pages(total, page_size) if total else 0
         return AuditEventListResponse(
-            items=[_to_item(row) for row in rows],
+            items=[_to_item(event, actor_username=username) for event, username in rows],
             total=total,
             page=max(1, page),
             page_size=page_size,

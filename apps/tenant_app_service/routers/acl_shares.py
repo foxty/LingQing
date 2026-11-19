@@ -8,7 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.audit_event.write_helpers import record_acl_share_create, record_acl_share_revoke
+from apps.shared.audit_event.record_helpers import record_acl_share_create, record_acl_share_revoke
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.auth import get_current_user

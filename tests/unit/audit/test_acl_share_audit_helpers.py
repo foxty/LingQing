@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from apps.shared.audit_event.event_types import TenantAuditEventType
 from apps.shared.db.models import AuditEvent, Tenant
 from apps.shared.domain.types import RESOURCE_TYPE_AGENT, RESOURCE_TYPE_DOCUMENT_COLLECTION
-from apps.shared.audit_event.write_helpers import record_acl_share_create, record_acl_share_revoke
+from apps.shared.audit_event.record_helpers import record_acl_share_create, record_acl_share_revoke
 
 
 @pytest.mark.asyncio

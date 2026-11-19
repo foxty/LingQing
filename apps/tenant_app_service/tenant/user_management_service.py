@@ -10,14 +10,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.audit_event.event_types import TenantAuditEventType
 from apps.shared.audit_event.payload import mask_email
-from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
+from apps.shared.audit_event.recorder import TenantAuditRecorder
 from apps.shared.authz.ta_rbac import DEFAULT_ROLE_PERMISSIONS
 from apps.shared.core.base_service import TenantAwareService
 from apps.shared.core.exceptions import DuplicateResourceError, ResourceNotFoundError, ValidationError
 from apps.shared.db.models import TenantMembership, User
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
-from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
+from apps.tenant_app_service.audit.record_helpers import (
+    record_conflict_rejection_audit,
+    record_user_create,
+    record_user_membership_deactivate,
+    record_user_membership_reactivate,
+    record_user_role_update,
+)
 from apps.tenant_app_service.auth.domain import (
     MembershipStatus,
     UserRole,
@@ -145,11 +151,9 @@ class TenantUserManagementService(TenantAwareService):
                     actor_user_id=actor_user_id,
                     resource_type="user",
                     resource_id=None,
-                    payload={
-                        "email_masked": mask_email(email),
-                        "role": role,
-                        "failure_reason": "duplicate_username",
-                    },
+                    failure_reason="duplicate_username",
+                    email_masked=mask_email(email),
+                    role=role,
                 )
             raise DuplicateResourceError("User already exists in tenant")
 
@@ -164,14 +168,12 @@ class TenantUserManagementService(TenantAwareService):
         logger.info(f"Created user {user.id} for tenant {self.tenant_id}")
         if actor_user_id is not None:
             recorder = TenantAuditRecorder(self.db, tenant_id=self.tenant_id)
-            await recorder.record(
-                event_type=TenantAuditEventType.USER_CREATE.value,
-                outcome=OUTCOME_SUCCESS,
+            await record_user_create(
+                recorder,
                 actor_user_id=actor_user_id,
-                actor_type=ACTOR_TYPE_USER,
-                resource_type="user",
-                resource_id=str(user.id),
-                payload={"email_masked": mask_email(email), "role": role},
+                user_id=user.id,
+                email=email,
+                role=role,
             )
         return TenantUserDTO(
             id=user.id,
@@ -239,14 +241,10 @@ class TenantUserManagementService(TenantAwareService):
         await sync_service.deactivate_user_connections(owner_id=user_id)
 
         recorder = TenantAuditRecorder(self.db, tenant_id=self.tenant_id)
-        await recorder.record(
-            event_type=TenantAuditEventType.USER_MEMBERSHIP_DEACTIVATE.value,
-            outcome=OUTCOME_SUCCESS,
+        await record_user_membership_deactivate(
+            recorder,
             actor_user_id=actor_user_id,
-            actor_type=ACTOR_TYPE_USER,
-            resource_type="user",
-            resource_id=str(user_id),
-            payload={"change_summary": "membership_deactivated"},
+            user_id=user_id,
         )
 
         logger.info(f"Deactivated user {user_id} in tenant {self.tenant_id}")
@@ -274,14 +272,10 @@ class TenantUserManagementService(TenantAwareService):
 
         if actor_user_id is not None:
             recorder = TenantAuditRecorder(self.db, tenant_id=self.tenant_id)
-            await recorder.record(
-                event_type=TenantAuditEventType.USER_MEMBERSHIP_REACTIVATE.value,
-                outcome=OUTCOME_SUCCESS,
+            await record_user_membership_reactivate(
+                recorder,
                 actor_user_id=actor_user_id,
-                actor_type=ACTOR_TYPE_USER,
-                resource_type="user",
-                resource_id=str(user_id),
-                payload={"change_summary": "membership_reactivated"},
+                user_id=user_id,
             )
 
         logger.info(f"Recovered user {user_id} in tenant {self.tenant_id}")
@@ -352,18 +346,12 @@ class TenantUserManagementService(TenantAwareService):
             raise ResourceNotFoundError("User not found")
 
         recorder = TenantAuditRecorder(self.db, tenant_id=self.tenant_id)
-        await recorder.record(
-            event_type=TenantAuditEventType.USER_ROLE_UPDATE.value,
-            outcome=OUTCOME_SUCCESS,
+        await record_user_role_update(
+            recorder,
             actor_user_id=actor_user_id,
-            actor_type=ACTOR_TYPE_USER,
-            resource_type="user",
-            resource_id=str(user_id),
-            payload={
-                "change_summary": "role_updated",
-                "role_before": role_before,
-                "role_after": role,
-            },
+            user_id=user_id,
+            role_before=role_before,
+            role_after=role,
         )
 
         logger.info(f"Updated role for user {user_id} in tenant {self.tenant_id} to {role}")

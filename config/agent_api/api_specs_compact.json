@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-19T07:12:23.038759+00:00",
+  "generated_at": "2026-11-19T09:13:12.024773+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -2054,6 +2054,191 @@
         ],
         "title": "AssetSchemaResponse",
         "description": "Asset schema response."
+      },
+      "AuditEventItem": {
+        "properties": {
+          "id": {
+            "type": "integer",
+            "title": "Id"
+          },
+          "tenant_id": {
+            "type": "integer",
+            "title": "Tenant Id"
+          },
+          "actor_user_id": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor User Id"
+          },
+          "actor_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Username"
+          },
+          "actor_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Actor Type"
+          },
+          "event_type": {
+            "type": "string",
+            "title": "Event Type"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Outcome"
+          },
+          "client_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Ip"
+          },
+          "user_agent": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "User Agent"
+          },
+          "request_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Request Id"
+          },
+          "resource_type": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Type"
+          },
+          "resource_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resource Id"
+          },
+          "payload": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Payload"
+          },
+          "created_at": {
+            "type": "string",
+            "format": "date-time",
+            "title": "Created At"
+          }
+        },
+        "type": "object",
+        "required": [
+          "id",
+          "tenant_id",
+          "actor_user_id",
+          "actor_type",
+          "event_type",
+          "outcome",
+          "client_ip",
+          "user_agent",
+          "request_id",
+          "resource_type",
+          "resource_id",
+          "payload",
+          "created_at"
+        ],
+        "title": "AuditEventItem"
+      },
+      "AuditEventListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/AuditEventItem"
+            },
+            "type": "array",
+            "title": "Items"
+          },
+          "total": {
+            "type": "integer",
+            "title": "Total"
+          },
+          "page": {
+            "type": "integer",
+            "title": "Page"
+          },
+          "page_size": {
+            "type": "integer",
+            "title": "Page Size"
+          },
+          "total_pages": {
+            "type": "integer",
+            "title": "Total Pages"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items",
+          "total",
+          "page",
+          "page_size",
+          "total_pages"
+        ],
+        "title": "AuditEventListResponse"
       },
       "AuditEventTypesResponse": {
         "properties": {
@@ -13230,6 +13415,9 @@
       },
       "response": {
         "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/AuditEventListResponse"
+        },
         "error_statuses": [
           "422"
         ]

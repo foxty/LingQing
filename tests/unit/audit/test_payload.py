@@ -18,18 +18,18 @@ def test_sanitize_audit_payload_strips_secrets():
     assert cleaned["env_var_keys_changed"] == ["API_KEY"]
 
 
-def test_sanitize_audit_payload_keeps_credential_metadata():
+def test_sanitize_audit_payload_keeps_typed_datasource_metadata():
     cleaned = sanitize_audit_payload(
         {
-            "credentials_present": True,
-            "credentials_changed": True,
-            "credential_field_names": ["password"],
+            "config_has_secrets": True,
+            "secret_config_changed": True,
+            "secret_config_keys": ["password"],
             "password": "must-drop",
         }
     )
-    assert cleaned["credentials_present"] is True
-    assert cleaned["credentials_changed"] is True
-    assert cleaned["credential_field_names"] == ["password"]
+    assert cleaned["config_has_secrets"] is True
+    assert cleaned["secret_config_changed"] is True
+    assert cleaned["secret_config_keys"] == ["password"]
     assert "password" not in cleaned
 
 

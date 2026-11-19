@@ -68,7 +68,7 @@ async def test_user_create_duplicate_failure_audit_survives_request_rollback(mon
                 await session.close()
 
         monkeypatch.setattr(
-            "apps.tenant_app_service.audit.record_helpers.app_db_session",
+            "apps.shared.audit_event.record_helpers.app_db_session",
             _committed_side_session,
         )
 

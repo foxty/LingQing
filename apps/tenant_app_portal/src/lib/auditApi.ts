@@ -4,6 +4,7 @@ export interface AuditEventDTO {
   id: number
   tenant_id: number
   actor_user_id: number | null
+  actor_username: string | null
   actor_type: string | null
   event_type: string
   outcome: string | null

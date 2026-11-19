@@ -7,8 +7,7 @@ import json
 from fastapi import APIRouter, Depends, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from apps.shared.audit_event.event_types import TenantAuditEventType
-from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
+from apps.shared.audit_event.recorder import TenantAuditRecorder
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.auth import get_current_user, require_permission
@@ -25,6 +24,11 @@ from apps.tenant_app_service.agent_ingress.slack.dtos import (
     SlackIntegrationResponse,
     SlackTestConnectionResponse,
     UpdateAgentSlackIntegrationRequest,
+)
+from apps.tenant_app_service.audit.record_helpers import (
+    record_slack_agent_ingress_create,
+    record_slack_agent_ingress_delete,
+    record_slack_integration_update,
 )
 
 router = APIRouter(prefix="/agents/{agent_id}/integrations/slack", tags=["slack"])
@@ -156,14 +160,11 @@ async def create_agent_slack_integration(
     service = SlackAdminService(db)
     result = await service.create_integration(current_user.tenant_id, agent_id, request)
     recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
-    await recorder.record(
-        event_type=TenantAuditEventType.SLACK_AGENT_INGRESS_ENDPOINT_CREATE.value,
-        outcome=OUTCOME_SUCCESS,
+    await record_slack_agent_ingress_create(
+        recorder,
         actor_user_id=current_user.id,
-        actor_type=ACTOR_TYPE_USER,
-        resource_type="agent_ingress_endpoint",
-        resource_id=str(result.id),
-        payload={"agent_id": agent_id},
+        endpoint_id=result.id,
+        agent_id=agent_id,
     )
     await db.commit()
     return result
@@ -184,14 +185,12 @@ async def update_agent_slack_integration(
         if key not in {"bot_token", "signing_secret"}
     ]
     recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
-    await recorder.record(
-        event_type=TenantAuditEventType.SLACK_INTEGRATION_UPDATE.value,
-        outcome=OUTCOME_SUCCESS,
+    await record_slack_integration_update(
+        recorder,
         actor_user_id=current_user.id,
-        actor_type=ACTOR_TYPE_USER,
-        resource_type="agent_ingress_endpoint",
-        resource_id=str(result.id),
-        payload={"fields_changed": fields_changed, "agent_id": agent_id},
+        endpoint_id=result.id,
+        agent_id=agent_id,
+        fields_changed=fields_changed,
     )
     await db.commit()
     return result
@@ -208,14 +207,11 @@ async def delete_agent_slack_integration(
     await service.delete_integration(current_user.tenant_id, agent_id)
     if existing is not None:
         recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id)
-        await recorder.record(
-            event_type=TenantAuditEventType.SLACK_AGENT_INGRESS_ENDPOINT_DELETE.value,
-            outcome=OUTCOME_SUCCESS,
+        await record_slack_agent_ingress_delete(
+            recorder,
             actor_user_id=current_user.id,
-            actor_type=ACTOR_TYPE_USER,
-            resource_type="agent_ingress_endpoint",
-            resource_id=str(existing.id),
-            payload={"agent_id": agent_id},
+            endpoint_id=existing.id,
+            agent_id=agent_id,
         )
     await db.commit()
 

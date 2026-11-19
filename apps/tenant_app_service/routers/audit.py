@@ -17,7 +17,7 @@ from apps.shared.core.exceptions import ValidationError
 from apps.shared.db.session import get_db
 from apps.shared.live_app.domain import LiveAppAuditEventType
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.audit.schemas import AuditEventTypesResponse
+from apps.tenant_app_service.audit.schemas import AuditEventListResponse, AuditEventTypesResponse
 from apps.tenant_app_service.audit.service import TenantAuditQueryService, iter_audit_export_csv
 
 router = APIRouter(prefix="/audit", tags=["audit"])
@@ -43,7 +43,7 @@ async def list_audit_event_types(
     return AuditEventTypesResponse(items=items)
 
 
-@router.get("/events")
+@router.get("/events", response_model=AuditEventListResponse)
 async def list_audit_events(
     actor_user_id: int | None = Query(None),
     event_type: str | None = Query(None),

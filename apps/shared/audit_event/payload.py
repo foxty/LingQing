@@ -1,28 +1,12 @@
-"""Payload sanitization for audit events (PRD §5.2)."""
+"""Payload sanitization for audit events (defense in depth after typed builders)."""
 
 from __future__ import annotations
 
-import re
 from collections.abc import Mapping
 from typing import Any
 
-# PRD-allowed metadata keys (booleans, field name lists) — never strip by substring rules.
-_ALLOWED_METADATA_KEYS = frozenset(
-    {
-        "credentials_changed",
-        "credential_field_names",
-        "credentials_present",
-        "fields_changed",
-        "env_var_keys_changed",
-        "change_summary",
-        "filter_summary",
-        "exported_count",
-        "truncated",
-        "total_matched",
-    }
-)
-
-_BLOCKED_VALUE_KEYS = frozenset(
+# Exact key names whose values must never be stored (values may still carry secrets).
+_SECRET_KEYS = frozenset(
     {
         "password",
         "passwd",
@@ -32,15 +16,12 @@ _BLOCKED_VALUE_KEYS = frozenset(
         "bot_token",
         "signing_secret",
         "api_key",
+        "apikey",
         "credentials",
         "credential",
+        "secret",
+        "client_secret",
     }
-)
-
-# Secret **value** keys only — do not match substrings like "credentials_present".
-_SENSITIVE_KEY_RE = re.compile(
-    r"(^password$|^passwd$|_token$|^token$|^secret$|api_key|apikey|^bot_token$|^signing_secret$)",
-    re.IGNORECASE,
 )
 
 
@@ -55,12 +36,7 @@ def mask_email(email: str | None) -> str | None:
 
 
 def _should_drop_key(key: str) -> bool:
-    key_l = key.lower()
-    if key_l in _ALLOWED_METADATA_KEYS:
-        return False
-    if key_l in _BLOCKED_VALUE_KEYS:
-        return True
-    return _SENSITIVE_KEY_RE.search(key_l) is not None
+    return key.lower() in _SECRET_KEYS
 
 
 def _sanitize_nested_value(value: Any) -> Any:
@@ -72,7 +48,7 @@ def _sanitize_nested_value(value: Any) -> Any:
 
 
 def sanitize_audit_payload(payload: Mapping[str, Any] | None) -> dict | None:
-    """Strip secret-bearing keys/values from audit payload before persistence."""
+    """Strip known secret **value** keys before persistence."""
     if payload is None:
         return None
     cleaned: dict[str, Any] = {}

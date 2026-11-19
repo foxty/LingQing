@@ -15,7 +15,13 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlglot.errors import ParseError
 
 from apps.shared.audit_event.event_types import TenantAuditEventType
-from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
+from apps.shared.audit_event.record_helpers import (
+    record_conflict_rejection_audit,
+    record_datasource_create,
+    record_datasource_delete,
+    record_datasource_update,
+)
+from apps.shared.audit_event.recorder import TenantAuditRecorder
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
@@ -62,7 +68,6 @@ from apps.shared.infra.analytics_db.manager_factory import get_db_manager_for_da
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
 from apps.shared.utils.sql_utils import extract_table_references, validate_read_only_sql
-from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
 
 from .repository import (
     AssetMetadataRepository,
@@ -71,6 +76,13 @@ from .repository import (
 from .temp_table_repository import TempTableRepository
 
 logger = get_logger(__name__)
+
+
+def _config_secret_keys(config: dict | None) -> list[str]:
+    if not config:
+        return []
+    needles = ("password", "token", "secret")
+    return sorted(k for k in config if any(n in k.lower() for n in needles))
 
 _SYSTEM_CATALOG_SCHEMAS = frozenset({"information_schema", "pg_catalog", "pg_toast"})
 
@@ -455,20 +467,15 @@ class DataSourceService(TenantAwareService):
 
         logger.info(f"Updated data source {data_source_id} for tenant {self.tenant_id}")
         incoming = update_data.model_dump(exclude_unset=True)
-        credential_fields = [k for k in (incoming.get("config") or {}) if "password" in k.lower() or "token" in k.lower()]
+        secret_keys = _config_secret_keys(incoming.get("config"))
         recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
-        await recorder.record(
-            event_type=TenantAuditEventType.DATASOURCE_UPDATE.value,
-            outcome=OUTCOME_SUCCESS,
+        await record_datasource_update(
+            recorder,
             actor_user_id=actor.user_id,
-            actor_type=ACTOR_TYPE_USER,
-            resource_type="datasource",
-            resource_id=str(data_source_id),
-            payload={
-                "change_summary": sorted(incoming.keys()),
-                "credentials_changed": bool(credential_fields),
-                "credential_field_names": credential_fields,
-            },
+            data_source_id=data_source_id,
+            change_summary=sorted(incoming.keys()),
+            secret_config_changed=bool(secret_keys),
+            secret_config_keys=secret_keys,
         )
         return db_data_source_to_public_api_response(updated)
 
@@ -497,14 +504,11 @@ class DataSourceService(TenantAwareService):
         deleted = await self.data_source_repo.delete_by_id_and_tenant(data_source_id, self.tenant_id)
         logger.info(f"Deleted data source {data_source_id} for tenant {self.tenant_id}")
         recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
-        await recorder.record(
-            event_type=TenantAuditEventType.DATASOURCE_DELETE.value,
-            outcome=OUTCOME_SUCCESS,
+        await record_datasource_delete(
+            recorder,
             actor_user_id=actor.user_id,
-            actor_type=ACTOR_TYPE_USER,
-            resource_type="datasource",
-            resource_id=str(data_source_id),
-            payload={"name_snapshot": data_source.name},
+            data_source_id=data_source_id,
+            name_snapshot=data_source.name,
         )
         return deleted
 
@@ -637,11 +641,9 @@ class DataSourceService(TenantAwareService):
                 actor_user_id=owner_id,
                 resource_type="datasource",
                 resource_id=str(existing.id),
-                payload={
-                    "name": data_source_data.name,
-                    "connector_type": data_source_data.type,
-                    "failure_reason": "duplicate_name",
-                },
+                failure_reason="duplicate_name",
+                name=data_source_data.name,
+                connector_type=data_source_data.type,
             )
             raise ValueError(f"Data source '{data_source_data.name}' already exists for tenant {self.tenant_id}")
 
@@ -663,18 +665,13 @@ class DataSourceService(TenantAwareService):
 
         logger.info(f"Created data source '{data_source.name}' (ID: {data_source.id}) for tenant {self.tenant_id}")
         recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
-        await recorder.record(
-            event_type=TenantAuditEventType.DATASOURCE_CREATE.value,
-            outcome=OUTCOME_SUCCESS,
+        await record_datasource_create(
+            recorder,
             actor_user_id=owner_id,
-            actor_type=ACTOR_TYPE_USER,
-            resource_type="datasource",
-            resource_id=str(data_source.id),
-            payload={
-                "name": data_source.name,
-                "connector_type": data_source.type,
-                "credentials_present": bool(data_source_data.config),
-            },
+            data_source_id=data_source.id,
+            name=data_source.name,
+            connector_type=data_source.type,
+            config_has_secrets=bool(_config_secret_keys(config)),
         )
         return db_data_source_to_public_api_response(data_source)
 

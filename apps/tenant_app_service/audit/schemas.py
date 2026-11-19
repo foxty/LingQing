@@ -12,6 +12,7 @@ class AuditEventItem(BaseModel):
     id: int
     tenant_id: int
     actor_user_id: int | None
+    actor_username: str | None = None
     actor_type: str | None
     event_type: str
     outcome: str | None
