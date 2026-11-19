@@ -1,4 +1,8 @@
-"""Tenant audit event type constants (PRD §6 sign-off)."""
+"""Tenant audit event type constants (PRD §6 sign-off).
+
+Live-app operational events use ``LiveAppAuditEventType`` (``live_app.*`` prefix) in
+``apps.shared.live_app.domain`` — same ``audit_events`` table, separate enum.
+"""
 
 from __future__ import annotations
 
@@ -13,6 +17,10 @@ class TenantAuditEventType(StrEnum):
     AUTH_LOGIN_FAILURE = "auth.login.failure"
     AUTH_LOGOUT = "auth.logout"  # reserved — no write in v1
 
+    # acl.*
+    ACL_SHARE_CREATE = "acl.share.create"
+    ACL_SHARE_REVOKE = "acl.share.revoke"
+
     # user.*
     USER_CREATE = "user.create"
     USER_MEMBERSHIP_DEACTIVATE = "user.membership.deactivate"
@@ -24,7 +32,7 @@ class TenantAuditEventType(StrEnum):
     KB_DOCUMENT_CREATE = "kb.document.create"
     KB_DOCUMENT_UPDATE = "kb.document.update"  # reserved
     KB_DOCUMENT_DELETE = "kb.document.delete"
-    KB_DOCUMENT_ACCESS_POLICY_UPDATE = "kb.document.access_policy.update"
+    KB_DOCUMENT_ACCESS_POLICY_UPDATE = "kb.document.access_policy.update"  # reserved — use acl.share.*
     KB_DOCUMENT_PUBLISH = "kb.document.publish"  # reserved
     KB_DOCUMENT_READ = "kb.document.read"  # reserved
 
@@ -63,6 +71,7 @@ MANDATORY_EVENT_TYPES: frozenset[str] = frozenset(
     not in {
         TenantAuditEventType.AUTH_LOGOUT,
         TenantAuditEventType.USER_PERMISSION_UPDATE,
+        TenantAuditEventType.KB_DOCUMENT_ACCESS_POLICY_UPDATE,
         TenantAuditEventType.KB_DOCUMENT_UPDATE,
         TenantAuditEventType.KB_DOCUMENT_PUBLISH,
         TenantAuditEventType.KB_DOCUMENT_READ,
@@ -74,6 +83,7 @@ RESERVED_EVENT_TYPES: frozenset[str] = frozenset(
     {
         TenantAuditEventType.AUTH_LOGOUT.value,
         TenantAuditEventType.USER_PERMISSION_UPDATE.value,
+        TenantAuditEventType.KB_DOCUMENT_ACCESS_POLICY_UPDATE.value,
         TenantAuditEventType.KB_DOCUMENT_UPDATE.value,
         TenantAuditEventType.KB_DOCUMENT_PUBLISH.value,
         TenantAuditEventType.KB_DOCUMENT_READ.value,

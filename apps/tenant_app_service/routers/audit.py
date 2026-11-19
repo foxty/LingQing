@@ -9,12 +9,15 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.audit_event.context import AuditRequestContext
-from apps.shared.core.exceptions import ValidationError
+from apps.shared.audit_event.event_types import TenantAuditEventType
 from apps.shared.audit_event.repository import DEFAULT_PAGE_SIZE
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
+from apps.shared.core.exceptions import ValidationError
 from apps.shared.db.session import get_db
+from apps.shared.live_app.domain import LiveAppAuditEventType
 from apps.shared.schemas.user import UserDTO
+from apps.tenant_app_service.audit.schemas import AuditEventTypesResponse
 from apps.tenant_app_service.audit.service import TenantAuditQueryService, iter_audit_export_csv
 
 router = APIRouter(prefix="/audit", tags=["audit"])
@@ -27,6 +30,17 @@ def _parse_dt(value: str | None) -> datetime | None:
         return datetime.fromisoformat(value.replace("Z", "+00:00"))
     except ValueError as exc:
         raise ValidationError("Invalid datetime filter", {"value": value}) from exc
+
+
+@router.get("/event-types", response_model=AuditEventTypesResponse)
+async def list_audit_event_types(
+    current_user: UserDTO = Depends(require_permission(Permissions.AUDIT_READ)),
+):
+    """Catalog of known event type strings for filter autocomplete."""
+    items = sorted(
+        {t.value for t in TenantAuditEventType} | {t.value for t in LiveAppAuditEventType},
+    )
+    return AuditEventTypesResponse(items=items)
 
 
 @router.get("/events")

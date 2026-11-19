@@ -38,6 +38,15 @@ export async function listAuditEvents(params: ListAuditEventsParams = {}): Promi
   return res.data
 }
 
+export interface AuditEventTypesResponse {
+  items: string[]
+}
+
+export async function listAuditEventTypes(): Promise<AuditEventTypesResponse> {
+  const res = await api.get<AuditEventTypesResponse>('/audit/event-types')
+  return res.data
+}
+
 export async function exportAuditEvents(params: ListAuditEventsParams = {}): Promise<{
   blob: Blob
   truncated: boolean
@@ -52,4 +61,15 @@ export async function exportAuditEvents(params: ListAuditEventsParams = {}): Pro
   const totalMatched = Number(res.headers['x-audit-total-matched'] ?? 0)
   const exportedCount = Number(res.headers['x-audit-exported-count'] ?? 0)
   return { blob: res.data, truncated, totalMatched, exportedCount }
+}
+
+export function formatAuditPayload(payload: Record<string, unknown> | null | undefined): string {
+  if (!payload || Object.keys(payload).length === 0) {
+    return ''
+  }
+  try {
+    return JSON.stringify(payload)
+  } catch {
+    return ''
+  }
 }

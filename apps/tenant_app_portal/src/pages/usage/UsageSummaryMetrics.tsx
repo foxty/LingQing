@@ -74,7 +74,7 @@ export type UsageSummaryMetricsData = {
 
 type UsageSummaryMetricsProps = {
   summary: UsageSummaryMetricsData | null | undefined
-  days: number
+  periodLabel: string
   showReachMetrics?: boolean
   /** Render without outer Card — use inside SettingsSection. */
   embedded?: boolean
@@ -100,7 +100,7 @@ function StatBar({ items }: { items: StatItem[] }) {
 
 function UsageSummaryMetricsBody({
   summary,
-  days,
+  periodLabel,
   showReachMetrics,
 }: Omit<UsageSummaryMetricsProps, 'embedded'>) {
   const { t, i18n: i18nInstance } = useTranslation()
@@ -141,7 +141,7 @@ function UsageSummaryMetricsBody({
     <div className="space-y-4">
       <div>
         <p className="text-sm text-muted-foreground">
-          {t('settings.usageTab.totalTokens')} · {t('settings.usageTab.lastNDays', { days })}
+          {t('settings.usageTab.totalTokens')} · {periodLabel}
         </p>
         <p className="text-3xl font-semibold tabular-nums tracking-tight">
           {formatNumber(summary?.total_tokens ?? 0, locale)}
@@ -160,12 +160,12 @@ function UsageSummaryMetricsBody({
 
 export default function UsageSummaryMetrics({
   summary,
-  days,
+  periodLabel,
   showReachMetrics = true,
   embedded = false,
 }: UsageSummaryMetricsProps) {
   const body = (
-    <UsageSummaryMetricsBody summary={summary} days={days} showReachMetrics={showReachMetrics} />
+    <UsageSummaryMetricsBody summary={summary} periodLabel={periodLabel} showReachMetrics={showReachMetrics} />
   )
 
   if (embedded) {

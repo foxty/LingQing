@@ -5,7 +5,7 @@ from enum import StrEnum
 
 
 class LiveAppAuditEventType(StrEnum):
-    """Typed event names for live app audit events."""
+    """Typed event names for live app audit events (persisted via tenant audit pipeline)."""
 
     FILE_WRITE = "live_app.file.write"
     DATA_QUERY = "live_app.data.query"

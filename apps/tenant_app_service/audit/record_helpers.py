@@ -7,8 +7,6 @@ from typing import Any
 
 from apps.shared.audit_event.context import AuditRequestContext
 from apps.shared.audit_event.event_types import TenantAuditEventType
-from apps.shared.db.session import app_db_session
-from apps.shared.audit_event.payload import mask_email
 from apps.shared.audit_event.recorder import (
     ACTOR_TYPE_ANONYMOUS,
     ACTOR_TYPE_USER,
@@ -16,6 +14,7 @@ from apps.shared.audit_event.recorder import (
     OUTCOME_SUCCESS,
     TenantAuditRecorder,
 )
+from apps.shared.db.session import app_db_session
 
 
 def identifier_hash(value: str) -> str:

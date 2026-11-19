@@ -41,3 +41,16 @@ def test_export_audit_events_rejects_invalid_from_datetime():
         assert resp.status_code == 400
     finally:
         app.dependency_overrides.clear()
+
+
+def test_list_audit_event_types_returns_catalog():
+    client = TestClient(app)
+    app.dependency_overrides[get_current_user] = _admin_user
+    try:
+        resp = client.get("/audit/event-types")
+        assert resp.status_code == 200
+        body = resp.json()
+        assert "acl.share.create" in body["items"]
+        assert "live_app.data.query" in body["items"]
+    finally:
+        app.dependency_overrides.clear()

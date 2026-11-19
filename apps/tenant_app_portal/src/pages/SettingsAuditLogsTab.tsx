@@ -1,8 +1,10 @@
 import PaginationBar from '@/components/PaginationBar'
 import SettingsPageShell from '@/components/SettingsPageShell'
 import SettingsSection from '@/components/SettingsSection'
+import SearchableCombobox from '@/components/SearchableCombobox'
+import TenantUserFilterCombobox from '@/components/TenantUserFilterCombobox'
+import TimeRangePicker, { type TimeRangeValue } from '@/components/TimeRangePicker'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import {
   Table,
   TableBody,
@@ -14,7 +16,14 @@ import {
 import { useAuth } from '@/hooks/useAuth'
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { useNotification } from '@/hooks/useNotification'
-import { exportAuditEvents, listAuditEvents, type AuditEventDTO } from '@/lib/auditApi'
+import {
+  exportAuditEvents,
+  formatAuditPayload,
+  listAuditEventTypes,
+  listAuditEvents,
+  type AuditEventDTO,
+} from '@/lib/auditApi'
+import { resolveTimeRangeToIsoBounds } from '@/lib/timeRangeUtils'
 import { getApiErrorMessage } from '@/lib/api'
 import { PERMISSIONS } from '@/lib/permissionRules'
 import i18n from '@/i18n/config'
@@ -32,10 +41,18 @@ i18n.addResourceBundle(
     settings: { auditLogs: 'Audit Logs' },
     auditLogs: {
       description: 'Review security-relevant user actions in this tenant.',
-      eventType: 'Event type',
+      eventTypePlaceholder: 'All event types',
+      eventTypeSearch: 'Search event types…',
+      eventTypeEmpty: 'No matching event types',
+      eventTypeUseCustom: 'Filter: {{value}}',
+      clearEventType: 'Clear event type',
       actorUserId: 'Actor user ID',
-      from: 'From (ISO)',
-      to: 'To (ISO)',
+      actorUserPlaceholder: 'All actors',
+      actorUserSearch: 'Search users…',
+      actorUserEmpty: 'No users found',
+      clearActor: 'Clear actor',
+      clearTimeRange: 'Clear time range',
+      payloadCol: 'Payload',
       export: 'Export CSV',
       exportTruncated: 'Only the first 1000 matching rows were exported.',
       noRows: 'No audit events match your filters.',
@@ -59,10 +76,18 @@ i18n.addResourceBundle(
     settings: { auditLogs: '审计日志' },
     auditLogs: {
       description: '查看本租户内与安全相关的用户操作记录。',
-      eventType: '事件类型',
+      eventTypePlaceholder: '全部事件类型',
+      eventTypeSearch: '搜索事件类型…',
+      eventTypeEmpty: '没有匹配的事件类型',
+      eventTypeUseCustom: '筛选：{{value}}',
+      clearEventType: '清除事件类型',
       actorUserId: '操作人用户 ID',
-      from: '开始时间 (ISO)',
-      to: '结束时间 (ISO)',
+      actorUserPlaceholder: '全部操作人',
+      actorUserSearch: '搜索用户…',
+      actorUserEmpty: '未找到用户',
+      clearActor: '清除操作人',
+      clearTimeRange: '清除时间范围',
+      payloadCol: '详情',
       export: '导出 CSV',
       exportTruncated: '仅导出了匹配的前 1000 条记录。',
       noRows: '没有符合筛选条件的审计事件。',
@@ -88,20 +113,31 @@ export default function SettingsAuditLogsTab() {
 
   const [page, setPage] = useState(1)
   const [eventType, setEventType] = useState('')
-  const [actorUserId, setActorUserId] = useState('')
-  const [from, setFrom] = useState('')
-  const [to, setTo] = useState('')
+  const [actorUserId, setActorUserId] = useState<number | undefined>(undefined)
+  const [actorUsernames, setActorUsernames] = useState<Record<number, string>>({})
+  const [timeRange, setTimeRange] = useState<TimeRangeValue | null>(null)
+  const isoBounds = useMemo(() => resolveTimeRangeToIsoBounds(timeRange, 'datetime'), [timeRange])
+
+  const eventTypesQuery = useQuery({
+    queryKey: ['audit-event-types'],
+    queryFn: listAuditEventTypes,
+  })
+
+  const eventTypeOptions = useMemo(
+    () => (eventTypesQuery.data?.items ?? []).map((value) => ({ value, label: value })),
+    [eventTypesQuery.data?.items]
+  )
 
   const queryParams = useMemo(
     () => ({
       page,
       page_size: PAGE_SIZE,
       event_type: eventType.trim() || undefined,
-      actor_user_id: actorUserId.trim() ? Number(actorUserId) : undefined,
-      from: from.trim() || undefined,
-      to: to.trim() || undefined,
+      actor_user_id: actorUserId,
+      from: isoBounds.from,
+      to: isoBounds.to,
     }),
-    [actorUserId, eventType, from, page, to]
+    [actorUserId, eventType, isoBounds.from, isoBounds.to, page]
   )
 
   const { data, isLoading, isError, refetch } = useQuery({
@@ -147,39 +183,59 @@ export default function SettingsAuditLogsTab() {
           ) : undefined
         }
       >
-        <div className="mb-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
-          <Input
-            placeholder={t('auditLogs.eventType')}
+        <div className="mb-4 grid grid-cols-1 gap-3 min-[480px]:grid-cols-2 xl:grid-cols-3 xl:items-start">
+          <SearchableCombobox
+            className="w-full min-w-0"
             value={eventType}
-            onChange={(e) => {
+            onChange={(next) => {
               setPage(1)
-              setEventType(e.target.value)
+              setEventType(next)
             }}
+            options={eventTypeOptions}
+            placeholder={t('auditLogs.eventTypePlaceholder')}
+            searchPlaceholder={t('auditLogs.eventTypeSearch')}
+            emptyMessage={t('auditLogs.eventTypeEmpty')}
+            clearLabel={t('auditLogs.clearEventType')}
+            allowFreeform
+            freeformActionLabel={(q) => t('auditLogs.eventTypeUseCustom', { value: q })}
+            disabled={eventTypesQuery.isLoading}
           />
-          <Input
-            placeholder={t('auditLogs.actorUserId')}
+          <TenantUserFilterCombobox
+            className="w-full min-w-0"
             value={actorUserId}
-            onChange={(e) => {
+            onChange={(id, username) => {
               setPage(1)
-              setActorUserId(e.target.value)
+              setActorUserId(id)
+              if (id != null && username) {
+                setActorUsernames((prev) => ({ ...prev, [id]: username }))
+              }
             }}
           />
-          <Input
-            placeholder={t('auditLogs.from')}
-            value={from}
-            onChange={(e) => {
-              setPage(1)
-              setFrom(e.target.value)
-            }}
-          />
-          <Input
-            placeholder={t('auditLogs.to')}
-            value={to}
-            onChange={(e) => {
-              setPage(1)
-              setTo(e.target.value)
-            }}
-          />
+          <div className="flex min-w-0 flex-col gap-1 min-[480px]:col-span-2 xl:col-span-1">
+            <TimeRangePicker
+              className="w-full"
+              value={timeRange}
+              precision="datetime"
+              onChange={(next) => {
+                setPage(1)
+                setTimeRange(next)
+              }}
+            />
+            {timeRange ? (
+              <Button
+                type="button"
+                variant="ghost"
+                size="sm"
+                className="h-7 self-start px-2 text-xs"
+                onClick={() => {
+                  setPage(1)
+                  setTimeRange(null)
+                }}
+              >
+                {t('auditLogs.clearTimeRange')}
+              </Button>
+            ) : null}
+          </div>
         </div>
 
         {isError ? (
@@ -198,33 +254,47 @@ export default function SettingsAuditLogsTab() {
                 <TableHead>{t('auditLogs.actorCol')}</TableHead>
                 <TableHead>{t('auditLogs.outcomeCol')}</TableHead>
                 <TableHead>{t('auditLogs.resourceCol')}</TableHead>
+                <TableHead className="min-w-[12rem]">{t('auditLogs.payloadCol')}</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {isLoading ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     ...
                   </TableCell>
                 </TableRow>
               ) : rows.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center text-muted-foreground">
+                  <TableCell colSpan={6} className="text-center text-muted-foreground">
                     {t('auditLogs.noRows')}
                   </TableCell>
                 </TableRow>
               ) : (
-                rows.map((row) => (
-                  <TableRow key={row.id}>
-                    <TableCell>{formatDt(row.created_at)}</TableCell>
-                    <TableCell className="font-mono text-xs">{row.event_type}</TableCell>
-                    <TableCell>{row.actor_user_id ?? '—'}</TableCell>
-                    <TableCell>{row.outcome ?? '—'}</TableCell>
-                    <TableCell className="text-xs">
-                      {row.resource_type ? `${row.resource_type}:${row.resource_id ?? ''}` : '—'}
-                    </TableCell>
-                  </TableRow>
-                ))
+                rows.map((row) => {
+                  const payloadText = formatAuditPayload(row.payload)
+                  const actorLabel =
+                    row.actor_user_id != null
+                      ? actorUsernames[row.actor_user_id] ?? row.actor_user_id
+                      : '—'
+                  return (
+                    <TableRow key={row.id}>
+                      <TableCell>{formatDt(row.created_at)}</TableCell>
+                      <TableCell className="font-mono text-xs">{row.event_type}</TableCell>
+                      <TableCell className="text-xs">{actorLabel}</TableCell>
+                      <TableCell>{row.outcome ?? '—'}</TableCell>
+                      <TableCell className="text-xs">
+                        {row.resource_type ? `${row.resource_type}:${row.resource_id ?? ''}` : '—'}
+                      </TableCell>
+                      <TableCell
+                        className="max-w-[20rem] truncate font-mono text-xs text-muted-foreground"
+                        title={payloadText || undefined}
+                      >
+                        {payloadText || '—'}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })
               )}
             </TableBody>
           </Table>

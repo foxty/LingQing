@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-17T03:09:50.799976+00:00",
+  "generated_at": "2026-11-19T05:31:06.242388+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -2054,6 +2054,22 @@
         ],
         "title": "AssetSchemaResponse",
         "description": "Asset schema response."
+      },
+      "AuditEventTypesResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "AuditEventTypesResponse"
       },
       "BasicAuthConfigSchema": {
         "properties": {
@@ -9196,6 +9212,7 @@
     "GET_/apps/{app_id}/{environment}/entry": "get_live_app_entry_apps__app_id___environment__entry_get",
     "GET_/apps/{app_id}/{environment}/{asset_path}": "get_live_app_asset_apps__app_id___environment___asset_path__get",
     "GET_/artifacts/context-picker": "search_artifacts_for_context_picker_artifacts_context_picker_get",
+    "GET_/audit/event-types": "list_audit_event_types_audit_event_types_get",
     "GET_/audit/events": "list_audit_events_audit_events_get",
     "GET_/audit/events/export": "export_audit_events_audit_events_export_get",
     "GET_/charts/{chart_id}/image.{extension}": "get_chart_image_charts__chart_id__image__extension__get",
@@ -10953,18 +10970,6 @@
         ],
         "query_params": [
           {
-            "name": "days",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 90,
-              "minimum": 1,
-              "default": 30,
-              "title": "Days"
-            },
-            "description": ""
-          },
-          {
             "name": "user_id",
             "required": false,
             "schema": {
@@ -10979,6 +10984,28 @@
               "title": "User Id"
             },
             "description": ""
+          },
+          {
+            "name": "start_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range start (UTC)",
+              "title": "Start Time"
+            },
+            "description": "Range start (UTC)"
+          },
+          {
+            "name": "end_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range end (UTC)",
+              "title": "End Time"
+            },
+            "description": "Range end (UTC)"
           }
         ]
       },
@@ -11020,40 +11047,6 @@
         ],
         "query_params": [
           {
-            "name": "start_time",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Start Time"
-            },
-            "description": ""
-          },
-          {
-            "name": "end_time",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "End Time"
-            },
-            "description": ""
-          },
-          {
             "name": "page",
             "required": false,
             "schema": {
@@ -11091,6 +11084,28 @@
               "title": "User Id"
             },
             "description": ""
+          },
+          {
+            "name": "start_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range start (UTC)",
+              "title": "Start Time"
+            },
+            "description": "Range start (UTC)"
+          },
+          {
+            "name": "end_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range end (UTC)",
+              "title": "End Time"
+            },
+            "description": "Range end (UTC)"
           }
         ]
       },
@@ -11128,18 +11143,6 @@
         ],
         "query_params": [
           {
-            "name": "days",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 90,
-              "minimum": 1,
-              "default": 30,
-              "title": "Days"
-            },
-            "description": ""
-          },
-          {
             "name": "user_id",
             "required": false,
             "schema": {
@@ -11154,6 +11157,28 @@
               "title": "User Id"
             },
             "description": ""
+          },
+          {
+            "name": "start_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range start (UTC)",
+              "title": "Start Time"
+            },
+            "description": "Range start (UTC)"
+          },
+          {
+            "name": "end_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range end (UTC)",
+              "title": "End Time"
+            },
+            "description": "Range end (UTC)"
           }
         ]
       },
@@ -12333,18 +12358,6 @@
       "request": {
         "query_params": [
           {
-            "name": "days",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 90,
-              "minimum": 1,
-              "default": 30,
-              "title": "Days"
-            },
-            "description": ""
-          },
-          {
             "name": "user_id",
             "required": false,
             "schema": {
@@ -12375,6 +12388,28 @@
               "title": "Agent Id"
             },
             "description": ""
+          },
+          {
+            "name": "start_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range start (UTC)",
+              "title": "Start Time"
+            },
+            "description": "Range start (UTC)"
+          },
+          {
+            "name": "end_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range end (UTC)",
+              "title": "End Time"
+            },
+            "description": "Range end (UTC)"
           }
         ]
       },
@@ -12404,40 +12439,6 @@
       "description": "Get paginated tenant token event records.",
       "request": {
         "query_params": [
-          {
-            "name": "start_time",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Start Time"
-            },
-            "description": ""
-          },
-          {
-            "name": "end_time",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string",
-                  "format": "date-time"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "End Time"
-            },
-            "description": ""
-          },
           {
             "name": "page",
             "required": false,
@@ -12492,6 +12493,28 @@
               "title": "Agent Id"
             },
             "description": ""
+          },
+          {
+            "name": "start_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range start (UTC)",
+              "title": "Start Time"
+            },
+            "description": "Range start (UTC)"
+          },
+          {
+            "name": "end_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range end (UTC)",
+              "title": "End Time"
+            },
+            "description": "Range end (UTC)"
           }
         ]
       },
@@ -12517,18 +12540,6 @@
       "description": "Get tenant token usage summary for a time window.",
       "request": {
         "query_params": [
-          {
-            "name": "days",
-            "required": false,
-            "schema": {
-              "type": "integer",
-              "maximum": 90,
-              "minimum": 1,
-              "default": 30,
-              "title": "Days"
-            },
-            "description": ""
-          },
           {
             "name": "user_id",
             "required": false,
@@ -12560,6 +12571,28 @@
               "title": "Agent Id"
             },
             "description": ""
+          },
+          {
+            "name": "start_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range start (UTC)",
+              "title": "Start Time"
+            },
+            "description": "Range start (UTC)"
+          },
+          {
+            "name": "end_time",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "description": "Range end (UTC)",
+              "title": "End Time"
+            },
+            "description": "Range end (UTC)"
           }
         ]
       },
@@ -12875,6 +12908,24 @@
           },
           "type": "array",
           "title": "Response List Assignable Skills Agents Catalog Skills Get"
+        }
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_audit_event_types_audit_event_types_get": {
+      "operation_key": "GET_/audit/event-types",
+      "method": "GET",
+      "path": "/audit/event-types",
+      "summary": "List Audit Event Types",
+      "description": "Catalog of known event type strings for filter autocomplete.",
+      "request": {},
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/AuditEventTypesResponse"
         }
       },
       "constraints": {

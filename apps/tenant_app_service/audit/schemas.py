@@ -32,6 +32,10 @@ class AuditEventListResponse(BaseModel):
     total_pages: int
 
 
+class AuditEventTypesResponse(BaseModel):
+    items: list[str]
+
+
 class AuditExportMeta(BaseModel):
     truncated: bool
     total_matched: int

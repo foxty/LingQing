@@ -2087,19 +2087,19 @@ class LiveAppService(TenantAwareService):
         outcome: str = "success",
     ) -> None:
         """Persist live app audit row in the current transaction (fail-closed)."""
-        from apps.shared.audit_event.context import resolve_audit_request_context
+        from apps.shared.audit_event.recorder import (
+            ACTOR_TYPE_ANONYMOUS,
+            ACTOR_TYPE_USER,
+            TenantAuditRecorder,
+        )
 
         app_id = payload.get("app_id")
-        audit_ctx = resolve_audit_request_context(None)
-        await self.audit_repo.add_event(
-            tenant_id=self.tenant_id,
-            actor_user_id=actor_user_id,
-            actor_type="user" if actor_user_id is not None else None,
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        await recorder.record(
             event_type=event_type.value if isinstance(event_type, LiveAppAuditEventType) else str(event_type),
             outcome=outcome,
-            client_ip=audit_ctx.client_ip,
-            user_agent=audit_ctx.user_agent,
-            request_id=audit_ctx.request_id,
+            actor_user_id=actor_user_id,
+            actor_type=ACTOR_TYPE_USER if actor_user_id is not None else ACTOR_TYPE_ANONYMOUS,
             resource_type="live_app",
             resource_id=str(app_id) if app_id is not None else None,
             payload=payload,

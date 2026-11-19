@@ -14,10 +14,15 @@ export function useAgentUsageSummary(
   enabled = true
 ) {
   const { user } = useAuth()
-  const days = params.days ?? 30
-
   return useQuery({
-    queryKey: ['agent-usage-summary', user?.tenantId, agentId, days, params.user_id],
+    queryKey: [
+      'agent-usage-summary',
+      user?.tenantId,
+      agentId,
+      params.start_time,
+      params.end_time,
+      params.user_id,
+    ],
     queryFn: () => getAgentUsageSummary(agentId!, params),
     enabled: enabled && !!user && agentId !== undefined,
   })
@@ -29,10 +34,15 @@ export function useAgentUsageDaily(
   enabled = true
 ) {
   const { user } = useAuth()
-  const days = params.days ?? 30
-
   return useQuery({
-    queryKey: ['agent-usage-daily', user?.tenantId, agentId, days, params.user_id],
+    queryKey: [
+      'agent-usage-daily',
+      user?.tenantId,
+      agentId,
+      params.start_time,
+      params.end_time,
+      params.user_id,
+    ],
     queryFn: () => getAgentUsageDaily(agentId!, params),
     enabled: enabled && !!user && agentId !== undefined,
   })

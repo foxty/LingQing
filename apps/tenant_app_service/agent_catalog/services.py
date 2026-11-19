@@ -2,14 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.audit_event.event_types import TenantAuditEventType
 from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
-from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
 from apps.shared.authz.authz_query_builder import build_unified_resource_filter, evaluate_resource_action
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
@@ -57,6 +56,7 @@ from apps.tenant_app_service.agent_catalog.dtos import (
 )
 from apps.tenant_app_service.agent_catalog.repository import AgentCatalogRepository
 from apps.tenant_app_service.agents.system_agent_config import TOOL_REGISTRY, get_config_loader
+from apps.tenant_app_service.audit.record_helpers import record_conflict_rejection_audit
 from apps.tenant_app_service.tenant.schemas import TokenUsageDailyPoint, TokenUsageEventsResponse
 
 logger = get_logger(__name__)
@@ -131,11 +131,6 @@ class AgentCatalogService(TenantAwareService):
     def _observability(self) -> ObservabilityService:
         return ObservabilityService.create(self.db_session, self.tenant_id)
 
-    @staticmethod
-    def _usage_period(days: int) -> tuple[datetime, datetime]:
-        period_end = datetime.now(UTC)
-        return period_end - timedelta(days=days), period_end
-
     async def _ensure_agent_usage_access(self, *, agent_id: int, actor: ActorContext) -> None:
         if agent_id != SYSTEM_AGENT_ONE_ID:
             await self.require_agent_access(agent_id=agent_id, actor=actor, action=ABAC_ACTION_READ)
@@ -145,16 +140,16 @@ class AgentCatalogService(TenantAwareService):
         *,
         agent_id: int,
         actor: ActorContext,
-        days: int,
+        start_time: datetime,
+        end_time: datetime,
         user_id: int | None = None,
     ) -> TenantUsageStatsDTO:
         await self._ensure_agent_usage_access(agent_id=agent_id, actor=actor)
-        period_start, period_end = self._usage_period(days)
         return await self._observability().get_agent_usage_stats(
             tenant_id=self.tenant_id,
             agent_id=agent_id,
-            start_time=period_start,
-            end_time=period_end,
+            start_time=start_time,
+            end_time=end_time,
             user_id=user_id,
         )
 
@@ -163,15 +158,15 @@ class AgentCatalogService(TenantAwareService):
         *,
         agent_id: int,
         actor: ActorContext,
-        days: int,
+        start_time: datetime,
+        end_time: datetime,
         user_id: int | None = None,
     ) -> list[TokenUsageDailyPoint]:
         await self._ensure_agent_usage_access(agent_id=agent_id, actor=actor)
-        period_start, period_end = self._usage_period(days)
         rows = await self._observability().get_tenant_token_daily_usage(
             tenant_id=self.tenant_id,
-            start_time=period_start,
-            end_time=period_end,
+            start_time=start_time,
+            end_time=end_time,
             agent_id=agent_id,
             user_id=user_id,
         )

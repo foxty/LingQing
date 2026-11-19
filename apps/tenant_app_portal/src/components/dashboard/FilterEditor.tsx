@@ -92,7 +92,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Textarea } from '@/components/ui/textarea'
-import TimeRangePicker from '@/components/dashboard/filters/TimeRangePicker'
+import TimeRangePicker from '@/components/TimeRangePicker'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import { cn } from '@/lib/utils'
 import { normalizeTimeRangeValue } from '@/lib/timeRangeUtils'
