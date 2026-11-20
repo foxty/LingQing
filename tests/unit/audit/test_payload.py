@@ -1,3 +1,5 @@
+import pytest
+
 from apps.shared.audit_event.payload import mask_email, sanitize_audit_payload
 
 
@@ -18,18 +20,33 @@ def test_sanitize_audit_payload_strips_secrets():
     assert cleaned["env_var_keys_changed"] == ["API_KEY"]
 
 
-def test_sanitize_audit_payload_keeps_typed_datasource_metadata():
+@pytest.mark.parametrize(
+    "key",
+    [
+        "smtp_token",
+        "webhook_token",
+        "openai_api_key",
+        "x_api_key",
+    ],
+)
+def test_sanitize_audit_payload_drops_sensitive_key_variants(key):
+    cleaned = sanitize_audit_payload({key: "SECRETVAL", "name": "ok"})
+    assert key not in cleaned
+    assert cleaned["name"] == "ok"
+
+
+def test_sanitize_audit_payload_keeps_credential_metadata():
     cleaned = sanitize_audit_payload(
         {
-            "config_has_secrets": True,
-            "secret_config_changed": True,
-            "secret_config_keys": ["password"],
+            "credentials_present": True,
+            "credentials_changed": True,
+            "credential_field_names": ["password"],
             "password": "must-drop",
         }
     )
-    assert cleaned["config_has_secrets"] is True
-    assert cleaned["secret_config_changed"] is True
-    assert cleaned["secret_config_keys"] == ["password"]
+    assert cleaned["credentials_present"] is True
+    assert cleaned["credentials_changed"] is True
+    assert cleaned["credential_field_names"] == ["password"]
     assert "password" not in cleaned
 
 

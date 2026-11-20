@@ -56,25 +56,25 @@ def build_datasource_create_payload(
     *,
     name: str,
     connector_type: str,
-    config_has_secrets: bool,
+    credentials_present: bool,
 ) -> dict[str, Any]:
     return {
         "name": name,
         "connector_type": connector_type,
-        "config_has_secrets": config_has_secrets,
+        "credentials_present": credentials_present,
     }
 
 
 def build_datasource_update_payload(
     *,
     change_summary: list[str],
-    secret_config_changed: bool,
-    secret_config_keys: list[str],
+    credentials_changed: bool,
+    credential_field_names: list[str],
 ) -> dict[str, Any]:
     return {
         "change_summary": change_summary,
-        "secret_config_changed": secret_config_changed,
-        "secret_config_keys": secret_config_keys,
+        "credentials_changed": credentials_changed,
+        "credential_field_names": credential_field_names,
     }
 
 
