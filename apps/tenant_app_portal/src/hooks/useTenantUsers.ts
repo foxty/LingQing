@@ -1,11 +1,10 @@
 import { useCallback } from 'react'
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { tenantUsersListQueryKey } from '@/lib/tenantUsersQueryKeys'
 import {
   createTenantUser,
   deactivateTenantUser,
-  listTenantUsers,
   recoverTenantUser,
   resetTenantUserPassword,
   updateTenantUserRole,
@@ -15,27 +14,7 @@ import {
   type TenantUserUpdateRequest,
 } from '@/lib/tenantUsersApi'
 import { setUserBreakGlass } from '@/lib/ssoApi'
-import { PERMISSIONS } from '@/lib/permissionRules'
 import { useAuth } from './useAuth'
-
-const TENANT_USERS_DROPDOWN_PAGE_SIZE = 500
-
-export function useTenantUsersList() {
-  const { user, hasAny } = useAuth()
-  const canListUsers = hasAny([
-    PERMISSIONS.TENANT_ADMIN,
-    PERMISSIONS.TENANT_SETTINGS_READ,
-    PERMISSIONS.USERS_MANAGE,
-  ])
-
-  return useQuery({
-    queryKey: [...tenantUsersListQueryKey(user?.tenantId), 'dropdown', TENANT_USERS_DROPDOWN_PAGE_SIZE],
-    queryFn: () =>
-      listTenantUsers({ page: 1, page_size: TENANT_USERS_DROPDOWN_PAGE_SIZE }).then((res) => res.items),
-    enabled: !!user && canListUsers,
-    retry: 1,
-  })
-}
 
 function applyRowPatchToResponsePages(
   queryClient: ReturnType<typeof useQueryClient>,

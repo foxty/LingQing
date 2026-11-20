@@ -18,8 +18,8 @@ i18n.addResourceBundle('en', 'translation', {
   settings: {
     usageTab: {
       tokenDetails: 'Token Details',
-      tokenDetailsDesc: 'Token usage details over the last {{days}} days',
-      tokenDetailsDescForUser: 'Token usage details for {{username}} over the last {{days}} days',
+      tokenDetailsDesc: 'Token usage details · {{period}}',
+      tokenDetailsDescForUser: '{{username}} · {{period}}',
       timeCol: 'Time',
       userCol: 'User',
       modelCol: 'Model',
@@ -37,8 +37,8 @@ i18n.addResourceBundle('zh', 'translation', {
   settings: {
     usageTab: {
       tokenDetails: '令牌明细',
-      tokenDetailsDesc: '最近 {{days}} 天的令牌用量明细',
-      tokenDetailsDescForUser: '{{username}} 最近 {{days}} 天的令牌用量明细',
+      tokenDetailsDesc: '令牌用量明细 · {{period}}',
+      tokenDetailsDescForUser: '{{username}} · {{period}}',
       timeCol: '时间',
       userCol: '用户',
       modelCol: '模型',
@@ -64,7 +64,7 @@ function formatOptionalCount(value: number | null | undefined): string {
 }
 
 interface TokenTableProps {
-  days: number
+  periodLabel: string
   username?: string
   isLoading: boolean
   events?: TokenUsageEventsResponse
@@ -73,7 +73,7 @@ interface TokenTableProps {
 }
 
 export default function TokenTable({
-  days,
+  periodLabel,
   username,
   isLoading,
   events,
@@ -83,8 +83,8 @@ export default function TokenTable({
   const { t } = useTranslation()
   const formatUserDateTime = useFormatUserDateTime()
   const description = username
-    ? t('settings.usageTab.tokenDetailsDescForUser', { days, username })
-    : t('settings.usageTab.tokenDetailsDesc', { days })
+    ? t('settings.usageTab.tokenDetailsDescForUser', { period: periodLabel, username })
+    : t('settings.usageTab.tokenDetailsDesc', { period: periodLabel })
 
   return (
     <SettingsSection

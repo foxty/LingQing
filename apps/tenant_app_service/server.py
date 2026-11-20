@@ -33,6 +33,7 @@ from apps.tenant_app_service.routers import (
     admin_system_tasks,
     api_connectors,
     artifact_context,
+    audit,
     auth,
     chart_media,
     chat,
@@ -115,6 +116,12 @@ app.add_middleware(
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "X-Request-ID",
+        "X-Audit-Truncated",
+        "X-Audit-Total-Matched",
+        "X-Audit-Exported-Count",
+    ],
 )
 
 # Mount static files
@@ -142,6 +149,7 @@ app.include_router(observability.router)
 app.include_router(reports.router)
 app.include_router(notifications.router)
 app.include_router(admin_system_tasks.router)
+app.include_router(audit.router)
 app.include_router(scheduled_tasks.router)
 app.include_router(chat.router)
 app.include_router(hitl.router)

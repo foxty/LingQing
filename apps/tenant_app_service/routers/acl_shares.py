@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import and_, delete, func, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.audit_event.record_helpers import record_acl_share_create, record_acl_share_revoke
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.authz.ta_rbac import role_has_permission
 from apps.shared.core.auth import get_current_user
@@ -380,6 +381,15 @@ async def share_resource(
     )
     db.add(grant)
     await db.flush()
+    await record_acl_share_create(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        shared_with_user_id=request.user_id,
+        permission=request.permission,
+    )
     await db.commit()
 
     user_stmt = select(User.username).where(User.id == request.user_id)
@@ -510,5 +520,14 @@ async def revoke_resource_share(
     result = await db.execute(stmt)
     if not result.rowcount:
         raise ResourceNotFoundError(f"Share not found for user {user_id}")
+
+    await record_acl_share_revoke(
+        db,
+        tenant_id=current_user.tenant_id,
+        actor_user_id=current_user.id,
+        resource_type=resource_type,
+        resource_id=resource_id,
+        shared_with_user_id=user_id,
+    )
 
     await db.commit()

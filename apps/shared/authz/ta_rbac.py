@@ -28,6 +28,7 @@ DEFAULT_ROLE_PERMISSIONS: dict[str, set[str]] = {
         TenantAppPermissions.TAGS_READ,
         TenantAppPermissions.TAGS_MANAGE,
         TenantAppPermissions.AUDIT_READ,
+        TenantAppPermissions.AUDIT_MANAGE,
         TenantAppPermissions.ARTIFACTS_MANAGE,
         TenantAppPermissions.REPORTS_WRITE,
         TenantAppPermissions.SCHEDULED_TASKS_WRITE,

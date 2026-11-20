@@ -14,6 +14,14 @@ from apps.tenant_app_service.routers import skills
 from apps.tenant_app_service.skills.dtos import SkillInfo
 
 
+@pytest.fixture(autouse=True)
+def _noop_audit_record(monkeypatch):
+    async def _noop(self, **kwargs):
+        return None
+
+    monkeypatch.setattr("apps.shared.audit_event.recorder.TenantAuditRecorder.record", _noop)
+
+
 @pytest.fixture
 def app():
     api = FastAPI()

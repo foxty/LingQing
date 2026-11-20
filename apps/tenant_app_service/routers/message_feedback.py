@@ -2,13 +2,16 @@
 
 from datetime import datetime
 
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, Request
 from fastapi.responses import StreamingResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.audit_event.context import AuditRequestContext
+from apps.shared.audit_event.event_types import TenantAuditEventType
+from apps.shared.audit_event.recorder import ACTOR_TYPE_USER, OUTCOME_SUCCESS, TenantAuditRecorder
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
-from apps.shared.db.session import get_db
+from apps.shared.db.session import app_db_session, get_db
 from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.message_feedback.schemas import (
     FeedbackListResponse,
@@ -120,6 +123,7 @@ async def list_feedback(
 
 @router.get("/feedback/export")
 async def export_feedback(
+    request: Request,
     agent_id: int | None = Query(None),
     rating: str | None = Query(None),
     source: str | None = Query(None),
@@ -128,15 +132,50 @@ async def export_feedback(
     current_user: UserDTO = Depends(require_permission(_ANALYSIS_PERMISSIONS)),
 ):
     # Do not use Depends(get_db): streaming must not hold a session across slow client reads.
-    return StreamingResponse(
-        iter_feedback_export_csv(
+    ctx = AuditRequestContext.from_request(request)
+    filter_summary = {
+        k: v
+        for k, v in {
+            "agent_id": agent_id,
+            "rating": rating,
+            "source": source,
+            "from": from_dt,
+            "to": to_dt,
+        }.items()
+        if v is not None
+    }
+
+    async def _stream_and_audit():
+        row_count = 0
+        async for chunk in iter_feedback_export_csv(
             current_user.tenant_id,
             agent_id=agent_id,
             rating=rating,
             source=source,
             from_dt=_parse_dt(from_dt),
             to_dt=_parse_dt(to_dt),
-        ),
+        ):
+            yield chunk
+            if chunk and b"\n" in chunk:
+                row_count += chunk.count(b"\n")
+        async with app_db_session() as db:
+            recorder = TenantAuditRecorder(db, tenant_id=current_user.tenant_id, request_context=ctx)
+            await recorder.record(
+                event_type=TenantAuditEventType.EXPORT_DATA.value,
+                outcome=OUTCOME_SUCCESS,
+                actor_user_id=current_user.id,
+                actor_type=ACTOR_TYPE_USER,
+                resource_type="message_feedback",
+                resource_id=ctx.request_id,
+                payload={
+                    "export_format": "csv",
+                    "row_count": max(0, row_count - 1),
+                    "filter_summary": filter_summary,
+                },
+            )
+
+    return StreamingResponse(
+        _stream_and_audit(),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=message_feedback.csv"},
     )

@@ -1,0 +1,1 @@
+"""Shared FastAPI dependencies for tenant app HTTP routers."""

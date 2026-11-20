@@ -1,7 +1,5 @@
 """HTTP routes for custom agent catalog."""
 
-from datetime import UTC, datetime, timedelta
-
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -22,6 +20,7 @@ from apps.tenant_app_service.agent_catalog.dtos import (
     AgentUpdateRequest,
 )
 from apps.tenant_app_service.agent_catalog.services import AgentCatalogService
+from apps.tenant_app_service.routers.deps.time_range import TimeRangeWindow, time_range_window
 from apps.tenant_app_service.tenant.schemas import TokenUsageDailyPoint, TokenUsageEventsResponse
 
 router = APIRouter(prefix="/agents", tags=["agents"])
@@ -105,7 +104,7 @@ async def create_agent(
 @router.get("/{agent_id}/usage/summary", response_model=TenantUsageStatsDTO)
 async def get_agent_usage_summary(
     agent_id: int,
-    days: int = Query(default=30, ge=1, le=90),
+    window: TimeRangeWindow = Depends(time_range_window),
     user_id: int | None = Query(default=None),
     current_user: UserDTO = Depends(require_permission(Permissions.AGENTS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -113,7 +112,8 @@ async def get_agent_usage_summary(
     return await _service(db, current_user.tenant_id).get_agent_usage_summary_for_actor(
         agent_id=agent_id,
         actor=_actor(current_user),
-        days=days,
+        start_time=window.start_time,
+        end_time=window.end_time,
         user_id=user_id,
     )
 
@@ -121,7 +121,7 @@ async def get_agent_usage_summary(
 @router.get("/{agent_id}/usage/daily", response_model=list[TokenUsageDailyPoint])
 async def get_agent_usage_daily(
     agent_id: int,
-    days: int = Query(default=30, ge=1, le=90),
+    window: TimeRangeWindow = Depends(time_range_window),
     user_id: int | None = Query(default=None),
     current_user: UserDTO = Depends(require_permission(Permissions.AGENTS_READ)),
     db: AsyncSession = Depends(get_db),
@@ -129,7 +129,8 @@ async def get_agent_usage_daily(
     return await _service(db, current_user.tenant_id).get_agent_usage_daily_for_actor(
         agent_id=agent_id,
         actor=_actor(current_user),
-        days=days,
+        start_time=window.start_time,
+        end_time=window.end_time,
         user_id=user_id,
     )
 
@@ -137,8 +138,7 @@ async def get_agent_usage_daily(
 @router.get("/{agent_id}/usage/events", response_model=TokenUsageEventsResponse)
 async def get_agent_usage_events(
     agent_id: int,
-    start_time: datetime | None = Query(default=None),
-    end_time: datetime | None = Query(default=None),
+    window: TimeRangeWindow = Depends(time_range_window),
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=20, ge=1, le=100),
     user_id: int | None = Query(default=None),
@@ -150,14 +150,11 @@ async def get_agent_usage_events(
     if page_size < 1 or page_size > 100:
         raise ValidationError("page_size must be between 1 and 100")
 
-    period_end = end_time or datetime.now(UTC)
-    period_start = start_time or (period_end - timedelta(days=30))
-
     return await _service(db, current_user.tenant_id).get_agent_usage_events_for_actor(
         agent_id=agent_id,
         actor=_actor(current_user),
-        start_time=period_start,
-        end_time=period_end,
+        start_time=window.start_time,
+        end_time=window.end_time,
         page=page,
         page_size=page_size,
         user_id=user_id,

@@ -12,6 +12,10 @@ from apps.shared.live_app.service import LiveAppService
 from apps.shared.live_app.workspace import LiveAppWriteLockTimeoutError, get_latest_commit_for_app_environment
 
 
+async def _noop_live_app_audit_event(self, **kwargs):
+    return None
+
+
 @pytest.mark.asyncio
 async def test_service_factory_does_not_bootstrap_workspace(async_db_session, monkeypatch):
     tenant = Tenant(name="tenant_live_app_service_factory", slug="tenant_live_app_service_factory", config=None)
@@ -531,16 +535,23 @@ async def test_write_file_writes_audit_event(async_db_session, monkeypatch, tmp_
     service = LiveAppService.create(tenant_id=tenant.id, db_session=async_db_session)
     calls: list[dict] = []
 
-    async def _fake_add_audit_event(**kwargs):
-        calls.append(kwargs)
-        return None
+    class _CapturingRecorder:
+        def __init__(self, *args, **kwargs):
+            pass
 
-    monkeypatch.setattr(service.audit_repo, "add_event", _fake_add_audit_event)
+        async def record(self, **kwargs):
+            calls.append(kwargs)
+
+    monkeypatch.setattr(
+        "apps.shared.audit_event.recorder.TenantAuditRecorder",
+        _CapturingRecorder,
+    )
     await service.write_file(live_app.id, "src/audit.js", "console.log('audit')", actor_user_id=user.id)
 
     assert len(calls) == 1
     assert calls[0]["actor_user_id"] == user.id
     assert calls[0]["event_type"] == "live_app.file.write"
+    assert calls[0]["resource_type"] == "live_app"
     assert calls[0]["payload"]["updated"] is True
     assert calls[0]["payload"]["path"] == "src/audit.js"
 
@@ -641,10 +652,7 @@ async def test_query_data_success(async_db_session, monkeypatch):
 
     fake_data_executor = _FakeDataExecutor()
 
-    async def _fake_add_event(**_):
-        return None
-
-    monkeypatch.setattr(service.audit_repo, "add_event", _fake_add_event)
+    monkeypatch.setattr(LiveAppService, "_record_audit_event", _noop_live_app_audit_event)
 
     monkeypatch.setattr(service, "data_executor", fake_data_executor)
     result = await service.query_data(live_app.id, f"SELECT id, name FROM app_{live_app.id}.orders")
@@ -762,12 +770,9 @@ async def test_mutate_data_insert_success(async_db_session, monkeypatch):
         assert len(kwargs["rows"]) == 1
         return 1
 
-    async def _fake_add_event(**_):
-        return None
-
     monkeypatch.setattr(service.repo, "get_for_tenant", _fake_get_for_tenant)
     monkeypatch.setattr(service.data_executor, "insert_rows", _fake_insert_rows)
-    monkeypatch.setattr(service.audit_repo, "add_event", _fake_add_event)
+    monkeypatch.setattr(LiveAppService, "_record_audit_event", _noop_live_app_audit_event)
 
     result = await service.mutate_data(
         live_app.id,
@@ -879,12 +884,9 @@ async def test_import_data_success(async_db_session, monkeypatch):
         assert kwargs["full_table_name"] == f"app_{live_app.id}.orders"
         return 1
 
-    async def _fake_add_event(**_):
-        return None
-
     monkeypatch.setattr(service.repo, "get_for_tenant", _fake_get_for_tenant)
     monkeypatch.setattr(service.data_executor, "import_csv", _fake_import_csv)
-    monkeypatch.setattr(service.audit_repo, "add_event", _fake_add_event)
+    monkeypatch.setattr(LiveAppService, "_record_audit_event", _noop_live_app_audit_event)
 
     result = await service.import_data(
         live_app.id,
@@ -1047,12 +1049,9 @@ async def test_apply_migration_success(async_db_session, monkeypatch, tmp_path: 
         assert kwargs["up_sql"].startswith("CREATE TABLE")
         return {"applied": True, "reason": "applied"}
 
-    async def _fake_add_event(**_):
-        return None
-
     monkeypatch.setattr(service.repo, "get_for_tenant", _fake_get_for_tenant)
     monkeypatch.setattr(service.data_executor, "apply_migration", _fake_apply_migration)
-    monkeypatch.setattr(service.audit_repo, "add_event", _fake_add_event)
+    monkeypatch.setattr(LiveAppService, "_record_audit_event", _noop_live_app_audit_event)
     result = await service.apply_migration(live_app.id, "001_init", environment="dev", actor_user_id=user.id)
 
     assert result["applied"] is True
@@ -1148,12 +1147,9 @@ async def test_rollback_migration_success(async_db_session, monkeypatch, tmp_pat
         assert kwargs["down_sql"].startswith("DROP TABLE")
         return {"rolled_back": True, "reason": "rolled_back"}
 
-    async def _fake_add_event(**_):
-        return None
-
     monkeypatch.setattr(service.repo, "get_for_tenant", _fake_get_for_tenant)
     monkeypatch.setattr(service.data_executor, "rollback_migration", _fake_rollback_migration)
-    monkeypatch.setattr(service.audit_repo, "add_event", _fake_add_event)
+    monkeypatch.setattr(LiveAppService, "_record_audit_event", _noop_live_app_audit_event)
 
     result = await service.rollback_migration(live_app.id, "001_init", environment="dev", actor_user_id=user.id)
     assert result["rolled_back"] is True
@@ -1410,11 +1406,8 @@ async def test_commit_changes_commits_once(async_db_session, monkeypatch):
     async def _fake_get_for_tenant(app_id: int, tenant_id: int):
         return live_app
 
-    async def _fake_add_event(**_):
-        return None
-
     monkeypatch.setattr(service.repo, "get_for_tenant", _fake_get_for_tenant)
-    monkeypatch.setattr(service.audit_repo, "add_event", _fake_add_event)
+    monkeypatch.setattr(LiveAppService, "_record_audit_event", _noop_live_app_audit_event)
     monkeypatch.setattr("apps.shared.live_app.service.commit_app_changes", lambda **_: True)
 
     result = await service.commit_changes(

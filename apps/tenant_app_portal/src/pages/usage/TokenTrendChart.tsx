@@ -12,8 +12,8 @@ i18n.addResourceBundle('en', 'translation', {
       totalTokens: 'Total Tokens',
       llmCalls: 'LLM Calls',
       tokenTrend: 'Token Trend',
-      tokenTrendDesc: 'Token usage over the last {{days}} days',
-      tokenTrendDescForUser: 'Token usage for {{username}} over the last {{days}} days',
+      tokenTrendDesc: 'Token usage · {{period}}',
+      tokenTrendDescForUser: '{{username}} · {{period}}',
       noTokenData: 'No token data available',
     }
   }
@@ -25,8 +25,8 @@ i18n.addResourceBundle('zh', 'translation', {
       totalTokens: '总令牌数',
       llmCalls: 'LLM 调用',
       tokenTrend: '令牌趋势',
-      tokenTrendDesc: '最近 {{days}} 天的令牌用量',
-      tokenTrendDescForUser: '{{username}} 最近 {{days}} 天的令牌用量',
+      tokenTrendDesc: '令牌用量 · {{period}}',
+      tokenTrendDescForUser: '{{username}} · {{period}}',
       noTokenData: '暂无令牌数据',
     }
   }
@@ -37,16 +37,16 @@ function formatNumber(value: number): string {
 }
 
 interface TokenTrendChartProps {
-  days: number
+  periodLabel: string
   username?: string
   rows: TokenUsageDailyPoint[]
 }
 
-export default function TokenTrendChart({ days, username, rows }: TokenTrendChartProps) {
+export default function TokenTrendChart({ periodLabel, username, rows }: TokenTrendChartProps) {
   const { t } = useTranslation()
   const description = username
-    ? t('settings.usageTab.tokenTrendDescForUser', { days, username })
-    : t('settings.usageTab.tokenTrendDesc', { days })
+    ? t('settings.usageTab.tokenTrendDescForUser', { period: periodLabel, username })
+    : t('settings.usageTab.tokenTrendDesc', { period: periodLabel })
   const option = useMemo<EChartsOption | null>(() => {
     if (!rows.length) return null
 

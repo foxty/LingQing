@@ -160,6 +160,7 @@ async def create_tenant_user(
         password=request.password,
         role=request.role,
         email=request.email,
+        actor_user_id=current_user.id,
     )
 
 
@@ -194,7 +195,7 @@ async def recover_tenant_user(
         db: Database session
     """
     service = TenantUserManagementService(tenant_id=current_user.tenant_id, db=db)
-    await service.recover_user(user_id=user_id)
+    await service.recover_user(user_id=user_id, actor_user_id=current_user.id)
 
 
 @router.post("/users/{user_id}/reset-password", status_code=204)

@@ -4,19 +4,14 @@ import { AlertCircle, Loader2, RefreshCw } from 'lucide-react'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select'
-import {
   useAgentUsageDaily,
   useAgentUsageEvents,
   useAgentUsageSummary,
 } from '@/hooks/useAgentUsage'
-import { useTenantUsersList } from '@/hooks/useTenantUsers'
-import { buildRelativeIsoRange } from '@shared/frontend/format'
+import TenantUserFilterCombobox from '@/components/TenantUserFilterCombobox'
+import TimeRangePicker from '@/components/TimeRangePicker'
+import { USAGE_TOKEN_TIME_RANGE_PRESET_VALUES } from '@/lib/timeRangeUtils'
+import { useTokenUsageTimeRange } from '@/hooks/useTokenUsageTimeRange'
 import TokenTrendChart from '@/pages/usage/TokenTrendChart'
 import TokenTable from '@/pages/usage/TokenTable'
 import UsageSummaryMetrics from '@/pages/usage/UsageSummaryMetrics'
@@ -28,31 +23,22 @@ type AgentUsagePanelProps = {
 
 export default function AgentUsagePanel({ agentId, enabled = true }: AgentUsagePanelProps) {
   const { t } = useTranslation()
-  const [days, setDays] = useState(30)
+  const { timeRange, setTimeRange, bounds, periodLabel } = useTokenUsageTimeRange()
   const [page, setPage] = useState(1)
-  const [userFilter, setUserFilter] = useState('all')
+  const [selectedUserId, setSelectedUserId] = useState<number | undefined>(undefined)
+  const [selectedUsername, setSelectedUsername] = useState<string | undefined>(undefined)
 
-  const tokenFilter = useMemo(() => {
-    const userId = userFilter === 'all' ? undefined : Number(userFilter)
-    return { days, user_id: userId }
-  }, [days, userFilter])
+  const tokenFilter = useMemo(
+    () => ({ ...bounds, user_id: selectedUserId }),
+    [bounds, selectedUserId]
+  )
 
   const summaryQuery = useAgentUsageSummary(agentId, tokenFilter, enabled)
   const dailyQuery = useAgentUsageDaily(agentId, tokenFilter, enabled)
-  const usersQuery = useTenantUsersList()
-
-  const range = useMemo(() => buildRelativeIsoRange(days), [days])
-  const selectedUserId = userFilter === 'all' ? undefined : Number(userFilter)
-  const selectedUsername = useMemo(() => {
-    if (selectedUserId === undefined) {
-      return undefined
-    }
-    return usersQuery.data?.find((user) => user.id === selectedUserId)?.username
-  }, [selectedUserId, usersQuery.data])
 
   const eventsQuery = useAgentUsageEvents(
     agentId,
-    { ...range, page, page_size: 20, user_id: selectedUserId },
+    { ...bounds, page, page_size: 20, user_id: selectedUserId },
     enabled
   )
 
@@ -62,57 +48,47 @@ export default function AgentUsagePanel({ agentId, enabled = true }: AgentUsageP
   const tokenError = (summaryQuery.error || dailyQuery.error || eventsQuery.error) as Error | null
   const tokenLoading = summaryQuery.isLoading || dailyQuery.isLoading || eventsQuery.isLoading
 
-  const handleDaysChange = (value: string) => {
-    setDays(Number(value))
-    setPage(1)
-  }
-
-  const handleUserChange = (value: string) => {
-    setUserFilter(value)
-    setPage(1)
-  }
-
   const handleRefresh = () => {
     summaryQuery.refetch()
     dailyQuery.refetch()
     eventsQuery.refetch()
   }
 
+  const periodDescription = selectedUsername
+    ? t('settings.usageTab.tokenUsageDescForUser', { period: periodLabel, username: selectedUsername })
+    : t('settings.usageTab.tokenUsageDesc', { period: periodLabel })
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {selectedUsername
-            ? t('settings.usageTab.tokenUsageDescForUser', { days, username: selectedUsername })
-            : t('settings.usageTab.tokenUsageDesc', { days })}
-        </p>
+        <p className="text-sm text-muted-foreground">{periodDescription}</p>
         <div className="flex flex-wrap items-center gap-2">
-          <div className="w-40">
-            <Select value={String(days)} onValueChange={handleDaysChange}>
-              <SelectTrigger>
-                <SelectValue placeholder={t('settings.usageTab.selectTimeRange')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="7">{t('settings.usageTab.last7Days')}</SelectItem>
-                <SelectItem value="30">{t('settings.usageTab.last30Days')}</SelectItem>
-                <SelectItem value="90">{t('settings.usageTab.last90Days')}</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          <div className="w-44">
-            <Select value={userFilter} onValueChange={handleUserChange}>
-              <SelectTrigger>
-                <SelectValue placeholder={t('settings.usageTab.selectUser')} />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">{t('settings.usageTab.allUsers')}</SelectItem>
-                {(usersQuery.data ?? []).map((user) => (
-                  <SelectItem key={user.id} value={String(user.id)}>
-                    {user.username}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+          <TimeRangePicker
+            className="min-w-[220px]"
+            value={timeRange}
+            presets={USAGE_TOKEN_TIME_RANGE_PRESET_VALUES}
+            onChange={(next) => {
+              setPage(1)
+              setTimeRange(next)
+            }}
+          />
+          <div className="min-w-[12rem] flex-1 sm:max-w-xs">
+            <TenantUserFilterCombobox
+              className="w-full"
+              value={selectedUserId}
+              onChange={(id, username) => {
+                setPage(1)
+                setSelectedUserId(id)
+                setSelectedUsername(username)
+              }}
+              labels={{
+                placeholder: t('settings.usageTab.allUsers'),
+                searchPlaceholder: t('settings.usageTab.userSearch'),
+                emptyMessage: t('settings.usageTab.userSearchEmpty'),
+                clearLabel: t('settings.usageTab.allUsers'),
+                numericFallbackPlaceholder: t('settings.usageTab.selectUser'),
+              }}
+            />
           </div>
           <Button variant="outline" onClick={handleRefresh}>
             <RefreshCw className="mr-2 h-4 w-4" />
@@ -136,10 +112,10 @@ export default function AgentUsagePanel({ agentId, enabled = true }: AgentUsageP
         </div>
       ) : (
         <>
-          <UsageSummaryMetrics summary={tokenSummary} days={days} showReachMetrics />
-          <TokenTrendChart days={days} rows={tokenDaily} />
+          <UsageSummaryMetrics summary={tokenSummary} periodLabel={periodLabel} showReachMetrics />
+          <TokenTrendChart periodLabel={periodLabel} rows={tokenDaily} />
           <TokenTable
-            days={days}
+            periodLabel={periodLabel}
             isLoading={eventsQuery.isLoading}
             events={events}
             page={page}

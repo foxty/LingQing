@@ -190,8 +190,17 @@ export type {
 } from './tenantApi'
 
 export type AgentUsageFilterParams = {
-  days?: number
+  start_time?: string
+  end_time?: string
   user_id?: number
+}
+
+function buildAgentUsageWindowParams(params: AgentUsageFilterParams) {
+  const { start_time, end_time, user_id } = params
+  if (!start_time || !end_time) {
+    throw new Error('Agent usage queries require start_time and end_time')
+  }
+  return { start_time, end_time, user_id }
 }
 
 export async function getAgentUsageSummary(
@@ -199,7 +208,7 @@ export async function getAgentUsageSummary(
   params: AgentUsageFilterParams = {}
 ): Promise<TenantTokenSummary> {
   const response = await api.get<TenantTokenSummary>(`/agents/${agentId}/usage/summary`, {
-    params: { days: params.days ?? 30, user_id: params.user_id },
+    params: buildAgentUsageWindowParams(params),
   })
   return response.data
 }
@@ -209,7 +218,7 @@ export async function getAgentUsageDaily(
   params: AgentUsageFilterParams = {}
 ): Promise<TokenUsageDailyPoint[]> {
   const response = await api.get<TokenUsageDailyPoint[]>(`/agents/${agentId}/usage/daily`, {
-    params: { days: params.days ?? 30, user_id: params.user_id },
+    params: buildAgentUsageWindowParams(params),
   })
   return response.data
 }

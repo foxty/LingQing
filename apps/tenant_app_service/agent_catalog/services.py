@@ -2,11 +2,13 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from apps.shared.audit_event.event_types import TenantAuditEventType
+from apps.shared.audit_event.recorder import TenantAuditRecorder
 from apps.shared.authz.authz_query_builder import build_unified_resource_filter, evaluate_resource_action
 from apps.shared.authz.ta_permissions import TenantAppPermissions
 from apps.shared.authz.ta_rbac import role_has_permission
@@ -54,6 +56,13 @@ from apps.tenant_app_service.agent_catalog.dtos import (
 )
 from apps.tenant_app_service.agent_catalog.repository import AgentCatalogRepository
 from apps.tenant_app_service.agents.system_agent_config import TOOL_REGISTRY, get_config_loader
+from apps.tenant_app_service.audit.record_helpers import (
+    record_agent_create,
+    record_agent_delete,
+    record_agent_status_update,
+    record_agent_update,
+    record_conflict_rejection_audit,
+)
 from apps.tenant_app_service.tenant.schemas import TokenUsageDailyPoint, TokenUsageEventsResponse
 
 logger = get_logger(__name__)
@@ -128,11 +137,6 @@ class AgentCatalogService(TenantAwareService):
     def _observability(self) -> ObservabilityService:
         return ObservabilityService.create(self.db_session, self.tenant_id)
 
-    @staticmethod
-    def _usage_period(days: int) -> tuple[datetime, datetime]:
-        period_end = datetime.now(UTC)
-        return period_end - timedelta(days=days), period_end
-
     async def _ensure_agent_usage_access(self, *, agent_id: int, actor: ActorContext) -> None:
         if agent_id != SYSTEM_AGENT_ONE_ID:
             await self.require_agent_access(agent_id=agent_id, actor=actor, action=ABAC_ACTION_READ)
@@ -142,16 +146,16 @@ class AgentCatalogService(TenantAwareService):
         *,
         agent_id: int,
         actor: ActorContext,
-        days: int,
+        start_time: datetime,
+        end_time: datetime,
         user_id: int | None = None,
     ) -> TenantUsageStatsDTO:
         await self._ensure_agent_usage_access(agent_id=agent_id, actor=actor)
-        period_start, period_end = self._usage_period(days)
         return await self._observability().get_agent_usage_stats(
             tenant_id=self.tenant_id,
             agent_id=agent_id,
-            start_time=period_start,
-            end_time=period_end,
+            start_time=start_time,
+            end_time=end_time,
             user_id=user_id,
         )
 
@@ -160,15 +164,15 @@ class AgentCatalogService(TenantAwareService):
         *,
         agent_id: int,
         actor: ActorContext,
-        days: int,
+        start_time: datetime,
+        end_time: datetime,
         user_id: int | None = None,
     ) -> list[TokenUsageDailyPoint]:
         await self._ensure_agent_usage_access(agent_id=agent_id, actor=actor)
-        period_start, period_end = self._usage_period(days)
         rows = await self._observability().get_tenant_token_daily_usage(
             tenant_id=self.tenant_id,
-            start_time=period_start,
-            end_time=period_end,
+            start_time=start_time,
+            end_time=end_time,
             agent_id=agent_id,
             user_id=user_id,
         )
@@ -245,6 +249,15 @@ class AgentCatalogService(TenantAwareService):
     ) -> AgentResponse:
         existing = await self._repo.get_by_name(self.tenant_id, payload.name.strip())
         if existing:
+            await record_conflict_rejection_audit(
+                tenant_id=self.tenant_id,
+                event_type=TenantAuditEventType.AGENT_CREATE.value,
+                actor_user_id=actor.user_id,
+                resource_type="agent",
+                resource_id=str(existing.id),
+                failure_reason="duplicate_name",
+                name=payload.name.strip(),
+            )
             raise DuplicateResourceError(f"Agent '{payload.name}' already exists")
 
         profile = AgentCapabilityProfile.from_config(payload.config.model_dump())
@@ -265,6 +278,13 @@ class AgentCatalogService(TenantAwareService):
             )
         )
         logger.info("Created custom agent id=%s tenant=%s", record.id, self.tenant_id)
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        await record_agent_create(
+            recorder,
+            actor_user_id=actor.user_id,
+            agent_id=record.id,
+            name=record.name,
+        )
         return await self._to_response(
             db_agent_to_custom(record), actor=actor, assignable_skills=assignable_skills
         )
@@ -281,6 +301,9 @@ class AgentCatalogService(TenantAwareService):
         record = await self._repo.get_by_id_and_tenant(agent_id, self.tenant_id)
         if record is None:
             raise ResourceNotFoundError(f"Agent {agent_id} not found")
+
+        status_before = record.status
+        changed_fields = set(payload.model_dump(exclude_unset=True).keys())
 
         if payload.name and payload.name.strip() != domain.name:
             existing = await self._repo.get_by_name(self.tenant_id, payload.name.strip())
@@ -305,15 +328,40 @@ class AgentCatalogService(TenantAwareService):
 
         record.updated_at = datetime.now(UTC)
         await self.db_session.flush()
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        if changed_fields == {"status"} and payload.status is not None:
+            await record_agent_status_update(
+                recorder,
+                actor_user_id=actor.user_id,
+                agent_id=agent_id,
+                status_before=status_before,
+                status_after=record.status,
+            )
+        else:
+            await record_agent_update(
+                recorder,
+                actor_user_id=actor.user_id,
+                agent_id=agent_id,
+                change_summary=sorted(changed_fields),
+            )
         return await self._to_response(
             db_agent_to_custom(record), actor=actor, assignable_skills=assignable_skills
         )
 
     async def delete_agent(self, *, agent_id: int, actor: ActorContext) -> None:
         await self.require_agent_access(agent_id=agent_id, actor=actor, action=ABAC_ACTION_WRITE)
+        record = await self._repo.get_by_id_and_tenant(agent_id, self.tenant_id)
+        name_snapshot = record.name if record else None
         deleted = await self._repo.delete_by_id(agent_id)
         if not deleted:
             raise ResourceNotFoundError(f"Agent {agent_id} not found")
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        await record_agent_delete(
+            recorder,
+            actor_user_id=actor.user_id,
+            agent_id=agent_id,
+            name_snapshot=name_snapshot,
+        )
 
     def get_system_agent_template(self) -> AgentResponse:
         return self._system_agent_response(actor=None)

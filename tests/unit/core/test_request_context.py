@@ -1,6 +1,10 @@
 """Unit tests for HTTP request context helpers."""
 
-from apps.shared.core.request_context import format_request_context, get_or_create_request_id
+from apps.shared.core.request_context import (
+    REQUEST_ID_MAX_LENGTH,
+    format_request_context,
+    get_or_create_request_id,
+)
 
 
 class _State:
@@ -28,6 +32,13 @@ def test_get_or_create_request_id_generates_when_missing():
     assert isinstance(request_id, str)
     assert len(request_id) >= 8
     assert request.state.request_id == request_id
+
+
+def test_get_or_create_request_id_truncates_long_header():
+    request = _Request(headers={"X-Request-ID": "r" * 300})
+    rid = get_or_create_request_id(request)
+    assert len(rid) == REQUEST_ID_MAX_LENGTH
+    assert rid == "r" * REQUEST_ID_MAX_LENGTH
 
 
 def test_format_request_context_includes_request_id_and_route():

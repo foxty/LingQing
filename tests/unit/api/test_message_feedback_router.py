@@ -107,7 +107,21 @@ class TestMessageFeedbackRouter:
             calls.append(tenant_id)
             yield b"id,thread_id\n1,t1\n"
 
+        async def _noop_record(self, **kwargs):
+            return None
+
+        from contextlib import asynccontextmanager
+
+        @asynccontextmanager
+        async def _empty_db():
+            yield object()
+
         monkeypatch.setattr(message_feedback, "iter_feedback_export_csv", _fake_csv_stream)
+        monkeypatch.setattr("apps.tenant_app_service.routers.message_feedback.app_db_session", _empty_db)
+        monkeypatch.setattr(
+            "apps.shared.audit_event.recorder.TenantAuditRecorder.record",
+            _noop_record,
+        )
 
         async def _admin_user():
             return UserDTO(id=1, username="admin", role="admin", tenant_id=1, tenant_name="t1")

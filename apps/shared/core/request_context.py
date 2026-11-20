@@ -17,16 +17,24 @@ from apps.shared.utils.logger import get_logger
 logger = get_logger(__name__)
 
 REQUEST_ID_HEADER = "X-Request-ID"
+REQUEST_ID_MAX_LENGTH = 100
+
+
+def _clip_request_id(value: str) -> str:
+    return value[:REQUEST_ID_MAX_LENGTH]
 
 
 def get_or_create_request_id(request: Request) -> str:
     """Return the inbound request id or generate one for this request."""
     existing = getattr(request.state, "request_id", None)
     if isinstance(existing, str) and existing.strip():
-        return existing
+        return _clip_request_id(existing.strip())
 
     header_value = request.headers.get(REQUEST_ID_HEADER)
-    request_id = header_value.strip() if isinstance(header_value, str) and header_value.strip() else uuid4().hex
+    if isinstance(header_value, str) and header_value.strip():
+        request_id = _clip_request_id(header_value.strip())
+    else:
+        request_id = uuid4().hex
     request.state.request_id = request_id
     return request_id
 
@@ -83,6 +91,14 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         tenant_id, user_id = _peek_auth_context(request)
         started = time.perf_counter()
         status_code = 500
+        from apps.shared.audit_event.context import (
+            AuditRequestContext,
+            reset_audit_context,
+            set_current_audit_context,
+        )
+
+        audit_ctx = AuditRequestContext.from_request(request)
+        audit_token = set_current_audit_context(audit_ctx)
 
         try:
             response = await call_next(request)
@@ -90,6 +106,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             response.headers[REQUEST_ID_HEADER] = request_id
             return response
         finally:
+            reset_audit_context(audit_token)
             duration_ms = int((time.perf_counter() - started) * 1000)
             log_line = (
                 "HTTP request request_id=%s method=%s path=%s status=%s duration_ms=%s "

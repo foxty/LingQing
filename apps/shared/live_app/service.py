@@ -2084,15 +2084,23 @@ class LiveAppService(TenantAwareService):
         actor_user_id: int | None,
         event_type: LiveAppAuditEventType,
         payload: dict,
+        outcome: str = "success",
     ) -> None:
-        try:
-            async with self.db_session.begin_nested():
-                await self.audit_repo.add_event(
-                    tenant_id=self.tenant_id,
-                    actor_user_id=actor_user_id,
-                    event_type=event_type,
-                    payload=payload,
-                )
-        except Exception:
-            # Keep write flow available even if audit persistence is temporarily unavailable.
-            logger.warning("Failed to persist live app audit event", exc_info=True)
+        """Persist live app audit row in the current transaction (fail-closed)."""
+        from apps.shared.audit_event.recorder import (
+            ACTOR_TYPE_ANONYMOUS,
+            ACTOR_TYPE_USER,
+            TenantAuditRecorder,
+        )
+
+        app_id = payload.get("app_id")
+        recorder = TenantAuditRecorder(self.db_session, tenant_id=self.tenant_id)
+        await recorder.record(
+            event_type=event_type.value if isinstance(event_type, LiveAppAuditEventType) else str(event_type),
+            outcome=outcome,
+            actor_user_id=actor_user_id,
+            actor_type=ACTOR_TYPE_USER if actor_user_id is not None else ACTOR_TYPE_ANONYMOUS,
+            resource_type="live_app",
+            resource_id=str(app_id) if app_id is not None else None,
+            payload=payload,
+        )

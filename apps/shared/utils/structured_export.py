@@ -7,6 +7,17 @@ import io
 from collections.abc import Iterator, Sequence
 from typing import Any
 
+_CSV_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def sanitize_csv_cell(value: Any) -> Any:
+    """Prefix spreadsheet formula trigger characters so Excel/Sheets will not evaluate the cell."""
+    if not isinstance(value, str) or not value:
+        return value
+    if value[0] in _CSV_FORMULA_PREFIXES:
+        return "'" + value
+    return value
+
 
 class CsvTableExporter:
     """Buffered CSV writer that can flush UTF-8 byte chunks for streaming responses."""
@@ -20,7 +31,7 @@ class CsvTableExporter:
         self._writer.writerow(headers)
 
     def append_row(self, cells: Sequence[Any]) -> None:
-        self._writer.writerow(cells)
+        self._writer.writerow(sanitize_csv_cell(cell) for cell in cells)
 
     def flush_chunk(self) -> bytes | None:
         """Encode accumulated rows and clear the internal text buffer."""

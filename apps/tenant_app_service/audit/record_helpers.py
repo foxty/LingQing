@@ -1,0 +1,31 @@
+"""Re-export shared audit record helpers for tenant-app modules."""
+
+from apps.shared.audit_event.record_helpers import *  # noqa: F403
+from apps.shared.audit_event.record_helpers import (  # noqa: F401 — explicit public API
+    identifier_hash,
+    record_acl_share_create,
+    record_acl_share_revoke,
+    record_agent_create,
+    record_agent_delete,
+    record_agent_status_update,
+    record_agent_update,
+    record_auth_login_failure,
+    record_auth_login_success,
+    record_conflict_rejection_audit,
+    record_datasource_create,
+    record_datasource_delete,
+    record_datasource_update,
+    record_kb_document_create,
+    record_kb_document_delete,
+    record_skill_create,
+    record_skill_delete,
+    record_skill_env_vars_update,
+    record_skill_status_update,
+    record_slack_agent_ingress_create,
+    record_slack_agent_ingress_delete,
+    record_slack_integration_update,
+    record_user_create,
+    record_user_membership_deactivate,
+    record_user_membership_reactivate,
+    record_user_role_update,
+)

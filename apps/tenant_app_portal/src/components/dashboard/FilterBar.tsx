@@ -54,7 +54,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import TimeRangePicker from '@/components/dashboard/filters/TimeRangePicker'
+import TimeRangePicker from '@/components/TimeRangePicker'
 
 import {
   type DashboardFilter,

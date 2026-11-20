@@ -13,10 +13,16 @@ import {
 
 export function useTenantTokenSummary(params: TenantTokenFilterParams = {}) {
   const { user } = useAuth()
-  const days = params.days ?? 30
 
   return useQuery<TenantTokenSummary>({
-    queryKey: ['tenant-token-summary', user?.tenantId, days, params.user_id, params.agent_id],
+    queryKey: [
+      'tenant-token-summary',
+      user?.tenantId,
+      params.start_time,
+      params.end_time,
+      params.user_id,
+      params.agent_id,
+    ],
     queryFn: () => getTenantTokenSummary(params),
     enabled: !!user,
     retry: 1,
@@ -25,10 +31,16 @@ export function useTenantTokenSummary(params: TenantTokenFilterParams = {}) {
 
 export function useTenantTokenDaily(params: TenantTokenFilterParams = {}) {
   const { user } = useAuth()
-  const days = params.days ?? 30
 
   return useQuery<TokenUsageDailyPoint[]>({
-    queryKey: ['tenant-token-daily', user?.tenantId, days, params.user_id, params.agent_id],
+    queryKey: [
+      'tenant-token-daily',
+      user?.tenantId,
+      params.start_time,
+      params.end_time,
+      params.user_id,
+      params.agent_id,
+    ],
     queryFn: () => getTenantTokenDaily(params),
     enabled: !!user,
     retry: 1,

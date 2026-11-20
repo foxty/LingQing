@@ -30,6 +30,7 @@ import SettingsUsersTab from './pages/SettingsUsersTab'
 import SettingsIdentityTab from './pages/SettingsIdentityTab'
 import SettingsDocumentSourcesTab from './pages/SettingsDocumentSourcesTab'
 import SettingsSystemJobsTab from './pages/SettingsSystemJobsTab'
+import SettingsAuditLogsTab from './pages/SettingsAuditLogsTab'
 import SsoCallbackPage from './pages/SsoCallbackPage'
 import ScheduledTaskPage from './pages/ScheduledTaskPage'
 import ScheduledTasksPage from './pages/ScheduledTasksPage'
@@ -325,6 +326,14 @@ function App() {
           />
           <Route path="usage" element={<SettingsUsageTab />} />
           <Route path="system-jobs" element={<SettingsSystemJobsTab />} />
+          <Route
+            path="audit-logs"
+            element={
+              <ProtectedRoute withLayout={false} permission={PERMISSIONS.AUDIT_READ}>
+                <SettingsAuditLogsTab />
+              </ProtectedRoute>
+            }
+          />
           <Route path="subscription" element={<SettingsSubscriptionTab />} />
         </Route>
         <Route path="*" element={<DefaultRedirect />} />

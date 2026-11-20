@@ -135,6 +135,7 @@ export function getSettingsNavItems(
     includeAppearance?: boolean
     includeDocumentSources?: boolean
     includeSystemJobs?: boolean
+    includeAuditLogs?: boolean
     /** Show Users nav when caller can list users (settings read or user admin). */
     includeUsers?: boolean
   } = {}
@@ -183,6 +184,14 @@ export function getSettingsNavItems(
       to: '/settings/system-jobs',
       label: t('settings.systemJobs'),
       matchPrefixes: ['/settings/system-jobs'],
+    })
+  }
+
+  if (options.includeAuditLogs) {
+    items.push({
+      to: '/settings/audit-logs',
+      label: t('settings.auditLogs'),
+      matchPrefixes: ['/settings/audit-logs'],
     })
   }
 

@@ -14,6 +14,14 @@ from sqlalchemy import select
 from sqlalchemy.sql.elements import ColumnElement
 from sqlglot.errors import ParseError
 
+from apps.shared.audit_event.event_types import TenantAuditEventType
+from apps.shared.audit_event.record_helpers import (
+    record_conflict_rejection_audit,
+    record_datasource_create,
+    record_datasource_delete,
+    record_datasource_update,
+)
+from apps.shared.audit_event.recorder import TenantAuditRecorder
 from apps.shared.authz.authz_query_builder import (
     AuthzSqlFilter,
     build_unified_resource_filter,
@@ -68,6 +76,13 @@ from .repository import (
 from .temp_table_repository import TempTableRepository
 
 logger = get_logger(__name__)
+
+
+def _config_secret_keys(config: dict | None) -> list[str]:
+    if not config:
+        return []
+    needles = ("password", "token", "secret")
+    return sorted(k for k in config if any(n in k.lower() for n in needles))
 
 _SYSTEM_CATALOG_SCHEMAS = frozenset({"information_schema", "pg_catalog", "pg_toast"})
 
@@ -451,6 +466,17 @@ class DataSourceService(TenantAwareService):
             raise ResourceNotFoundError(f"Data source {data_source_id} not found")
 
         logger.info(f"Updated data source {data_source_id} for tenant {self.tenant_id}")
+        incoming = update_data.model_dump(exclude_unset=True)
+        secret_keys = _config_secret_keys(incoming.get("config"))
+        recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
+        await record_datasource_update(
+            recorder,
+            actor_user_id=actor.user_id,
+            data_source_id=data_source_id,
+            change_summary=sorted(incoming.keys()),
+            secret_config_changed=bool(secret_keys),
+            secret_config_keys=secret_keys,
+        )
         return db_data_source_to_public_api_response(updated)
 
     async def delete_data_source_for_actor(
@@ -477,6 +503,13 @@ class DataSourceService(TenantAwareService):
 
         deleted = await self.data_source_repo.delete_by_id_and_tenant(data_source_id, self.tenant_id)
         logger.info(f"Deleted data source {data_source_id} for tenant {self.tenant_id}")
+        recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
+        await record_datasource_delete(
+            recorder,
+            actor_user_id=actor.user_id,
+            data_source_id=data_source_id,
+            name_snapshot=data_source.name,
+        )
         return deleted
 
     async def query_asset_for_actor(
@@ -602,6 +635,16 @@ class DataSourceService(TenantAwareService):
         existing = await self.data_source_repo.get_by_tenant_and_name(self.tenant_id, data_source_data.name)
 
         if existing:
+            await record_conflict_rejection_audit(
+                tenant_id=self.tenant_id,
+                event_type=TenantAuditEventType.DATASOURCE_CREATE.value,
+                actor_user_id=owner_id,
+                resource_type="datasource",
+                resource_id=str(existing.id),
+                failure_reason="duplicate_name",
+                name=data_source_data.name,
+                connector_type=data_source_data.type,
+            )
             raise ValueError(f"Data source '{data_source_data.name}' already exists for tenant {self.tenant_id}")
 
         config = data_source_data.config or {}
@@ -621,6 +664,15 @@ class DataSourceService(TenantAwareService):
         )
 
         logger.info(f"Created data source '{data_source.name}' (ID: {data_source.id}) for tenant {self.tenant_id}")
+        recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
+        await record_datasource_create(
+            recorder,
+            actor_user_id=owner_id,
+            data_source_id=data_source.id,
+            name=data_source.name,
+            connector_type=data_source.type,
+            config_has_secrets=bool(_config_secret_keys(config)),
+        )
         return db_data_source_to_public_api_response(data_source)
 
     async def query_data_for_actor(

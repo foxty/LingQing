@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-16T11:43:52.392949+00:00",
+  "generated_at": "2026-11-19T05:31:06.242388+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -260,6 +260,21 @@
     {
       "operation_key": "GET_/artifacts/context-picker",
       "summary": "Search artifacts attachable via @mention in chat",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/audit/event-types",
+      "summary": "List Audit Event Types",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/audit/events",
+      "summary": "List Audit Events",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/audit/events/export",
+      "summary": "Export Audit Events",
       "risk_level": "read"
     },
     {

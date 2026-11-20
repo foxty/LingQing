@@ -76,16 +76,25 @@ export interface TokenUsageEventsResponse {
 }
 
 export interface TenantTokenFilterParams {
-  days?: number
+  start_time?: string
+  end_time?: string
   user_id?: number
   agent_id?: number
+}
+
+function buildTokenUsageWindowParams(params: TenantTokenFilterParams) {
+  const { start_time, end_time, user_id, agent_id } = params
+  if (!start_time || !end_time) {
+    throw new Error('Token usage queries require start_time and end_time')
+  }
+  return { start_time, end_time, user_id, agent_id }
 }
 
 export async function getTenantTokenSummary(
   params: TenantTokenFilterParams = {}
 ): Promise<TenantTokenSummary> {
   const response = await api.get<TenantTokenSummary>('/observability/tenant/token-summary', {
-    params: { days: params.days ?? 30, user_id: params.user_id, agent_id: params.agent_id },
+    params: buildTokenUsageWindowParams(params),
   })
   return response.data
 }
@@ -94,7 +103,7 @@ export async function getTenantTokenDaily(
   params: TenantTokenFilterParams = {}
 ): Promise<TokenUsageDailyPoint[]> {
   const response = await api.get<TokenUsageDailyPoint[]>('/observability/tenant/token-daily', {
-    params: { days: params.days ?? 30, user_id: params.user_id, agent_id: params.agent_id },
+    params: buildTokenUsageWindowParams(params),
   })
   return response.data
 }

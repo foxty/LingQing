@@ -58,7 +58,9 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { cn } from '@/lib/utils'
-import { normalizeForPrecision } from '@/lib/timeRangeUtils'
+import { formatTimeRangeSummary, normalizeForPrecision, type TimeRangeValue } from '@/lib/timeRangeUtils'
+
+export type { TimeRangeValue }
 
 const TIME_PRESETS = [
   { value: 'today' },
@@ -68,35 +70,15 @@ const TIME_PRESETS = [
   { value: 'this_month' },
   { value: 'last_month' },
   { value: 'this_year' },
-]
-
-export interface TimeRangeValue {
-  mode?: 'relative' | 'absolute'
-  preset?: string
-  start?: string
-  end?: string
-}
+] as const
 
 interface TimeRangePickerProps {
   value?: TimeRangeValue | null
   onChange: (value: TimeRangeValue) => void
   precision?: 'date' | 'datetime'
   className?: string
-}
-
-function buildSummary(value: TimeRangeValue | null | undefined, precision: 'date' | 'datetime', t: (key: string) => string) {
-  if (!value) return t('components.timeRangePicker.selectTimeRange')
-  if (value.mode === 'relative' && value.preset) {
-    const labelKey = `components.timeRangePicker.${value.preset}`
-    const label = t(labelKey)
-    return label !== labelKey ? label : t('components.timeRangePicker.selectTimeRange')
-  }
-  if (value.mode === 'absolute' && (value.start || value.end)) {
-    const start = normalizeForPrecision(value.start, precision) ?? t('components.timeRangePicker.start').split(' ')[0]
-    const end = normalizeForPrecision(value.end, precision) ?? t('components.timeRangePicker.end').split(' ')[0]
-    return `${start} ~ ${end}`
-  }
-  return t('components.timeRangePicker.selectTimeRange')
+  /** When set, only these preset keys are shown (e.g. usage pages omit ``this_year``). */
+  presets?: readonly string[]
 }
 
 export default function TimeRangePicker({
@@ -104,6 +86,7 @@ export default function TimeRangePicker({
   onChange,
   precision: defaultPrecision = 'datetime',
   className,
+  presets,
 }: TimeRangePickerProps) {
   const { t } = useTranslation()
   const [open, setOpen] = useState(false)
@@ -112,9 +95,16 @@ export default function TimeRangePicker({
   const [tempEnd, setTempEnd] = useState(value?.end ?? '')
 
   const summary = useMemo(
-    () => buildSummary(value ?? null, defaultPrecision, t),
+    () => formatTimeRangeSummary(value ?? null, defaultPrecision, t),
     [value, defaultPrecision, t]
   )
+  const visiblePresets = useMemo(() => {
+    if (!presets?.length) {
+      return TIME_PRESETS
+    }
+    const allowed = new Set(presets)
+    return TIME_PRESETS.filter((preset) => allowed.has(preset.value))
+  }, [presets])
   const current = value ?? { mode: 'relative', preset: 'last_7_days' }
 
   /**
@@ -196,7 +186,7 @@ export default function TimeRangePicker({
           <div className="space-y-2">
             <div className="text-sm font-medium">{t('components.timeRangePicker.presets')}</div>
             <div className="grid gap-2">
-              {TIME_PRESETS.map((preset) => (
+              {visiblePresets.map((preset) => (
                 <Button
                   key={preset.value}
                   variant={
