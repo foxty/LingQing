@@ -236,7 +236,7 @@ async def record_datasource_create(
     data_source_id: int,
     name: str,
     connector_type: str,
-    config_has_secrets: bool,
+    credentials_present: bool,
 ) -> None:
     await recorder.record(
         event_type=TenantAuditEventType.DATASOURCE_CREATE.value,
@@ -248,7 +248,7 @@ async def record_datasource_create(
         payload=build_datasource_create_payload(
             name=name,
             connector_type=connector_type,
-            config_has_secrets=config_has_secrets,
+            credentials_present=credentials_present,
         ),
     )
 
@@ -259,8 +259,8 @@ async def record_datasource_update(
     actor_user_id: int,
     data_source_id: int,
     change_summary: list[str],
-    secret_config_changed: bool,
-    secret_config_keys: list[str],
+    credentials_changed: bool,
+    credential_field_names: list[str],
 ) -> None:
     await recorder.record(
         event_type=TenantAuditEventType.DATASOURCE_UPDATE.value,
@@ -271,8 +271,8 @@ async def record_datasource_update(
         resource_id=str(data_source_id),
         payload=build_datasource_update_payload(
             change_summary=change_summary,
-            secret_config_changed=secret_config_changed,
-            secret_config_keys=secret_config_keys,
+            credentials_changed=credentials_changed,
+            credential_field_names=credential_field_names,
         ),
     )
 

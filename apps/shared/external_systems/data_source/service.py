@@ -58,6 +58,7 @@ from apps.shared.external_systems.data_source.schemas import (
     DiscoveredAsset,
     TestConnectionResponse,
 )
+from apps.shared.external_systems.data_source.sensitive_config import datasource_audit_credential_field_names
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_USER,
     IntegrationPurpose,
@@ -78,11 +79,6 @@ from .temp_table_repository import TempTableRepository
 logger = get_logger(__name__)
 
 
-def _config_secret_keys(config: dict | None) -> list[str]:
-    if not config:
-        return []
-    needles = ("password", "token", "secret")
-    return sorted(k for k in config if any(n in k.lower() for n in needles))
 
 _SYSTEM_CATALOG_SCHEMAS = frozenset({"information_schema", "pg_catalog", "pg_toast"})
 
@@ -467,15 +463,15 @@ class DataSourceService(TenantAwareService):
 
         logger.info(f"Updated data source {data_source_id} for tenant {self.tenant_id}")
         incoming = update_data.model_dump(exclude_unset=True)
-        secret_keys = _config_secret_keys(incoming.get("config"))
+        credential_field_names = datasource_audit_credential_field_names(incoming.get("config"))
         recorder = TenantAuditRecorder(self.data_source_repo.db, tenant_id=self.tenant_id)
         await record_datasource_update(
             recorder,
             actor_user_id=actor.user_id,
             data_source_id=data_source_id,
             change_summary=sorted(incoming.keys()),
-            secret_config_changed=bool(secret_keys),
-            secret_config_keys=secret_keys,
+            credentials_changed=bool(credential_field_names),
+            credential_field_names=credential_field_names,
         )
         return db_data_source_to_public_api_response(updated)
 
@@ -671,7 +667,7 @@ class DataSourceService(TenantAwareService):
             data_source_id=data_source.id,
             name=data_source.name,
             connector_type=data_source.type,
-            config_has_secrets=bool(_config_secret_keys(config)),
+            credentials_present=bool(config),
         )
         return db_data_source_to_public_api_response(data_source)
 
