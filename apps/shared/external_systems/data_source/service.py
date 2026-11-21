@@ -667,7 +667,7 @@ class DataSourceService(TenantAwareService):
             data_source_id=data_source.id,
             name=data_source.name,
             connector_type=data_source.type,
-            credentials_present=bool(config),
+            credentials_present=bool(datasource_audit_credential_field_names(config)),
         )
         return db_data_source_to_public_api_response(data_source)
 
