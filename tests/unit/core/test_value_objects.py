@@ -72,3 +72,20 @@ def test_byot_connection_template_from_dict():
     )
     assert connection.database == "app"
     assert connection.username is None
+
+
+def test_postgres_to_url_percent_encodes_password_special_characters():
+    password = "u9YG28hrsuHit&LliR4ZmILb"
+    connection = DatabaseConnectionVO.from_dict(
+        {
+            "host": "localhost",
+            "port": 5432,
+            "database": "tenant_1_analytics",
+            "username": "tenant_1_user",
+            "password": password,
+        }
+    )
+    url = connection.to_url("postgresql")
+    assert "&" not in url.split("@", 1)[0]
+    assert "u9YG28hrsuHit%26LliR4ZmILb" in url
+    assert url.endswith("/tenant_1_analytics")

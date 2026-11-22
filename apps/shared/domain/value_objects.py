@@ -1,6 +1,7 @@
 from dataclasses import dataclass, field
 from enum import StrEnum
 from typing import Any, Literal
+from urllib.parse import quote_plus
 
 AssetTypeStr = Literal["table", "view", "materialized_view", "api_endpoint"]
 DataSourceTypeStr = Literal["duckdb", "postgres", "mysql", "databricks", "snowflake", "bigquery"]
@@ -268,9 +269,11 @@ class DatabaseConnectionVO:
 
             return url
 
-        # Standard SQL database format
+        # Standard SQL database format (quote userinfo — provisioned passwords may contain &, @, etc.)
         port_str = f":{self.port}" if self.port else ""
-        url = f"{driver}://{self.username}:{self.password}@{self.host}{port_str}/{self.database}"
+        user = quote_plus(self.username or "", safe="")
+        pwd = quote_plus(self.password or "", safe="")
+        url = f"{driver}://{user}:{pwd}@{self.host}{port_str}/{self.database}"
 
         if self.extra_params:
             params = "&".join(f"{k}={v}" for k, v in self.extra_params.items())
