@@ -28,6 +28,7 @@ export interface UserIntegrationConnectionSummary {
   auth_type?: string | null
   updated_at?: string | null
   provisioned_by_user_id?: number | null
+  provisioned_by_username?: string | null
   provisioned_at?: string | null
 }
 

@@ -31,18 +31,18 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/hooks/useAuth'
 import { actionRules } from '@/lib/permissionRules'
 import { useConfirmation } from '@/hooks/useConfirmation'
-import { useAssets } from '@/hooks/useDataSources'
+import { useAssets, useDataSourceDetail } from '@/hooks/useDataSources'
 import { useNotification } from '@/hooks/useNotification'
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
+import { getApiErrorMessage } from '@/lib/api'
 import {
-  getDataSource,
   resolveAssetDescription,
   syncAssetMetadata,
   type AssetMetadata,
-  type DataSource,
 } from '@/lib/dataSourceApi'
 import { Info, MoreHorizontal, RefreshCw, Table2, Trash2, TriangleAlert, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
+import axios from 'axios'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
@@ -189,17 +189,24 @@ export default function DataAssetsPage() {
   const canProvisionUserConnections = hasAny(actionRules.canProvisionUserIntegrationConnections())
   const { showSuccess, showError } = useNotification()
 
+  const parsedDataSourceId = useMemo(() => {
+    const n = Number(dataSourceId)
+    return Number.isFinite(n) ? n : undefined
+  }, [dataSourceId])
+
+  const dataSourceQuery = useDataSourceDetail(parsedDataSourceId)
+  const dataSource = dataSourceQuery.data
+
   const {
     assets,
-    loading: assetsLoading,
     fetchAssets,
     removeAssets,
     pageSize,
     total,
     totalPages,
-  } = useAssets(dataSourceId ? parseInt(dataSourceId) : 0)
+  } = useAssets(parsedDataSourceId ?? 0)
 
-  const [dataSource, setDataSource] = useState<DataSource | null>(null)
+  const skipSearchFetchRef = useRef(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -243,31 +250,38 @@ export default function DataAssetsPage() {
     }
   }
 
-  // Fetch data source and assets
   const fetchData = async (pageNum: number = 1, query?: string) => {
-    if (!dataSourceId) return
-
+    if (parsedDataSourceId == null) return
     try {
-      const dsData = await getDataSource(parseInt(dataSourceId))
-      setDataSource(dsData)
       await fetchAssets(pageNum, pageSize, query)
-    } catch (error: any) {
-      console.error('Failed to fetch data source:', error)
-      showError(error.message || t('dataAssets.fetchFailed'))
+    } catch (error: unknown) {
+      showError(getApiErrorMessage(error, t('dataAssets.fetchFailed')))
     }
   }
 
   useEffect(() => {
-    fetchData()
-  }, [dataSourceId])
+    skipSearchFetchRef.current = true
+  }, [parsedDataSourceId])
 
-  // Reset to page 1 when search query changes
   useEffect(() => {
+    if (authLoading || !dataSourceQuery.isSuccess) return
     setCurrentPage(1)
     setSelectedAssets([])
-    if (!dataSourceId) return
-    fetchAssets(1, pageSize, normalizedQuery)
-  }, [searchQuery, dataSourceId, normalizedQuery, pageSize, fetchAssets])
+    void fetchAssets(1, pageSize, normalizedQuery)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- search changes handled by the effect below
+  }, [parsedDataSourceId, dataSourceQuery.isSuccess, authLoading, fetchAssets, pageSize])
+
+  // Reset to page 1 when search query changes (after initial load)
+  useEffect(() => {
+    if (authLoading || !dataSourceQuery.isSuccess) return
+    if (skipSearchFetchRef.current) {
+      skipSearchFetchRef.current = false
+      return
+    }
+    setCurrentPage(1)
+    setSelectedAssets([])
+    void fetchAssets(1, pageSize, normalizedQuery)
+  }, [searchQuery, normalizedQuery, pageSize, fetchAssets, authLoading, dataSourceQuery.isSuccess])
 
   // Batch selection handlers
   const isAllSelected = assets.length > 0 && selectedAssets.length === assets.length
@@ -395,7 +409,11 @@ export default function DataAssetsPage() {
     )
   }
 
-  if (authLoading) {
+  const dataSourceLoadStatus = axios.isAxiosError(dataSourceQuery.error)
+    ? dataSourceQuery.error.response?.status
+    : undefined
+
+  if (authLoading || dataSourceQuery.isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -403,21 +421,22 @@ export default function DataAssetsPage() {
     )
   }
 
-  if (assetsLoading && !dataSource) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (!dataSource) {
+  if (dataSourceQuery.isError || !dataSource) {
+    const notFound = dataSourceLoadStatus === 404
     return (
       <div className="space-y-4">
         <Alert variant="destructive">
           <Info className="h-4 w-4" />
-          <AlertDescription>{t('dataAssets.dataSourceNotExists')}</AlertDescription>
+          <AlertDescription>
+            {notFound ? t('dataAssets.dataSourceNotExists') : t('dataAssets.fetchFailed')}
+          </AlertDescription>
         </Alert>
+        {!notFound ? (
+          <Button type="button" variant="outline" onClick={() => void dataSourceQuery.refetch()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            {t('common.retry', { defaultValue: 'Retry' })}
+          </Button>
+        ) : null}
       </div>
     )
   }

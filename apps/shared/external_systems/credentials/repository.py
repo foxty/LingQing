@@ -5,6 +5,7 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from sqlalchemy import func, select
+from sqlalchemy.orm import aliased
 
 from apps.shared.db.base_repository import BaseRepository
 from apps.shared.db.models import User, UserIntegrationCredential
@@ -156,10 +157,12 @@ class UserIntegrationCredentialRepository(BaseRepository[UserIntegrationCredenti
         tenant_id: int,
         resource_type: str,
         resource_id: int,
-    ) -> list[tuple[UserIntegrationCredential, User]]:
+    ) -> list[tuple[UserIntegrationCredential, User, User | None]]:
+        provisioner = aliased(User)
         result = await self.db.execute(
-            select(UserIntegrationCredential, User)
+            select(UserIntegrationCredential, User, provisioner)
             .join(User, User.id == UserIntegrationCredential.user_id)
+            .outerjoin(provisioner, provisioner.id == UserIntegrationCredential.provisioned_by_user_id)
             .where(
                 UserIntegrationCredential.tenant_id == tenant_id,
                 UserIntegrationCredential.resource_type == resource_type,

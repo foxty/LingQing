@@ -45,6 +45,8 @@ i18n.addResourceBundle(
       user: 'User',
       status: 'Status',
       accountLabel: 'Account label',
+      configuredBy: 'Configured by',
+      configuredBySelf: 'Self',
       updated: 'Updated',
       actions: 'Actions',
       configure: 'Configure',
@@ -76,6 +78,8 @@ i18n.addResourceBundle(
       user: '用户',
       status: '状态',
       accountLabel: '账号备注',
+      configuredBy: '配置人',
+      configuredBySelf: '本人',
       updated: '更新时间',
       actions: '操作',
       configure: '配置',
@@ -120,6 +124,22 @@ function statusLabel(status: UserIntegrationConnectionSummary['status'], t: (k: 
   if (status === 'connected') return t('adminUserConnections.statusConnected')
   if (status === 'expired') return t('adminUserConnections.statusExpired')
   return t('adminUserConnections.statusNotConnected')
+}
+
+function configuredByLabel(
+  row: UserIntegrationConnectionSummary,
+  t: (k: string) => string
+): string {
+  if (row.provisioned_by_username) {
+    return row.provisioned_by_username
+  }
+  if (row.provisioned_by_user_id != null) {
+    return String(row.provisioned_by_user_id)
+  }
+  if (row.status !== 'not_connected') {
+    return t('adminUserConnections.configuredBySelf')
+  }
+  return '—'
 }
 
 export default function AdminUserConnectionsSection(props: Props) {
@@ -260,6 +280,7 @@ export default function AdminUserConnectionsSection(props: Props) {
                 <TableHead>{t('adminUserConnections.user')}</TableHead>
                 <TableHead>{t('adminUserConnections.status')}</TableHead>
                 <TableHead>{t('adminUserConnections.accountLabel')}</TableHead>
+                <TableHead>{t('adminUserConnections.configuredBy')}</TableHead>
                 <TableHead>{t('adminUserConnections.updated')}</TableHead>
                 <TableHead className="w-[100px]">{t('adminUserConnections.actions')}</TableHead>
               </TableRow>
@@ -282,6 +303,9 @@ export default function AdminUserConnectionsSection(props: Props) {
                     </Badge>
                   </TableCell>
                   <TableCell className="text-muted-foreground">{row.account_label ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">
+                    {configuredByLabel(row, t)}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-xs">
                     {row.updated_at ? formatDateTime(row.updated_at) : '—'}
                   </TableCell>

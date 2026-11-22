@@ -523,7 +523,7 @@ class UserIntegrationCredentialService:
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             resource_id=ds.id,
         )
-        items = [await self._summary_for_binding(actor, row, user) for row, user in rows]
+        items = [await self._summary_for_binding(actor, row, user, provisioner) for row, user, provisioner in rows]
         return UserIntegrationConnectionSummaryListResponse(items=items)
 
     async def list_api_connector_connections(
@@ -539,10 +539,10 @@ class UserIntegrationCredentialService:
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=conn.id,
         )
-        items = [await self._summary_for_binding(actor, row, user) for row, user in rows]
+        items = [await self._summary_for_binding(actor, row, user, provisioner) for row, user, provisioner in rows]
         return UserIntegrationConnectionSummaryListResponse(items=items)
 
-    async def _summary_for_binding(self, actor: ActorContext, row, user) -> UserIntegrationConnectionSummary:
+    async def _summary_for_binding(self, actor: ActorContext, row, user, provisioner) -> UserIntegrationConnectionSummary:
         status, _ = await self.resolver.connection_status_for_actor(
             tenant_id=actor.tenant_id,
             user_id=row.user_id,
@@ -560,6 +560,7 @@ class UserIntegrationCredentialService:
             auth_type=row.auth_type,
             updated_at=row.updated_at,
             provisioned_by_user_id=row.provisioned_by_user_id,
+            provisioned_by_username=provisioner.username if provisioner else None,
             provisioned_at=row.provisioned_at,
         )
 

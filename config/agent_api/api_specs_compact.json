@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-20T08:48:11.725056+00:00",
+  "generated_at": "2026-11-22T12:55:41.366898+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -9294,6 +9294,17 @@
               }
             ],
             "title": "Provisioned By User Id"
+          },
+          "provisioned_by_username": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Provisioned By Username"
           },
           "provisioned_at": {
             "anyOf": [

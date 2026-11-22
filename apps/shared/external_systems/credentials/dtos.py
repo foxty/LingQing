@@ -53,6 +53,7 @@ class UserIntegrationConnectionSummary(BaseModel):
     auth_type: str | None = None
     updated_at: datetime | None = None
     provisioned_by_user_id: int | None = None
+    provisioned_by_username: str | None = None
     provisioned_at: datetime | None = None
 
 
