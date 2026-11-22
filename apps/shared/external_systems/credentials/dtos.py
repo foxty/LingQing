@@ -40,3 +40,21 @@ class UserIntegrationConnectionUpsertRequest(BaseModel):
 class UserIntegrationConnectionTestResponse(BaseModel):
     success: bool
     message: str
+
+
+class UserIntegrationConnectionSummary(BaseModel):
+    user_id: int
+    username: str | None = None
+    resource_type: str
+    resource_id: int
+    resource_name: str | None = None
+    status: UserConnectionStatus
+    account_label: str | None = None
+    auth_type: str | None = None
+    updated_at: datetime | None = None
+    provisioned_by_user_id: int | None = None
+    provisioned_at: datetime | None = None
+
+
+class UserIntegrationConnectionSummaryListResponse(BaseModel):
+    items: list[UserIntegrationConnectionSummary]

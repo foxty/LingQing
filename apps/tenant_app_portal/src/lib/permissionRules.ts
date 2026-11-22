@@ -37,6 +37,7 @@ export const PERMISSIONS = {
   // Data sources
   DATA_SOURCES_READ: 'data_sources.read',
   DATA_SOURCES_WRITE: 'data_sources.write',
+  DATA_SOURCES_MANAGE: 'data_sources.manage',
 
   // Dashboards
   DASHBOARDS_WRITE: 'dashboards.write',
@@ -140,6 +141,13 @@ export const actionRules = {
   canCreateDataSource: () => [PERMISSIONS.DATA_SOURCES_WRITE],
   canEditDataSource: () => [PERMISSIONS.DATA_SOURCES_WRITE],
   canDeleteDataSource: () => [PERMISSIONS.DATA_SOURCES_WRITE],
+
+  canProvisionUserIntegrationConnections: () => [
+    PERMISSIONS.TENANT_ADMIN,
+    PERMISSIONS.DATA_SOURCES_MANAGE,
+    PERMISSIONS.API_CONNECTORS_MANAGE,
+    PERMISSIONS.USERS_MANAGE,
+  ],
 
   canCreateDashboard: () => [PERMISSIONS.DASHBOARDS_WRITE],
   canDeleteDashboard: () => [PERMISSIONS.DASHBOARDS_WRITE],

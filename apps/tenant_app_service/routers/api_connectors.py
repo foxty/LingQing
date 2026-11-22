@@ -32,6 +32,7 @@ from apps.shared.external_systems.api_connector.service import ApiConnectorServi
 from apps.shared.external_systems.application.wiring import api_connector_execution_service
 from apps.shared.external_systems.credentials.dtos import (
     UserIntegrationConnectionResponse,
+    UserIntegrationConnectionSummaryListResponse,
     UserIntegrationConnectionTestResponse,
     UserIntegrationConnectionUpsertRequest,
 )
@@ -168,6 +169,107 @@ async def test_my_api_connector_connection(
         actor=actor,
         connector_id=connector_id,
         body=body,
+    )
+
+
+@router.get("/{connector_id}/connections", response_model=UserIntegrationConnectionSummaryListResponse)
+async def list_api_connector_connections(
+    connector_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_MANAGE)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.list_api_connector_connections(actor=actor, connector_id=connector_id)
+
+
+@router.get(
+    "/{connector_id}/connections/users/{user_id}",
+    response_model=UserIntegrationConnectionResponse,
+)
+async def get_user_api_connector_connection(
+    connector_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_MANAGE)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.get_user_connection_api_connector(
+        actor=actor,
+        binding_user_id=user_id,
+        connector_id=connector_id,
+    )
+
+
+@router.put(
+    "/{connector_id}/connections/users/{user_id}",
+    response_model=UserIntegrationConnectionResponse,
+)
+async def admin_upsert_user_api_connector_connection(
+    connector_id: int,
+    user_id: int,
+    body: UserIntegrationConnectionUpsertRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_MANAGE)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.admin_upsert_api_connector_connection(
+        actor=actor,
+        target_user_id=user_id,
+        connector_id=connector_id,
+        body=body,
+    )
+
+
+@router.delete(
+    "/{connector_id}/connections/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def admin_delete_user_api_connector_connection(
+    connector_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_MANAGE)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    await cred_service.admin_disconnect_api_connector(
+        actor=actor,
+        target_user_id=user_id,
+        connector_id=connector_id,
+    )
+
+
+@router.post(
+    "/{connector_id}/connections/users/{user_id}/test",
+    response_model=UserIntegrationConnectionTestResponse,
+)
+async def admin_test_user_api_connector_connection(
+    connector_id: int,
+    user_id: int,
+    body: UserIntegrationConnectionUpsertRequest | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_MANAGE)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.test_api_connector_connection(
+        actor=actor,
+        connector_id=connector_id,
+        body=body,
+        binding_user_id=user_id,
     )
 
 

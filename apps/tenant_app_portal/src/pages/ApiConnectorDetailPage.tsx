@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Trans } from 'react-i18next'
 
+import AdminUserConnectionsSection from '@/components/AdminUserConnectionsSection'
 import ContainerDetailHeader from '@/components/ContainerDetailHeader'
 import ListDetailInlineNotice from '@/components/ListDetailInlineNotice'
 import ListDetailToolbar from '@/components/ListDetailToolbar'
@@ -14,7 +15,10 @@ import OpenApiMetaPanel from '@/components/OpenApiMetaPanel'
 import PageStatsActionBar from '@/components/PageStatsActionBar'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { useAuth } from '@/hooks/useAuth'
 import { useApiConnectors } from '@/hooks/useApiConnectors'
+import { actionRules } from '@/lib/permissionRules'
 import { useNotification } from '@/hooks/useNotification'
 import type { ApiOperation, ApiOperationCallResponse } from '@/lib/apiConnectorApi'
 import { Braces, Cable, Info, Plus, RefreshCw, TriangleAlert, Upload } from 'lucide-react'
@@ -75,6 +79,8 @@ i18n.addResourceBundle('en', 'translation', {
     userCredentialsExpiredTitle: 'API credentials expired',
     userCredentialsExpired:
       'Reconnect via <1>Reconnect</1> on <0>API Connectors</0> and save new credentials.',
+    tabOperations: 'Operations',
+    tabUserAccess: 'User access',
   }
 }, true, true)
 
@@ -132,13 +138,20 @@ i18n.addResourceBundle('zh', 'translation', {
     userCredentialsExpiredTitle: 'API 凭证已过期',
     userCredentialsExpired:
       '在 <0>API 连接器</0> 列表的操作列点击 <1>重新连接</1> 并保存新凭证。',
+    tabOperations: 'API 操作',
+    tabUserAccess: '用户访问',
   }
 }, true, true)
+
+const TAB_OPERATIONS = 'operations'
+const TAB_USER_ACCESS = 'user-access'
 
 const EMPTY_JSON = '{\n  "path": {},\n  "query": {},\n  "header": {},\n  "body": null\n}'
 
 export default function ApiConnectorDetailPage() {
   const { t } = useTranslation()
+  const { hasAny } = useAuth()
+  const canProvisionUserConnections = hasAny(actionRules.canProvisionUserIntegrationConnections())
   const {
     connectors,
     operations,
@@ -163,6 +176,7 @@ export default function ApiConnectorDetailPage() {
 
   const { connectorId } = useParams<{ connectorId: string }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
 
   const [selectedOperation, setSelectedOperation] = useState<ApiOperation | null>(null)
 
@@ -458,7 +472,27 @@ export default function ApiConnectorDetailPage() {
 
   const connectionStatus = selectedConnector?.user_connection_status ?? 'not_connected'
   const isUserCredentialMode = (selectedConnector?.credential_mode ?? 'shared') === 'user'
-  const showConnectionWarn = Boolean(selectedConnector) && isUserCredentialMode && connectionStatus !== 'connected'
+  const showUserAccessTab =
+    Boolean(selectedConnector) && isUserCredentialMode && canProvisionUserConnections
+  const tabParam = searchParams.get('tab')
+  const activeTab =
+    showUserAccessTab && tabParam === TAB_USER_ACCESS ? TAB_USER_ACCESS : TAB_OPERATIONS
+
+  const setDetailTab = (tab: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (tab === TAB_OPERATIONS) {
+      next.delete('tab')
+    } else {
+      next.set('tab', tab)
+    }
+    setSearchParams(next, { replace: true })
+  }
+
+  const showConnectionWarn =
+    Boolean(selectedConnector) &&
+    isUserCredentialMode &&
+    connectionStatus !== 'connected' &&
+    activeTab === TAB_OPERATIONS
   const userCredentialAccessLink = (
     <Link
       key="ac-list"
@@ -466,6 +500,205 @@ export default function ApiConnectorDetailPage() {
       className="font-medium text-foreground underline underline-offset-2"
     />
   )
+
+  const operationsPanel =
+    selectedConnector == null ? null : (
+      <div className="space-y-4">
+        {showConnectionWarn ? (
+          <ListDetailInlineNotice
+            tone="warn"
+            icon={<TriangleAlert className="text-amber-700 dark:text-amber-400" aria-hidden />}
+            title={t(
+              connectionStatus === 'expired'
+                ? 'apiConnectorDetail.userCredentialsExpiredTitle'
+                : 'apiConnectorDetail.userCredentialsNotConnectedTitle'
+            )}
+          >
+            <Trans
+              i18nKey={
+                connectionStatus === 'expired'
+                  ? 'apiConnectorDetail.userCredentialsExpired'
+                  : 'apiConnectorDetail.userCredentialsNotConnected'
+              }
+              components={[
+                userCredentialAccessLink,
+                <span key="action" className="font-medium text-foreground" />,
+              ]}
+            />
+          </ListDetailInlineNotice>
+        ) : null}
+        <PageStatsActionBar
+          stats={
+            <>
+              <div className="flex items-center gap-2">
+                <Braces className="h-4 w-4 text-muted-foreground" />
+                <span className="text-sm text-muted-foreground">{t('apiConnectorDetail.pathCount')}:</span>
+                <span className="text-lg font-semibold tabular-nums">{operationStats.path_count}</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Cable className="h-4 w-4 text-muted-foreground" />
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm text-muted-foreground">{t('apiConnectorDetail.apiTotal')}:</span>
+                    <Popover>
+                      <PopoverTrigger asChild>
+                        <button
+                          type="button"
+                          className="text-lg font-semibold tabular-nums underline decoration-dotted underline-offset-4"
+                          title={t('apiConnectorDetail.viewApiDistribution')}
+                        >
+                          {operationStats.total}
+                        </button>
+                      </PopoverTrigger>
+                      <PopoverContent className="w-64 p-3" align="start">
+                        <div className="space-y-3 text-sm">
+                          <div className="font-medium">{t('apiConnectorDetail.apiDistribution')}</div>
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">{t('apiConnectorDetail.byStatus')}</div>
+                            <div className="space-y-1 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span>{t('apiConnectorDetail.statusActive')}</span>
+                                <span className="font-medium">{operationStats.active}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>{t('apiConnectorDetail.statusDisabled')}</span>
+                                <span className="font-medium">{operationStats.disabled}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>{t('apiConnectorDetail.statusStale')}</span>
+                                <span className="font-medium">{operationStats.stale}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <div>
+                            <div className="mb-1 text-xs text-muted-foreground">{t('apiConnectorDetail.bySource')}</div>
+                            <div className="space-y-1 text-xs">
+                              <div className="flex items-center justify-between">
+                                <span>{t('apiConnectorDetail.sourceManual')}</span>
+                                <span className="font-medium">{operationStats.manual}</span>
+                              </div>
+                              <div className="flex items-center justify-between">
+                                <span>{t('apiConnectorDetail.sourceImported')}</span>
+                                <span className="font-medium">{operationStats.imported}</span>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      </PopoverContent>
+                    </Popover>
+                  </div>
+                </div>
+              </div>
+            </>
+          }
+          statsClassName="gap-4"
+        />
+
+        <OpenApiMetaPanel metadata={selectedConnector.schema_metadata ?? {}} />
+        <ImportOpenApiDialog
+          open={importSchemaDialogOpen}
+          onOpenChange={setImportSchemaDialogOpen}
+          disabled={loading}
+          onImport={(content) => handleSyncSchema(content)}
+        />
+        <ListDetailToolbar
+          searchQuery={searchQuery}
+          searchPlaceholder={t('apiConnectorDetail.searchOperations')}
+          onSearchQueryChange={setSearchQuery}
+          onClearSearchQuery={() => {
+            setSearchQuery('')
+            setAppliedQuery('')
+            setCurrentPage(1)
+          }}
+          onSearchSubmit={() => {
+            void handleSearchOperations()
+          }}
+          primaryAction={{
+            label: t('apiConnectorDetail.addApi'),
+            onClick: () => setAddOperationDialogOpen(true),
+            icon: Plus,
+            disabled: loading,
+          }}
+          overflowItems={[
+            {
+              label: t('common.refresh'),
+              icon: RefreshCw,
+              onClick: () => {
+                void handleRefresh()
+              },
+            },
+            selectedConnector.schema_source_type === 'openapi_upload'
+              ? {
+                  label: t('apiConnectorDetail.importOpenApi'),
+                  icon: Upload,
+                  onClick: handleImportOpenApi,
+                }
+              : {
+                  label: t('apiConnectorDetail.syncSchema'),
+                  icon: RefreshCw,
+                  onClick: handleSyncSchemaClick,
+                },
+          ]}
+        />
+        <ManualOperationDialog
+          mode="create"
+          open={addOperationDialogOpen}
+          onOpenChange={setAddOperationDialogOpen}
+          disabled={loading}
+          onSubmit={handleAddManualOperation}
+        />
+        <ApiOperationTable
+          operations={operations}
+          selectedOperationUid={selectedOperation?.operation_uid}
+          onSelectOperation={setSelectedOperation}
+          onTestOperation={handleOpenOperationTest}
+          onToggleOperationStatus={(operation) => {
+            void handleToggleOperationStatus(operation)
+          }}
+          onEditManualOperation={(operation) => {
+            handleStartEditManualOperation(operation)
+          }}
+          onDeleteManualOperation={(operation) => {
+            void handleDeleteManualOperationFromRow(operation)
+          }}
+          operationsPage={operationsPage}
+          operationsPageSize={operationsPageSize}
+          operationsTotal={operationsTotal}
+          operationsTotalPages={operationsTotalPages}
+          onPageChange={setCurrentPage}
+        />
+
+        {selectedOperation?.source === 'manual' && (
+          <ManualOperationDialog
+            mode="edit"
+            open={editOperationDialogOpen}
+            onOpenChange={setEditOperationDialogOpen}
+            disabled={loading}
+            initialValues={{
+              method: selectedOperation.method,
+              pathTemplate: selectedOperation.path_template,
+              summary: selectedOperation.summary ?? '',
+              operationId: selectedOperation.operation_id ?? '',
+              requestSchemaText: JSON.stringify(selectedOperation.request_schema ?? {}, null, 2),
+              responseSchemaText: JSON.stringify(selectedOperation.response_schema ?? {}, null, 2),
+            }}
+            onSubmit={handleSaveManualOperation}
+          />
+        )}
+
+        <ApiOperationCallDialog
+          open={callDialogOpen}
+          onOpenChange={setCallDialogOpen}
+          connectorName={selectedConnector.name}
+          selectedOperation={selectedOperation}
+          loading={loading}
+          callParametersText={callParametersText}
+          onCallParametersChange={setCallParametersText}
+          callResult={callResult}
+          onCallOperation={handleCallOperation}
+        />
+      </div>
+    )
 
   return (
     <div className="space-y-4">
@@ -475,32 +708,7 @@ export default function ApiConnectorDetailPage() {
         title={selectedConnector?.name ?? t('apiConnectorDetail.loadingConnector')}
         meta={
           selectedConnector ? (
-            <div className="space-y-3 pt-1">
-              <span className="font-mono text-xs">{selectedConnector.base_url}</span>
-              {showConnectionWarn ? (
-                <ListDetailInlineNotice
-                  tone="warn"
-                  icon={<TriangleAlert className="text-amber-700 dark:text-amber-400" aria-hidden />}
-                  title={t(
-                    connectionStatus === 'expired'
-                      ? 'apiConnectorDetail.userCredentialsExpiredTitle'
-                      : 'apiConnectorDetail.userCredentialsNotConnectedTitle'
-                  )}
-                >
-                  <Trans
-                    i18nKey={
-                      connectionStatus === 'expired'
-                        ? 'apiConnectorDetail.userCredentialsExpired'
-                        : 'apiConnectorDetail.userCredentialsNotConnected'
-                    }
-                    components={[
-                      userCredentialAccessLink,
-                      <span key="action" className="font-medium text-foreground" />,
-                    ]}
-                  />
-                </ListDetailInlineNotice>
-              ) : null}
-            </div>
+            <span className="font-mono text-xs text-muted-foreground pt-1">{selectedConnector.base_url}</span>
           ) : null
         }
       />
@@ -518,186 +726,26 @@ export default function ApiConnectorDetailPage() {
         </Alert>
       ) : (
         <>
-          <div className="space-y-4">
-            <PageStatsActionBar
-              stats={
-                <>
-                  <div className="flex items-center gap-2">
-                    <Braces className="h-4 w-4 text-muted-foreground" />
-                    <span className="text-sm text-muted-foreground">{t('apiConnectorDetail.pathCount')}:</span>
-                    <span className="text-lg font-semibold tabular-nums">{operationStats.path_count}</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Cable className="h-4 w-4 text-muted-foreground" />
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm text-muted-foreground">{t('apiConnectorDetail.apiTotal')}:</span>
-                        <Popover>
-                          <PopoverTrigger asChild>
-                            <button
-                              type="button"
-                              className="text-lg font-semibold tabular-nums underline decoration-dotted underline-offset-4"
-                              title={t('apiConnectorDetail.viewApiDistribution')}
-                            >
-                              {operationStats.total}
-                            </button>
-                          </PopoverTrigger>
-                          <PopoverContent className="w-64 p-3" align="start">
-                            <div className="space-y-3 text-sm">
-                              <div className="font-medium">{t('apiConnectorDetail.apiDistribution')}</div>
-                              <div>
-                                <div className="mb-1 text-xs text-muted-foreground">{t('apiConnectorDetail.byStatus')}</div>
-                                <div className="space-y-1 text-xs">
-                                  <div className="flex items-center justify-between">
-                                    <span>{t('apiConnectorDetail.statusActive')}</span>
-                                    <span className="font-medium">{operationStats.active}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span>{t('apiConnectorDetail.statusDisabled')}</span>
-                                    <span className="font-medium">{operationStats.disabled}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span>{t('apiConnectorDetail.statusStale')}</span>
-                                    <span className="font-medium">{operationStats.stale}</span>
-                                  </div>
-                                </div>
-                              </div>
-                              <div>
-                                <div className="mb-1 text-xs text-muted-foreground">{t('apiConnectorDetail.bySource')}</div>
-                                <div className="space-y-1 text-xs">
-                                  <div className="flex items-center justify-between">
-                                    <span>{t('apiConnectorDetail.sourceManual')}</span>
-                                    <span className="font-medium">{operationStats.manual}</span>
-                                  </div>
-                                  <div className="flex items-center justify-between">
-                                    <span>{t('apiConnectorDetail.sourceImported')}</span>
-                                    <span className="font-medium">{operationStats.imported}</span>
-                                  </div>
-                                </div>
-                              </div>
-                            </div>
-                          </PopoverContent>
-                        </Popover>
-                      </div>
-                    </div>
-                  </div>
-                </>
-              }
-              statsClassName="gap-4"
-            />
-
-            <OpenApiMetaPanel metadata={selectedConnector.schema_metadata ?? {}} />
-            <ImportOpenApiDialog
-              open={importSchemaDialogOpen}
-              onOpenChange={setImportSchemaDialogOpen}
-              disabled={loading}
-              onImport={(content) => handleSyncSchema(content)}
-            />
-            <ListDetailToolbar
-              searchQuery={searchQuery}
-              searchPlaceholder={t('apiConnectorDetail.searchOperations')}
-              onSearchQueryChange={setSearchQuery}
-              onClearSearchQuery={() => {
-                setSearchQuery('')
-                setAppliedQuery('')
-                setCurrentPage(1)
-              }}
-              onSearchSubmit={() => {
-                void handleSearchOperations()
-              }}
-              primaryAction={{
-                label: t('apiConnectorDetail.addApi'),
-                onClick: () => setAddOperationDialogOpen(true),
-                icon: Plus,
-                disabled: loading,
-              }}
-              overflowItems={[
-                {
-                  label: t('common.refresh'),
-                  icon: RefreshCw,
-                  onClick: () => {
-                    void handleRefresh()
-                  },
-                },
-                selectedConnector.schema_source_type === 'openapi_upload'
-                  ? {
-                      label: t('apiConnectorDetail.importOpenApi'),
-                      icon: Upload,
-                      onClick: handleImportOpenApi,
-                    }
-                  : {
-                      label: t('apiConnectorDetail.syncSchema'),
-                      icon: RefreshCw,
-                      onClick: handleSyncSchemaClick,
-                    },
-              ]}
-            />
-            <ManualOperationDialog
-              mode="create"
-              open={addOperationDialogOpen}
-              onOpenChange={setAddOperationDialogOpen}
-              disabled={loading}
-              onSubmit={handleAddManualOperation}
-            />
-            <ApiOperationTable
-              operations={operations}
-              selectedOperationUid={selectedOperation?.operation_uid}
-              onSelectOperation={setSelectedOperation}
-              onTestOperation={handleOpenOperationTest}
-              onToggleOperationStatus={(operation) => {
-                void handleToggleOperationStatus(operation)
-              }}
-              onEditManualOperation={(operation) => {
-                handleStartEditManualOperation(operation)
-              }}
-              onDeleteManualOperation={(operation) => {
-                void handleDeleteManualOperationFromRow(operation)
-              }}
-              operationsPage={operationsPage}
-              operationsPageSize={operationsPageSize}
-              operationsTotal={operationsTotal}
-              operationsTotalPages={operationsTotalPages}
-              onPageChange={setCurrentPage}
-            />
-
-            {selectedOperation?.source === 'manual' && (
-              <ManualOperationDialog
-                mode="edit"
-                open={editOperationDialogOpen}
-                onOpenChange={setEditOperationDialogOpen}
-                disabled={loading}
-                initialValues={{
-                  method: selectedOperation.method,
-                  pathTemplate: selectedOperation.path_template,
-                  summary: selectedOperation.summary ?? '',
-                  operationId: selectedOperation.operation_id ?? '',
-                  requestSchemaText: JSON.stringify(
-                    selectedOperation.request_schema ?? {},
-                    null,
-                    2
-                  ),
-                  responseSchemaText: JSON.stringify(
-                    selectedOperation.response_schema ?? {},
-                    null,
-                    2
-                  ),
-                }}
-                onSubmit={handleSaveManualOperation}
-              />
-            )}
-
-            <ApiOperationCallDialog
-              open={callDialogOpen}
-              onOpenChange={setCallDialogOpen}
-              connectorName={selectedConnector.name}
-              selectedOperation={selectedOperation}
-              loading={loading}
-              callParametersText={callParametersText}
-              onCallParametersChange={setCallParametersText}
-              callResult={callResult}
-              onCallOperation={handleCallOperation}
-            />
-          </div>
+          {showUserAccessTab ? (
+            <Tabs value={activeTab} onValueChange={setDetailTab} className="space-y-3">
+              <TabsList>
+                <TabsTrigger value={TAB_OPERATIONS}>{t('apiConnectorDetail.tabOperations')}</TabsTrigger>
+                <TabsTrigger value={TAB_USER_ACCESS}>{t('apiConnectorDetail.tabUserAccess')}</TabsTrigger>
+              </TabsList>
+              <TabsContent value={TAB_OPERATIONS} className="space-y-3 mt-3">
+                {operationsPanel}
+              </TabsContent>
+              <TabsContent value={TAB_USER_ACCESS} className="mt-3">
+                <AdminUserConnectionsSection
+                  kind="api_connector"
+                  apiConnector={selectedConnector}
+                  embeddedInTab
+                />
+              </TabsContent>
+            </Tabs>
+          ) : (
+            operationsPanel
+          )}
         </>
       )}
     </div>
