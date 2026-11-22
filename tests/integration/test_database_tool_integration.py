@@ -2,6 +2,9 @@
 
 These tests execute tools through the same execution path as the agent
 (direct tool invocation with RunnableConfig), without HTTP.
+
+Real provisioned analytics PostgreSQL (URL encoding, no DB manager mocks):
+see ``tests/integration/analytics_db/test_agent_tools.py``.
 """
 
 import json

@@ -119,11 +119,14 @@ Use **FastAPI TestClient** for router unit tests (no running server). Use `httpx
 ## Integration tests
 
 **Location:** `tests/integration/`  
-**Prerequisites:** Docker running (testcontainers manages Postgres/Chroma automatically)
+**Prerequisites:** Docker running (testcontainers manages Postgres/Chroma automatically).  
+**Analytics DB provisioning tests** (`tests/integration/analytics_db/`) also require the **`psql` CLI** (same as `tenant_cli` / `PostgreSQLProvisioningExecutor`). CI installs `postgresql-client` on the Backend job; locally: `psql --version` (see [dev-guide.md](dev-guide.md)).
 
 ```bash
 docker info                    # verify Docker
+psql --version                 # required for tests/integration/analytics_db/
 uv run pytest tests/integration/ -v
+uv run pytest tests/integration/analytics_db/ -v   # provisioned analytics slice
 ```
 
 Containers are created per session and torn down automatically. Each test uses SAVEPOINT rollback — no manual cleanup.

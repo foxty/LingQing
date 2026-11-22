@@ -76,6 +76,9 @@ jobs:
           uv sync --all-groups
           npm ci
 
+      - name: Install PostgreSQL client
+        run: sudo apt-get update && sudo apt-get install -y postgresql-client
+
       - name: Lint
         run: npx nx run root:lint
 

@@ -180,12 +180,15 @@ def pg_container():
                     raise TimeoutError(f"Postgres port {host}:{port} not accessible after 30 s")
                 time.sleep(0.5)
 
-        # ── Patch env-vars so app modules pick up the test DB coordinates ────
-        os.environ["TENANT_APP_DB_HOST"] = host
-        os.environ["TENANT_APP_DB_PORT"] = str(port)
-        os.environ["TENANT_APP_DB_USER"] = pg.username
-        os.environ["TENANT_APP_DB_PASSWORD"] = pg.password
-        os.environ["TENANT_APP_DB_NAME"] = pg.dbname
+        # ── Patch env-vars so app modules + psql provisioning use testcontainers only ─
+        # PostgreSQLProvisioningExecutor prefers TENANT_MANAGER_DB_* when set (.env.local);
+        # mirror app + manager to the container superuser so integration never hits local PG.
+        for prefix in ("TENANT_APP_DB", "TENANT_MANAGER_DB"):
+            os.environ[f"{prefix}_HOST"] = host
+            os.environ[f"{prefix}_PORT"] = str(port)
+            os.environ[f"{prefix}_USER"] = pg.username
+            os.environ[f"{prefix}_PASSWORD"] = pg.password
+            os.environ[f"{prefix}_NAME"] = pg.dbname
 
         # ── Create schema via Alembic migrations to mirror production behavior ─
         _run_tenant_app_migrations(
