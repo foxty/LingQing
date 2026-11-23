@@ -142,7 +142,7 @@ Record operations. Two layouts only — **list index** and **list detail**.
 
 **List index:** Page header = identity only (`text-2xl` title + muted description, **no buttons**). Toolbar below: search left, refresh outline + one solid Create/Add right (`ListIndexToolbar`). Row actions: `ContainerRowActions` (Share/Tags/Edit/Delete). Optional filter/tabs between toolbar and table.
 
-**List detail:** `ContainerDetailHeader` = breadcrumb + title + meta only (no CTAs). Toolbar: search, batch outline when selected, one solid Upload/Add, ⋯ for infrequent ops (`ListDetailToolbar`). Optional status bar (e.g. Drive sync) between header and toolbar — no duplicate refresh in header and bar. Container catalog actions stay on parent index only.
+**List detail:** `ContainerDetailHeader` = breadcrumb only: parent link (`text-sm`), chevron, **leaf** (`h1`, `text-xl` semibold) = current entity name; optional `titleAddon` on the row; optional **info** popover for `meta` (type, URL, description — not a second headline). No CTAs in the header. Toolbar: search, batch outline when selected, one solid Upload/Add, ⋯ for infrequent ops (`ListDetailToolbar`). Optional status bar (e.g. Drive sync) between header and toolbar — no duplicate refresh in header and bar. Container catalog actions stay on parent index only.
 
 **Parent → child routing:** parent = list index, child = list detail; two routes when table is wide (≥~6 cols). No persistent container sidebar.
 

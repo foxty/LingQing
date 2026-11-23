@@ -129,6 +129,7 @@ async def byot_connections_setup(async_db_session: AsyncSession, mock_jwt_token)
 
     yield {
         "tenant_id": tenant.id,
+        "tenant_name": tenant.name,
         "user_id": user.id,
         "data_source_id": data_source.id,
         "token": token,
@@ -220,3 +221,107 @@ async def test_connections_me_test_without_binding_returns_integration_not_conne
     assert response.status_code == 422, response.text
     body = response.json()
     assert body.get("code") == "INTEGRATION_NOT_CONNECTED"
+
+
+@pytest.mark.asyncio
+async def test_admin_provisions_user_connection(byot_connections_setup, mock_jwt_token, mock_warehouse_test):
+    client = TestClient(app)
+    member_headers = _auth_headers(byot_connections_setup["token"])
+    ds_id = byot_connections_setup["data_source_id"]
+    member_id = byot_connections_setup["user_id"]
+
+    async with byot_connections_setup["session_factory"]() as session:
+        admin = User(
+            username="byot_admin",
+            email="admin@test.local",
+            hashed_password="$2b$12$hAjROif0svlKIjI.K5IwGugZ554XGSE44FPpq.1/9ZdSNr23Djvn.",
+            tenant_id=byot_connections_setup["tenant_id"],
+            role="admin",
+        )
+        session.add(admin)
+        await session.flush()
+        session.add(
+            TenantMembership(
+                tenant_id=byot_connections_setup["tenant_id"],
+                user_id=admin.id,
+                status="active",
+            )
+        )
+        await session.commit()
+        admin_id = admin.id
+
+    admin_token = mock_jwt_token(
+        user_id=admin_id,
+        username="byot_admin",
+        role="admin",
+        tenant_id=byot_connections_setup["tenant_id"],
+        tenant_name=byot_connections_setup["tenant_name"],
+    )
+    admin_headers = _auth_headers(admin_token)
+
+    put = client.put(
+        f"/data-sources/{ds_id}/connections/users/{member_id}",
+        headers=admin_headers,
+        json={
+            "auth_type": "db_password",
+            "secrets": {"password": "admin-set-secret", "username": "bob"},
+            "account_label": "it",
+        },
+    )
+    assert put.status_code == 200, put.text
+    body = put.json()
+    assert body["status"] == "connected"
+    assert body["account_label"] == "it"
+
+    member_get = client.get(f"/data-sources/{ds_id}/connections/me", headers=member_headers)
+    assert member_get.status_code == 200
+    assert member_get.json()["status"] == "connected"
+
+    listed = client.get(f"/data-sources/{ds_id}/connections", headers=admin_headers)
+    assert listed.status_code == 200, listed.text
+    items = listed.json()["items"]
+    assert any(item["user_id"] == member_id and item["status"] == "connected" for item in items)
+    assert any(item.get("provisioned_by_user_id") == admin_id for item in items)
+
+
+@pytest.mark.asyncio
+async def test_admin_provision_rejects_user_not_in_tenant(byot_connections_setup, mock_jwt_token):
+    client = TestClient(app)
+    ds_id = byot_connections_setup["data_source_id"]
+
+    async with byot_connections_setup["session_factory"]() as session:
+        admin = User(
+            username="byot_admin2",
+            email="admin2@test.local",
+            hashed_password="$2b$12$hAjROif0svlKIjI.K5IwGugZ554XGSE44FPpq.1/9ZdSNr23Djvn.",
+            tenant_id=byot_connections_setup["tenant_id"],
+            role="admin",
+        )
+        session.add(admin)
+        await session.flush()
+        session.add(
+            TenantMembership(
+                tenant_id=byot_connections_setup["tenant_id"],
+                user_id=admin.id,
+                status="active",
+            )
+        )
+        await session.commit()
+        admin_id = admin.id
+
+    admin_token = mock_jwt_token(
+        user_id=admin_id,
+        username="byot_admin2",
+        role="admin",
+        tenant_id=byot_connections_setup["tenant_id"],
+        tenant_name=byot_connections_setup["tenant_name"],
+    )
+    put = client.put(
+        f"/data-sources/{ds_id}/connections/users/{999_999}",
+        headers=_auth_headers(admin_token),
+        json={
+            "auth_type": "db_password",
+            "secrets": {"password": "x", "username": "bob"},
+        },
+    )
+    assert put.status_code == 404, put.text

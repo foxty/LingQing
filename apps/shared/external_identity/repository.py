@@ -10,7 +10,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import ExternalIdentity, TenantMembership, User
-from apps.tenant_app_service.auth.domain import MembershipStatus
+from apps.shared.domain.membership import MembershipStatus
 
 
 class ExternalIdentityRepository:

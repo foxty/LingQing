@@ -4,6 +4,7 @@ import type { PaginatedResponse } from '@/lib/documentsApi'
 import type { PaginatedListResponse } from '@/lib/paginatedList'
 import type {
   UserIntegrationConnection,
+  UserIntegrationConnectionSummary,
   UserIntegrationConnectionUpsert,
 } from '@/lib/userIntegrationConnection'
 
@@ -294,6 +295,56 @@ export async function testMyApiConnectorConnection(
 ): Promise<{ success: boolean; message: string }> {
   const response = await api.post<{ success: boolean; message: string }>(
     `/api-connectors/${connectorId}/connections/me/test`,
+    body ?? undefined
+  )
+  return response.data
+}
+
+export async function listApiConnectorUserConnections(
+  connectorId: number
+): Promise<UserIntegrationConnectionSummary[]> {
+  const response = await api.get<{ items: UserIntegrationConnectionSummary[] }>(
+    `/api-connectors/${connectorId}/connections`
+  )
+  return response.data.items
+}
+
+export async function getUserApiConnectorConnection(
+  connectorId: number,
+  userId: number
+): Promise<UserIntegrationConnection> {
+  const response = await api.get<UserIntegrationConnection>(
+    `/api-connectors/${connectorId}/connections/users/${userId}`
+  )
+  return response.data
+}
+
+export async function upsertUserApiConnectorConnection(
+  connectorId: number,
+  userId: number,
+  body: UserIntegrationConnectionUpsert
+): Promise<UserIntegrationConnection> {
+  const response = await api.put<UserIntegrationConnection>(
+    `/api-connectors/${connectorId}/connections/users/${userId}`,
+    body
+  )
+  return response.data
+}
+
+export async function deleteUserApiConnectorConnection(
+  connectorId: number,
+  userId: number
+): Promise<void> {
+  await api.delete(`/api-connectors/${connectorId}/connections/users/${userId}`)
+}
+
+export async function testUserApiConnectorConnection(
+  connectorId: number,
+  userId: number,
+  body?: UserIntegrationConnectionUpsert
+): Promise<{ success: boolean; message: string }> {
+  const response = await api.post<{ success: boolean; message: string }>(
+    `/api-connectors/${connectorId}/connections/users/${userId}/test`,
     body ?? undefined
   )
   return response.data

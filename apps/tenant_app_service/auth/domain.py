@@ -10,12 +10,11 @@ from typing import Protocol
 from apps.shared.auth.membership_access import (
     LOGIN_BLOCKED_ACCOUNT_DISABLED,
     LOGIN_BLOCKED_MEMBERSHIP_INACTIVE,
-    MembershipStatus,
-    UserAccountStatus,
     login_blocked_reason,
 )
 from apps.shared.core.exceptions import ValidationError
 from apps.shared.domain.base_domain_model import BaseDomainModel
+from apps.shared.domain.membership import MembershipStatus, UserAccountStatus
 from apps.tenant_app_service.auth.user_display_preferences import normalize_datetime_format
 
 

@@ -2,15 +2,19 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 
 from apps.shared.core.exceptions import IntegrationNotConnectedError, ResourceNotFoundError
-from apps.shared.db.models import ApiConnector, DataSource
+from apps.shared.db.models import ApiConnector, DataSource, User
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
 from apps.shared.external_systems.credentials.adapters import redact_user_integration_secrets_for_api
 from apps.shared.external_systems.credentials.dtos import (
     UserIntegrationConnectionResponse,
+    UserIntegrationConnectionSummary,
+    UserIntegrationConnectionSummaryListResponse,
     UserIntegrationConnectionTestResponse,
     UserIntegrationConnectionUpsertRequest,
 )
@@ -28,6 +32,7 @@ from apps.shared.external_systems.domain.types import (
     USER_CONNECTION_NOT_CONNECTED,
     IntegrationPurpose,
 )
+from apps.shared.tenant.membership_repository import TenantMembershipRepository
 from apps.shared.utils.field_cipher import FieldCipher
 from apps.shared.utils.logger import get_logger
 
@@ -38,12 +43,27 @@ def _non_empty_str(value: object) -> bool:
     return isinstance(value, str) and bool(value.strip())
 
 
+def _actor_for_binding(actor: ActorContext, binding_user_id: int) -> ActorContext:
+    return ActorContext(
+        tenant_id=actor.tenant_id,
+        user_id=binding_user_id,
+        user_role=actor.user_role,
+    )
+
+
 class UserIntegrationCredentialService:
     def __init__(self, db_session, cipher: FieldCipher | None = None):
         self.db_session = db_session
         self.cipher = cipher or FieldCipher()
         self.repo = UserIntegrationCredentialRepository(db_session)
+        self.membership_repo = TenantMembershipRepository(db_session)
         self.resolver = IntegrationCredentialResolver(db_session, cipher=self.cipher)
+
+    async def _require_active_tenant_member(self, *, tenant_id: int, user_id: int) -> User:
+        user = await self.membership_repo.get_active_member_user(tenant_id=tenant_id, user_id=user_id)
+        if user is None:
+            raise ResourceNotFoundError(f"User {user_id} not found")
+        return user
 
     async def get_my_connection_data_source(
         self,
@@ -51,12 +71,10 @@ class UserIntegrationCredentialService:
         actor: ActorContext,
         data_source_id: int,
     ) -> UserIntegrationConnectionResponse:
-        ds = await self._get_data_source(actor.tenant_id, data_source_id)
-        return await self._status_response(
+        return await self.get_user_connection_data_source(
             actor=actor,
-            resource_type=RESOURCE_TYPE_DATA_SOURCE,
-            resource_id=ds.id,
-            credential_mode=getattr(ds, "credential_mode", None) or "shared",
+            binding_user_id=actor.user_id,
+            data_source_id=data_source_id,
         )
 
     async def get_my_connection_api_connector(
@@ -65,9 +83,41 @@ class UserIntegrationCredentialService:
         actor: ActorContext,
         connector_id: int,
     ) -> UserIntegrationConnectionResponse:
+        return await self.get_user_connection_api_connector(
+            actor=actor,
+            binding_user_id=actor.user_id,
+            connector_id=connector_id,
+        )
+
+    async def get_user_connection_data_source(
+        self,
+        *,
+        actor: ActorContext,
+        binding_user_id: int,
+        data_source_id: int,
+    ) -> UserIntegrationConnectionResponse:
+        await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=binding_user_id)
+        ds = await self._get_data_source(actor.tenant_id, data_source_id)
+        return await self._status_response(
+            actor=actor,
+            binding_user_id=binding_user_id,
+            resource_type=RESOURCE_TYPE_DATA_SOURCE,
+            resource_id=ds.id,
+            credential_mode=getattr(ds, "credential_mode", None) or "shared",
+        )
+
+    async def get_user_connection_api_connector(
+        self,
+        *,
+        actor: ActorContext,
+        binding_user_id: int,
+        connector_id: int,
+    ) -> UserIntegrationConnectionResponse:
+        await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=binding_user_id)
         conn = await self._get_api_connector(actor.tenant_id, connector_id)
         return await self._status_response(
             actor=actor,
+            binding_user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=conn.id,
             credential_mode=getattr(conn, "credential_mode", None) or "shared",
@@ -79,12 +129,15 @@ class UserIntegrationCredentialService:
         actor: ActorContext,
         data_source_id: int,
         body: UserIntegrationConnectionUpsertRequest,
+        binding_user_id: int | None = None,
+        provisioned_by_user_id: int | None = None,
     ) -> UserIntegrationConnectionResponse:
+        binding_user_id = actor.user_id if binding_user_id is None else binding_user_id
         ds = await self._get_data_source(actor.tenant_id, data_source_id)
         self._require_user_mode(ds.credential_mode, RESOURCE_TYPE_DATA_SOURCE)
         merged_secrets = await self._merge_upsert_secrets(
             tenant_id=actor.tenant_id,
-            user_id=actor.user_id,
+            user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             resource_id=ds.id,
             incoming=body.secrets,
@@ -96,17 +149,31 @@ class UserIntegrationCredentialService:
             data_source_type=ds.type,
         )
         secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        now = datetime.now(UTC)
+        provision_kwargs: dict = {}
+        if provisioned_by_user_id is not None:
+            provision_kwargs = {
+                "provisioned_by_user_id": provisioned_by_user_id,
+                "provisioned_at": now,
+            }
+        elif binding_user_id == actor.user_id:
+            provision_kwargs = {
+                "provisioned_by_user_id": None,
+                "provisioned_at": None,
+            }
         await self.repo.upsert_binding(
             tenant_id=actor.tenant_id,
-            user_id=actor.user_id,
+            user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             resource_id=ds.id,
             auth_type=body.auth_type,
             secrets_enc=secrets_enc,
             account_label=body.account_label,
+            **provision_kwargs,
         )
         return await self._status_response(
             actor=actor,
+            binding_user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             resource_id=ds.id,
             credential_mode=CREDENTIAL_MODE_USER,
@@ -118,12 +185,15 @@ class UserIntegrationCredentialService:
         actor: ActorContext,
         connector_id: int,
         body: UserIntegrationConnectionUpsertRequest,
+        binding_user_id: int | None = None,
+        provisioned_by_user_id: int | None = None,
     ) -> UserIntegrationConnectionResponse:
+        binding_user_id = actor.user_id if binding_user_id is None else binding_user_id
         conn = await self._get_api_connector(actor.tenant_id, connector_id)
         self._require_user_mode(conn.credential_mode, RESOURCE_TYPE_API_CONNECTOR)
         merged_secrets = await self._merge_upsert_secrets(
             tenant_id=actor.tenant_id,
-            user_id=actor.user_id,
+            user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=conn.id,
             incoming=body.secrets,
@@ -135,20 +205,86 @@ class UserIntegrationCredentialService:
             connector_auth_type=conn.auth_type,
         )
         secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        now = datetime.now(UTC)
+        provision_kwargs: dict = {}
+        if provisioned_by_user_id is not None:
+            provision_kwargs = {
+                "provisioned_by_user_id": provisioned_by_user_id,
+                "provisioned_at": now,
+            }
+        elif binding_user_id == actor.user_id:
+            provision_kwargs = {
+                "provisioned_by_user_id": None,
+                "provisioned_at": None,
+            }
         await self.repo.upsert_binding(
             tenant_id=actor.tenant_id,
-            user_id=actor.user_id,
+            user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=conn.id,
             auth_type=body.auth_type,
             secrets_enc=secrets_enc,
             account_label=body.account_label,
+            **provision_kwargs,
         )
         return await self._status_response(
             actor=actor,
+            binding_user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=conn.id,
             credential_mode=CREDENTIAL_MODE_USER,
+        )
+
+    async def admin_upsert_data_source_connection(
+        self,
+        *,
+        actor: ActorContext,
+        target_user_id: int,
+        data_source_id: int,
+        body: UserIntegrationConnectionUpsertRequest,
+    ) -> UserIntegrationConnectionResponse:
+        await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=target_user_id)
+        logger.info(
+            "Admin provisioned data source user connection",
+            extra={
+                "tenant_id": actor.tenant_id,
+                "resource_id": data_source_id,
+                "binding_user_id": target_user_id,
+                "actor_user_id": actor.user_id,
+            },
+        )
+        return await self.upsert_data_source_connection(
+            actor=actor,
+            data_source_id=data_source_id,
+            body=body,
+            binding_user_id=target_user_id,
+            provisioned_by_user_id=actor.user_id,
+        )
+
+    async def admin_upsert_api_connector_connection(
+        self,
+        *,
+        actor: ActorContext,
+        target_user_id: int,
+        connector_id: int,
+        body: UserIntegrationConnectionUpsertRequest,
+    ) -> UserIntegrationConnectionResponse:
+        await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=target_user_id)
+        logger.info(
+            "Admin provisioned API connector user connection",
+            extra={
+                "tenant_id": actor.tenant_id,
+                "resource_id": connector_id,
+                "binding_user_id": target_user_id,
+                "actor_user_id": actor.user_id,
+            },
+        )
+        return await self.upsert_api_connector_connection(
+            actor=actor,
+            connector_id=connector_id,
+            body=body,
+            binding_user_id=target_user_id,
+            provisioned_by_user_id=actor.user_id,
         )
 
     async def disconnect_data_source(
@@ -156,12 +292,14 @@ class UserIntegrationCredentialService:
         *,
         actor: ActorContext,
         data_source_id: int,
+        binding_user_id: int | None = None,
     ) -> None:
+        binding_user_id = actor.user_id if binding_user_id is None else binding_user_id
         ds = await self._get_data_source(actor.tenant_id, data_source_id)
         self._require_user_mode(ds.credential_mode, RESOURCE_TYPE_DATA_SOURCE)
         await self.repo.delete_binding(
             tenant_id=actor.tenant_id,
-            user_id=actor.user_id,
+            user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             resource_id=ds.id,
         )
@@ -171,15 +309,55 @@ class UserIntegrationCredentialService:
         *,
         actor: ActorContext,
         connector_id: int,
+        binding_user_id: int | None = None,
     ) -> None:
+        binding_user_id = actor.user_id if binding_user_id is None else binding_user_id
         conn = await self._get_api_connector(actor.tenant_id, connector_id)
         self._require_user_mode(conn.credential_mode, RESOURCE_TYPE_API_CONNECTOR)
         await self.repo.delete_binding(
             tenant_id=actor.tenant_id,
-            user_id=actor.user_id,
+            user_id=binding_user_id,
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=conn.id,
         )
+
+    async def admin_disconnect_data_source(
+        self,
+        *,
+        actor: ActorContext,
+        target_user_id: int,
+        data_source_id: int,
+    ) -> None:
+        await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=target_user_id)
+        logger.info(
+            "Admin removed data source user connection",
+            extra={
+                "tenant_id": actor.tenant_id,
+                "resource_id": data_source_id,
+                "binding_user_id": target_user_id,
+                "actor_user_id": actor.user_id,
+            },
+        )
+        await self.disconnect_data_source(actor=actor, data_source_id=data_source_id, binding_user_id=target_user_id)
+
+    async def admin_disconnect_api_connector(
+        self,
+        *,
+        actor: ActorContext,
+        target_user_id: int,
+        connector_id: int,
+    ) -> None:
+        await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=target_user_id)
+        logger.info(
+            "Admin removed API connector user connection",
+            extra={
+                "tenant_id": actor.tenant_id,
+                "resource_id": connector_id,
+                "binding_user_id": target_user_id,
+                "actor_user_id": actor.user_id,
+            },
+        )
+        await self.disconnect_api_connector(actor=actor, connector_id=connector_id, binding_user_id=target_user_id)
 
     async def test_data_source_connection(
         self,
@@ -187,17 +365,22 @@ class UserIntegrationCredentialService:
         actor: ActorContext,
         data_source_id: int,
         body: UserIntegrationConnectionUpsertRequest | None = None,
+        binding_user_id: int | None = None,
     ) -> UserIntegrationConnectionTestResponse:
         from copy import deepcopy
 
         from apps.shared.utils.field_cipher import strip_sensitive_fields
 
+        binding_user_id = actor.user_id if binding_user_id is None else binding_user_id
+        if binding_user_id != actor.user_id:
+            await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=binding_user_id)
+        binding_actor = _actor_for_binding(actor, binding_user_id)
         ds = await self._get_data_source(actor.tenant_id, data_source_id)
         self._require_user_mode(ds.credential_mode, RESOURCE_TYPE_DATA_SOURCE)
         if body is not None:
             merged_secrets = await self._merge_upsert_secrets(
                 tenant_id=actor.tenant_id,
-                user_id=actor.user_id,
+                user_id=binding_user_id,
                 resource_type=RESOURCE_TYPE_DATA_SOURCE,
                 resource_id=ds.id,
                 incoming=body.secrets,
@@ -218,7 +401,7 @@ class UserIntegrationCredentialService:
         else:
             status, _ = await self.resolver.connection_status_for_actor(
                 tenant_id=actor.tenant_id,
-                user_id=actor.user_id,
+                user_id=binding_user_id,
                 resource_type=RESOURCE_TYPE_DATA_SOURCE,
                 resource_id=ds.id,
             )
@@ -229,7 +412,7 @@ class UserIntegrationCredentialService:
                 )
             resolved_config = await self.resolver.resolve_data_source_config(
                 data_source=ds,
-                actor=actor,
+                actor=binding_actor,
                 purpose=IntegrationPurpose.QUERY,
             )
         from apps.shared.external_systems.data_source.adapters import db_data_source_to_domain_with_connection
@@ -254,18 +437,23 @@ class UserIntegrationCredentialService:
         actor: ActorContext,
         connector_id: int,
         body: UserIntegrationConnectionUpsertRequest | None = None,
+        binding_user_id: int | None = None,
     ) -> UserIntegrationConnectionTestResponse:
         from copy import deepcopy
 
         from apps.shared.utils.field_cipher import strip_sensitive_fields
 
+        binding_user_id = actor.user_id if binding_user_id is None else binding_user_id
+        if binding_user_id != actor.user_id:
+            await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=binding_user_id)
+        binding_actor = _actor_for_binding(actor, binding_user_id)
         conn = await self._get_api_connector(actor.tenant_id, connector_id)
         self._require_user_mode(conn.credential_mode, RESOURCE_TYPE_API_CONNECTOR)
         try:
             if body is not None:
                 merged_secrets = await self._merge_upsert_secrets(
                     tenant_id=actor.tenant_id,
-                    user_id=actor.user_id,
+                    user_id=binding_user_id,
                     resource_type=RESOURCE_TYPE_API_CONNECTOR,
                     resource_id=conn.id,
                     incoming=body.secrets,
@@ -281,7 +469,11 @@ class UserIntegrationCredentialService:
                     sensitive_keys=API_CONNECTOR_USER_MODE_STRIP_KEYS,
                 )
                 auth_dict = {**template, **merged_secrets}
-                if not any(_non_empty_str(auth_dict.get(k)) for k in USER_INTEGRATION_SENSITIVE_LEAF_KEYS if k in auth_dict):
+                if not any(
+                    _non_empty_str(auth_dict.get(k))
+                    for k in USER_INTEGRATION_SENSITIVE_LEAF_KEYS
+                    if k in auth_dict
+                ):
                     return UserIntegrationConnectionTestResponse(
                         success=False,
                         message="Enter your credentials before testing",
@@ -289,7 +481,7 @@ class UserIntegrationCredentialService:
             else:
                 status, _ = await self.resolver.connection_status_for_actor(
                     tenant_id=actor.tenant_id,
-                    user_id=actor.user_id,
+                    user_id=binding_user_id,
                     resource_type=RESOURCE_TYPE_API_CONNECTOR,
                     resource_id=conn.id,
                 )
@@ -300,7 +492,7 @@ class UserIntegrationCredentialService:
                     )
                 auth_dict = await self.resolver.resolve_api_connector_auth_config(
                     connector=conn,
-                    actor=actor,
+                    actor=binding_actor,
                     purpose=IntegrationPurpose.EXECUTE,
                 )
             if not auth_dict:
@@ -318,10 +510,66 @@ class UserIntegrationCredentialService:
             )
         return UserIntegrationConnectionTestResponse(success=True, message="Credentials validated successfully")
 
+    async def list_data_source_connections(
+        self,
+        *,
+        actor: ActorContext,
+        data_source_id: int,
+    ) -> UserIntegrationConnectionSummaryListResponse:
+        ds = await self._get_data_source(actor.tenant_id, data_source_id)
+        self._require_user_mode(ds.credential_mode, RESOURCE_TYPE_DATA_SOURCE)
+        rows = await self.repo.list_bindings_for_resource(
+            tenant_id=actor.tenant_id,
+            resource_type=RESOURCE_TYPE_DATA_SOURCE,
+            resource_id=ds.id,
+        )
+        items = [await self._summary_for_binding(actor, row, user, provisioner) for row, user, provisioner in rows]
+        return UserIntegrationConnectionSummaryListResponse(items=items)
+
+    async def list_api_connector_connections(
+        self,
+        *,
+        actor: ActorContext,
+        connector_id: int,
+    ) -> UserIntegrationConnectionSummaryListResponse:
+        conn = await self._get_api_connector(actor.tenant_id, connector_id)
+        self._require_user_mode(conn.credential_mode, RESOURCE_TYPE_API_CONNECTOR)
+        rows = await self.repo.list_bindings_for_resource(
+            tenant_id=actor.tenant_id,
+            resource_type=RESOURCE_TYPE_API_CONNECTOR,
+            resource_id=conn.id,
+        )
+        items = [await self._summary_for_binding(actor, row, user, provisioner) for row, user, provisioner in rows]
+        return UserIntegrationConnectionSummaryListResponse(items=items)
+
+    async def _summary_for_binding(self, actor: ActorContext, row, user, provisioner) -> UserIntegrationConnectionSummary:
+        status, _ = await self.resolver.connection_status_for_actor(
+            tenant_id=actor.tenant_id,
+            user_id=row.user_id,
+            resource_type=row.resource_type,
+            resource_id=row.resource_id,
+        )
+        return UserIntegrationConnectionSummary(
+            user_id=row.user_id,
+            username=user.username,
+            resource_type=row.resource_type,
+            resource_id=row.resource_id,
+            resource_name=None,
+            status=status,
+            account_label=row.account_label,
+            auth_type=row.auth_type,
+            updated_at=row.updated_at,
+            provisioned_by_user_id=row.provisioned_by_user_id,
+            provisioned_by_username=provisioner.username if provisioner else None,
+            provisioned_at=row.provisioned_at,
+        )
+
+
     async def _status_response(
         self,
         *,
         actor: ActorContext,
+        binding_user_id: int,
         resource_type: str,
         resource_id: int,
         credential_mode: str,
@@ -335,7 +583,7 @@ class UserIntegrationCredentialService:
             )
         status, row = await self.resolver.connection_status_for_actor(
             tenant_id=actor.tenant_id,
-            user_id=actor.user_id,
+            user_id=binding_user_id,
             resource_type=resource_type,
             resource_id=resource_id,
         )
@@ -379,7 +627,6 @@ class UserIntegrationCredentialService:
             raise ResourceNotFoundError(f"API connector {connector_id} not found")
         return conn
 
-
     async def _merge_upsert_secrets(
         self,
         *,
@@ -409,8 +656,6 @@ class UserIntegrationCredentialService:
                 else:
                     merged.pop(key, None)
         return merged
-
-
 
     @staticmethod
     def _require_user_mode(credential_mode: str | None, resource_type: str) -> None:

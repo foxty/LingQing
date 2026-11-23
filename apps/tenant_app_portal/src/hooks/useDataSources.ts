@@ -201,6 +201,24 @@ export function useDataSources() {
   }
 }
 
+/** Detail page fetch — same React Query pattern as `useAgent`. */
+export function useDataSourceDetail(dataSourceId: number | undefined) {
+  const { user, loading: authLoading } = useAuth()
+
+  return useQuery<DataSource>({
+    queryKey: ['data-sources', 'detail', user?.tenantId, dataSourceId],
+    queryFn: () => getDataSource(dataSourceId!),
+    enabled: !authLoading && !!user && dataSourceId !== undefined,
+    retry: (failureCount, error) => {
+      const status = (error as { response?: { status?: number } }).response?.status
+      if (status === 404) {
+        return false
+      }
+      return failureCount < 2
+    },
+  })
+}
+
 export function useAssets(dataSourceId: number) {
   const [assets, setAssets] = useState<AssetMetadata[]>([])
   const [loading, setLoading] = useState(false)

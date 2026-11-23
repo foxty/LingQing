@@ -1,4 +1,5 @@
 import AssetSchemaDialog from '@/components/AssetSchemaDialog'
+import AdminUserConnectionsSection from '@/components/AdminUserConnectionsSection'
 import ContainerDetailHeader from '@/components/ContainerDetailHeader'
 import ListDetailToolbar from '@/components/ListDetailToolbar'
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
@@ -26,22 +27,23 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useAuth } from '@/hooks/useAuth'
 import { actionRules } from '@/lib/permissionRules'
 import { useConfirmation } from '@/hooks/useConfirmation'
-import { useAssets } from '@/hooks/useDataSources'
+import { useAssets, useDataSourceDetail } from '@/hooks/useDataSources'
 import { useNotification } from '@/hooks/useNotification'
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
+import { getApiErrorMessage } from '@/lib/api'
 import {
-  getDataSource,
   resolveAssetDescription,
   syncAssetMetadata,
   type AssetMetadata,
-  type DataSource,
 } from '@/lib/dataSourceApi'
 import { Info, MoreHorizontal, RefreshCw, Table2, Trash2, TriangleAlert, Upload } from 'lucide-react'
-import { useEffect, useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import axios from 'axios'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 
@@ -104,6 +106,8 @@ i18n.addResourceBundle('en', 'translation', {
     userCredentialsExpiredTitle: 'Warehouse login expired',
     userCredentialsExpired:
       'Reconnect in <0>Data Sources</0> via <1>Reconnect</1> in the Actions column, then save new credentials.',
+    tabAssets: 'Assets',
+    tabUserAccess: 'User access',
   }
 }, true, true)
 
@@ -166,29 +170,43 @@ i18n.addResourceBundle('zh', 'translation', {
     userCredentialsExpiredTitle: '仓库登录已过期',
     userCredentialsExpired:
       '请在<0>数据源</0>列表操作列点击<1>重新连接</1>并保存新凭证。',
+    tabAssets: '数据资产',
+    tabUserAccess: '用户访问',
   }
 }, true, true)
+
+const TAB_ASSETS = 'assets'
+const TAB_USER_ACCESS = 'user-access'
 
 export default function DataAssetsPage() {
   const { t } = useTranslation()
   const formatUserDateTime = useFormatUserDateTime()
   const { dataSourceId } = useParams<{ dataSourceId: string }>()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { loading: authLoading, hasAny } = useAuth()
   const canWriteAssets = hasAny(actionRules.canEditDataSource())
+  const canProvisionUserConnections = hasAny(actionRules.canProvisionUserIntegrationConnections())
   const { showSuccess, showError } = useNotification()
+
+  const parsedDataSourceId = useMemo(() => {
+    const n = Number(dataSourceId)
+    return Number.isFinite(n) ? n : undefined
+  }, [dataSourceId])
+
+  const dataSourceQuery = useDataSourceDetail(parsedDataSourceId)
+  const dataSource = dataSourceQuery.data
 
   const {
     assets,
-    loading: assetsLoading,
     fetchAssets,
     removeAssets,
     pageSize,
     total,
     totalPages,
-  } = useAssets(dataSourceId ? parseInt(dataSourceId) : 0)
+  } = useAssets(parsedDataSourceId ?? 0)
 
-  const [dataSource, setDataSource] = useState<DataSource | null>(null)
+  const skipSearchFetchRef = useRef(true)
   const [searchQuery, setSearchQuery] = useState('')
   const [currentPage, setCurrentPage] = useState(1)
   const [uploadDialogOpen, setUploadDialogOpen] = useState(false)
@@ -232,31 +250,38 @@ export default function DataAssetsPage() {
     }
   }
 
-  // Fetch data source and assets
   const fetchData = async (pageNum: number = 1, query?: string) => {
-    if (!dataSourceId) return
-
+    if (parsedDataSourceId == null) return
     try {
-      const dsData = await getDataSource(parseInt(dataSourceId))
-      setDataSource(dsData)
       await fetchAssets(pageNum, pageSize, query)
-    } catch (error: any) {
-      console.error('Failed to fetch data source:', error)
-      showError(error.message || t('dataAssets.fetchFailed'))
+    } catch (error: unknown) {
+      showError(getApiErrorMessage(error, t('dataAssets.fetchFailed')))
     }
   }
 
   useEffect(() => {
-    fetchData()
-  }, [dataSourceId])
+    skipSearchFetchRef.current = true
+  }, [parsedDataSourceId])
 
-  // Reset to page 1 when search query changes
   useEffect(() => {
+    if (authLoading || !dataSourceQuery.isSuccess) return
     setCurrentPage(1)
     setSelectedAssets([])
-    if (!dataSourceId) return
-    fetchAssets(1, pageSize, normalizedQuery)
-  }, [searchQuery, dataSourceId, normalizedQuery, pageSize, fetchAssets])
+    void fetchAssets(1, pageSize, normalizedQuery)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- search changes handled by the effect below
+  }, [parsedDataSourceId, dataSourceQuery.isSuccess, authLoading, fetchAssets, pageSize])
+
+  // Reset to page 1 when search query changes (after initial load)
+  useEffect(() => {
+    if (authLoading || !dataSourceQuery.isSuccess) return
+    if (skipSearchFetchRef.current) {
+      skipSearchFetchRef.current = false
+      return
+    }
+    setCurrentPage(1)
+    setSelectedAssets([])
+    void fetchAssets(1, pageSize, normalizedQuery)
+  }, [searchQuery, normalizedQuery, pageSize, fetchAssets, authLoading, dataSourceQuery.isSuccess])
 
   // Batch selection handlers
   const isAllSelected = assets.length > 0 && selectedAssets.length === assets.length
@@ -384,7 +409,11 @@ export default function DataAssetsPage() {
     )
   }
 
-  if (authLoading) {
+  const dataSourceLoadStatus = axios.isAxiosError(dataSourceQuery.error)
+    ? dataSourceQuery.error.response?.status
+    : undefined
+
+  if (authLoading || dataSourceQuery.isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
@@ -392,21 +421,22 @@ export default function DataAssetsPage() {
     )
   }
 
-  if (assetsLoading && !dataSource) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <RefreshCw className="h-6 w-6 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  if (!dataSource) {
+  if (dataSourceQuery.isError || !dataSource) {
+    const notFound = dataSourceLoadStatus === 404
     return (
       <div className="space-y-4">
         <Alert variant="destructive">
           <Info className="h-4 w-4" />
-          <AlertDescription>{t('dataAssets.dataSourceNotExists')}</AlertDescription>
+          <AlertDescription>
+            {notFound ? t('dataAssets.dataSourceNotExists') : t('dataAssets.fetchFailed')}
+          </AlertDescription>
         </Alert>
+        {!notFound ? (
+          <Button type="button" variant="outline" onClick={() => void dataSourceQuery.refetch()}>
+            <RefreshCw className="mr-2 h-4 w-4" />
+            {t('common.retry', { defaultValue: 'Retry' })}
+          </Button>
+        ) : null}
       </div>
     )
   }
@@ -423,58 +453,50 @@ export default function DataAssetsPage() {
     />
   )
   const isUserCredentialMode = (dataSource.credential_mode ?? 'shared') === 'user'
+  const showUserAccessTab = isUserCredentialMode && canProvisionUserConnections
+  const tabParam = searchParams.get('tab')
+  const activeTab =
+    showUserAccessTab && tabParam === TAB_USER_ACCESS ? TAB_USER_ACCESS : TAB_ASSETS
   const showConnectionWarn =
-    isUserCredentialMode && connectionStatus !== 'connected'
+    isUserCredentialMode && connectionStatus !== 'connected' && activeTab === TAB_ASSETS
 
-  return (
-    <div className="space-y-4">
-      <ContainerDetailHeader
-        parentLabel={t('dataAssets.parentLabel')}
-        onParentNavigate={() => navigate('/data-sources')}
-        title={dataSource.name}
-        meta={
-          <div className="space-y-3 pt-1">
-            <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground">
-              <span>
-                {t('dataAssets.title')}
-                {' · '}
-                {dataSource.type.toUpperCase()}
-              </span>
-              {dataSource.managed ? (
-                <Badge variant="secondary" className="font-normal">
-                  {t('dataAssets.platformManaged')}
-                </Badge>
-              ) : null}
-            </div>
-            {showConnectionWarn ? (
-              <ListDetailInlineNotice
-                tone="warn"
-                icon={<TriangleAlert className="text-amber-700 dark:text-amber-400" aria-hidden />}
-                title={t(
-                  connectionStatus === 'expired'
-                    ? 'dataAssets.userCredentialsExpiredTitle'
-                    : 'dataAssets.userCredentialsNotConnectedTitle'
-                )}
-              >
-                <Trans
-                  i18nKey={
-                    connectionStatus === 'expired'
-                      ? 'dataAssets.userCredentialsExpired'
-                      : 'dataAssets.userCredentialsNotConnected'
-                  }
-                  components={[userCredentialAccessLink, <span key="action" className="font-medium text-foreground" />]}
-                />
-              </ListDetailInlineNotice>
-            ) : null}
-            {!isUserCredentialMode && !dataSource.managed ? (
-              <ListDetailInlineNotice tone="info" icon={<Info className="text-muted-foreground" aria-hidden />}>
-                {t('dataAssets.sharedCredentialsNote')}
-              </ListDetailInlineNotice>
-            ) : null}
-          </div>
-        }
-      />
+  const setDetailTab = (tab: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (tab === TAB_ASSETS) {
+      next.delete('tab')
+    } else {
+      next.set('tab', tab)
+    }
+    setSearchParams(next, { replace: true })
+  }
 
+  const assetsPanel = (
+    <>
+      {showConnectionWarn ? (
+        <ListDetailInlineNotice
+          tone="warn"
+          icon={<TriangleAlert className="text-amber-700 dark:text-amber-400" aria-hidden />}
+          title={t(
+            connectionStatus === 'expired'
+              ? 'dataAssets.userCredentialsExpiredTitle'
+              : 'dataAssets.userCredentialsNotConnectedTitle'
+          )}
+        >
+          <Trans
+            i18nKey={
+              connectionStatus === 'expired'
+                ? 'dataAssets.userCredentialsExpired'
+                : 'dataAssets.userCredentialsNotConnected'
+            }
+            components={[userCredentialAccessLink, <span key="action" className="font-medium text-foreground" />]}
+          />
+        </ListDetailInlineNotice>
+      ) : null}
+      {!isUserCredentialMode && !dataSource.managed ? (
+        <ListDetailInlineNotice tone="info" icon={<Info className="text-muted-foreground" aria-hidden />}>
+          {t('dataAssets.sharedCredentialsNote')}
+        </ListDetailInlineNotice>
+      ) : null}
       <ListDetailToolbar
         searchQuery={searchQuery}
         searchPlaceholder={t('dataAssets.searchPlaceholder')}
@@ -513,7 +535,6 @@ export default function DataAssetsPage() {
         ]}
       />
 
-      {/* Assets Table */}
       {assets.length === 0 ? (
         <div className="text-center py-12 border rounded-lg bg-card">
           <Table2 className="w-12 h-12 mx-auto mb-3 text-muted-foreground opacity-50" />
@@ -529,7 +550,6 @@ export default function DataAssetsPage() {
         </div>
       ) : (
         <div className="space-y-3">
-          {/* Table */}
           <div className="overflow-hidden rounded-lg border bg-card">
             <Table>
               <TableHeader>
@@ -638,7 +658,6 @@ export default function DataAssetsPage() {
             </Table>
           </div>
 
-          {/* Pagination */}
           <PaginationBar
             page={displayPage}
             pageSize={pageSize}
@@ -646,8 +665,54 @@ export default function DataAssetsPage() {
             totalPages={displayTotalPages}
             onPageChange={handlePageChange}
           />
-
         </div>
+      )}
+    </>
+  )
+
+  return (
+    <div className="space-y-4">
+      <ContainerDetailHeader
+        parentLabel={t('dataAssets.parentLabel')}
+        onParentNavigate={() => navigate('/data-sources')}
+        title={dataSource.name}
+        meta={
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-muted-foreground pt-1">
+            {!showUserAccessTab ? (
+              <span>
+                {t('dataAssets.title')}
+                {' · '}
+              </span>
+            ) : null}
+            <span>{dataSource.type.toUpperCase()}</span>
+            {dataSource.managed ? (
+              <Badge variant="secondary" className="font-normal">
+                {t('dataAssets.platformManaged')}
+              </Badge>
+            ) : null}
+          </div>
+        }
+      />
+
+      {showUserAccessTab ? (
+        <Tabs value={activeTab} onValueChange={setDetailTab} className="space-y-3">
+          <TabsList>
+            <TabsTrigger value={TAB_ASSETS}>{t('dataAssets.tabAssets')}</TabsTrigger>
+            <TabsTrigger value={TAB_USER_ACCESS}>{t('dataAssets.tabUserAccess')}</TabsTrigger>
+          </TabsList>
+          <TabsContent value={TAB_ASSETS} className="space-y-3 mt-3">
+            {assetsPanel}
+          </TabsContent>
+          <TabsContent value={TAB_USER_ACCESS} className="mt-3">
+            <AdminUserConnectionsSection
+              kind="data_source"
+              dataSource={dataSource}
+              embeddedInTab
+            />
+          </TabsContent>
+        </Tabs>
+      ) : (
+        assetsPanel
       )}
 
       {/* CSV Upload Dialog */}

@@ -21,7 +21,6 @@ import IntegrationCredentialsCell, {
   showPerUserConnectionAction,
 } from '@/components/IntegrationCredentialsCell'
 import MyIntegrationConnectionDialog from '@/components/MyIntegrationConnectionDialog'
-import { Badge } from '@/components/ui/badge'
 import { buttonVariants } from '@/components/ui/button'
 import {
   Table,
@@ -64,7 +63,6 @@ i18n.addResourceBundle('en', 'translation', {
     createdCol: 'Created At',
     deletedUser: 'Deleted User',
     platformManaged: 'Platform Managed',
-    externalConnection: 'External',
     shareSource: 'Share',
     manageTags: 'Manage tags',
     platformManagedNote: 'This data source is managed by the platform',
@@ -97,7 +95,6 @@ i18n.addResourceBundle('zh', 'translation', {
     createdCol: '创建时间',
     deletedUser: '已删除用户',
     platformManaged: '平台管理',
-    externalConnection: '外部连接',
     shareSource: '分享',
     manageTags: '管理标签',
     platformManagedNote: '此数据源由平台管理',
@@ -218,19 +215,6 @@ export default function DataSourcesPage() {
     setConnectDialogOpen(true)
   }
 
-  const renderNameMeta = (dataSource: DataSource) => {
-    if (dataSource.managed) {
-      return null
-    }
-    return (
-      <div className="flex flex-wrap items-center gap-1 pl-6">
-        <Badge variant="outline" className="text-[10px] font-normal px-1.5 py-0">
-          {t('dataSources.externalConnection')}
-        </Badge>
-      </div>
-    )
-  }
-
   if (authLoading) {
     return (
       <div className="flex items-center justify-center h-64">
@@ -313,7 +297,6 @@ export default function DataSourcesPage() {
                               {dataSource.name}
                             </button>
                           </div>
-                          {renderNameMeta(dataSource)}
                           {canReadTags && (dataSourceTagsMap[dataSource.id]?.length || 0) > 0 ? (
                             <TagChips
                               tags={dataSourceTagsMap[dataSource.id]}

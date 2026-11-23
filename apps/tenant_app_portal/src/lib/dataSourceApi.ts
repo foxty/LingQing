@@ -7,6 +7,7 @@ import api from './api'
 import { API_ENDPOINTS } from '@/constants/api'
 import type {
   UserIntegrationConnection,
+  UserIntegrationConnectionSummary,
   UserIntegrationConnectionUpsert,
 } from '@/lib/userIntegrationConnection'
 
@@ -437,6 +438,56 @@ export async function testMyDataSourceConnection(
 ): Promise<{ success: boolean; message: string }> {
   const response = await api.post<{ success: boolean; message: string }>(
     `/data-sources/${dataSourceId}/connections/me/test`,
+    body ?? undefined
+  )
+  return response.data
+}
+
+export async function listDataSourceUserConnections(
+  dataSourceId: number
+): Promise<UserIntegrationConnectionSummary[]> {
+  const response = await api.get<{ items: UserIntegrationConnectionSummary[] }>(
+    `/data-sources/${dataSourceId}/connections`
+  )
+  return response.data.items
+}
+
+export async function getUserDataSourceConnection(
+  dataSourceId: number,
+  userId: number
+): Promise<UserIntegrationConnection> {
+  const response = await api.get<UserIntegrationConnection>(
+    `/data-sources/${dataSourceId}/connections/users/${userId}`
+  )
+  return response.data
+}
+
+export async function upsertUserDataSourceConnection(
+  dataSourceId: number,
+  userId: number,
+  body: UserIntegrationConnectionUpsert
+): Promise<UserIntegrationConnection> {
+  const response = await api.put<UserIntegrationConnection>(
+    `/data-sources/${dataSourceId}/connections/users/${userId}`,
+    body
+  )
+  return response.data
+}
+
+export async function deleteUserDataSourceConnection(
+  dataSourceId: number,
+  userId: number
+): Promise<void> {
+  await api.delete(`/data-sources/${dataSourceId}/connections/users/${userId}`)
+}
+
+export async function testUserDataSourceConnection(
+  dataSourceId: number,
+  userId: number,
+  body?: UserIntegrationConnectionUpsert
+): Promise<{ success: boolean; message: string }> {
+  const response = await api.post<{ success: boolean; message: string }>(
+    `/data-sources/${dataSourceId}/connections/users/${userId}/test`,
     body ?? undefined
   )
   return response.data

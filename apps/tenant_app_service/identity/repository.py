@@ -6,7 +6,7 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import Tenant, TenantLoginDomain, TenantMembership
-from apps.tenant_app_service.auth.domain import MembershipStatus
+from apps.shared.domain.membership import MembershipStatus
 
 
 class IdentityRepository:

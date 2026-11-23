@@ -27,6 +27,7 @@ from apps.shared.domain.value_objects import DataSourceTypeStr
 from apps.shared.external_systems.application.wiring import data_source_service as wire_data_source_service
 from apps.shared.external_systems.credentials.dtos import (
     UserIntegrationConnectionResponse,
+    UserIntegrationConnectionSummaryListResponse,
     UserIntegrationConnectionTestResponse,
     UserIntegrationConnectionUpsertRequest,
 )
@@ -150,6 +151,107 @@ async def test_my_data_source_connection(
         actor=actor,
         data_source_id=data_source_id,
         body=body,
+    )
+
+
+@router.get("/{data_source_id}/connections", response_model=UserIntegrationConnectionSummaryListResponse)
+async def list_data_source_connections(
+    data_source_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_MANAGE)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.list_data_source_connections(actor=actor, data_source_id=data_source_id)
+
+
+@router.get(
+    "/{data_source_id}/connections/users/{user_id}",
+    response_model=UserIntegrationConnectionResponse,
+)
+async def get_user_data_source_connection(
+    data_source_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_MANAGE)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.get_user_connection_data_source(
+        actor=actor,
+        binding_user_id=user_id,
+        data_source_id=data_source_id,
+    )
+
+
+@router.put(
+    "/{data_source_id}/connections/users/{user_id}",
+    response_model=UserIntegrationConnectionResponse,
+)
+async def admin_upsert_user_data_source_connection(
+    data_source_id: int,
+    user_id: int,
+    body: UserIntegrationConnectionUpsertRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_MANAGE)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.admin_upsert_data_source_connection(
+        actor=actor,
+        target_user_id=user_id,
+        data_source_id=data_source_id,
+        body=body,
+    )
+
+
+@router.delete(
+    "/{data_source_id}/connections/users/{user_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+)
+async def admin_delete_user_data_source_connection(
+    data_source_id: int,
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_MANAGE)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    await cred_service.admin_disconnect_data_source(
+        actor=actor,
+        target_user_id=user_id,
+        data_source_id=data_source_id,
+    )
+
+
+@router.post(
+    "/{data_source_id}/connections/users/{user_id}/test",
+    response_model=UserIntegrationConnectionTestResponse,
+)
+async def admin_test_user_data_source_connection(
+    data_source_id: int,
+    user_id: int,
+    body: UserIntegrationConnectionUpsertRequest | None = Body(default=None),
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_MANAGE)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    cred_service = UserIntegrationCredentialService(db)
+    return await cred_service.test_data_source_connection(
+        actor=actor,
+        data_source_id=data_source_id,
+        body=body,
+        binding_user_id=user_id,
     )
 
 

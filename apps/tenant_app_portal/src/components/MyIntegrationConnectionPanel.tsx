@@ -9,7 +9,10 @@ import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useNotification } from '@/hooks/useNotification'
 import { getApiErrorMessage, sanitizeUserFacingMessage } from '@/lib/api'
-import type { UserIntegrationConnectionUpsert } from '@/lib/userIntegrationConnection'
+import type {
+  UserIntegrationConnectionClient,
+  UserIntegrationConnectionUpsert,
+} from '@/lib/userIntegrationConnection'
 import {
   isSecretSatisfiedForTest,
   secretPayloadValue,
@@ -18,15 +21,23 @@ import {
 import { configuredSecretKeysFromConnection } from '@/lib/maskedFields'
 import {
   deleteMyApiConnectorConnection,
+  deleteUserApiConnectorConnection,
   getMyApiConnectorConnection,
+  getUserApiConnectorConnection,
   testMyApiConnectorConnection,
+  testUserApiConnectorConnection,
   upsertMyApiConnectorConnection,
+  upsertUserApiConnectorConnection,
 } from '@/lib/apiConnectorApi'
 import {
   deleteMyDataSourceConnection,
+  deleteUserDataSourceConnection,
   getMyDataSourceConnection,
+  getUserDataSourceConnection,
   testMyDataSourceConnection,
+  testUserDataSourceConnection,
   upsertMyDataSourceConnection,
+  upsertUserDataSourceConnection,
 } from '@/lib/dataSourceApi'
 
 i18n.addResourceBundle('en', 'translation', {
@@ -81,6 +92,8 @@ interface Props {
   credentialMode?: string
   authTypeHint?: string
   secretFields?: { key: string; label: string }[]
+  /** When set, calls admin `…/connections/users/{id}` APIs for this member. */
+  targetUserId?: number
   onConnectionChanged?: () => void
   onSaved?: () => void
   compact?: boolean
@@ -96,6 +109,7 @@ export default function MyIntegrationConnectionPanel({
   credentialMode = 'shared',
   authTypeHint = 'pat',
   secretFields = [{ key: 'password', label: 'Token / password' }],
+  targetUserId,
   onConnectionChanged,
   onSaved,
   compact = false,
@@ -111,14 +125,49 @@ export default function MyIntegrationConnectionPanel({
   const [secretBindings, setSecretBindings] = useState<Record<string, SecretFieldBinding>>({})
   const secretBindingsRef = useRef<Record<string, SecretFieldBinding>>({})
 
-  const queryKey = ['my-integration-connection', resourceKind, resourceId]
+  const connectionClient = useMemo((): UserIntegrationConnectionClient => {
+    if (targetUserId != null) {
+      if (resourceKind === 'data_source') {
+        return {
+          get: () => getUserDataSourceConnection(resourceId, targetUserId),
+          upsert: (body) => upsertUserDataSourceConnection(resourceId, targetUserId, body),
+          remove: () => deleteUserDataSourceConnection(resourceId, targetUserId),
+          test: (body) => testUserDataSourceConnection(resourceId, targetUserId, body),
+        }
+      }
+      return {
+        get: () => getUserApiConnectorConnection(resourceId, targetUserId),
+        upsert: (body) => upsertUserApiConnectorConnection(resourceId, targetUserId, body),
+        remove: () => deleteUserApiConnectorConnection(resourceId, targetUserId),
+        test: (body) => testUserApiConnectorConnection(resourceId, targetUserId, body),
+      }
+    }
+    if (resourceKind === 'data_source') {
+      return {
+        get: () => getMyDataSourceConnection(resourceId),
+        upsert: (body) => upsertMyDataSourceConnection(resourceId, body),
+        remove: () => deleteMyDataSourceConnection(resourceId),
+        test: (body) => testMyDataSourceConnection(resourceId, body),
+      }
+    }
+    return {
+      get: () => getMyApiConnectorConnection(resourceId),
+      upsert: (body) => upsertMyApiConnectorConnection(resourceId, body),
+      remove: () => deleteMyApiConnectorConnection(resourceId),
+      test: (body) => testMyApiConnectorConnection(resourceId, body),
+    }
+  }, [resourceKind, resourceId, targetUserId])
+
+  const queryKey = [
+    'integration-connection',
+    resourceKind,
+    resourceId,
+    targetUserId ?? 'me',
+  ]
 
   const { data: status, isLoading } = useQuery({
     queryKey,
-    queryFn: () =>
-      resourceKind === 'data_source'
-        ? getMyDataSourceConnection(resourceId)
-        : getMyApiConnectorConnection(resourceId),
+    queryFn: () => connectionClient.get(),
     enabled: credentialMode === 'user',
     refetchOnMount: 'always',
   })
@@ -238,12 +287,7 @@ export default function MyIntegrationConnectionPanel({
     account_label: accountLabel.trim() || undefined,
   })
 
-  const runTest = async (body: UserIntegrationConnectionUpsert) => {
-    if (resourceKind === 'data_source') {
-      return testMyDataSourceConnection(resourceId, body)
-    }
-    return testMyApiConnectorConnection(resourceId, body)
-  }
+  const runTest = async (body: UserIntegrationConnectionUpsert) => connectionClient.test(body)
 
   const ensureSecretsOrMarkFields = (): boolean => {
     if (secretsComplete) {
@@ -277,11 +321,7 @@ export default function MyIntegrationConnectionPanel({
         )
         throw new Error(failMessage)
       }
-      if (resourceKind === 'data_source') {
-        await upsertMyDataSourceConnection(resourceId, body)
-      } else {
-        await upsertMyApiConnectorConnection(resourceId, body)
-      }
+      await connectionClient.upsert(body)
       return testRes
     },
     onSuccess: () => {
@@ -318,10 +358,7 @@ export default function MyIntegrationConnectionPanel({
   })
 
   const disconnectMutation = useMutation({
-    mutationFn: () =>
-      resourceKind === 'data_source'
-        ? deleteMyDataSourceConnection(resourceId)
-        : deleteMyApiConnectorConnection(resourceId),
+    mutationFn: () => connectionClient.remove(),
     onSuccess: () => {
       setPlainSecrets({})
       setAccountLabel('')
