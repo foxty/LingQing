@@ -8,6 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useNotification } from '@/hooks/useNotification'
+import { useApiConnectorOAuth } from '@/hooks/useApiConnectorOAuth'
 import { getApiErrorMessage, sanitizeUserFacingMessage } from '@/lib/api'
 import type {
   UserIntegrationConnectionClient,
@@ -40,49 +41,66 @@ import {
   upsertUserDataSourceConnection,
 } from '@/lib/dataSourceApi'
 
-i18n.addResourceBundle('en', 'translation', {
-  myIntegrationConnection: {
-    title: 'My connection',
-    save: 'Save',
-    test: 'Test connection',
-    disconnect: 'Disconnect',
-    accountLabel: 'Account label (optional)',
-    saved: 'Connection saved',
-    disconnected: 'Disconnected',
-    fillSecrets: 'Enter your credentials before saving or testing.',
-    testBeforeSave: 'Fix the connection error below before saving.',
-    testSuccess: 'Connection successful',
-    testFailed: 'Connection failed',
-    status: {
-      not_connected: 'Not connected',
-      connected: 'Connected',
-      expired: 'Expired',
-      unknown: 'Unknown',
+i18n.addResourceBundle(
+  'en',
+  'translation',
+  {
+    myIntegrationConnection: {
+      title: 'My connection',
+      save: 'Save',
+      test: 'Test connection',
+      disconnect: 'Disconnect',
+      connectWithOAuth: 'Connect account',
+      oauthAdminHint:
+        'OAuth must be completed by the member in the portal (Connect). Admins can disconnect an existing binding here.',
+      accountLabel: 'Account label (optional)',
+      saved: 'Connection saved',
+      disconnected: 'Disconnected',
+      fillSecrets: 'Enter your credentials before saving or testing.',
+      testBeforeSave: 'Fix the connection error below before saving.',
+      testSuccess: 'Connection successful',
+      testFailed: 'Connection failed',
+      status: {
+        not_connected: 'Not connected',
+        connected: 'Connected',
+        expired: 'Expired',
+        unknown: 'Unknown',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 
-i18n.addResourceBundle('zh', 'translation', {
-  myIntegrationConnection: {
-    title: '我的连接',
-    save: '保存',
-    test: '测试连接',
-    disconnect: '断开',
-    accountLabel: '账号备注（可选）',
-    saved: '连接已保存',
-    disconnected: '已断开连接',
-    fillSecrets: '请先填写凭证再保存或测试。',
-    testBeforeSave: '请先解决下方连接错误再保存。',
-    testSuccess: '连接成功',
-    testFailed: '连接失败',
-    status: {
-      not_connected: '未连接',
-      connected: '已连接',
-      expired: '已过期',
-      unknown: '未知',
+i18n.addResourceBundle(
+  'zh',
+  'translation',
+  {
+    myIntegrationConnection: {
+      title: '我的连接',
+      save: '保存',
+      test: '测试连接',
+      disconnect: '断开',
+      connectWithOAuth: '连接账号',
+      oauthAdminHint: 'OAuth 需由成员本人在门户中完成连接。管理员可在此断开已有绑定。',
+      accountLabel: '账号备注（可选）',
+      saved: '连接已保存',
+      disconnected: '已断开连接',
+      fillSecrets: '请先填写凭证再保存或测试。',
+      testBeforeSave: '请先解决下方连接错误再保存。',
+      testSuccess: '连接成功',
+      testFailed: '连接失败',
+      status: {
+        not_connected: '未连接',
+        connected: '已连接',
+        expired: '已过期',
+        unknown: '未知',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 
 type ResourceKind = 'data_source' | 'api_connector'
 
@@ -117,6 +135,7 @@ export default function MyIntegrationConnectionPanel({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useNotification()
+  const { startOAuth, starting } = useApiConnectorOAuth()
   const [plainSecrets, setPlainSecrets] = useState<Record<string, string>>({})
   const [accountLabel, setAccountLabel] = useState('')
   const [configuredSecretKeys, setConfiguredSecretKeys] = useState<Set<string>>(() => new Set())
@@ -158,12 +177,7 @@ export default function MyIntegrationConnectionPanel({
     }
   }, [resourceKind, resourceId, targetUserId])
 
-  const queryKey = [
-    'integration-connection',
-    resourceKind,
-    resourceId,
-    targetUserId ?? 'me',
-  ]
+  const queryKey = ['integration-connection', resourceKind, resourceId, targetUserId ?? 'me']
 
   const { data: status, isLoading } = useQuery({
     queryKey,
@@ -244,12 +258,12 @@ export default function MyIntegrationConnectionPanel({
       }
       return Boolean(plainSecrets[key]?.trim())
     },
-    [plainSecrets, secretBindings],
+    [plainSecrets, secretBindings]
   )
 
   const secretsComplete = useMemo(
     () => secretFields.every((field) => fieldSatisfied(field.key)),
-    [secretFields, fieldSatisfied],
+    [secretFields, fieldSatisfied]
   )
 
   const isConnected = status?.status === 'connected'
@@ -317,7 +331,7 @@ export default function MyIntegrationConnectionPanel({
       if (!testRes.success) {
         const failMessage = formatConnectionMessage(
           testRes.message || '',
-          t('myIntegrationConnection.testFailed'),
+          t('myIntegrationConnection.testFailed')
         )
         throw new Error(failMessage)
       }
@@ -374,6 +388,15 @@ export default function MyIntegrationConnectionPanel({
       showError(getApiErrorMessage(err, t('myIntegrationConnection.testFailed'))),
   })
 
+  const startOAuthConnection = async () => {
+    try {
+      const result = await startOAuth(resourceId)
+      window.location.assign(result.authorization_url)
+    } catch (err: unknown) {
+      showError(getApiErrorMessage(err, t('myIntegrationConnection.testFailed')))
+    }
+  }
+
   if (credentialMode !== 'user') {
     return null
   }
@@ -382,7 +405,52 @@ export default function MyIntegrationConnectionPanel({
   const statusLabel = t(`myIntegrationConnection.status.${statusKey}`, {
     defaultValue: t('myIntegrationConnection.status.unknown'),
   })
-  const busy = saveMutation.isPending || testMutation.isPending
+  const busy = saveMutation.isPending || testMutation.isPending || starting
+
+  if (resourceKind === 'api_connector' && authTypeHint === 'oauth2') {
+    const isAdminTarget = targetUserId != null
+    return (
+      <div className={compact ? 'space-y-3' : 'rounded-lg border p-4 space-y-3 bg-card'}>
+        <p
+          className={`text-xs font-medium ${
+            statusKey === 'connected'
+              ? 'text-success'
+              : statusKey === 'expired'
+                ? 'text-destructive'
+                : 'text-muted-foreground'
+          }`}
+        >
+          {isLoading ? '…' : statusLabel}
+        </p>
+        {isAdminTarget ? (
+          <p className="text-xs text-muted-foreground">
+            {t('myIntegrationConnection.oauthAdminHint')}
+          </p>
+        ) : null}
+        <div className="flex flex-wrap gap-2">
+          {!isAdminTarget ? (
+            <Button
+              type="button"
+              size="sm"
+              onClick={() => void startOAuthConnection()}
+              disabled={busy}
+            >
+              {t('myIntegrationConnection.connectWithOAuth')}
+            </Button>
+          ) : null}
+          <Button
+            type="button"
+            size="sm"
+            variant="outline"
+            onClick={() => disconnectMutation.mutate()}
+            disabled={disconnectMutation.isPending || !isConnected}
+          >
+            {t('myIntegrationConnection.disconnect')}
+          </Button>
+        </div>
+      </div>
+    )
+  }
 
   const secretMode = (fieldKey: string): 'create' | 'edit' =>
     configuredSecretKeys.has(fieldKey) ? 'edit' : 'create'
@@ -411,9 +479,7 @@ export default function MyIntegrationConnectionPanel({
               stored={configuredSecretKeys.has(field.key)}
               resetKey={secretResetKey}
               maskedPreview={
-                configuredSecretKeys.has(field.key)
-                  ? (status?.secrets?.[field.key] ?? null)
-                  : null
+                configuredSecretKeys.has(field.key) ? (status?.secrets?.[field.key] ?? null) : null
               }
               disabled={busy}
               errorMsg={fieldErrors[field.key]}
@@ -436,7 +502,7 @@ export default function MyIntegrationConnectionPanel({
               onInput={(e) => {
                 const value = e.currentTarget.value
                 setPlainSecrets((prev) =>
-                  prev[field.key] === value ? prev : { ...prev, [field.key]: value },
+                  prev[field.key] === value ? prev : { ...prev, [field.key]: value }
                 )
                 bumpSecretRevision()
               }}
@@ -446,7 +512,9 @@ export default function MyIntegrationConnectionPanel({
         )
       })}
       <div className="space-y-1">
-        <Label htmlFor={`${resourceKind}-${resourceId}-label`}>{t('myIntegrationConnection.accountLabel')}</Label>
+        <Label htmlFor={`${resourceKind}-${resourceId}-label`}>
+          {t('myIntegrationConnection.accountLabel')}
+        </Label>
         <Input
           id={`${resourceKind}-${resourceId}-label`}
           value={accountLabel}

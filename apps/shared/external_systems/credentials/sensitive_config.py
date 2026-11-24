@@ -20,3 +20,4 @@ DATA_SOURCE_USER_MODE_STRIP_KEYS: frozenset[str] = frozenset(
     {"password", "username", "user", "connection_url"}
 )
 API_CONNECTOR_USER_MODE_STRIP_KEYS: frozenset[str] = INTEGRATION_SECRET_LEAF_KEYS
+OAUTH2_USER_TOKEN_KEYS: frozenset[str] = frozenset({"token", "access_token", "refresh_token"})

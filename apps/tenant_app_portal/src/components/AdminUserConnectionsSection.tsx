@@ -62,10 +62,12 @@ i18n.addResourceBundle(
       statusConnected: 'Connected',
       statusNotConnected: 'Not connected',
       statusExpired: 'Expired',
+      unsupportedAuth:
+        'This resource does not support admin-managed per-user credentials for its auth type.',
     },
   },
   true,
-  true,
+  true
 )
 
 i18n.addResourceBundle(
@@ -95,10 +97,11 @@ i18n.addResourceBundle(
       statusConnected: '已连接',
       statusNotConnected: '未连接',
       statusExpired: '已过期',
+      unsupportedAuth: '此资源的认证类型不支持管理员代配按用户凭证。',
     },
   },
   true,
-  true,
+  true
 )
 
 type ResourceKind = 'data_source' | 'api_connector'
@@ -221,7 +224,9 @@ export default function AdminUserConnectionsSection(props: Props) {
       {!embeddedInTab ? (
         <div>
           <h2 className="text-sm font-semibold">{t('adminUserConnections.title')}</h2>
-          <p className="text-xs text-muted-foreground mt-1">{t('adminUserConnections.description')}</p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {t('adminUserConnections.description')}
+          </p>
         </div>
       ) : null}
 
@@ -270,7 +275,9 @@ export default function AdminUserConnectionsSection(props: Props) {
         <p className="text-xs text-muted-foreground">…</p>
       ) : filteredConnections.length === 0 ? (
         <p className="text-xs text-muted-foreground">
-          {filterUserId != null ? t('adminUserConnections.emptyFiltered') : t('adminUserConnections.empty')}
+          {filterUserId != null
+            ? t('adminUserConnections.emptyFiltered')
+            : t('adminUserConnections.empty')}
         </p>
       ) : (
         <div className="overflow-hidden rounded-lg border bg-card">
@@ -302,7 +309,9 @@ export default function AdminUserConnectionsSection(props: Props) {
                       {statusLabel(row.status, t)}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-muted-foreground">{row.account_label ?? '—'}</TableCell>
+                  <TableCell className="text-muted-foreground">
+                    {row.account_label ?? '—'}
+                  </TableCell>
                   <TableCell className="text-muted-foreground text-sm">
                     {configuredByLabel(row, t)}
                   </TableCell>
@@ -336,7 +345,9 @@ export default function AdminUserConnectionsSection(props: Props) {
               {dialogUsername ? ` · ${dialogUsername}` : ''}
             </DialogDescription>
           </DialogHeader>
-          {selectedUserId != null && authTypeHint && secretFields.length > 0 ? (
+          {selectedUserId != null &&
+          authTypeHint &&
+          (secretFields.length > 0 || authTypeHint === 'oauth2') ? (
             <MyIntegrationConnectionPanel
               key={`${resourceKind}-${resourceId}-${selectedUserId}`}
               resourceKind={resourceKind}
@@ -352,7 +363,11 @@ export default function AdminUserConnectionsSection(props: Props) {
                 setDialogOpen(false)
               }}
             />
-          ) : null}
+          ) : (
+            <p className="text-sm text-muted-foreground">
+              {t('adminUserConnections.unsupportedAuth')}
+            </p>
+          )}
         </DialogContent>
       </Dialog>
     </section>

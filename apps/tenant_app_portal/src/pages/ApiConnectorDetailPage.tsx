@@ -20,6 +20,7 @@ import { useAuth } from '@/hooks/useAuth'
 import { useApiConnectors } from '@/hooks/useApiConnectors'
 import { actionRules } from '@/lib/permissionRules'
 import { useNotification } from '@/hooks/useNotification'
+import { getApiErrorMessage } from '@/lib/api'
 import type { ApiOperation, ApiOperationCallResponse } from '@/lib/apiConnectorApi'
 import { Braces, Cable, Info, Plus, RefreshCw, TriangleAlert, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -81,6 +82,8 @@ i18n.addResourceBundle('en', 'translation', {
       'Reconnect via <1>Reconnect</1> on <0>API Connectors</0> and save new credentials.',
     tabOperations: 'Operations',
     tabUserAccess: 'User access',
+    oauthConnected: 'Account connected',
+    oauthFailed: 'OAuth connection failed. Try Connect again.',
   }
 }, true, true)
 
@@ -140,6 +143,8 @@ i18n.addResourceBundle('zh', 'translation', {
       '在 <0>API 连接器</0> 列表的操作列点击 <1>重新连接</1> 并保存新凭证。',
     tabOperations: 'API 操作',
     tabUserAccess: '用户访问',
+    oauthConnected: '账号已连接',
+    oauthFailed: 'OAuth 连接失败，请重新连接。',
   }
 }, true, true)
 
@@ -200,10 +205,24 @@ export default function ApiConnectorDetailPage() {
   )
 
   useEffect(() => {
-    fetchConnectors().catch((err: any) => {
-      showError(getErrorMessage(err, t('apiConnectorDetail.loadFailed')))
-    })
-  }, [fetchConnectors, showError])
+    // Load fail → hook `error` → page Alert (no toast; DESIGN §5 one channel).
+    void fetchConnectors().catch(() => undefined)
+  }, [fetchConnectors])
+
+  useEffect(() => {
+    const oauth = searchParams.get('oauth')
+    if (!oauth) {
+      return
+    }
+    if (oauth === 'connected') {
+      showSuccess(t('apiConnectorDetail.oauthConnected'))
+    } else if (oauth === 'error') {
+      showError(t('apiConnectorDetail.oauthFailed'))
+    }
+    const next = new URLSearchParams(searchParams)
+    next.delete('oauth')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, showError, showSuccess, t])
 
   useEffect(() => {
     if (!Number.isFinite(connectorIdNumber)) {
@@ -218,16 +237,15 @@ export default function ApiConnectorDetailPage() {
     if (!Number.isFinite(connectorIdNumber)) {
       return
     }
-    fetchOperations(connectorIdNumber, {
+    // Load fail → hook `error` → page Alert (no toast).
+    void fetchOperations(connectorIdNumber, {
       page: currentPage,
       pageSize: operationsPageSize || 10,
       query: appliedQuery || undefined,
       status: undefined,
     })
       .then(() => fetchOperationStats(connectorIdNumber))
-      .catch((err: any) => {
-        showError(getErrorMessage(err, t('apiConnectorDetail.loadOperationsFailed')))
-      })
+      .catch(() => undefined)
   }, [
     connectorIdNumber,
     currentPage,
@@ -235,7 +253,6 @@ export default function ApiConnectorDetailPage() {
     appliedQuery,
     fetchOperations,
     fetchOperationStats,
-    showError,
   ])
 
   const parseJsonInput = (value: string, fieldName: string): Record<string, any> => {
@@ -410,6 +427,29 @@ export default function ApiConnectorDetailPage() {
     }
   }
 
+  const callFailureToResult = (err: unknown): ApiOperationCallResponse => {
+    const axiosErr = err as {
+      response?: { status?: number; data?: Record<string, unknown> }
+      apiError?: { code?: string; message?: string; details?: Record<string, unknown>; request_id?: string }
+    }
+    const message = getApiErrorMessage(err, t('apiConnectorDetail.callFailed'))
+    const data = axiosErr.response?.data
+    const apiError = axiosErr.apiError
+    return {
+      status_code: axiosErr.response?.status ?? 0,
+      body: {
+        code: (typeof data?.code === 'string' ? data.code : undefined) ?? apiError?.code,
+        message,
+        details: (data?.details as Record<string, unknown> | undefined) ?? apiError?.details,
+        request_id:
+          (typeof data?.request_id === 'string' ? data.request_id : undefined) ?? apiError?.request_id,
+      },
+      headers: {},
+      elapsed_ms: 0,
+      error: message,
+    }
+  }
+
   const handleCallOperation = async () => {
     if (!selectedOperation) {
       showError(t('apiConnectorDetail.selectOperation'))
@@ -419,14 +459,10 @@ export default function ApiConnectorDetailPage() {
     try {
       const params = parseJsonInput(callParametersText, t('apiConnectorDetail.callParameters'))
       const result = await executeOperation(selectedOperation.operation_uid, params)
+      // Success and failure both stay in the dialog response header (diagnostic channel).
       setCallResult(result)
-      if (result.error) {
-        showError(t('apiConnectorDetail.callFailed') + `: ${result.error}`)
-        return
-      }
-      showSuccess(t('apiConnectorDetail.callSuccess'))
-    } catch (err: any) {
-      showError(getErrorMessage(err, t('apiConnectorDetail.callFailed')))
+    } catch (err: unknown) {
+      setCallResult(callFailureToResult(err))
     }
   }
 
@@ -449,8 +485,8 @@ export default function ApiConnectorDetailPage() {
         status: undefined,
       })
       await fetchOperationStats(connectorIdNumber)
-    } catch (err: any) {
-      showError(getErrorMessage(err, t('apiConnectorDetail.loadOperationsFailed')))
+    } catch {
+      // Load fail → hook `error` → page Alert.
     }
   }
 

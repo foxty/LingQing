@@ -35,6 +35,7 @@ import { useAssets, useDataSourceDetail } from '@/hooks/useDataSources'
 import { useNotification } from '@/hooks/useNotification'
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { getApiErrorMessage } from '@/lib/api'
+import { iconButtonRowClass } from '@/lib/uiControlPatterns'
 import {
   resolveAssetDescription,
   syncAssetMetadata,
@@ -621,8 +622,10 @@ export default function DataAssetsPage() {
                         <DropdownMenu>
                           <DropdownMenuTrigger asChild>
                             <Button
+                              type="button"
+                              size="sm"
                               variant="ghost"
-                              className="h-11 w-11 p-0"
+                              className={iconButtonRowClass}
                               aria-label={t('dataAssets.rowActions')}
                             >
                               <MoreHorizontal className="w-4 h-4" />

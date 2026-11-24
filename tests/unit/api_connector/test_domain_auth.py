@@ -6,6 +6,7 @@ import base64
 
 import pytest
 
+from apps.shared.core.exceptions import ValidationError
 from apps.shared.external_systems.api_connector.domain import (
     ApiConnectorDomain,
     ApiKeyAuthConfig,
@@ -13,9 +14,9 @@ from apps.shared.external_systems.api_connector.domain import (
     BearerAuthConfig,
     CustomAuthConfig,
     NoAuthConfig,
+    OAuth2AuthConfig,
     RatePolicyDomain,
 )
-from apps.shared.core.exceptions import ValidationError
 
 
 def _dict_to_auth_config(auth_type: str, auth_dict: dict):
@@ -29,6 +30,8 @@ def _dict_to_auth_config(auth_type: str, auth_dict: dict):
             return BasicAuthConfig(**auth_dict)
         case "custom":
             return CustomAuthConfig(**auth_dict)
+        case "oauth2":
+            return OAuth2AuthConfig(**auth_dict)
         case _:
             return NoAuthConfig()
 
@@ -125,6 +128,26 @@ class TestBuildHeaders:
         headers = connector.build_headers()
 
         assert headers["Authorization"] == "Bearer oauth-access-token"
+
+    def test_oauth2_auth_maps_slack_user_token_type_to_bearer_scheme(self):
+        """Provider token_type 'user' is not an HTTP scheme; Authorization must be Bearer <token>."""
+        connector = create_connector_domain(
+            auth_type="oauth2",
+            auth_config={
+                "authorize_url": "https://slack.com/oauth/v2/authorize",
+                "token_url": "https://slack.com/api/oauth.v2.access",
+                "client_id": "synthetic-client",
+                "access_token": "xoxp-synthetic-user-token",
+                # Intentionally not "Bearer" — Slack oauth.v2.access authed_user.token_type
+                "token_type": "user",
+            },
+        )
+
+        headers = connector.build_headers()
+
+        # Must NOT be "user xoxp-..." (that caused Slack not_authed)
+        assert headers["Authorization"] == "Bearer xoxp-synthetic-user-token"
+        assert not headers["Authorization"].startswith("user ")
 
     def test_basic_auth_returns_encoded_credentials(self):
         """Basic auth should encode username:password in Authorization header."""

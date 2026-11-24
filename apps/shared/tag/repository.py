@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.base_repository import BaseRepository
@@ -94,6 +94,17 @@ class TagBindingRepository(BaseRepository[TagBinding]):
             )
         )
         return list(result.scalars().all())
+
+    async def delete_by_resource(self, tenant_id: int, resource_type: str, resource_id: int) -> int:
+        result = await self.db.execute(
+            delete(TagBinding).where(
+                TagBinding.tenant_id == tenant_id,
+                TagBinding.resource_type == resource_type,
+                TagBinding.resource_id == resource_id,
+            )
+        )
+        await self.db.flush()
+        return int(result.rowcount or 0)
 
     async def list_by_resource_and_key(
         self,

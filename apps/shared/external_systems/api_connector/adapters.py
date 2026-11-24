@@ -8,6 +8,15 @@ from typing import Any
 from pydantic import BaseModel
 
 from apps.shared.db.models import ApiConnector, ApiOperationIndex
+from apps.shared.external_systems.api_connector.constants import (
+    AUTH_TYPE_API_KEY,
+    AUTH_TYPE_BASIC,
+    AUTH_TYPE_BEARER,
+    AUTH_TYPE_CUSTOM,
+    AUTH_TYPE_OAUTH2,
+    TOKEN_AUTH_METHOD_CLIENT_SECRET_BASIC,
+    TOKEN_AUTH_METHOD_CLIENT_SECRET_POST,
+)
 from apps.shared.external_systems.api_connector.domain import (
     ApiConnectorDomain,
     ApiKeyAuthConfig,
@@ -15,11 +24,14 @@ from apps.shared.external_systems.api_connector.domain import (
     BasicAuthConfig,
     BearerAuthConfig,
     CustomAuthConfig,
+    ExecutionRulesDomain,
     NoAuthConfig,
+    OAuth2AuthConfig,
     RatePolicyDomain,
 )
 from apps.shared.external_systems.api_connector.schemas import (
     ApiConnectorResponse,
+    ApiExecutionRulesSchema,
     ApiOperationResponse,
     ApiRatePolicySchema,
 )
@@ -46,7 +58,7 @@ def auth_config_to_dict(auth_config: Any) -> dict[str, Any]:
     raise TypeError(f"Unsupported auth_config type: {type(auth_config).__name__}")
 
 
-def _dict_to_auth_config(auth_type: str, auth_dict: dict[str, Any]):
+def dict_to_auth_config(auth_type: str, auth_dict: dict[str, Any]):
     """Convert raw dict to typed domain auth config dataclass.
 
     Args:
@@ -59,34 +71,54 @@ def _dict_to_auth_config(auth_type: str, auth_dict: dict[str, Any]):
     if not auth_dict:
         return NoAuthConfig()
 
-    match auth_type:
-        case "api_key":
-            return ApiKeyAuthConfig(
-                key_name=auth_dict.get("key_name", "X-API-Key"),
-                key_value=auth_dict.get("key_value"),
-                api_key=auth_dict.get("api_key"),
-            )
-        case "bearer":
-            return BearerAuthConfig(
-                token=auth_dict.get("token"),
-                access_token=auth_dict.get("access_token"),
-            )
-        case "basic":
-            return BasicAuthConfig(
-                username=auth_dict.get("username"),
-                password=auth_dict.get("password"),
-            )
-        case "custom":
-            return CustomAuthConfig(
-                login_endpoint=auth_dict.get("login_endpoint", ""),
-                login_method=auth_dict.get("login_method", "POST"),
-                login_payload_template=auth_dict.get("login_payload_template", {}),
-                token_extraction=auth_dict.get("token_extraction", {}),
-                request_headers=auth_dict.get("request_headers", {}),
-                extra_config=auth_dict.get("extra_config", {}),
-            )
-        case _:
-            return NoAuthConfig()
+    if auth_type == AUTH_TYPE_API_KEY:
+        return ApiKeyAuthConfig(
+            key_name=auth_dict.get("key_name", "X-API-Key"),
+            key_value=auth_dict.get("key_value"),
+            api_key=auth_dict.get("api_key"),
+        )
+    if auth_type == AUTH_TYPE_BEARER:
+        return BearerAuthConfig(
+            token=auth_dict.get("token"),
+            access_token=auth_dict.get("access_token"),
+        )
+    if auth_type == AUTH_TYPE_BASIC:
+        return BasicAuthConfig(
+            username=auth_dict.get("username"),
+            password=auth_dict.get("password"),
+        )
+    if auth_type == AUTH_TYPE_CUSTOM:
+        return CustomAuthConfig(
+            login_endpoint=auth_dict.get("login_endpoint", ""),
+            login_method=auth_dict.get("login_method", "POST"),
+            login_payload_template=auth_dict.get("login_payload_template", {}),
+            token_extraction=auth_dict.get("token_extraction", {}),
+            request_headers=auth_dict.get("request_headers", {}),
+            extra_config=auth_dict.get("extra_config", {}),
+        )
+    if auth_type == AUTH_TYPE_OAUTH2:
+        token_auth_method = auth_dict.get("token_auth_method", TOKEN_AUTH_METHOD_CLIENT_SECRET_POST)
+        if token_auth_method not in {
+            TOKEN_AUTH_METHOD_CLIENT_SECRET_POST,
+            TOKEN_AUTH_METHOD_CLIENT_SECRET_BASIC,
+        }:
+            token_auth_method = TOKEN_AUTH_METHOD_CLIENT_SECRET_POST
+        return OAuth2AuthConfig(
+            authorize_url=auth_dict.get("authorize_url", ""),
+            token_url=auth_dict.get("token_url", ""),
+            client_id=auth_dict.get("client_id", ""),
+            client_secret=auth_dict.get("client_secret"),
+            scopes=list(auth_dict.get("scopes") or []),
+            scope_param=auth_dict.get("scope_param", "scope"),
+            redirect_uri=auth_dict.get("redirect_uri"),
+            token_auth_method=token_auth_method,
+            token_response_path=auth_dict.get("token_response_path"),
+            access_token=auth_dict.get("access_token"),
+            refresh_token=auth_dict.get("refresh_token"),
+            token_type=auth_dict.get("token_type", "Bearer"),
+            expires_at=auth_dict.get("expires_at"),
+        )
+    return NoAuthConfig()
 
 
 def connector_entity_to_domain(
@@ -119,7 +151,7 @@ def connector_entity_to_domain(
         else:
             decrypted_dict = raw_auth_config
 
-    auth_config = _dict_to_auth_config(connector.auth_type, decrypted_dict)
+    auth_config = dict_to_auth_config(connector.auth_type, decrypted_dict)
 
     return ApiConnectorDomain(
         id=connector.id,
@@ -138,6 +170,8 @@ def connector_entity_to_domain(
         schema_last_synced_at=connector.schema_last_synced_at,
         status=connector.status,
         credential_mode=effective_credential_mode(connector.credential_mode),
+        pack_ref=connector.pack_ref,
+        execution_rules=ExecutionRulesDomain.from_raw(connector.execution_rules),
         created_at=connector.created_at,
         updated_at=connector.updated_at,
     )
@@ -206,6 +240,8 @@ def connector_domain_to_response(connector: ApiConnectorDomain) -> ApiConnectorR
         auth_type=connector.auth_type,
         auth_config=masked_auth_config,
         rate_policy=ApiRatePolicySchema.from_domain(connector.rate_policy),
+        execution_rules=ApiExecutionRulesSchema(**connector.execution_rules.to_dict()),
+        pack_ref=connector.pack_ref,
         schema_source_type=connector.schema_source_type,
         schema_source_url=connector.schema_source_url,
         schema_metadata=connector.schema_metadata,

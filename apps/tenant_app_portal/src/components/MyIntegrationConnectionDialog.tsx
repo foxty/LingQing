@@ -29,7 +29,7 @@ i18n.addResourceBundle(
       descriptionApiConnector:
         'Enter the credentials you use to call this API. We test the connection before saving.',
       connectorAuthUnsupported:
-        'This connector does not support per-user credentials. Ask an admin to use api_key, bearer, or basic auth.',
+        'This connector does not support per-user credentials. Ask an admin to use a supported user credential mode.',
     },
   },
   true,
@@ -45,7 +45,8 @@ i18n.addResourceBundle(
       titleApiConnector: '连接 API 凭证',
       descriptionDataSource: '填写用于查询此数据仓库的凭证。保存前会先测试连接。',
       descriptionApiConnector: '填写用于调用此 API 的凭证。保存前会先测试连接。',
-      connectorAuthUnsupported: '此连接器不支持按用户凭证。请联系管理员改用 api_key、bearer 或 basic 认证。',
+      connectorAuthUnsupported:
+        '此连接器不支持按用户凭证。请联系管理员使用支持的用户凭证模式。',
     },
   },
   true,
@@ -119,7 +120,7 @@ export default function MyIntegrationConnectionDialog({
             {apiConnector.name} — {t('myIntegrationConnectionDialog.descriptionApiConnector')}
           </DialogDescription>
         </DialogHeader>
-        {authTypeHint && secretFields.length > 0 ? (
+        {authTypeHint && (secretFields.length > 0 || authTypeHint === 'oauth2') ? (
           <MyIntegrationConnectionPanel
             key={apiConnector.id}
             resourceKind="api_connector"

@@ -356,13 +356,20 @@ export default function AgentFeedbackPanel({
         </div>
 
         <div className="flex shrink-0 items-center justify-end gap-2">
-          <Button variant="outline" className="h-11" onClick={handleRefresh} disabled={isLoading}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={handleRefresh}
+            disabled={isLoading}
+          >
             <RefreshCw className={`mr-2 h-4 w-4 ${isLoading ? 'animate-spin' : ''}`} />
             {t('common.refresh')}
           </Button>
           <Button
+            type="button"
             variant="outline"
-            className="h-11"
+            size="sm"
             onClick={() => void handleExport()}
             disabled={exporting}
           >

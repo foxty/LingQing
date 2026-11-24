@@ -169,6 +169,7 @@ class UserIntegrationCredentialService:
             auth_type=body.auth_type,
             secrets_enc=secrets_enc,
             account_label=body.account_label,
+            expires_at=body.expires_at,
             **provision_kwargs,
         )
         return await self._status_response(
@@ -225,6 +226,7 @@ class UserIntegrationCredentialService:
             auth_type=body.auth_type,
             secrets_enc=secrets_enc,
             account_label=body.account_label,
+            expires_at=body.expires_at,
             **provision_kwargs,
         )
         return await self._status_response(

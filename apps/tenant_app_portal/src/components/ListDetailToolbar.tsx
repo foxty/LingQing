@@ -91,8 +91,9 @@ export default function ListDetailToolbar({
       <div className="flex items-center justify-end gap-2 shrink-0">
         {batchAction && !batchAction.hidden ? (
           <Button
+            type="button"
             variant="outline"
-            className="h-11"
+            size="sm"
             onClick={batchAction.onClick}
             disabled={batchAction.disabled}
           >
@@ -101,7 +102,12 @@ export default function ListDetailToolbar({
           </Button>
         ) : null}
         {primaryAction && !primaryAction.hidden ? (
-          <Button className="h-11" onClick={primaryAction.onClick} disabled={primaryAction.disabled}>
+          <Button
+            type="button"
+            size="sm"
+            onClick={primaryAction.onClick}
+            disabled={primaryAction.disabled}
+          >
             {PrimaryIcon ? <PrimaryIcon className="w-4 h-4 mr-2" /> : null}
             {primaryAction.label}
           </Button>
@@ -109,7 +115,7 @@ export default function ListDetailToolbar({
         {visibleOverflow.length > 0 ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon" className="h-11 w-11">
+              <Button type="button" variant="outline" size="sm" className="h-9 w-9 px-0">
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">{t('common.action')}</span>
               </Button>

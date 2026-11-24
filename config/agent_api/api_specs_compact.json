@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-22T12:55:41.366898+00:00",
+  "generated_at": "2026-11-24T13:47:08.031560+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -579,7 +579,8 @@
               "api_key",
               "bearer",
               "basic",
-              "custom"
+              "custom",
+              "oauth2"
             ],
             "title": "Auth Type",
             "default": "none"
@@ -600,12 +601,18 @@
               },
               {
                 "$ref": "#/components/schemas/CustomAuthConfigSchema"
+              },
+              {
+                "$ref": "#/components/schemas/OAuth2AuthConfigSchema"
               }
             ],
             "title": "Auth Config"
           },
           "rate_policy": {
             "$ref": "#/components/schemas/ApiRatePolicySchema"
+          },
+          "execution_rules": {
+            "$ref": "#/components/schemas/ApiExecutionRulesSchema"
           },
           "schema_source_type": {
             "type": "string",
@@ -683,6 +690,69 @@
         "title": "ApiConnectorListResponse",
         "description": "Paginated API connector list response."
       },
+      "ApiConnectorOAuthStartResponse": {
+        "properties": {
+          "authorization_url": {
+            "type": "string",
+            "title": "Authorization Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "authorization_url"
+        ],
+        "title": "ApiConnectorOAuthStartResponse"
+      },
+      "ApiConnectorPackListResponse": {
+        "properties": {
+          "items": {
+            "items": {
+              "$ref": "#/components/schemas/ApiConnectorPackSummary"
+            },
+            "type": "array",
+            "title": "Items"
+          }
+        },
+        "type": "object",
+        "required": [
+          "items"
+        ],
+        "title": "ApiConnectorPackListResponse"
+      },
+      "ApiConnectorPackSummary": {
+        "properties": {
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "version": {
+            "type": "string",
+            "title": "Version"
+          },
+          "name": {
+            "type": "string",
+            "title": "Name"
+          },
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pack_id",
+          "version",
+          "name"
+        ],
+        "title": "ApiConnectorPackSummary"
+      },
       "ApiConnectorResponse": {
         "properties": {
           "masked_fields": {
@@ -743,7 +813,8 @@
               "api_key",
               "bearer",
               "basic",
-              "custom"
+              "custom",
+              "oauth2"
             ],
             "title": "Auth Type"
           },
@@ -754,6 +825,20 @@
           },
           "rate_policy": {
             "$ref": "#/components/schemas/ApiRatePolicySchema"
+          },
+          "execution_rules": {
+            "$ref": "#/components/schemas/ApiExecutionRulesSchema"
+          },
+          "pack_ref": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Ref"
           },
           "schema_source_type": {
             "type": "string",
@@ -910,7 +995,8 @@
                   "api_key",
                   "bearer",
                   "basic",
-                  "custom"
+                  "custom",
+                  "oauth2"
                 ]
               },
               {
@@ -937,6 +1023,9 @@
                   },
                   {
                     "$ref": "#/components/schemas/CustomAuthConfigSchema"
+                  },
+                  {
+                    "$ref": "#/components/schemas/OAuth2AuthConfigSchema"
                   }
                 ]
               },
@@ -950,6 +1039,16 @@
             "anyOf": [
               {
                 "$ref": "#/components/schemas/ApiRatePolicySchema"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "execution_rules": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ApiExecutionRulesSchema"
               },
               {
                 "type": "null"
@@ -1001,6 +1100,50 @@
         },
         "type": "object",
         "title": "ApiConnectorUpdateRequest"
+      },
+      "ApiExecutionRulesSchema": {
+        "properties": {
+          "default_request_encoding": {
+            "type": "string",
+            "enum": [
+              "json",
+              "form"
+            ],
+            "title": "Default Request Encoding",
+            "default": "json"
+          },
+          "success_json_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Success Json Path"
+          },
+          "success_value": {
+            "title": "Success Value",
+            "default": true
+          },
+          "error_json_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Json Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "title": "ApiExecutionRulesSchema"
       },
       "ApiKeyAuthConfigSchema": {
         "properties": {
@@ -5898,6 +6041,42 @@
         "title": "HitlApprovalResponse",
         "description": "HITL approval response payload."
       },
+      "InstallApiConnectorPackRequest": {
+        "properties": {
+          "pack_id": {
+            "type": "string",
+            "title": "Pack Id"
+          },
+          "client_id": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "type": "string",
+            "minLength": 1,
+            "title": "Client Secret"
+          },
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri"
+          }
+        },
+        "type": "object",
+        "required": [
+          "pack_id",
+          "client_id",
+          "client_secret"
+        ],
+        "title": "InstallApiConnectorPackRequest"
+      },
       "LLMDefaultsResponseDTO": {
         "properties": {
           "agent_profile_id": {
@@ -6544,6 +6723,94 @@
           "created_at"
         ],
         "title": "NotificationResponse"
+      },
+      "OAuth2AuthConfigSchema": {
+        "properties": {
+          "auth_method": {
+            "type": "string",
+            "const": "oauth2",
+            "title": "Auth Method",
+            "default": "oauth2"
+          },
+          "authorize_url": {
+            "type": "string",
+            "title": "Authorize Url"
+          },
+          "token_url": {
+            "type": "string",
+            "title": "Token Url"
+          },
+          "client_id": {
+            "type": "string",
+            "title": "Client Id"
+          },
+          "client_secret": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Secret"
+          },
+          "scopes": {
+            "items": {
+              "type": "string"
+            },
+            "type": "array",
+            "title": "Scopes"
+          },
+          "scope_param": {
+            "type": "string",
+            "maxLength": 64,
+            "minLength": 1,
+            "title": "Scope Param",
+            "default": "scope"
+          },
+          "redirect_uri": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Redirect Uri"
+          },
+          "token_auth_method": {
+            "type": "string",
+            "enum": [
+              "client_secret_post",
+              "client_secret_basic"
+            ],
+            "title": "Token Auth Method",
+            "default": "client_secret_post"
+          },
+          "token_response_path": {
+            "anyOf": [
+              {
+                "type": "string",
+                "maxLength": 255
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Token Response Path"
+          }
+        },
+        "additionalProperties": false,
+        "type": "object",
+        "required": [
+          "authorize_url",
+          "token_url",
+          "client_id"
+        ],
+        "title": "OAuth2AuthConfigSchema",
+        "description": "OAuth 2.0 application configuration; user tokens are stored separately."
       },
       "PaginatedResponse_ApiOperationResponse_": {
         "properties": {
@@ -9367,7 +9634,7 @@
           "auth_type": {
             "type": "string",
             "title": "Auth Type",
-            "description": "Data source: db_password (RDBMS) or pat (Databricks). API connector: must match connector auth_type (api_key, bearer, basic)."
+            "description": "Data source: db_password (RDBMS) or pat (Databricks). API connector: must match connector auth_type (api_key, bearer, basic, oauth2)."
           },
           "secrets": {
             "additionalProperties": {
@@ -9387,6 +9654,18 @@
               }
             ],
             "title": "Account Label"
+          },
+          "expires_at": {
+            "anyOf": [
+              {
+                "type": "string",
+                "format": "date-time"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Expires At"
           }
         },
         "type": "object",
@@ -9517,6 +9796,7 @@
     "GET_/agents/{agent_id}/usage/events": "get_agent_usage_events_agents__agent_id__usage_events_get",
     "GET_/agents/{agent_id}/usage/summary": "get_agent_usage_summary_agents__agent_id__usage_summary_get",
     "GET_/api-connectors": "list_connectors_api_connectors_get",
+    "GET_/api-connectors/oauth/callback": "api_connector_oauth_callback_api_connectors_oauth_callback_get",
     "GET_/api-connectors/operations/search": "search_operations_api_connectors_operations_search_get",
     "GET_/api-connectors/{connector_id}": "get_connector_api_connectors__connector_id__get",
     "GET_/api-connectors/{connector_id}/connections": "list_api_connector_connections_api_connectors__connector_id__connections_get",
@@ -9564,6 +9844,7 @@
     "GET_/feedback/export": "export_feedback_feedback_export_get",
     "GET_/feedback/stats": "get_feedback_stats_feedback_stats_get",
     "GET_/hitl/approvals/{proposal_id}": "get_approval_hitl_approvals__proposal_id__get",
+    "GET_/integration-packs": "list_api_connector_packs_integration_packs_get",
     "GET_/llm-config/models": "list_models_llm_config_models_get",
     "GET_/llm-config/providers": "list_llm_providers_llm_config_providers_get",
     "GET_/llm-config/providers/by-category": "list_providers_by_category_llm_config_providers_by_category_get",
@@ -9613,6 +9894,7 @@
     "POST_/api-connectors/operations/{operation_uid}/call": "call_operation_api_connectors_operations__operation_uid__call_post",
     "POST_/api-connectors/{connector_id}/connections/me/test": "test_my_api_connector_connection_api_connectors__connector_id__connections_me_test_post",
     "POST_/api-connectors/{connector_id}/connections/users/{user_id}/test": "admin_test_user_api_connector_connection_api_connectors__connector_id__connections_users__user_id__test_post",
+    "POST_/api-connectors/{connector_id}/oauth/start": "start_my_api_connector_oauth_api_connectors__connector_id__oauth_start_post",
     "POST_/api-connectors/{connector_id}/operations": "add_manual_operation_api_connectors__connector_id__operations_post",
     "POST_/api-connectors/{connector_id}/sync-schema": "sync_schema_api_connectors__connector_id__sync_schema_post",
     "POST_/apps/v1/{app_id}/{environment}/api-connectors/{operation_uid}/call": "call_api_connector_v1_apps_v1__app_id___environment__api_connectors__operation_uid__call_post",
@@ -9646,6 +9928,7 @@
     "POST_/hitl/approvals/{proposal_id}/approve": "approve_approval_hitl_approvals__proposal_id__approve_post",
     "POST_/hitl/approvals/{proposal_id}/reject": "reject_approval_hitl_approvals__proposal_id__reject_post",
     "POST_/hitl/approvals/{proposal_id}/resume-stream": "resume_approval_stream_hitl_approvals__proposal_id__resume_stream_post",
+    "POST_/integration-packs/install": "install_api_connector_pack_integration_packs_install_post",
     "POST_/llm-config/registry/profiles": "create_registry_profile_llm_config_registry_profiles_post",
     "POST_/llm-config/registry/profiles/{profile_id}/test": "test_registry_profile_connection_llm_config_registry_profiles__profile_id__test_post",
     "POST_/llm-config/registry/providers": "create_registry_provider_llm_config_registry_providers_post",
@@ -10098,6 +10381,75 @@
       },
       "constraints": {
         "side_effect": true,
+        "idempotent": true
+      }
+    },
+    "api_connector_oauth_callback_api_connectors_oauth_callback_get": {
+      "operation_key": "GET_/api-connectors/oauth/callback",
+      "method": "GET",
+      "path": "/api-connectors/oauth/callback",
+      "summary": "Api Connector Oauth Callback",
+      "description": "Shared Slack/IdP browser callback for all API connector OAuth installs.",
+      "request": {
+        "query_params": [
+          {
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            },
+            "description": ""
+          },
+          {
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            },
+            "description": ""
+          },
+          {
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
         "idempotent": true
       }
     },
@@ -13703,6 +14055,38 @@
         "idempotent": false
       }
     },
+    "install_api_connector_pack_integration_packs_install_post": {
+      "operation_key": "POST_/integration-packs/install",
+      "method": "POST",
+      "path": "/integration-packs/install",
+      "summary": "Install Api Connector Pack",
+      "description": "",
+      "request": {
+        "body_schema": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/InstallApiConnectorPackRequest"
+              }
+            }
+          },
+          "required": true
+        }
+      },
+      "response": {
+        "success_status": "201",
+        "success_schema": {
+          "$ref": "#/components/schemas/ApiConnectorResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
     "list_agents_agents_get": {
       "operation_key": "GET_/agents",
       "method": "GET",
@@ -13752,6 +14136,24 @@
         "error_statuses": [
           "422"
         ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
+      }
+    },
+    "list_api_connector_packs_integration_packs_get": {
+      "operation_key": "GET_/integration-packs",
+      "method": "GET",
+      "path": "/integration-packs",
+      "summary": "List Api Connector Packs",
+      "description": "",
+      "request": {},
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/ApiConnectorPackListResponse"
+        }
       },
       "constraints": {
         "side_effect": false,
@@ -16743,6 +17145,39 @@
         "success_status": "201",
         "success_schema": {
           "$ref": "#/components/schemas/AclShareResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "start_my_api_connector_oauth_api_connectors__connector_id__oauth_start_post": {
+      "operation_key": "POST_/api-connectors/{connector_id}/oauth/start",
+      "method": "POST",
+      "path": "/api-connectors/{connector_id}/oauth/start",
+      "summary": "Start My Api Connector Oauth",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connector Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/ApiConnectorOAuthStartResponse"
         },
         "error_statuses": [
           "422"

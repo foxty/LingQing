@@ -5,21 +5,33 @@ import i18n from '@/i18n/config'
 import { Label } from '@/components/ui/label'
 import { Input } from '@/components/ui/input'
 
-i18n.addResourceBundle('en', 'translation', {
-  components: {
-    authConfigs: {
-      basicUsernamePlaceholder: 'Enter username',
+i18n.addResourceBundle(
+  'en',
+  'translation',
+  {
+    components: {
+      authConfigs: {
+        basicUsernamePlaceholder: 'Enter username',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 
-i18n.addResourceBundle('zh', 'translation', {
-  components: {
-    authConfigs: {
-      basicUsernamePlaceholder: '输入用户名',
+i18n.addResourceBundle(
+  'zh',
+  'translation',
+  {
+    components: {
+      authConfigs: {
+        basicUsernamePlaceholder: '输入用户名',
+      },
     },
   },
-}, true, true)
+  true,
+  true
+)
 
 interface BasicAuthConfigProps {
   username: string
@@ -44,8 +56,8 @@ export function BasicAuthConfig({
 }: BasicAuthConfigProps) {
   const { t } = useTranslation()
   return (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-      <div className="space-y-2">
+    <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+      <div className="space-y-1">
         <Label htmlFor="add-basic-username">Username</Label>
         <Input
           id="add-basic-username"

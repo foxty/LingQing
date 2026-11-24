@@ -1468,6 +1468,7 @@ class ApiConnector(Base):
     __tablename__ = "api_connectors"
     __table_args__ = (
         UniqueConstraint("tenant_id", "name", name="uq_api_connectors_tenant_name"),
+        UniqueConstraint("tenant_id", "pack_ref", name="uq_api_connectors_tenant_pack_ref"),
         Index("idx_api_connectors_tenant_status", "tenant_id", "status"),
     )
 
@@ -1492,6 +1493,12 @@ class ApiConnector(Base):
         server_default="shared",
         comment="shared: tenant secret on connector; user: per-user bindings",
     )
+    pack_ref: Mapped[str | None] = mapped_column(
+        String(160),
+        nullable=True,
+        comment="Optional immutable pack identity, for example slack-user@1",
+    )
+    execution_rules: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     rate_policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     schema_source_type: Mapped[str] = mapped_column(String(50), nullable=False)
     schema_source_url: Mapped[str | None] = mapped_column(String(2048), nullable=True)

@@ -15,6 +15,13 @@ AUTH_TYPE_API_KEY: Final = "api_key"
 AUTH_TYPE_BEARER: Final = "bearer"
 AUTH_TYPE_BASIC: Final = "basic"
 AUTH_TYPE_CUSTOM: Final = "custom"
+AUTH_TYPE_OAUTH2: Final = "oauth2"
+
+REQUEST_ENCODING_JSON: Final = "json"
+REQUEST_ENCODING_FORM: Final = "form"
+
+TOKEN_AUTH_METHOD_CLIENT_SECRET_POST: Final = "client_secret_post"
+TOKEN_AUTH_METHOD_CLIENT_SECRET_BASIC: Final = "client_secret_basic"
 
 SCHEMA_SOURCE_TYPE_MANUAL: Final = "manual"
 SCHEMA_SOURCE_TYPE_OPENAPI_URL: Final = "openapi_url"

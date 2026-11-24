@@ -39,6 +39,12 @@ class ApiConnectorRepository(BaseRepository[ApiConnector]):
         )
         return result.scalar_one_or_none()
 
+    async def get_by_tenant_and_pack_ref(self, tenant_id: int, pack_ref: str) -> ApiConnector | None:
+        result = await self.db.execute(
+            select(ApiConnector).where(ApiConnector.tenant_id == tenant_id, ApiConnector.pack_ref == pack_ref)
+        )
+        return result.scalar_one_or_none()
+
     async def get_by_ids_and_tenant(
         self,
         connector_ids: list[int],

@@ -20,6 +20,7 @@ from apps.shared.external_systems.credentials.domain import (
     AUTH_TYPE_BEARER,
     AUTH_TYPE_CUSTOM,
     AUTH_TYPE_NONE,
+    AUTH_TYPE_OAUTH2,
     BYOT_CONNECTOR_AUTH_TYPES,
     DATA_SOURCE_USER_AUTH_TYPES,
     USER_INTEGRATION_AUTH_DB_PASSWORD,
@@ -82,6 +83,9 @@ def validate_merged_secrets_for_auth_type(
         return
     if auth_type == AUTH_TYPE_BASIC:
         _require_keys(merged, "username", "password", message="Username and password are required")
+        return
+    if auth_type == AUTH_TYPE_OAUTH2:
+        _require_keys(merged, "access_token", message="OAuth2 access token is required")
         return
     raise ValidationError(f"Unsupported auth_type: {auth_type}")
 

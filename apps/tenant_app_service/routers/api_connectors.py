@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from fastapi import APIRouter, Body, Depends, Query, status
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
+from apps.shared.core.exceptions import AuthenticationError, ResourceNotFoundError, ValidationError
 from apps.shared.db.session import get_db
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR
@@ -15,6 +17,7 @@ from apps.shared.external_systems.api_connector.domain import OperationStatus
 from apps.shared.external_systems.api_connector.schemas import (
     ApiConnectorCreateRequest,
     ApiConnectorListResponse,
+    ApiConnectorOAuthStartResponse,
     ApiConnectorResponse,
     ApiConnectorUpdateRequest,
     ApiOperationCallRequest,
@@ -37,11 +40,14 @@ from apps.shared.external_systems.credentials.dtos import (
     UserIntegrationConnectionUpsertRequest,
 )
 from apps.shared.external_systems.credentials.service import UserIntegrationCredentialService
+from apps.shared.external_systems.oauth import ApiConnectorOAuthFlow
+from apps.shared.external_systems.oauth.state import OAuthStateCodec
 from apps.shared.schemas.pagination import PaginatedResponse
 from apps.shared.schemas.user import UserDTO
 from apps.shared.tag.adapters import domain_tag_value_to_api
 from apps.shared.tag.schemas import TagBindingCreateRequest, TagValueDTO
 from apps.shared.tag.service import TagService
+from apps.shared.utils.field_cipher import FieldCipher
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -65,6 +71,36 @@ def _actor_ctx(current_user: UserDTO) -> ActorContext:
     )
 
 
+@router.get("/oauth/callback")
+async def api_connector_oauth_callback(
+    db: AsyncSession = Depends(get_db),
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+):
+    """Shared Slack/IdP browser callback for all API connector OAuth installs."""
+    connector_id: int | None = None
+    if state:
+        try:
+            connector_id = OAuthStateCodec(FieldCipher()).decode(state).connector_id
+        except ValidationError:
+            connector_id = None
+
+    if error or not code or not state:
+        return RedirectResponse(ApiConnectorOAuthFlow.portal_error_url(connector_id=connector_id))
+
+    try:
+        resolved_connector_id = await ApiConnectorOAuthFlow(db).complete_from_callback(
+            code=code,
+            state=state,
+        )
+        await db.commit()
+        return RedirectResponse(ApiConnectorOAuthFlow.portal_success_url(resolved_connector_id))
+    except (AuthenticationError, ResourceNotFoundError, ValidationError):
+        await db.rollback()
+        return RedirectResponse(ApiConnectorOAuthFlow.portal_error_url(connector_id=connector_id))
+
+
 @router.post("", response_model=ApiConnectorResponse, status_code=status.HTTP_201_CREATED)
 async def create_connector(
     payload: ApiConnectorCreateRequest,
@@ -83,6 +119,7 @@ async def create_connector(
         schema_source_type=payload.schema_source_type,
         schema_source_url=payload.schema_source_url,
         credential_mode=payload.credential_mode,
+        execution_rules=payload.execution_rules.to_domain(),
     )
 
 
@@ -170,6 +207,19 @@ async def test_my_api_connector_connection(
         connector_id=connector_id,
         body=body,
     )
+
+
+@router.post("/{connector_id}/oauth/start", response_model=ApiConnectorOAuthStartResponse)
+async def start_my_api_connector_oauth(
+    connector_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
+):
+    actor = _actor_ctx(current_user)
+    service = await _service(db, current_user.tenant_id)
+    await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+    authorization_url = await ApiConnectorOAuthFlow(db).start(actor=actor, connector_id=connector_id)
+    return ApiConnectorOAuthStartResponse(authorization_url=authorization_url)
 
 
 @router.get("/{connector_id}/connections", response_model=UserIntegrationConnectionSummaryListResponse)
@@ -299,6 +349,8 @@ async def update_connector(
     update_fields = payload.model_dump(exclude_unset=True, exclude={"rate_policy"})
     if payload.rate_policy is not None:
         update_fields["rate_policy"] = payload.rate_policy.to_domain()
+    if payload.execution_rules is not None:
+        update_fields["execution_rules"] = payload.execution_rules.to_domain()
 
     return await service.update_connector_for_actor(
         connector_id=connector_id,

@@ -116,6 +116,7 @@ import { useTranslation } from 'react-i18next'
 import { useAuth } from '@/hooks/useAuth'
 import { actionRules } from '@/lib/permissionRules'
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
+import { iconButtonRowClass } from '@/lib/uiControlPatterns'
 
 interface DocumentTableProps {
   data: PaginatedResponse<Document> | undefined
@@ -273,8 +274,10 @@ export function DocumentTable({
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
         <Button
+          type="button"
+          size="sm"
           variant="ghost"
-          className="h-11 w-11 p-0"
+          className={iconButtonRowClass}
           aria-label={t('knowledgeBase.rowActions')}
         >
           <MoreHorizontal className="w-4 h-4" />

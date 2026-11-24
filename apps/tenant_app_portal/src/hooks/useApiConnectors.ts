@@ -29,6 +29,10 @@ import {
 const getErrorMessage = (err: any, fallback: string) =>
   err.response?.data?.message || err.response?.data?.detail || fallback
 
+/**
+ * List/load failures set `error` for page Alert.
+ * Mutations only throw — callers toast (DESIGN §5: one channel per event).
+ */
 export function useApiConnectors() {
   const { user } = useAuth()
   const queryClient = useQueryClient()
@@ -67,8 +71,7 @@ export function useApiConnectors() {
         setConnectorsTotalPages(result.total_pages)
         return result
       } catch (err: any) {
-        const message = getErrorMessage(err, 'Failed to fetch API connectors')
-        setError(message)
+        setError(getErrorMessage(err, 'Failed to fetch API connectors'))
         throw err
       } finally {
         setLoading(false)
@@ -77,53 +80,44 @@ export function useApiConnectors() {
     []
   )
 
-  const addConnector = useCallback(async (payload: ApiConnectorCreateRequest) => {
-    setLoading(true)
-    setError(null)
-    try {
-      const created = await createApiConnector(payload)
-      setConnectors((prev) => [created, ...prev])
-      invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
-      return created
-    } catch (err: any) {
-      const message = getErrorMessage(err, 'Failed to create API connector')
-      setError(message)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [queryClient, user?.tenantId])
+  const addConnector = useCallback(
+    async (payload: ApiConnectorCreateRequest) => {
+      setLoading(true)
+      try {
+        const created = await createApiConnector(payload)
+        setConnectors((prev) => [created, ...prev])
+        invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
+        return created
+      } finally {
+        setLoading(false)
+      }
+    },
+    [queryClient, user?.tenantId]
+  )
 
-  const removeConnector = useCallback(async (connectorId: number) => {
-    setLoading(true)
-    setError(null)
-    try {
-      await deleteApiConnector(connectorId)
-      setConnectors((prev) => prev.filter((item) => item.id !== connectorId))
-      setOperations((prev) => prev.filter((item) => item.connector_id !== connectorId))
-      invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
-    } catch (err: any) {
-      const message = getErrorMessage(err, 'Failed to delete API connector')
-      setError(message)
-      throw err
-    } finally {
-      setLoading(false)
-    }
-  }, [queryClient, user?.tenantId])
+  const removeConnector = useCallback(
+    async (connectorId: number) => {
+      setLoading(true)
+      try {
+        await deleteApiConnector(connectorId)
+        setConnectors((prev) => prev.filter((item) => item.id !== connectorId))
+        setOperations((prev) => prev.filter((item) => item.connector_id !== connectorId))
+        invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [queryClient, user?.tenantId]
+  )
 
   const modifyConnector = useCallback(
     async (connectorId: number, payload: ApiConnectorUpdateRequest) => {
       setLoading(true)
-      setError(null)
       try {
         const updated = await updateApiConnector(connectorId, payload)
         setConnectors((prev) => prev.map((item) => (item.id === connectorId ? updated : item)))
         invalidateAgentAttachmentPickerQueries(queryClient, user?.tenantId)
         return updated
-      } catch (err: any) {
-        const message = getErrorMessage(err, 'Failed to update API connector')
-        setError(message)
-        throw err
       } finally {
         setLoading(false)
       }
@@ -133,13 +127,8 @@ export function useApiConnectors() {
 
   const syncSchema = useCallback(async (connectorId: number, fileContent?: string) => {
     setLoading(true)
-    setError(null)
     try {
       return await syncApiConnectorSchema(connectorId, fileContent)
-    } catch (err: any) {
-      const message = getErrorMessage(err, 'Failed to sync schema')
-      setError(message)
-      throw err
     } finally {
       setLoading(false)
     }
@@ -171,8 +160,7 @@ export function useApiConnectors() {
         setOperationsTotalPages(result.total_pages)
         return result
       } catch (err: any) {
-        const message = getErrorMessage(err, 'Failed to fetch operations')
-        setError(message)
+        setError(getErrorMessage(err, 'Failed to fetch operations'))
         throw err
       } finally {
         setLoading(false)
@@ -189,81 +177,51 @@ export function useApiConnectors() {
       setOperationStats(stats)
       return stats
     } catch (err: any) {
-      const message = getErrorMessage(err, 'Failed to fetch operation stats')
-      setError(message)
+      setError(getErrorMessage(err, 'Failed to fetch operation stats'))
       throw err
     } finally {
       setLoading(false)
     }
   }, [])
 
-  const addOperation = useCallback(
-    async (connectorId: number, payload: ApiOperationCreateRequest) => {
-      setLoading(true)
-      setError(null)
-      try {
-        const created = await createApiConnectorOperation(connectorId, payload)
-        setOperations((prev) => [created, ...prev])
-        return created
-      } catch (err: any) {
-        const message = getErrorMessage(err, 'Failed to create operation')
-        setError(message)
-        throw err
-      } finally {
-        setLoading(false)
-      }
-    },
-    []
-  )
+  const addOperation = useCallback(async (connectorId: number, payload: ApiOperationCreateRequest) => {
+    setLoading(true)
+    try {
+      const created = await createApiConnectorOperation(connectorId, payload)
+      setOperations((prev) => [created, ...prev])
+      return created
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const modifyOperation = useCallback(
-    async (operationId: number, payload: ApiOperationUpdateRequest) => {
-      setLoading(true)
-      setError(null)
-      try {
-        const updated = await updateApiConnectorOperation(operationId, payload)
-        setOperations((prev) => prev.map((item) => (item.id === operationId ? updated : item)))
-        return updated
-      } catch (err: any) {
-        const message = getErrorMessage(err, 'Failed to update operation')
-        setError(message)
-        throw err
-      } finally {
-        setLoading(false)
-      }
-    },
-    []
-  )
+  const modifyOperation = useCallback(async (operationId: number, payload: ApiOperationUpdateRequest) => {
+    setLoading(true)
+    try {
+      const updated = await updateApiConnectorOperation(operationId, payload)
+      setOperations((prev) => prev.map((item) => (item.id === operationId ? updated : item)))
+      return updated
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
-  const setOperationStatus = useCallback(
-    async (operationId: number, status: 'active' | 'disabled') => {
-      setLoading(true)
-      setError(null)
-      try {
-        const updated = await updateApiConnectorOperationStatus(operationId, status)
-        setOperations((prev) => prev.map((item) => (item.id === operationId ? updated : item)))
-        return updated
-      } catch (err: any) {
-        const message = getErrorMessage(err, 'Failed to update operation status')
-        setError(message)
-        throw err
-      } finally {
-        setLoading(false)
-      }
-    },
-    []
-  )
+  const setOperationStatus = useCallback(async (operationId: number, status: 'active' | 'disabled') => {
+    setLoading(true)
+    try {
+      const updated = await updateApiConnectorOperationStatus(operationId, status)
+      setOperations((prev) => prev.map((item) => (item.id === operationId ? updated : item)))
+      return updated
+    } finally {
+      setLoading(false)
+    }
+  }, [])
 
   const removeOperation = useCallback(async (operationId: number) => {
     setLoading(true)
-    setError(null)
     try {
       await deleteApiConnectorOperation(operationId)
       setOperations((prev) => prev.filter((item) => item.id !== operationId))
-    } catch (err: any) {
-      const message = getErrorMessage(err, 'Failed to delete operation')
-      setError(message)
-      throw err
     } finally {
       setLoading(false)
     }
@@ -275,13 +233,8 @@ export function useApiConnectors() {
       parameters: Record<string, any>
     ): Promise<ApiOperationCallResponse> => {
       setLoading(true)
-      setError(null)
       try {
         return await callApiOperation(operationUid, parameters)
-      } catch (err: any) {
-        const message = getErrorMessage(err, 'Failed to call operation')
-        setError(message)
-        throw err
       } finally {
         setLoading(false)
       }

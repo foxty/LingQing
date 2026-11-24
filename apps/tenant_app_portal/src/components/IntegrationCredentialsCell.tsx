@@ -1,5 +1,6 @@
 import { Badge } from '@/components/ui/badge'
 import i18n from '@/i18n/config'
+import { isByotConnectorAuthType } from '@/lib/integrationConnectionFields'
 import { cn } from '@/lib/utils'
 import { AlertCircle, Building2, CheckCircle2, CircleDashed, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -71,10 +72,10 @@ export function showPerUserConnectionAction(
   if ((credentialMode ?? 'shared') !== 'user') {
     return false
   }
-  if (connectorAuthType === undefined) {
+  if (connectorAuthType === undefined || connectorAuthType === null) {
     return true
   }
-  return connectorAuthType === 'api_key' || connectorAuthType === 'bearer' || connectorAuthType === 'basic'
+  return isByotConnectorAuthType(connectorAuthType)
 }
 
 function perUserStatusStyles(status: UserConnectionStatus) {

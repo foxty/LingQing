@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from '@/constants/api'
 import api from '@/lib/api'
+import config from '@/lib/config'
 import type { PaginatedResponse } from '@/lib/documentsApi'
 import type { PaginatedListResponse } from '@/lib/paginatedList'
 import type {
@@ -8,9 +9,27 @@ import type {
   UserIntegrationConnectionUpsert,
 } from '@/lib/userIntegrationConnection'
 
+/** Backend route registered on the API service (see oauth/flow.py). */
+export const API_CONNECTOR_OAUTH_CALLBACK_PATH = '/api-connectors/oauth/callback'
+
+/**
+ * Absolute callback URL for OAuth app registration.
+ * Uses VITE_BACKEND_URL when absolute; otherwise current origin + relative API prefix.
+ */
+export function getDefaultApiConnectorOAuthRedirectUri(): string {
+  const base = config.backendUrl.replace(/\/$/, '')
+  const path = API_CONNECTOR_OAUTH_CALLBACK_PATH
+  if (/^https?:\/\//i.test(base)) {
+    return `${base}${path}`
+  }
+  const prefix = base.startsWith('/') ? base : `/${base}`
+  const origin = typeof window !== 'undefined' ? window.location.origin : ''
+  return `${origin}${prefix}${path}`
+}
+
 export type { UserIntegrationConnection, UserIntegrationConnectionUpsert }
 
-export type ApiConnectorAuthType = 'none' | 'api_key' | 'bearer' | 'basic' | 'custom'
+export type ApiConnectorAuthType = 'none' | 'api_key' | 'bearer' | 'basic' | 'custom' | 'oauth2'
 export type ApiConnectorSchemaSourceType = 'manual' | 'openapi_url' | 'openapi_upload'
 
 export interface ApiConnector {
@@ -24,6 +43,8 @@ export interface ApiConnector {
   auth_type: ApiConnectorAuthType
   auth_config: Record<string, any>
   rate_policy: Record<string, any>
+  execution_rules?: Record<string, any>
+  pack_ref?: string | null
   schema_source_type: ApiConnectorSchemaSourceType
   schema_source_url: string | null
   schema_metadata: Record<string, any>
@@ -59,6 +80,13 @@ export interface ApiConnectorUpdateRequest {
   schema_source_type?: ApiConnectorSchemaSourceType
   schema_source_url?: string | null
   status?: string
+}
+
+export interface ApiConnectorPackSummary {
+  pack_id: string
+  version: string
+  name: string
+  description: string | null
 }
 
 export interface ApiOperation {
@@ -270,6 +298,30 @@ export async function getMyApiConnectorConnection(
 ): Promise<UserIntegrationConnection> {
   const response = await api.get<UserIntegrationConnection>(
     `/api-connectors/${connectorId}/connections/me`
+  )
+  return response.data
+}
+
+export async function listApiConnectorPacks(): Promise<ApiConnectorPackSummary[]> {
+  const response = await api.get<{ items: ApiConnectorPackSummary[] }>('/integration-packs')
+  return response.data.items
+}
+
+export async function installApiConnectorPack(body: {
+  pack_id: string
+  client_id: string
+  client_secret: string
+  redirect_uri?: string
+}): Promise<ApiConnector> {
+  const response = await api.post<ApiConnector>('/integration-packs/install', body)
+  return response.data
+}
+
+export async function startMyApiConnectorOAuth(
+  connectorId: number
+): Promise<{ authorization_url: string }> {
+  const response = await api.post<{ authorization_url: string }>(
+    `/api-connectors/${connectorId}/oauth/start`
   )
   return response.data
 }

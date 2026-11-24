@@ -1,0 +1,68 @@
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
+import pytest
+
+from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
+from apps.shared.external_systems.domain.types import IntegrationPurpose
+from apps.shared.infra.oauth import OAuth2TokenClient, OAuthTokenSet
+from apps.shared.utils.field_cipher import FieldCipher
+
+
+@pytest.mark.asyncio
+async def test_resolver_refreshes_expired_oauth_user_token(monkeypatch):
+    cipher = FieldCipher("synthetic-oauth-resolver-key")
+    db = SimpleNamespace(flush=AsyncMock())
+    resolver = IntegrationCredentialResolver(db, cipher=cipher)
+    connector = SimpleNamespace(
+        id=31,
+        tenant_id=17,
+        credential_mode="user",
+        auth_type="oauth2",
+        auth_config=cipher.encrypt_dict(
+            {
+                "authorize_url": "https://auth.example.test/authorize",
+                "token_url": "https://auth.example.test/token",
+                "client_id": "synthetic-client",
+                "client_secret": "synthetic-secret",
+            },
+            sensitive_fields={"client_secret"},
+        ),
+    )
+    binding = SimpleNamespace(
+        status="active",
+        secrets_enc=cipher.encrypt_dict(
+            {
+                "access_token": "expired-token",
+                "refresh_token": "refresh-token",
+            },
+            sensitive_fields={"access_token", "refresh_token"},
+        ),
+        expires_at=datetime.now(UTC) - timedelta(minutes=1),
+        updated_at=None,
+    )
+    resolver.repo = SimpleNamespace(get_binding=AsyncMock(return_value=binding))
+
+    async def fake_refresh(self, *, config, refresh_token):
+        assert config.client_secret == "synthetic-secret"
+        assert refresh_token == "refresh-token"
+        return OAuthTokenSet(
+            access_token="new-token",
+            refresh_token=None,
+            token_type="Bearer",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
+
+    monkeypatch.setattr(OAuth2TokenClient, "refresh", fake_refresh)
+
+    resolved = await resolver.resolve_api_connector_auth_config(
+        connector=connector,
+        actor=ActorContext(tenant_id=17, user_id=23, user_role="member"),
+        purpose=IntegrationPurpose.EXECUTE,
+    )
+
+    assert resolved["access_token"] == "new-token"
+    assert resolved["refresh_token"] == "refresh-token"
+    db.flush.assert_awaited_once()

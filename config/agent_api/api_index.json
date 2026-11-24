@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-20T08:48:11.725056+00:00",
+  "generated_at": "2026-11-24T13:47:08.031560+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -195,6 +195,11 @@
     {
       "operation_key": "GET_/api-connectors",
       "summary": "List Connectors",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/api-connectors/oauth/callback",
+      "summary": "Api Connector Oauth Callback",
       "risk_level": "read"
     },
     {
@@ -430,6 +435,11 @@
     {
       "operation_key": "GET_/hitl/approvals/{proposal_id}",
       "summary": "Get Approval",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/integration-packs",
+      "summary": "List Api Connector Packs",
       "risk_level": "read"
     },
     {
@@ -678,6 +688,11 @@
       "risk_level": "write"
     },
     {
+      "operation_key": "POST_/api-connectors/{connector_id}/oauth/start",
+      "summary": "Start My Api Connector Oauth",
+      "risk_level": "write"
+    },
+    {
       "operation_key": "POST_/api-connectors/{connector_id}/operations",
       "summary": "Add Manual Operation",
       "risk_level": "write"
@@ -840,6 +855,11 @@
     {
       "operation_key": "POST_/hitl/approvals/{proposal_id}/resume-stream",
       "summary": "Resume Approval Stream",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/integration-packs/install",
+      "summary": "Install Api Connector Pack",
       "risk_level": "write"
     },
     {
