@@ -1,4 +1,4 @@
-"""Shared OAuth PKCE helpers for OIDC and document source connect flows."""
+"""OAuth PKCE helpers shared by SSO, document sync, and integration connect flows."""
 
 from __future__ import annotations
 
@@ -11,9 +11,12 @@ def generate_pkce() -> tuple[str, str, str]:
     """Return (state, code_verifier, code_challenge) for an OAuth PKCE flow."""
     state = secrets.token_urlsafe(32)
     code_verifier = secrets.token_urlsafe(48)
-    digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
-    code_challenge = base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
-    return state, code_verifier, code_challenge
+    return state, code_verifier, code_challenge(code_verifier)
+
+
+def code_challenge(verifier: str) -> str:
+    digest = hashlib.sha256(verifier.encode("ascii")).digest()
+    return base64.urlsafe_b64encode(digest).rstrip(b"=").decode("ascii")
 
 
 def generate_nonce() -> str:

@@ -30,10 +30,10 @@ from apps.shared.external_systems.domain.types import (
 DataSourceUserCredentialAuthTypeStr: TypeAlias = Literal["db_password", "pat"]
 
 # user_integration_credentials.auth_type when resource_type = api_connector (BYOT subset only)
-ApiConnectorUserCredentialAuthTypeStr: TypeAlias = Literal["api_key", "bearer", "basic"]
+ApiConnectorUserCredentialAuthTypeStr: TypeAlias = Literal["api_key", "bearer", "basic", "oauth2"]
 
 # api_connectors.auth_type — integration definition (admin); includes schemes without BYOT
-ApiConnectorDefinitionAuthTypeStr: TypeAlias = Literal["none", "api_key", "bearer", "basic", "custom"]
+ApiConnectorDefinitionAuthTypeStr: TypeAlias = Literal["none", "api_key", "bearer", "basic", "custom", "oauth2"]
 
 CREDENTIAL_STATUS_ACTIVE = "active"
 CREDENTIAL_STATUS_EXPIRED = "expired"
@@ -49,9 +49,10 @@ AUTH_TYPE_API_KEY = "api_key"
 AUTH_TYPE_BEARER = "bearer"
 AUTH_TYPE_BASIC = "basic"
 AUTH_TYPE_CUSTOM = "custom"
+AUTH_TYPE_OAUTH2 = "oauth2"
 
 DATA_SOURCE_USER_AUTH_TYPES = frozenset({USER_INTEGRATION_AUTH_DB_PASSWORD, USER_INTEGRATION_AUTH_PAT})
-BYOT_CONNECTOR_AUTH_TYPES = frozenset({AUTH_TYPE_API_KEY, AUTH_TYPE_BEARER, AUTH_TYPE_BASIC})
+BYOT_CONNECTOR_AUTH_TYPES = frozenset({AUTH_TYPE_API_KEY, AUTH_TYPE_BEARER, AUTH_TYPE_BASIC, AUTH_TYPE_OAUTH2})
 
 __all__ = [
     "AUTH_TYPE_API_KEY",
@@ -59,6 +60,7 @@ __all__ = [
     "AUTH_TYPE_BEARER",
     "AUTH_TYPE_CUSTOM",
     "AUTH_TYPE_NONE",
+    "AUTH_TYPE_OAUTH2",
     "ApiConnectorDefinitionAuthTypeStr",
     "ApiConnectorUserCredentialAuthTypeStr",
     "BYOT_CONNECTOR_AUTH_TYPES",

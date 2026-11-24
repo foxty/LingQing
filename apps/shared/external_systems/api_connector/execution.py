@@ -43,8 +43,10 @@ from apps.shared.external_systems.api_connector.constants import (
     AUTH_TYPE_CUSTOM,
     CONNECTOR_STATUS_ACTIVE,
     OPERATION_STATUS_ACTIVE,
+    REQUEST_ENCODING_FORM,
+    REQUEST_ENCODING_JSON,
 )
-from apps.shared.external_systems.api_connector.domain import ApiConnectorDomain
+from apps.shared.external_systems.api_connector.domain import ApiConnectorDomain, RequestEncoding
 from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository, ApiOperationIndexRepository
 from apps.shared.external_systems.api_connector.schemas import ApiOperationCallParameters
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
@@ -211,9 +213,11 @@ class ApiConnectorExecutionService:
                 runtime_parameters.header,
                 actor=actor,
             )
-
+            request_encoding = self._request_encoding(operation_domain, connector_domain)
             query = runtime_parameters.query
             body = runtime_parameters.body
+            if body and request_encoding == REQUEST_ENCODING_FORM:
+                headers.setdefault("Content-Type", "application/x-www-form-urlencoded")
             concurrency_guard = await self._acquire_concurrency_guard(connector_domain)
             await self._apply_rate_limit(connector_domain)
 
@@ -225,11 +229,13 @@ class ApiConnectorExecutionService:
                 query=query,
                 body=body,
             )
+            execution_error = self._execution_error(connector_domain, status_code, payload)
             return ApiExecutionResult(
                 status_code=status_code,
                 body=payload,
                 headers=response_headers,
                 elapsed_ms=(monotonic() - start) * 1000,
+                error=execution_error,
             )
         except Exception as exc:
             logger.exception("API execution failed")
@@ -422,9 +428,21 @@ class ApiConnectorExecutionService:
     ) -> tuple[int, dict[str, str], Any]:
         timeout = aiohttp.ClientTimeout(total=max(timeout_ms, 1) / 1000)
         logger.info(f"Sending {method} request to {url}")
-        logger.debug(f"With headers={headers} and body={body}")
+        content_type = next(
+            (value for key, value in headers.items() if key.lower() == "content-type"),
+            "",
+        )
         async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.request(method=method, url=url, headers=headers, params=query, json=body) as response:
+            request_kwargs = (
+                {"data": body} if content_type.startswith("application/x-www-form-urlencoded") else {"json": body}
+            )
+            async with session.request(
+                method=method,
+                url=url,
+                headers=headers,
+                params=query,
+                **request_kwargs,
+            ) as response:
                 text = await response.text()
                 payload: Any
                 try:
@@ -432,6 +450,42 @@ class ApiConnectorExecutionService:
                 except Exception:
                     payload = text
                 return response.status, dict(response.headers), payload
+
+    @staticmethod
+    def _request_encoding(operation, connector: ApiConnectorDomain) -> RequestEncoding:
+        """Prefer the operation's OpenAPI media type, then connector fallback."""
+        request_schema = operation.request_schema or {}
+        request_body = request_schema.get("requestBody") if isinstance(request_schema, dict) else None
+        content = request_body.get("content") if isinstance(request_body, dict) else None
+        if isinstance(content, dict):
+            if "application/x-www-form-urlencoded" in content:
+                return REQUEST_ENCODING_FORM
+            if "application/json" in content:
+                return REQUEST_ENCODING_JSON
+        return connector.execution_rules.default_request_encoding
+
+    @classmethod
+    def _execution_error(cls, connector: ApiConnectorDomain, status_code: int, payload: Any) -> str | None:
+        if not 200 <= status_code < 300:
+            return f"External API returned HTTP {status_code}"
+
+        rules = connector.execution_rules
+        if not rules.success_json_path:
+            return None
+        actual = cls._json_path_value(payload, rules.success_json_path)
+        if actual == rules.success_value:
+            return None
+        detail = cls._json_path_value(payload, rules.error_json_path) if rules.error_json_path else None
+        return str(detail or f"Response field {rules.success_json_path!r} did not indicate success")
+
+    @staticmethod
+    def _json_path_value(payload: Any, path: str) -> Any:
+        current = payload
+        for part in path.split("."):
+            if not isinstance(current, dict) or part not in current:
+                return None
+            current = current[part]
+        return current
 
     async def _build_headers(
         self,
@@ -458,24 +512,18 @@ class ApiConnectorExecutionService:
         Returns:
             Dictionary of HTTP headers to include in API request
         """
-        # Get auth_config from domain model (already decrypted)
+        # Custom auth with login flow needs runtime token substitution; otherwise use domain headers.
         auth_config = connector.auth_config
-        headers = {"User-Agent": "LingQing-ApiConnector/1.0"}
-        headers.update({str(k): str(v) for k, v in (extra_headers or {}).items()})
-
-        # Handle custom auth with login flow (dynamic token substitution)
         if connector.auth_type == AUTH_TYPE_CUSTOM and auth_config.login_endpoint:
-            # Perform login to obtain session tokens
             tokens = await self._get_or_refresh_session_tokens(
                 connector,
                 actor=actor if connector.credential_mode == CREDENTIAL_MODE_USER else None,
             )
-
-            # Build headers with token substitution using domain method
+            headers = {"User-Agent": "LingQing-ApiConnector/1.0"}
+            headers.update({str(k): str(v) for k, v in (extra_headers or {}).items()})
             headers.update(connector.build_custom_headers_with_tokens(tokens))
             return headers
 
-        # For all other auth types, delegate to domain model
         return connector.build_headers(extra_headers)
 
     @staticmethod

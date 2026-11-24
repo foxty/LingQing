@@ -9,6 +9,7 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import { iconButtonRowClass } from '@/lib/uiControlPatterns'
 import type { ResourceType, TagValueDTO } from '@/lib/tagsApi'
 import {
   KeyRound,
@@ -106,7 +107,7 @@ export default function ContainerRowActions({
               type="button"
               size="sm"
               variant="ghost"
-              className="h-8 w-8 p-0"
+              className={iconButtonRowClass}
               aria-label={t('common.action')}
             >
               <MoreHorizontal className="h-4 w-4" />

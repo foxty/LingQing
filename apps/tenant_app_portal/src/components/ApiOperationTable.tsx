@@ -77,6 +77,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import type { ApiOperation } from '@/lib/apiConnectorApi'
+import { iconButtonRowClass } from '@/lib/uiControlPatterns'
 import { MoreHorizontal, Pencil, Play, Power, Trash2 } from 'lucide-react'
 
 interface ApiOperationTableProps {
@@ -165,8 +166,10 @@ export default function ApiOperationTable({
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button
+                          type="button"
+                          size="sm"
                           variant="ghost"
-                          className="h-11 w-11 p-0"
+                          className={iconButtonRowClass}
                           aria-label={t('components.apiOperationTable.rowActions')}
                         >
                           <MoreHorizontal className="w-4 h-4" />

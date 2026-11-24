@@ -931,3 +931,79 @@ async def test_update_connector_mixed_omit_and_real_values(async_db_session, moc
 
         # username should be UNCHANGED (same value)
         assert domain.auth_config.extra_config["username"] == "admin"
+
+
+@pytest.mark.asyncio
+async def test_update_connector_enriches_user_connection_status(
+    async_db_session, mock_rag_indexing_service
+):
+    """Update response must include actor connection status so list UI stays fresh."""
+    from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR
+    from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
+    from apps.shared.utils.field_cipher import FieldCipher
+
+    tenant = Tenant(
+        name="tenant_api_connector_update_status",
+        slug="tenant_api_connector_update_status",
+        config=None,
+    )
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+
+    user = User(
+        username="status_owner",
+        email=None,
+        hashed_password="hashed",
+        role="admin",
+        tenant_id=tenant.id,
+    )
+    async_db_session.add(user)
+    await async_db_session.flush()
+
+    actor = ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role)
+
+    with patch("apps.shared.search.sync_service.ResourceIndexService", return_value=mock_rag_indexing_service):
+        service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
+        created = await service.create_connector(
+            owner_id=user.id,
+            name="slack-user-pack",
+            description=None,
+            base_url="https://slack.com/api",
+            auth_type="oauth2",
+            auth_config={
+                "auth_method": "oauth2",
+                "authorize_url": "https://slack.com/oauth/v2/authorize",
+                "token_url": "https://slack.com/api/oauth.v2.access",
+                "client_id": "client-id",
+                "client_secret": "client-secret",
+                "scopes": ["search:read"],
+            },
+            rate_policy=RatePolicyDomain.from_raw({}),
+            schema_source_type="manual",
+            schema_source_url=None,
+            credential_mode="user",
+        )
+
+        cipher = FieldCipher()
+        repo = UserIntegrationCredentialRepository(async_db_session)
+        await repo.upsert_binding(
+            tenant_id=tenant.id,
+            user_id=user.id,
+            resource_type=RESOURCE_TYPE_API_CONNECTOR,
+            resource_id=created.id,
+            auth_type="oauth2",
+            secrets_enc=cipher.encrypt_dict(
+                {"access_token": "xoxp-token", "refresh_token": "refresh"},
+                sensitive_fields={"access_token", "refresh_token"},
+            ),
+            account_label="slack-user",
+        )
+
+        updated = await service.update_connector_for_actor(
+            connector_id=created.id,
+            actor=actor,
+            name="slack-user-renamed",
+        )
+
+    assert updated.name == "slack-user-renamed"
+    assert updated.user_connection_status == "connected"

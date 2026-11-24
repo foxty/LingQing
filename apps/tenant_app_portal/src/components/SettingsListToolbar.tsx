@@ -68,15 +68,21 @@ export default function SettingsListToolbar({
 
       <div className="flex w-full shrink-0 flex-wrap items-center justify-end gap-2 sm:w-auto">
         {onRefresh && refreshLabel ? (
-          <Button variant="outline" size="sm" className="h-9" onClick={onRefresh} disabled={refreshing}>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={onRefresh}
+            disabled={refreshing}
+          >
             <RefreshCw className={`mr-2 h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshLabel}
           </Button>
         ) : null}
         {primaryAction && !primaryAction.hidden ? (
           <Button
+            type="button"
             size="sm"
-            className="h-9"
             onClick={primaryAction.onClick}
             disabled={primaryAction.disabled}
           >

@@ -5,7 +5,6 @@
 
 // Tenant app service URL - defaults to /api for docker-compose routing through nginx
 const backendUrl = import.meta.env.VITE_BACKEND_URL || '/api'
-console.log('Tenant app service URL:', backendUrl)
 
 export const config = {
   // Tenant app service URL (unified) - supports relative and absolute paths

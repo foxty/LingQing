@@ -1,0 +1,206 @@
+pack_id: slack-user
+version: 1.1.0
+
+connector:
+  name: Slack (user)
+  description: Search and read Slack conversations with the connected user's permissions.
+  base_url: https://slack.com/api
+  credential_mode: user
+  auth_type: oauth2
+
+oauth:
+  authorize_url: https://slack.com/oauth/v2/authorize
+  token_url: https://slack.com/api/oauth.v2.access
+  scope_param: user_scope
+  token_response_path: authed_user
+  scopes:
+    - search:read
+    - channels:read
+    - channels:history
+    - groups:read
+    - groups:history
+    - im:read
+    - im:history
+    - mpim:read
+    - mpim:history
+    - users:read
+    - users:read.email
+    - files:read
+
+execution_rules:
+  default_request_encoding: form
+  success_json_path: ok
+  success_value: true
+  error_json_path: error
+
+operations:
+  - method: POST
+    path: /search.messages
+    operation_id: slack_search_messages
+    summary: Search Slack messages visible to the connected user.
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+                count: { type: integer, maximum: 100 }
+                page: { type: integer, minimum: 1 }
+                sort: { type: string, enum: [score, timestamp] }
+                sort_dir: { type: string, enum: [asc, desc] }
+    response_schema:
+      type: object
+  - method: POST
+    path: /conversations.list
+    operation_id: slack_list_conversations
+    summary: List Slack conversations visible to the connected user.
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                types: { type: string }
+                limit: { type: integer, maximum: 200 }
+                cursor: { type: string }
+    response_schema:
+      type: object
+  - method: POST
+    path: /conversations.info
+    operation_id: slack_conversation_info
+    summary: Get metadata for one Slack conversation (name, topic, purpose).
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { type: string }
+                include_locale: { type: boolean }
+                include_num_members: { type: boolean }
+    response_schema:
+      type: object
+  - method: POST
+    path: /conversations.history
+    operation_id: slack_conversation_history
+    summary: Read recent messages from one Slack conversation.
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { type: string }
+                oldest: { type: string }
+                latest: { type: string }
+                limit: { type: integer, maximum: 100 }
+                cursor: { type: string }
+    response_schema:
+      type: object
+  - method: POST
+    path: /conversations.replies
+    operation_id: slack_conversation_replies
+    summary: Read a Slack thread and its replies.
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [channel, ts]
+              properties:
+                channel: { type: string }
+                ts: { type: string }
+                limit: { type: integer, maximum: 100 }
+                cursor: { type: string }
+    response_schema:
+      type: object
+  - method: POST
+    path: /conversations.members
+    operation_id: slack_conversation_members
+    summary: List member user IDs for one Slack conversation.
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [channel]
+              properties:
+                channel: { type: string }
+                limit: { type: integer, maximum: 200 }
+                cursor: { type: string }
+    response_schema:
+      type: object
+  - method: POST
+    path: /users.info
+    operation_id: slack_user_info
+    summary: Resolve a Slack user ID to profile details (name, display name).
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [user]
+              properties:
+                user: { type: string }
+                include_locale: { type: boolean }
+    response_schema:
+      type: object
+  - method: POST
+    path: /users.lookupByEmail
+    operation_id: slack_user_lookup_by_email
+    summary: Resolve a work email to a Slack user ID.
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [email]
+              properties:
+                email: { type: string, format: email }
+    response_schema:
+      type: object
+  - method: POST
+    path: /files.info
+    operation_id: slack_file_info
+    summary: Get metadata for a Slack file shared in conversations.
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [file]
+              properties:
+                file: { type: string }
+                count: { type: integer, maximum: 100 }
+                page: { type: integer, minimum: 1 }
+    response_schema:
+      type: object
+  - method: POST
+    path: /chat.getPermalink
+    operation_id: slack_get_message_permalink
+    summary: Get a permalink for a Slack message used as a source citation.
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required: [channel, message_ts]
+              properties:
+                channel: { type: string }
+                message_ts: { type: string }
+    response_schema:
+      type: object

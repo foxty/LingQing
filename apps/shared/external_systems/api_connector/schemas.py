@@ -10,23 +10,29 @@ from pydantic import BaseModel, ConfigDict, Discriminator, Field, Tag
 from apps.shared.external_systems.api_connector.constants import (
     AUTH_REQUIREMENT_REQUIRED,
     AUTH_TYPE_NONE,
+    AUTH_TYPE_OAUTH2,
     DEFAULT_HTTP_TIMEOUT_MS,
     DEFAULT_MAX_CONCURRENT_REQUESTS,
     DEFAULT_MAX_REQUESTS_PER_SECOND,
     DEFAULT_MAX_RETRIES,
     DEFAULT_RETRY_BACKOFF_MS,
     DEFAULT_RETRY_ON_STATUS,
+    REQUEST_ENCODING_JSON,
     RISK_LEVEL_MEDIUM,
+    TOKEN_AUTH_METHOD_CLIENT_SECRET_POST,
 )
 from apps.shared.external_systems.api_connector.domain import (
     AuthRequirement,
     AuthType,
     ConnectorStatus,
+    ExecutionRulesDomain,
     OperationSource,
     OperationStatus,
     RatePolicyDomain,
+    RequestEncoding,
     RiskLevel,
     SchemaSourceType,
+    TokenAuthMethod,
 )
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_SHARED,
@@ -95,6 +101,22 @@ class CustomAuthConfigSchema(BaseModel):
     extra_config: dict[str, Any] = Field(default_factory=dict)
 
 
+class OAuth2AuthConfigSchema(BaseModel):
+    """OAuth 2.0 application configuration; user tokens are stored separately."""
+
+    model_config = ConfigDict(extra="forbid")
+    auth_method: Literal[AUTH_TYPE_OAUTH2] = Field(default=AUTH_TYPE_OAUTH2)
+    authorize_url: str
+    token_url: str
+    client_id: str
+    client_secret: str | None = None
+    scopes: list[str] = Field(default_factory=list)
+    scope_param: str = Field(default="scope", min_length=1, max_length=64)
+    redirect_uri: str | None = None
+    token_auth_method: TokenAuthMethod = TOKEN_AUTH_METHOD_CLIENT_SECRET_POST
+    token_response_path: str | None = Field(default=None, max_length=255)
+
+
 # Discriminated union for API validation
 AuthConfigSchema = Annotated[
     (
@@ -103,6 +125,7 @@ AuthConfigSchema = Annotated[
         | Annotated[BearerAuthConfigSchema, Tag("bearer")]
         | Annotated[BasicAuthConfigSchema, Tag("basic")]
         | Annotated[CustomAuthConfigSchema, Tag("custom")]
+        | Annotated[OAuth2AuthConfigSchema, Tag(AUTH_TYPE_OAUTH2)]
     ),
     Discriminator(_get_auth_method),
 ]
@@ -125,6 +148,18 @@ class ApiRatePolicySchema(BaseModel):
         return cls(**domain.to_policy_dict())
 
 
+class ApiExecutionRulesSchema(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    default_request_encoding: RequestEncoding = REQUEST_ENCODING_JSON
+    success_json_path: str | None = Field(default=None, max_length=255)
+    success_value: Any = True
+    error_json_path: str | None = Field(default=None, max_length=255)
+
+    def to_domain(self) -> ExecutionRulesDomain:
+        return ExecutionRulesDomain.from_raw(self.model_dump())
+
+
 # API request/response schemas
 class ApiConnectorCreateRequest(BaseModel):
     name: str
@@ -135,6 +170,7 @@ class ApiConnectorCreateRequest(BaseModel):
     # Use discriminated union with 'auth_method' field for proper validation and serialization
     auth_config: AuthConfigSchema = Field(default_factory=dict)
     rate_policy: ApiRatePolicySchema = Field(default_factory=ApiRatePolicySchema)
+    execution_rules: ApiExecutionRulesSchema = Field(default_factory=ApiExecutionRulesSchema)
     schema_source_type: SchemaSourceType
     schema_source_url: str | None = None
 
@@ -148,6 +184,7 @@ class ApiConnectorUpdateRequest(BaseModel):
     # Use discriminated union with 'auth_method' field for proper validation and serialization
     auth_config: AuthConfigSchema | None = None
     rate_policy: ApiRatePolicySchema | None = None
+    execution_rules: ApiExecutionRulesSchema | None = None
     schema_source_type: SchemaSourceType | None = None
     schema_source_url: str | None = None
     status: ConnectorStatus | None = None
@@ -164,6 +201,8 @@ class ApiConnectorResponse(MaskedFieldsMixin):
     auth_type: AuthType
     auth_config: dict[str, Any]
     rate_policy: ApiRatePolicySchema
+    execution_rules: ApiExecutionRulesSchema = Field(default_factory=ApiExecutionRulesSchema)
+    pack_ref: str | None = None
     schema_source_type: SchemaSourceType
     schema_source_url: str | None
     schema_metadata: dict[str, Any]
@@ -181,6 +220,10 @@ class ApiConnectorListResponse(PaginatedResponse[ApiConnectorResponse]):
 
 class SyncSchemaRequest(BaseModel):
     file_content: str | None = None
+
+
+class ApiConnectorOAuthStartResponse(BaseModel):
+    authorization_url: str
 
 
 class SyncSchemaSummaryDTO(BaseModel):

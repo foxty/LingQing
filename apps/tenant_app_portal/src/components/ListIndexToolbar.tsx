@@ -18,6 +18,8 @@ interface ListIndexToolbarProps {
   onRefresh: () => void
   refreshing?: boolean
   refreshLabel: string
+  /** Outline peer actions before the solid primary (e.g. Install Pack). */
+  secondaryActions?: ListIndexPrimaryAction[]
   primaryAction?: ListIndexPrimaryAction
 }
 
@@ -29,9 +31,11 @@ export default function ListIndexToolbar({
   onRefresh,
   refreshing = false,
   refreshLabel,
+  secondaryActions = [],
   primaryAction,
 }: ListIndexToolbarProps) {
   const PrimaryIcon = primaryAction?.icon ?? Plus
+  const visibleSecondary = secondaryActions.filter((action) => !action.hidden)
 
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -56,12 +60,28 @@ export default function ListIndexToolbar({
       </div>
 
       <div className="flex items-center justify-end gap-2 shrink-0">
-        <Button variant="outline" className="h-11" onClick={onRefresh} disabled={refreshing}>
+        <Button variant="outline" size="sm" onClick={onRefresh} disabled={refreshing}>
           <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
           {refreshLabel}
         </Button>
+        {visibleSecondary.map((action) => {
+          const Icon = action.icon
+          return (
+            <Button
+              key={action.label}
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={action.onClick}
+              disabled={action.disabled}
+            >
+              {Icon ? <Icon className="w-4 h-4 mr-2" /> : null}
+              {action.label}
+            </Button>
+          )
+        })}
         {primaryAction && !primaryAction.hidden ? (
-          <Button className="h-11" onClick={primaryAction.onClick} disabled={primaryAction.disabled}>
+          <Button size="sm" onClick={primaryAction.onClick} disabled={primaryAction.disabled}>
             <PrimaryIcon className="w-4 h-4 mr-2" />
             {primaryAction.label}
           </Button>

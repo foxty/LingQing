@@ -1,6 +1,6 @@
 /** Secret field definitions for per-user integration connection forms. */
 
-export const BYOT_CONNECTOR_AUTH_TYPES = ['api_key', 'bearer', 'basic'] as const
+export const BYOT_CONNECTOR_AUTH_TYPES = ['api_key', 'bearer', 'basic', 'oauth2'] as const
 export type ByotConnectorAuthType = (typeof BYOT_CONNECTOR_AUTH_TYPES)[number]
 
 export function dataSourceUserAuthTypeHint(dataSourceType: string): 'db_password' | 'pat' {

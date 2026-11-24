@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from apps.shared.core.exceptions import IntegrationNotConnectedError
@@ -15,6 +15,7 @@ from apps.shared.external_systems.credentials.repository import UserIntegrationC
 from apps.shared.external_systems.credentials.sensitive_config import (
     API_CONNECTOR_USER_MODE_STRIP_KEYS,
     DATA_SOURCE_USER_MODE_STRIP_KEYS,
+    OAUTH2_USER_TOKEN_KEYS,
     USER_INTEGRATION_SENSITIVE_LEAF_KEYS,
 )
 from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER, IntegrationPurpose
@@ -53,7 +54,9 @@ class IntegrationCredentialResolver:
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             resource_id=data_source.id,
         )
-        user_secrets = self.cipher.decrypt_dict(binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        user_secrets = self.cipher.decrypt_dict(
+            binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS
+        )
         merged = {**strip_sensitive_fields(base, sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS), **user_secrets}
         return merged
 
@@ -64,16 +67,10 @@ class IntegrationCredentialResolver:
         actor: ActorContext | None,
         purpose: IntegrationPurpose,
     ) -> dict[str, Any]:
-        
-
+        template = self._decrypt_connector_auth_template(connector)
         mode = getattr(connector, "credential_mode", None) or "shared"
         if mode != CREDENTIAL_MODE_USER:
-            raw = connector.auth_config or {}
-            if self.cipher and raw:
-                return self.cipher.decrypt_dict(
-                    raw, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS
-                )
-            return dict(raw)
+            return template
 
         if actor is None:
             raise IntegrationNotConnectedError(
@@ -81,15 +78,111 @@ class IntegrationCredentialResolver:
                 {"code": "INTEGRATION_NOT_CONNECTED", "resource_type": RESOURCE_TYPE_API_CONNECTOR},
             )
 
-        binding = await self._require_active_binding(
+        binding, user_secrets = await self._load_active_user_secrets(
             tenant_id=connector.tenant_id,
             user_id=actor.user_id,
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=connector.id,
         )
-        template = strip_sensitive_fields(connector.auth_config or {}, sensitive_keys=API_CONNECTOR_USER_MODE_STRIP_KEYS)
-        user_secrets = self.cipher.decrypt_dict(binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
-        return {**template, **user_secrets}
+        user_secrets = await self._maybe_refresh_oauth2_user_secrets(
+            connector=connector,
+            binding=binding,
+            template=template,
+            user_secrets=user_secrets,
+        )
+        return self._merge_user_secrets_into_connector_template(
+            template=template,
+            user_secrets=user_secrets,
+            auth_type=connector.auth_type,
+        )
+
+    def _decrypt_connector_auth_template(self, connector: ApiConnector) -> dict[str, Any]:
+        raw_template = connector.auth_config or {}
+        return self.cipher.decrypt_dict(raw_template, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+
+    async def _load_active_user_secrets(
+        self,
+        *,
+        tenant_id: int,
+        user_id: int,
+        resource_type: str,
+        resource_id: int,
+    ) -> tuple[UserIntegrationCredential, dict[str, Any]]:
+        """Load an active binding and decrypt secrets without failing on near-expiry.
+
+        OAuth connectors may refresh when expiry is imminent; callers decide refresh vs error.
+        """
+        binding = await self.repo.get_binding(
+            tenant_id=tenant_id,
+            user_id=user_id,
+            resource_type=resource_type,
+            resource_id=resource_id,
+        )
+        if binding is None or binding.status != CREDENTIAL_STATUS_ACTIVE:
+            raise IntegrationNotConnectedError(
+                "Connect your account to use this integration",
+                {
+                    "code": "INTEGRATION_NOT_CONNECTED",
+                    "resource_type": resource_type,
+                    "resource_id": resource_id,
+                },
+            )
+        user_secrets = self.cipher.decrypt_dict(
+            binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS
+        )
+        return binding, user_secrets
+
+    async def _maybe_refresh_oauth2_user_secrets(
+        self,
+        *,
+        connector: ApiConnector,
+        binding: UserIntegrationCredential,
+        template: dict[str, Any],
+        user_secrets: dict[str, Any],
+    ) -> dict[str, Any]:
+        expires_at = binding.expires_at
+        if expires_at is not None:
+            expires_at = expires_at.replace(tzinfo=UTC) if expires_at.tzinfo is None else expires_at.astimezone(UTC)
+        refresh_due = expires_at is not None and expires_at <= datetime.now(UTC) + timedelta(seconds=60)
+        if not refresh_due:
+            return user_secrets
+
+        if connector.auth_type != "oauth2" or not user_secrets.get("refresh_token"):
+            raise IntegrationNotConnectedError(
+                "Integration credentials expired; reconnect to continue",
+                {"code": "INTEGRATION_CREDENTIAL_EXPIRED", "resource_type": RESOURCE_TYPE_API_CONNECTOR},
+            )
+
+        from apps.shared.external_systems.api_connector.adapters import dict_to_auth_config
+        from apps.shared.external_systems.api_connector.domain import OAuth2AuthConfig
+        from apps.shared.infra.oauth import OAuth2TokenClient
+
+        oauth_config = dict_to_auth_config("oauth2", {**template, **user_secrets})
+        if not isinstance(oauth_config, OAuth2AuthConfig):
+            raise IntegrationNotConnectedError(
+                "Invalid OAuth2 connector configuration",
+                {"code": "INTEGRATION_OAUTH_CONFIG_INVALID"},
+            )
+        tokens = await OAuth2TokenClient().refresh(
+            config=oauth_config,
+            refresh_token=user_secrets["refresh_token"],
+        )
+        refreshed = {**user_secrets, **tokens.to_secrets()}
+        binding.secrets_enc = self.cipher.encrypt_dict(refreshed, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        binding.expires_at = tokens.expires_at
+        binding.updated_at = datetime.now(UTC)
+        await self.db_session.flush()
+        return refreshed
+
+    @staticmethod
+    def _merge_user_secrets_into_connector_template(
+        *,
+        template: dict[str, Any],
+        user_secrets: dict[str, Any],
+        auth_type: str,
+    ) -> dict[str, Any]:
+        strip_keys = OAUTH2_USER_TOKEN_KEYS if auth_type == "oauth2" else API_CONNECTOR_USER_MODE_STRIP_KEYS
+        return {**strip_sensitive_fields(template, sensitive_keys=strip_keys), **user_secrets}
 
     async def connection_status_for_actor(
         self,

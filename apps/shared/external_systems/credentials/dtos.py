@@ -30,11 +30,12 @@ class UserIntegrationConnectionUpsertRequest(BaseModel):
         ...,
         description=(
             "Data source: db_password (RDBMS) or pat (Databricks). "
-            "API connector: must match connector auth_type (api_key, bearer, basic)."
+            "API connector: must match connector auth_type (api_key, bearer, basic, oauth2)."
         ),
     )
     secrets: dict[str, str] = Field(..., description="Plaintext secrets; encrypted server-side")
     account_label: str | None = None
+    expires_at: datetime | None = None
 
 
 class UserIntegrationConnectionTestResponse(BaseModel):

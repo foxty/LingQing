@@ -1,15 +1,16 @@
 """Unit tests for ApiConnectorExecutionService."""
 
+from types import SimpleNamespace
 
 import pytest
 
-from apps.shared.external_systems.api_connector.domain import RatePolicyDomain
-from apps.shared.external_systems.api_connector.execution import ApiConnectorExecutionService
-from apps.shared.external_systems.api_connector.schemas import ApiOperationCallParameters
-from apps.shared.external_systems.api_connector.service import ApiConnectorService
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.db.models import Tenant, User
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.api_connector.domain import ExecutionRulesDomain, RatePolicyDomain
+from apps.shared.external_systems.api_connector.execution import ApiConnectorExecutionService
+from apps.shared.external_systems.api_connector.schemas import ApiOperationCallParameters
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
 
 
 @pytest.mark.asyncio
@@ -125,6 +126,39 @@ async def test_execute_operation_returns_error_for_missing_path_param(async_db_s
 def test_validate_base_url_blocks_private_hosts():
     with pytest.raises(ValidationError, match="loopback"):
         ApiConnectorExecutionService._validate_base_url("http://127.0.0.1:8080")
+
+
+def test_request_encoding_prefers_openapi_media_type():
+    operation = SimpleNamespace(
+        request_schema={
+            "requestBody": {
+                "content": {
+                    "application/x-www-form-urlencoded": {"schema": {"type": "object"}},
+                }
+            }
+        }
+    )
+    connector = SimpleNamespace(execution_rules=ExecutionRulesDomain(default_request_encoding="json"))
+
+    assert ApiConnectorExecutionService._request_encoding(operation, connector) == "form"
+
+
+def test_execution_rules_map_body_level_failure():
+    connector = SimpleNamespace(
+        execution_rules=ExecutionRulesDomain(
+            success_json_path="ok",
+            success_value=True,
+            error_json_path="error",
+        )
+    )
+
+    error = ApiConnectorExecutionService._execution_error(
+        connector,
+        200,
+        {"ok": False, "error": "missing_scope"},
+    )
+
+    assert error == "missing_scope"
 
 
 @pytest.mark.asyncio

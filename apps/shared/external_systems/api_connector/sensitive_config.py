@@ -14,3 +14,9 @@ AUTH_CONFIG_SENSITIVE_FIELDS = AUTH_CONFIG_SENSITIVE_LEAF_KEYS
 
 # User-mode BYOT: remove top-level shared auth leaves before overlaying user secrets.
 API_CONNECTOR_USER_MODE_STRIP_KEYS: frozenset[str] = AUTH_CONFIG_SENSITIVE_LEAF_KEYS
+
+# OAuth application credentials remain connector-scoped even when access tokens
+# are per-user. Strip only actor token fields before persisting connector config.
+OAUTH2_USER_TOKEN_KEYS: frozenset[str] = frozenset(
+    {"token", "access_token", "refresh_token"}
+)

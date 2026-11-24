@@ -144,6 +144,8 @@ Record operations. Two layouts only — **list index** and **list detail**.
 
 **List detail:** `ContainerDetailHeader` = breadcrumb only: parent link (`text-sm`), chevron, **leaf** (`h1`, `text-xl` semibold) = current entity name; optional `titleAddon` on the row; optional **info** popover for `meta` (type, URL, description — not a second headline). No CTAs in the header. Toolbar: search, batch outline when selected, one solid Upload/Add, ⋯ for infrequent ops (`ListDetailToolbar`). Optional status bar (e.g. Drive sync) between header and toolbar — no duplicate refresh in header and bar. Container catalog actions stay on parent index only.
 
+**List toolbars (index + detail):** search input and peer CTAs share one height — `Input` `h-9` + `Button size="sm"` (also `h-9`). Overflow ⋯ uses `size="sm"` with square `h-9 w-9`. Do **not** force `className="h-11"` on default-size buttons (leaves `py-2` and looks taller than peers). Compact popover/table rows stay on §6.1 (`h-8`); dialog/form primaries stay default `size` — do not blanket every CTA to `sm`.
+
 **Parent → child routing:** parent = list index, child = list detail; two routes when table is wide (≥~6 cols). No persistent container sidebar.
 
 **Skip list layouts for:** Catalog card grids, Workbench, Detail view.

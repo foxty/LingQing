@@ -5,7 +5,7 @@ from __future__ import annotations
 import base64
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal, Mapping, Sequence
+from typing import Any, Literal, Mapping, Sequence, TypedDict
 
 from apps.shared.core.exceptions import ValidationError
 from apps.shared.domain.base_domain_model import BaseDomainModel
@@ -17,6 +17,7 @@ from apps.shared.external_systems.api_connector.constants import (
     AUTH_TYPE_BEARER,
     AUTH_TYPE_CUSTOM,
     AUTH_TYPE_NONE,
+    AUTH_TYPE_OAUTH2,
     CONNECTOR_STATUS_ACTIVE,
     CONNECTOR_STATUS_DISABLED,
     DEFAULT_HTTP_TIMEOUT_MS,
@@ -30,16 +31,29 @@ from apps.shared.external_systems.api_connector.constants import (
     OPERATION_STATUS_ACTIVE,
     OPERATION_STATUS_DISABLED,
     OPERATION_STATUS_STALE,
+    REQUEST_ENCODING_FORM,
+    REQUEST_ENCODING_JSON,
     RISK_LEVEL_HIGH,
     RISK_LEVEL_LOW,
     RISK_LEVEL_MEDIUM,
     SCHEMA_SOURCE_TYPE_MANUAL,
     SCHEMA_SOURCE_TYPE_OPENAPI_UPLOAD,
     SCHEMA_SOURCE_TYPE_OPENAPI_URL,
+    TOKEN_AUTH_METHOD_CLIENT_SECRET_BASIC,
+    TOKEN_AUTH_METHOD_CLIENT_SECRET_POST,
 )
 from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_SHARED, CredentialModeStr
 
-AuthType = Literal[AUTH_TYPE_NONE, AUTH_TYPE_API_KEY, AUTH_TYPE_BEARER, AUTH_TYPE_BASIC, AUTH_TYPE_CUSTOM]
+AuthType = Literal[
+    AUTH_TYPE_NONE,
+    AUTH_TYPE_API_KEY,
+    AUTH_TYPE_BEARER,
+    AUTH_TYPE_BASIC,
+    AUTH_TYPE_CUSTOM,
+    AUTH_TYPE_OAUTH2,
+]
+RequestEncoding = Literal[REQUEST_ENCODING_JSON, REQUEST_ENCODING_FORM]
+TokenAuthMethod = Literal[TOKEN_AUTH_METHOD_CLIENT_SECRET_POST, TOKEN_AUTH_METHOD_CLIENT_SECRET_BASIC]
 SchemaSourceType = Literal[
     SCHEMA_SOURCE_TYPE_MANUAL,
     SCHEMA_SOURCE_TYPE_OPENAPI_URL,
@@ -50,6 +64,13 @@ AuthRequirement = Literal[AUTH_REQUIREMENT_REQUIRED, AUTH_REQUIREMENT_NONE]
 RiskLevel = Literal[RISK_LEVEL_LOW, RISK_LEVEL_MEDIUM, RISK_LEVEL_HIGH]
 OperationStatus = Literal[OPERATION_STATUS_ACTIVE, OPERATION_STATUS_DISABLED, OPERATION_STATUS_STALE]
 OperationSource = Literal[OPERATION_SOURCE_IMPORTED, OPERATION_SOURCE_MANUAL]
+
+
+class ExecutionRulesDict(TypedDict):
+    default_request_encoding: RequestEncoding
+    success_json_path: str | None
+    success_value: Any
+    error_json_path: str | None
 
 
 # Auth config value objects (pure domain dataclasses)
@@ -138,8 +159,72 @@ class CustomAuthConfig:
     extra_config: dict[str, Any] = field(default_factory=dict)
 
 
+@dataclass
+class OAuth2AuthConfig:
+    """OAuth 2.0 application config plus an actor-resolved token set."""
+
+    auth_method: Literal[AUTH_TYPE_OAUTH2] = AUTH_TYPE_OAUTH2
+    authorize_url: str = ""
+    token_url: str = ""
+    client_id: str = ""
+    client_secret: str | None = None
+    scopes: list[str] = field(default_factory=list)
+    scope_param: str = "scope"
+    redirect_uri: str | None = None
+    token_auth_method: TokenAuthMethod = TOKEN_AUTH_METHOD_CLIENT_SECRET_POST
+    token_response_path: str | None = None
+    access_token: str | None = None
+    refresh_token: str | None = None
+    token_type: str = "Bearer"
+    expires_at: str | None = None
+
+
 # Union type for all auth config variants
-AuthConfig = NoAuthConfig | ApiKeyAuthConfig | BearerAuthConfig | BasicAuthConfig | CustomAuthConfig
+AuthConfig = NoAuthConfig | ApiKeyAuthConfig | BearerAuthConfig | BasicAuthConfig | CustomAuthConfig | OAuth2AuthConfig
+
+
+def _oauth2_http_auth_scheme(token_type: str | None) -> str:
+    """Map provider ``token_type`` to an HTTP Authorization scheme.
+
+    Provider token responses often misuse ``token_type`` (Slack sets ``user`` for
+    user tokens). Only a real HTTP scheme is allowed in Authorization; we currently
+    support Bearer (RFC 6750) and ignore non-scheme labels like ``user``.
+    """
+    if isinstance(token_type, str) and token_type.strip().lower() == "bearer":
+        return "Bearer"
+    # "user", empty, unknown → still Bearer for access-token HTTP calls
+    return "Bearer"
+
+
+@dataclass
+class ExecutionRulesDomain(BaseDomainModel):
+    """Generic HTTP execution semantics configured per connector."""
+
+    default_request_encoding: RequestEncoding = REQUEST_ENCODING_JSON
+    success_json_path: str | None = None
+    success_value: Any = True
+    error_json_path: str | None = None
+
+    @classmethod
+    def from_raw(cls, raw: Mapping[str, Any] | None) -> ExecutionRulesDomain:
+        data = raw or {}
+        encoding = data.get("default_request_encoding", REQUEST_ENCODING_JSON)
+        if encoding not in {REQUEST_ENCODING_JSON, REQUEST_ENCODING_FORM}:
+            encoding = REQUEST_ENCODING_JSON
+        return cls(
+            default_request_encoding=encoding,
+            success_json_path=data.get("success_json_path"),
+            success_value=data.get("success_value", True),
+            error_json_path=data.get("error_json_path"),
+        )
+
+    def to_dict(self) -> ExecutionRulesDict:
+        return {
+            "default_request_encoding": self.default_request_encoding,
+            "success_json_path": self.success_json_path,
+            "success_value": self.success_value,
+            "error_json_path": self.error_json_path,
+        }
 
 
 @dataclass
@@ -273,6 +358,8 @@ class ApiConnectorDomain(BaseDomainModel):
     updated_at: datetime
     owner_name: str | None = None
     credential_mode: CredentialModeStr = CREDENTIAL_MODE_SHARED
+    pack_ref: str | None = None
+    execution_rules: ExecutionRulesDomain = field(default_factory=ExecutionRulesDomain)
 
     def build_headers(self, extra_headers: dict[str, Any] | None = None) -> dict[str, str]:
         """Build HTTP headers for API request based on authentication type.
@@ -295,41 +382,39 @@ class ApiConnectorDomain(BaseDomainModel):
         if extra_headers:
             headers.update({str(k): str(v) for k, v in extra_headers.items()})
 
-        match self.auth_type:
-            case "api_key":
-                key_name = auth_config.key_name or "X-API-Key"
-                key_value = auth_config.key_value or auth_config.api_key
-                if not key_value:
-                    raise ValidationError("Missing api_key/key_value in auth_config")
-                headers[key_name] = str(key_value)
-
-            case "bearer":
-                token = auth_config.token or auth_config.access_token
-                if not token:
-                    raise ValidationError("Missing bearer token in auth_config")
-                headers["Authorization"] = f"Bearer {token}"
-
-            case "basic":
-                username = auth_config.username
-                password = auth_config.password
-                if not username or not password:
-                    raise ValidationError("Missing username/password for basic auth")
-                raw = f"{username}:{password}".encode()
-                headers["Authorization"] = f"Basic {base64.b64encode(raw).decode('utf-8')}"
-
-            case "custom":
-                # For custom auth, headers are built dynamically during request execution
-                # (login flow, token extraction, placeholder substitution)
-                # This method returns static headers only; dynamic headers are handled in execution service
-                if hasattr(auth_config, "request_headers"):
-                    custom_headers = auth_config.request_headers
-                    if isinstance(custom_headers, dict):
-                        for key, value in custom_headers.items():
-                            headers[str(key)] = str(value)
-
-            case _:
-                # AUTH_TYPE_NONE: No auth headers needed, just return default headers
-                pass
+        if self.auth_type == AUTH_TYPE_API_KEY:
+            key_name = auth_config.key_name or "X-API-Key"
+            key_value = auth_config.key_value or auth_config.api_key
+            if not key_value:
+                raise ValidationError("Missing api_key/key_value in auth_config")
+            headers[key_name] = str(key_value)
+        elif self.auth_type == AUTH_TYPE_BEARER:
+            token = auth_config.token or auth_config.access_token
+            if not token:
+                raise ValidationError("Missing bearer token in auth_config")
+            headers["Authorization"] = f"Bearer {token}"
+        elif self.auth_type == AUTH_TYPE_OAUTH2:
+            token = auth_config.access_token
+            if not token:
+                raise ValidationError("Missing OAuth2 access_token for the current user")
+            headers["Authorization"] = f"{_oauth2_http_auth_scheme(auth_config.token_type)} {token}"
+        elif self.auth_type == AUTH_TYPE_BASIC:
+            username = auth_config.username
+            password = auth_config.password
+            if not username or not password:
+                raise ValidationError("Missing username/password for basic auth")
+            raw = f"{username}:{password}".encode()
+            headers["Authorization"] = f"Basic {base64.b64encode(raw).decode('utf-8')}"
+        elif self.auth_type == AUTH_TYPE_CUSTOM:
+            # For custom auth, headers are built dynamically during request execution
+            # (login flow, token extraction, placeholder substitution)
+            # This method returns static headers only; dynamic headers are handled in execution service
+            if hasattr(auth_config, "request_headers"):
+                custom_headers = auth_config.request_headers
+                if isinstance(custom_headers, dict):
+                    for key, value in custom_headers.items():
+                        headers[str(key)] = str(value)
+        # AUTH_TYPE_NONE: No auth headers needed, just return default headers
 
         return headers
 

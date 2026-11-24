@@ -1,5 +1,5 @@
 import { useEffect, useState, type MouseEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 
 import { ConfirmationDialog } from '@/components/ConfirmationDialog'
 import IntegrationCredentialsCell, {
@@ -10,6 +10,7 @@ import MyIntegrationConnectionDialog from '@/components/MyIntegrationConnectionD
 import { useConfirmation } from '@/hooks/useConfirmation'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import AddApiConnectorDialog from '@/components/AddApiConnectorDialog'
+import InstallApiConnectorPackDialog from '@/components/InstallApiConnectorPackDialog'
 import ContainerRowActions from '@/components/ContainerRowActions'
 import ListIndexToolbar from '@/components/ListIndexToolbar'
 import PaginationBar from '@/components/PaginationBar'
@@ -43,6 +44,7 @@ i18n.addResourceBundle('en', 'translation', {
     description: 'Manage and configure API connectors to expose external APIs',
     searchPlaceholder: 'Search connectors...',
     addButton: 'Add Connector',
+    installPack: 'Install Pack',
     noConnectors: 'No connectors found',
     noMatchingConnectors: 'No matching connectors found',
     nameCol: 'Name',
@@ -69,6 +71,7 @@ i18n.addResourceBundle('zh', 'translation', {
     description: '管理和配置API连接器以暴露外部API',
     searchPlaceholder: '搜索连接器...',
     addButton: '添加连接器',
+    installPack: '安装模板',
     noConnectors: '暂无连接器',
     noMatchingConnectors: '未找到匹配的连接器',
     nameCol: '名称',
@@ -106,6 +109,7 @@ export default function ApiConnectorsPage() {
   } = useApiConnectors()
   const { showError, showSuccess } = useNotification()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { hasAny } = useAuth()
   const canManageTags = hasAny(actionRules.canManageTags())
   const canReadTags = hasAny(actionRules.canReadTags())
@@ -114,6 +118,7 @@ export default function ApiConnectorsPage() {
   const canDeleteConnector = hasAny(actionRules.canDeleteApiConnector())
 
   const [addDialogOpen, setAddDialogOpen] = useState(false)
+  const [packDialogOpen, setPackDialogOpen] = useState(false)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editingConnector, setEditingConnector] = useState<ApiConnector | null>(null)
   const [sharingConnector, setSharingConnector] = useState<ApiConnector | null>(null)
@@ -129,10 +134,24 @@ export default function ApiConnectorsPage() {
   const searchParam = searchQuery.trim() || undefined
 
   useEffect(() => {
-    fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam).catch((err: any) => {
-      showError(err.response?.data?.detail || t('apiConnectors.fetchError'))
-    })
-  }, [fetchConnectors, currentPage, searchParam, showError, t])
+    // Load fail → hook `error` → page Alert (no toast; DESIGN §5 one channel).
+    void fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam).catch(() => undefined)
+  }, [fetchConnectors, currentPage, searchParam])
+
+  useEffect(() => {
+    const oauth = searchParams.get('oauth')
+    if (!oauth) {
+      return
+    }
+    if (oauth === 'connected') {
+      showSuccess(t('apiConnectors.oauthConnected', 'Account connected'))
+    } else if (oauth === 'error') {
+      showError(t('apiConnectors.oauthFailed', 'OAuth connection failed. Try Connect again.'))
+    }
+    const next = new URLSearchParams(searchParams)
+    next.delete('oauth')
+    setSearchParams(next, { replace: true })
+  }, [searchParams, setSearchParams, showError, showSuccess, t])
 
   useEffect(() => {
     if (connectorsPage !== currentPage) {
@@ -199,6 +218,13 @@ export default function ApiConnectorsPage() {
           onRefresh={() => fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam)}
           refreshing={loading}
           refreshLabel={t('common.refresh')}
+          secondaryActions={[
+            {
+              label: t('apiConnectors.installPack'),
+              onClick: () => setPackDialogOpen(true),
+              hidden: !canCreateConnector,
+            },
+          ]}
           primaryAction={{
             label: t('apiConnectors.addButton'),
             onClick: openCreateConnectorForm,
@@ -339,6 +365,12 @@ export default function ApiConnectorsPage() {
         onCreated={(created) => {
           openConnectorManagement(created.id)
         }}
+      />
+
+      <InstallApiConnectorPackDialog
+        open={packDialogOpen}
+        onOpenChange={setPackDialogOpen}
+        onInstalled={(connector) => openConnectorManagement(connector.id)}
       />
 
       <AddApiConnectorDialog

@@ -7,6 +7,7 @@ import json
 from datetime import UTC, datetime
 from typing import TYPE_CHECKING, Any
 
+from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.authz.authz_query_builder import (
@@ -21,7 +22,7 @@ from apps.shared.core.exceptions import (
     ValidationError,
 )
 from apps.shared.core.transaction import transaction
-from apps.shared.db.models import ApiConnector, ApiOperationIndex
+from apps.shared.db.models import AclGrant, ApiConnector, ApiOperationIndex, ResourceAcl
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import (
     ABAC_ACTION_READ,
@@ -37,6 +38,7 @@ from apps.shared.external_systems.api_connector.adapters import (
 from apps.shared.external_systems.api_connector.constants import (
     ALLOWED_HTTP_METHODS,
     AUTH_REQUIREMENT_REQUIRED,
+    AUTH_TYPE_OAUTH2,
     CONNECTOR_STATUS_ACTIVE,
     OPERATION_SOURCE_IMPORTED,
     OPERATION_SOURCE_MANUAL,
@@ -52,6 +54,7 @@ from apps.shared.external_systems.api_connector.domain import (
     AuthRequirement,
     AuthType,
     ConnectorStatus,
+    ExecutionRulesDomain,
     OperationStatus,
     RatePolicyDomain,
     RiskLevel,
@@ -64,7 +67,11 @@ from apps.shared.external_systems.api_connector.schemas import (
     ApiOperationStatsResponse,
     SyncSchemaSummaryDTO,
 )
-from apps.shared.external_systems.api_connector.sensitive_config import AUTH_CONFIG_SENSITIVE_FIELDS
+from apps.shared.external_systems.api_connector.sensitive_config import (
+    AUTH_CONFIG_SENSITIVE_FIELDS,
+    OAUTH2_USER_TOKEN_KEYS,
+)
+from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_SHARED,
@@ -74,6 +81,7 @@ from apps.shared.external_systems.domain.types import (
 )
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.search.schemas import ResourceIndexCreateDTO
+from apps.shared.tag.repository import TagBindingRepository
 from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
 
 if TYPE_CHECKING:
@@ -126,6 +134,8 @@ class ApiConnectorService:
         schema_source_type: SchemaSourceType,
         schema_source_url: str | None,
         credential_mode: CredentialModeStr = CREDENTIAL_MODE_SHARED,
+        execution_rules: ExecutionRulesDomain | None = None,
+        pack_ref: str | None = None,
     ) -> ApiConnectorDomain:
         existing = await self.connector_repo.get_by_tenant_and_name(self.tenant_id, name)
         if existing:
@@ -136,7 +146,9 @@ class ApiConnectorService:
         if credential_mode == CREDENTIAL_MODE_USER:
             auth_config_dict = strip_sensitive_fields(
                 auth_config_dict,
-                sensitive_keys=AUTH_CONFIG_SENSITIVE_FIELDS,
+                sensitive_keys=OAUTH2_USER_TOKEN_KEYS
+                if auth_type == AUTH_TYPE_OAUTH2
+                else AUTH_CONFIG_SENSITIVE_FIELDS,
             )
 
         encrypted_auth = self.cipher.encrypt_dict(auth_config_dict, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS)
@@ -154,6 +166,8 @@ class ApiConnectorService:
             schema_source_url=schema_source_url,
             status=CONNECTOR_STATUS_ACTIVE,
             credential_mode=credential_mode,
+            pack_ref=pack_ref,
+            execution_rules=(execution_rules or ExecutionRulesDomain()).to_dict(),
         )
         created = await self.connector_repo.create(connector)
         created_with_owner = await self.connector_repo.get_by_id_and_tenant(created.id, self.tenant_id)
@@ -162,9 +176,7 @@ class ApiConnectorService:
         )
 
     async def _connector_rows_to_responses(self, rows: list[ApiConnector]) -> list[ApiConnectorResponse]:
-        return [
-            connector_domain_to_response(connector_entity_to_domain(row, cipher=self.cipher)) for row in rows
-        ]
+        return [connector_domain_to_response(connector_entity_to_domain(row, cipher=self.cipher)) for row in rows]
 
     async def _enrich_connector_responses_user_connection_status(
         self,
@@ -205,11 +217,7 @@ class ApiConnectorService:
         normalized_query = query.strip().lower() if query else None
         if not normalized_query:
             return True
-        searchable = " ".join(
-            part
-            for part in (row.name, row.description, row.base_url)
-            if part
-        ).lower()
+        searchable = " ".join(part for part in (row.name, row.description, row.base_url) if part).lower()
         return normalized_query in searchable
 
     async def _readable_connector_rows_for_actor(
@@ -336,6 +344,7 @@ class ApiConnectorService:
         schema_source_url: str | None = None,
         status: ConnectorStatus | None = None,
         credential_mode: CredentialModeStr | None = None,
+        execution_rules: ExecutionRulesDomain | None = None,
     ) -> ApiConnectorResponse:
         connector = await self.connector_repo.get_by_id_and_tenant(connector_id, self.tenant_id)
         if not connector:
@@ -374,7 +383,9 @@ class ApiConnectorService:
             if mode == CREDENTIAL_MODE_USER:
                 merged_config = strip_sensitive_fields(
                     merged_config,
-                    sensitive_keys=AUTH_CONFIG_SENSITIVE_FIELDS,
+                    sensitive_keys=OAUTH2_USER_TOKEN_KEYS
+                    if (auth_type or connector.auth_type) == AUTH_TYPE_OAUTH2
+                    else AUTH_CONFIG_SENSITIVE_FIELDS,
                 )
 
             connector.auth_config = self.cipher.encrypt_dict(
@@ -384,6 +395,8 @@ class ApiConnectorService:
             connector.credential_mode = credential_mode
         if rate_policy is not None:
             connector.rate_policy = self._to_rate_policy_dict(rate_policy)
+        if execution_rules is not None:
+            connector.execution_rules = execution_rules.to_dict()
         if schema_source_type is not None:
             connector.schema_source_type = schema_source_type
         if schema_source_url is not None:
@@ -391,12 +404,24 @@ class ApiConnectorService:
         if status is not None:
             connector.status = status
 
+        final_auth_config = self.cipher.decrypt_dict(
+            connector.auth_config or {},
+            sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS,
+        )
+        self._validate_auth_config(
+            connector.auth_type,
+            final_auth_config,
+            credential_mode=effective_credential_mode(connector.credential_mode),
+        )
         connector.updated_at = datetime.now(UTC)
         updated = await self.connector_repo.update(connector)
         updated_with_owner = await self.connector_repo.get_by_id_and_tenant(updated.id, self.tenant_id)
-        return connector_domain_to_response(
+        response = connector_domain_to_response(
             connector_entity_to_domain(updated_with_owner or updated, cipher=self.cipher)
         )
+        # Same enrichment as get/list — UI replaces the list row with this payload.
+        enriched = await self._enrich_connector_responses_user_connection_status([response], actor)
+        return enriched[0]
 
     @transaction
     async def delete_connector_for_actor(self, *, connector_id: int, actor: ActorContext) -> None:
@@ -417,8 +442,48 @@ class ApiConnectorService:
         if not can_write:
             raise AuthorizationError("Write access denied to API connector")
 
+        await self._cleanup_connector_dependents(connector_id=connector.id)
         await self.operation_repo.delete_by_connector(self.tenant_id, connector_id)
         await self.connector_repo.delete(connector)
+
+    async def _cleanup_connector_dependents(self, *, connector_id: int) -> None:
+        """Remove polymorphic dependents that have no FK cascade to api_connectors."""
+        operations = await self.operation_repo.list_by_connector(self.tenant_id, connector_id)
+        for operation in operations:
+            await self._delete_api_operation_resource_index(operation.id)
+
+        deleted_bindings = await UserIntegrationCredentialRepository(self.db_session).delete_bindings_for_resource(
+            tenant_id=self.tenant_id,
+            resource_type=RESOURCE_TYPE_API_CONNECTOR,
+            resource_id=connector_id,
+        )
+        if deleted_bindings:
+            logger.info(
+                "Deleted %s user integration credential(s) for api connector %s",
+                deleted_bindings,
+                connector_id,
+            )
+
+        await self.db_session.execute(
+            delete(AclGrant).where(
+                AclGrant.tenant_id == self.tenant_id,
+                AclGrant.resource_type == RESOURCE_TYPE_API_CONNECTOR,
+                AclGrant.resource_id == connector_id,
+            )
+        )
+        await self.db_session.execute(
+            delete(ResourceAcl).where(
+                ResourceAcl.tenant_id == self.tenant_id,
+                ResourceAcl.resource_type == RESOURCE_TYPE_API_CONNECTOR,
+                ResourceAcl.resource_id == connector_id,
+            )
+        )
+        await TagBindingRepository(self.db_session).delete_by_resource(
+            self.tenant_id,
+            RESOURCE_TYPE_API_CONNECTOR,
+            connector_id,
+        )
+        await self.db_session.flush()
 
     async def sync_operations_from_schema_for_actor(
         self,
@@ -1148,6 +1213,16 @@ class ApiConnectorService:
         """
         if auth_type == "none":
             # No validation needed for none
+            return
+
+        if auth_type == AUTH_TYPE_OAUTH2:
+            if credential_mode != CREDENTIAL_MODE_USER:
+                raise ValidationError("OAuth2 API connectors require credential_mode='user'")
+            missing_fields = [
+                field for field in ("authorize_url", "token_url", "client_id") if not auth_config.get(field)
+            ]
+            if missing_fields:
+                raise ValidationError(f"OAuth2 auth requires: {', '.join(missing_fields)}")
             return
 
         if credential_mode == CREDENTIAL_MODE_USER and auth_type in ("api_key", "bearer", "basic"):

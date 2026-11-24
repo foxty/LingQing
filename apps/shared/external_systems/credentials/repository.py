@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from sqlalchemy import func, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.orm import aliased
 
 from apps.shared.db.base_repository import BaseRepository
@@ -82,9 +82,7 @@ class UserIntegrationCredentialRepository(BaseRepository[UserIntegrationCredenti
             account_label=account_label,
             status=status,
             expires_at=expires_at,
-            provisioned_by_user_id=(
-                None if provisioned_by_user_id is _PROVISIONED_UNSET else provisioned_by_user_id
-            ),
+            provisioned_by_user_id=(None if provisioned_by_user_id is _PROVISIONED_UNSET else provisioned_by_user_id),
             provisioned_at=None if provisioned_at is _PROVISIONED_UNSET else provisioned_at,
             created_at=now,
             updated_at=now,
@@ -131,6 +129,24 @@ class UserIntegrationCredentialRepository(BaseRepository[UserIntegrationCredenti
         await self.db.delete(row)
         await self.db.flush()
         return True
+
+    async def delete_bindings_for_resource(
+        self,
+        *,
+        tenant_id: int,
+        resource_type: str,
+        resource_id: int,
+    ) -> int:
+        """Delete all user bindings for a resource (connector/data source teardown)."""
+        result = await self.db.execute(
+            delete(UserIntegrationCredential).where(
+                UserIntegrationCredential.tenant_id == tenant_id,
+                UserIntegrationCredential.resource_type == resource_type,
+                UserIntegrationCredential.resource_id == resource_id,
+            )
+        )
+        await self.db.flush()
+        return int(result.rowcount or 0)
 
     async def count_active_bindings(
         self,
