@@ -39,6 +39,8 @@ def test_builtin_slack_pack_is_curated_for_user_oauth():
     assert manifest.oauth.scope_param == "user_scope"
     assert manifest.oauth.token_response_path == "authed_user"
     assert manifest.execution_rules.success_json_path == "ok"
+    assert manifest.agent_instructions is not None
+    assert "permalinks" in manifest.agent_instructions
     assert set(manifest.oauth.scopes) >= {
         "search:read",
         "users:read",
@@ -56,4 +58,29 @@ def test_builtin_slack_pack_is_curated_for_user_oauth():
         "slack_user_lookup_by_email",
         "slack_file_info",
         "slack_get_message_permalink",
+    }
+
+
+def test_builtin_github_pack_is_read_only_and_curated_for_user_oauth():
+    manifest = ApiConnectorPackCatalog().get("github-user")
+
+    assert manifest.pack_ref == "github-user@1"
+    assert manifest.connector.base_url == "https://api.github.com"
+    assert manifest.connector.credential_mode == "user"
+    assert set(manifest.oauth.scopes) == {"repo", "read:user", "user:email"}
+    assert manifest.execution_rules.default_request_encoding == "json"
+    assert manifest.agent_instructions is not None
+    assert "read-only" in manifest.agent_instructions
+    assert {operation.method for operation in manifest.operations} == {"GET"}
+    assert {operation.operation_id for operation in manifest.operations} == {
+        "github_get_authenticated_user",
+        "github_list_user_repositories",
+        "github_search_repositories",
+        "github_search_issues_and_pull_requests",
+        "github_get_repository",
+        "github_list_repository_issues",
+        "github_get_issue",
+        "github_list_issue_comments",
+        "github_list_pull_requests",
+        "github_get_pull_request",
     }

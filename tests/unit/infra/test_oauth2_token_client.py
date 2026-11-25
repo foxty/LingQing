@@ -49,8 +49,13 @@ class _FakeSession:
     def __init__(self, *args, **kwargs):
         pass
 
-    def post(self, url, data=None, auth=None):
-        type(self).last_post = {"url": url, "data": dict(data or {}), "auth": auth}
+    def post(self, url, data=None, auth=None, headers=None):
+        type(self).last_post = {
+            "url": url,
+            "data": dict(data or {}),
+            "auth": auth,
+            "headers": dict(headers or {}),
+        }
         return _FakeResponse(status=self._status, payload=self._payload)
 
     async def __aenter__(self):
@@ -103,6 +108,7 @@ async def test_exchange_code_reads_nested_slack_authed_user_path(monkeypatch):
     assert session_cls.last_post["data"]["grant_type"] == "authorization_code"
     assert session_cls.last_post["data"]["client_secret"] == "synthetic-secret"
     assert session_cls.last_post["auth"] is None
+    assert session_cls.last_post["headers"]["Accept"] == "application/json"
 
 
 @pytest.mark.asyncio

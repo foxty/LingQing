@@ -12,7 +12,7 @@ description: |
 
   DO NOT USE when:
   - User asks about non-data topics (general Q&A, coding, document search without data context)
-  - Request is purely about API operations (use api_connector skill)
+  - Request is purely about API operations (use search_apis / call_external_api)
   - User wants to modify/delete data (this skill is read-only)
   - User wants a persistent BI dashboard (use dashboard-builder)
 metadata:

@@ -68,7 +68,13 @@ platform:
     search_apis:
       limit: 10
       cacheable: true
-    api_connector:
+    get_api_connector_info:
+      limit: 5
+      cacheable: true
+    get_api_operation_detail:
+      limit: 10
+      cacheable: true
+    call_external_api:
       limit: 15
     create_report:
       limit: 5
@@ -104,7 +110,9 @@ system_agents:
       - search_documents
       - retrieve_resource_context
       - search_apis
-      - api_connector
+      - get_api_connector_info
+      - get_api_operation_detail
+      - call_external_api
     tags:
       - general
       - assistant

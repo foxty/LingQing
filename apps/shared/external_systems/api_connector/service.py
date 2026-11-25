@@ -137,6 +137,7 @@ class ApiConnectorService:
         credential_mode: CredentialModeStr = CREDENTIAL_MODE_SHARED,
         execution_rules: ExecutionRulesDomain | None = None,
         pack_ref: str | None = None,
+        agent_instructions: str | None = None,
     ) -> ApiConnectorDomain:
         existing = await self.connector_repo.get_by_tenant_and_name(self.tenant_id, name)
         if existing:
@@ -168,6 +169,7 @@ class ApiConnectorService:
             status=CONNECTOR_STATUS_ACTIVE,
             credential_mode=credential_mode,
             pack_ref=pack_ref,
+            agent_instructions=agent_instructions,
             execution_rules=(execution_rules or ExecutionRulesDomain()).to_dict(),
         )
         created = await self.connector_repo.create(connector)

@@ -142,7 +142,7 @@ async def test_search_apis_success(monkeypatch, runnable_config):
         def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
             pass
 
-        async def search_api_connectors(self, *, query, page, page_size):
+        async def search_api_connectors(self, *, query, page, page_size, connector_id=None):
             return [], PaginationRequest(page=1, page_size=page_size, total=0)
 
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.app_db_session", lambda: _FakeSessionContext())
@@ -159,6 +159,30 @@ async def test_search_apis_success(monkeypatch, runnable_config):
 
 
 @pytest.mark.asyncio
+async def test_search_apis_passes_connector_id(monkeypatch, runnable_config):
+    captured = {}
+
+    class _FakeSearchService:
+        def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
+            pass
+
+        async def search_api_connectors(self, *, query, page, page_size, connector_id=None):
+            captured["connector_id"] = connector_id
+            return [], PaginationRequest(page=1, page_size=page_size, total=0)
+
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.app_db_session", lambda: _FakeSessionContext())
+    monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.SearchService", _FakeSearchService)
+
+    result = await search_apis.ainvoke(
+        {"query": "orders", "connector_id": 42},
+        config=runnable_config,
+    )
+
+    assert result.status == ToolResultStatus.SUCCESS
+    assert captured["connector_id"] == 42
+
+
+@pytest.mark.asyncio
 async def test_search_apis_passes_embeddings(monkeypatch, runnable_config, mock_embeddings_resolver):
     """Verify registry embeddings are passed to SearchService for API search."""
     captured = {}
@@ -167,7 +191,7 @@ async def test_search_apis_passes_embeddings(monkeypatch, runnable_config, mock_
         def __init__(self, tenant_id, session, user_id, user_role, embeddings=None, **_kwargs):
             captured["embeddings"] = embeddings
 
-        async def search_api_connectors(self, *, query, page, page_size):
+        async def search_api_connectors(self, *, query, page, page_size, connector_id=None):
             return [], PaginationRequest(page=1, page_size=page_size, total=0)
 
     monkeypatch.setattr("apps.tenant_app_service.agents.tools.rag.app_db_session", lambda: _FakeSessionContext())

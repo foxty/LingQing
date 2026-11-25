@@ -145,3 +145,11 @@ def test_merge_api_connector_results_rrf_sets_score_and_source():
     assert merged[0].rrf_score > merged[1].rrf_score
     assert merged[1].source == "fts"
     assert all(r.rrf_score is not None and r.rrf_score > 0 for r in merged)
+
+
+def test_apply_connector_id_filter_intersects_scope():
+    assert SearchService._apply_connector_id_filter(None, None) is None
+    assert SearchService._apply_connector_id_filter(None, 7) == [7]
+    assert SearchService._apply_connector_id_filter([1, 7, 9], 7) == [7]
+    assert SearchService._apply_connector_id_filter([1, 9], 7) == []
+    assert SearchService._apply_connector_id_filter([1, 9], None) == [1, 9]

@@ -1,8 +1,9 @@
-"""Agent tools for API connector invocation."""
+"""Agent tools for API connector inspection and invocation."""
 
 from __future__ import annotations
 
 import json
+from typing import Any
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import tool
@@ -121,7 +122,7 @@ def _to_response_text(body) -> str:
         return str(body)
 
 
-def _build_body_payload(body: dict) -> dict[str, any]:
+def _build_body_payload(body: Any) -> dict[str, Any]:
     text = _to_response_text(body)
     total_chars = len(text)
     full_chunks = (total_chars + RESPONSE_BODY_CHUNK_SIZE - 1) // RESPONSE_BODY_CHUNK_SIZE
@@ -151,132 +152,161 @@ def _build_body_payload(body: dict) -> dict[str, any]:
     }
 
 
-class ApiConnectorToolInput(BaseModel):
-    """Input schema for API connector invocation tool."""
-
-    action: str = Field(
-        ...,
-        description="One of: get_operation_detail, call_external_api",
+def _runtime_actor(config: RunnableConfig):
+    runtime = extract_runtime_context(config)
+    actor = ActorContext(
+        tenant_id=runtime.user.tenant_id,
+        user_id=runtime.user.user_id,
+        user_role=runtime.user.role,
     )
-    operation_id: int = Field(..., description="Internal operation ID for detail/call")
+    allowed_ids = runtime.capability_profile.allowed_api_connector_ids if runtime.capability_profile else None
+    return runtime, actor, allowed_ids
+
+
+class GetApiConnectorInfoInput(BaseModel):
+    connector_id: int = Field(..., description="Internal connector ID from a search_apis result")
+
+
+class GetApiOperationDetailInput(BaseModel):
+    operation_id: int = Field(..., description="Internal operation ID from a search_apis result")
+
+
+class CallExternalApiInput(BaseModel):
+    operation_id: int = Field(..., description="Internal operation ID from a search_apis result")
     parameters: ApiOperationCallParameters = Field(
         default_factory=ApiOperationCallParameters,
-        description="Call parameters for action=call_external_api",
+        description="Path/query/header/body parameters for the operation call",
     )
 
 
-@tool(args_schema=ApiConnectorToolInput)
-async def api_connector(
-    action: str,
+@tool(args_schema=GetApiConnectorInfoInput)
+async def get_api_connector_info(
+    connector_id: int,
     config: RunnableConfig,
-    operation_id: int,
-    parameters: ApiOperationCallParameters | None = None,
 ) -> ToolResult:
-    """Inspect and invoke external API operations via API connectors.
+    """Fetch connector-level description, connection status, and agent instructions once.
 
-    Supported actions:
-    1. ``get_operation_detail``
-      - Purpose: retrieve detailed schema information for one operation.
-      - Required args: ``operation_id``.
-      - Returns: operation metadata plus ``request_schema`` and ``response_schema``.
-
-    2. ``call_external_api``
-      - Purpose: execute one external operation with runtime parameters.
-      - Required args: ``operation_id``.
-      - Optional args: ``parameters`` (defaults to empty dict).
-        - Prefer upstream filtering/pagination in ``parameters.query`` such as ``fields``, ``limit``,
-          ``maxResults``, ``pageSize``, or reduced ``expand`` when the target API supports them.
-      - Returns on success: response envelope with ``status_code`` and controlled-size ``body``.
-        - When body is large, ``body`` is returned as chunk list with chunk metadata to avoid
-          context explosion.
-      - Returns on failure: ``ToolResult`` error with code ``API_CONNECTOR_CALL_FAILED`` and
-        metadata including ``status_code`` and ``elapsed_ms``.
-
-    Recommended call flow:
-    Use ``search_apis`` to find operations, then ``get_operation_detail`` (when contract is unclear),
-    then ``call_external_api``.
-
-    Notes:
-    - ``action`` must be one of: ``get_operation_detail``, ``call_external_api``.
-    - Missing required fields return ``API_CONNECTOR_BAD_REQUEST``.
-    - Runtime context extraction failures return ``API_CONNECTOR_INVALID_CONTEXT``.
+    Call this once per connector after ``search_apis`` when provider guidance is needed.
+    Do not request connector instructions for every operation.
     """
     try:
-        runtime = extract_runtime_context(config)
+        runtime, actor, allowed_ids = _runtime_actor(config)
+    except ValueError as exc:
+        return ToolResult.error_result(str(exc), code="API_CONNECTOR_INVALID_CONTEXT")
+
+    if allowed_ids is not None and connector_id not in allowed_ids:
+        return ToolResult.error_result("Access denied to API connector", code="API_CONNECTOR_FORBIDDEN")
+
+    async with app_db_session() as session:
+        from apps.shared.external_systems.api_connector.service import ApiConnectorService
+
+        service = ApiConnectorService(tenant_id=runtime.user.tenant_id, db_session=session)
+        connector = await service.get_connector_for_actor(connector_id=connector_id, actor=actor)
+        return ToolResult.success(
+            {
+                "connector_id": connector.id,
+                "connector_name": connector.name,
+                "description": connector.description,
+                "base_url": connector.base_url,
+                "credential_mode": connector.credential_mode,
+                "connection_status": connector.user_connection_status,
+                "agent_instructions": connector.agent_instructions,
+            }
+        )
+
+
+@tool(args_schema=GetApiOperationDetailInput)
+async def get_api_operation_detail(
+    operation_id: int,
+    config: RunnableConfig,
+) -> ToolResult:
+    """Fetch one API operation's metadata and request/response schemas.
+
+    Use after ``search_apis`` when the operation contract is unclear. For connector-level
+    guidance, call ``get_api_connector_info`` once instead.
+    """
+    try:
+        runtime, actor, allowed_ids = _runtime_actor(config)
     except ValueError as exc:
         return ToolResult.error_result(str(exc), code="API_CONNECTOR_INVALID_CONTEXT")
 
     async with app_db_session() as session:
-        actor = ActorContext(
-            tenant_id=runtime.user.tenant_id,
-            user_id=runtime.user.user_id,
-            user_role=runtime.user.role,
-        )
-
         from apps.shared.external_systems.api_connector.service import ApiConnectorService
 
         service = ApiConnectorService(tenant_id=runtime.user.tenant_id, db_session=session)
+        row, connector = await service.get_operation_by_id_for_actor(
+            operation_id=operation_id,
+            actor=actor,
+        )
+        if allowed_ids is not None and connector.id not in allowed_ids:
+            return ToolResult.error_result("Access denied to API operation", code="API_CONNECTOR_FORBIDDEN")
+        return ToolResult.success(
+            {
+                "operation_id": row.id,
+                "operation_uid": row.operation_uid,
+                "connector_id": connector.id,
+                "connector_name": connector.name,
+                "connector_base_url": connector.base_url,
+                "method": row.method,
+                "path": row.path_template,
+                "summary": row.summary,
+                "request_schema": row.request_schema,
+                "response_schema": row.response_schema,
+            }
+        )
 
-        allowed_ids = runtime.capability_profile.allowed_api_connector_ids if runtime.capability_profile else None
 
-        if action == "get_operation_detail":
-            row, connector = await service.get_operation_by_id_for_actor(
+@tool(args_schema=CallExternalApiInput)
+async def call_external_api(
+    operation_id: int,
+    config: RunnableConfig,
+    parameters: ApiOperationCallParameters | None = None,
+) -> ToolResult:
+    """Execute one external API operation with runtime parameters.
+
+    Prefer upstream filtering/pagination in ``parameters.query`` such as ``fields``,
+    ``limit``, ``maxResults``, ``pageSize``, or reduced ``expand`` when supported.
+    Large response bodies are shaped and chunked to avoid context explosion.
+    """
+    try:
+        runtime, actor, allowed_ids = _runtime_actor(config)
+    except ValueError as exc:
+        return ToolResult.error_result(str(exc), code="API_CONNECTOR_INVALID_CONTEXT")
+
+    async with app_db_session() as session:
+        if allowed_ids is not None:
+            from apps.shared.external_systems.api_connector.service import ApiConnectorService
+
+            service = ApiConnectorService(tenant_id=runtime.user.tenant_id, db_session=session)
+            _row, connector = await service.get_operation_by_id_for_actor(
                 operation_id=operation_id,
                 actor=actor,
             )
-            if allowed_ids is not None and connector.id not in allowed_ids:
+            if connector.id not in allowed_ids:
                 return ToolResult.error_result("Access denied to API operation", code="API_CONNECTOR_FORBIDDEN")
-            return ToolResult.success(
-                {
-                    "operation_id": row.id,
-                    "operation_uid": row.operation_uid,
-                    "connector_id": connector.id,
-                    "connector_name": connector.name,
-                    "connector_base_url": connector.base_url,
-                    "method": row.method,
-                    "path": row.path_template,
-                    "summary": row.summary,
-                    "request_schema": row.request_schema,
-                    "response_schema": row.response_schema,
-                }
-            )
 
-        if action == "call_external_api":
-            if allowed_ids is not None:
-                _row, connector = await service.get_operation_by_id_for_actor(
-                    operation_id=operation_id,
-                    actor=actor,
-                )
-                if connector.id not in allowed_ids:
-                    return ToolResult.error_result("Access denied to API operation", code="API_CONNECTOR_FORBIDDEN")
-            exec_service = api_connector_execution_service(runtime.user.tenant_id, session)
-            result = await exec_service.execute_operation_by_id_for_actor(
-                operation_id=operation_id,
-                actor=actor,
-                parameters=parameters or ApiOperationCallParameters(),
-            )
-            if result.error:
-                return ToolResult.error_result(
-                    result.error,
-                    code="API_CONNECTOR_CALL_FAILED",
-                    metadata={
-                        "status_code": result.status_code,
-                        "elapsed_ms": result.elapsed_ms,
-                    },
-                )
-            shaped_body, body_shape_meta = _shape_response(result.body)
-
-            body_payload = _build_body_payload(shaped_body)
-            return ToolResult.success(
-                {
+        exec_service = api_connector_execution_service(runtime.user.tenant_id, session)
+        result = await exec_service.execute_operation_by_id_for_actor(
+            operation_id=operation_id,
+            actor=actor,
+            parameters=parameters or ApiOperationCallParameters(),
+        )
+        if result.error:
+            return ToolResult.error_result(
+                result.error,
+                code="API_CONNECTOR_CALL_FAILED",
+                metadata={
                     "status_code": result.status_code,
-                    **body_payload,
-                    **body_shape_meta,
+                    "elapsed_ms": result.elapsed_ms,
                 },
-                metadata={"elapsed_ms": result.elapsed_ms},
             )
-
-    return ToolResult.error_result(
-        f"Unsupported action: {action}",
-        code="API_CONNECTOR_BAD_REQUEST",
-    )
+        shaped_body, body_shape_meta = _shape_response(result.body)
+        body_payload = _build_body_payload(shaped_body)
+        return ToolResult.success(
+            {
+                "status_code": result.status_code,
+                **body_payload,
+                **body_shape_meta,
+            },
+            metadata={"elapsed_ms": result.elapsed_ms},
+        )

@@ -359,6 +359,7 @@ class ApiConnectorDomain(BaseDomainModel):
     owner_name: str | None = None
     credential_mode: CredentialModeStr = CREDENTIAL_MODE_SHARED
     pack_ref: str | None = None
+    agent_instructions: str | None = None
     execution_rules: ExecutionRulesDomain = field(default_factory=ExecutionRulesDomain)
 
     def build_headers(self, extra_headers: dict[str, Any] | None = None) -> dict[str, str]:

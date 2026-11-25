@@ -1498,6 +1498,11 @@ class ApiConnector(Base):
         nullable=True,
         comment="Optional immutable pack identity, for example slack-user@1",
     )
+    agent_instructions: Mapped[str | None] = mapped_column(
+        Text,
+        nullable=True,
+        comment="Trusted agent usage guidance copied from an installed preset pack",
+    )
     execution_rules: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     rate_policy: Mapped[dict] = mapped_column(JSON, nullable=False, default=dict, server_default="{}")
     schema_source_type: Mapped[str] = mapped_column(String(50), nullable=False)
