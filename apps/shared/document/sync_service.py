@@ -6,7 +6,6 @@ import io
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 
-import httpx
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.config import get_settings
@@ -208,35 +207,21 @@ class DocumentSyncService(TenantAwareService):
     async def _complete_google_callback(self, *, oauth_state, code: str) -> tuple[int, int]:
         provider, config = await self._require_provider_by_id(oauth_state.provider_id)
 
-        async with httpx.AsyncClient(timeout=30.0) as http_client:
-            token_response = await GoogleDriveClient.exchange_code(
-                client_id=config.client_id,
-                client_secret=config.client_secret,
-                redirect_uri=self._redirect_uri(),
-                code=code,
-                code_verifier=oauth_state.code_verifier,
-                http_client=http_client,
-            )
-            access_token = token_response.get("access_token")
-            if not access_token:
-                raise AuthenticationError(
-                    f"{provider_label(provider.provider)} token response missing access_token",
-                    {"code": "SOURCE_TOKEN_MISSING", "provider": provider.provider},
-                )
+        tokens = await GoogleDriveClient.exchange_code(
+            client_id=config.client_id,
+            client_secret=config.client_secret,
+            redirect_uri=self._redirect_uri(),
+            code=code,
+            code_verifier=oauth_state.code_verifier,
+        )
+        async with GoogleDriveClient(access_token=tokens.access_token) as drive_client:
+            account_email = await drive_client.get_account_email()
 
-            account_email: str | None = None
-            async with GoogleDriveClient(access_token=access_token, http_client=http_client) as drive_client:
-                account_email = await drive_client.get_account_email()
-
-        expires_at: str | None = None
-        expires_in = token_response.get("expires_in")
-        if expires_in:
-            expires_at = (datetime.now(UTC) + timedelta(seconds=int(expires_in))).isoformat()
         credentials = {
-            "access_token": access_token,
-            "refresh_token": token_response.get("refresh_token"),
-            "expires_at": expires_at,
-            "token_type": token_response.get("token_type"),
+            "access_token": tokens.access_token,
+            "refresh_token": tokens.refresh_token,
+            "expires_at": tokens.expires_at.isoformat() if tokens.expires_at else None,
+            "token_type": tokens.token_type,
         }
         await self._sync_repo.upsert_connection(
             tenant_id=self.tenant_id,
@@ -488,29 +473,19 @@ class DocumentSyncService(TenantAwareService):
                 f"{provider_label(provider_key)} connection has no valid credentials",
                 {"code": "SOURCE_AUTH_MISSING", "provider": provider_key},
             )
-        async with httpx.AsyncClient(timeout=30.0) as http_client:
-            token_response = await GoogleDriveClient.refresh_access_token(
-                client_id=config.client_id,
-                client_secret=config.client_secret,
-                refresh_token=refresh_token,
-                http_client=http_client,
-            )
-        new_access = token_response.get("access_token")
-        if not new_access:
-            provider_key = connection.source_provider.provider if connection.source_provider else "unknown"
-            raise AuthenticationError(
-                f"{provider_label(provider_key)} token refresh did not return access_token",
-                {"code": "SOURCE_TOKEN_REFRESH_FAILED", "provider": provider_key},
-            )
-        credentials["access_token"] = new_access
-        if token_response.get("refresh_token"):
-            credentials["refresh_token"] = token_response["refresh_token"]
-        expires_in = token_response.get("expires_in")
-        if expires_in:
-            credentials["expires_at"] = (datetime.now(UTC) + timedelta(seconds=int(expires_in))).isoformat()
+        tokens = await GoogleDriveClient.refresh_access_token(
+            client_id=config.client_id,
+            client_secret=config.client_secret,
+            refresh_token=refresh_token,
+        )
+        credentials["access_token"] = tokens.access_token
+        if tokens.refresh_token:
+            credentials["refresh_token"] = tokens.refresh_token
+        if tokens.expires_at:
+            credentials["expires_at"] = tokens.expires_at.isoformat()
         connection.oauth_credentials_enc = self._sync_repo.encrypt_credentials(credentials)
         await self.db_session.flush()
-        return new_access
+        return tokens.access_token
 
     @staticmethod
     def _token_needs_refresh(credentials: dict) -> bool:
@@ -623,11 +598,7 @@ class DocumentSyncService(TenantAwareService):
             needs_revive = await self._document_is_deleted(mapping.document_id)
             listable = await self._mapping_document_listable(connector, mapping.document_id)
 
-            if (
-                listable
-                and self._is_unchanged(mapping.external_modified_at, remote.modified_at)
-                and not needs_revive
-            ):
+            if listable and self._is_unchanged(mapping.external_modified_at, remote.modified_at) and not needs_revive:
                 if remote.modified_at is not None or remote.name != mapping.external_name:
                     await self._sync_repo.update_external_file(
                         mapping,

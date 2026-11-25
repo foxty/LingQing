@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from copy import deepcopy
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, datetime
 from typing import Any
 
 from apps.shared.core.exceptions import IntegrationNotConnectedError
@@ -140,33 +140,17 @@ class IntegrationCredentialResolver:
         template: dict[str, Any],
         user_secrets: dict[str, Any],
     ) -> dict[str, Any]:
-        expires_at = binding.expires_at
-        if expires_at is not None:
-            expires_at = expires_at.replace(tzinfo=UTC) if expires_at.tzinfo is None else expires_at.astimezone(UTC)
-        refresh_due = expires_at is not None and expires_at <= datetime.now(UTC) + timedelta(seconds=60)
-        if not refresh_due:
-            return user_secrets
+        from apps.shared.external_systems.oauth.refresh import maybe_refresh_oauth2_secrets
 
-        if connector.auth_type != "oauth2" or not user_secrets.get("refresh_token"):
-            raise IntegrationNotConnectedError(
-                "Integration credentials expired; reconnect to continue",
-                {"code": "INTEGRATION_CREDENTIAL_EXPIRED", "resource_type": RESOURCE_TYPE_API_CONNECTOR},
-            )
-
-        from apps.shared.external_systems.api_connector.adapters import dict_to_auth_config
-        from apps.shared.external_systems.api_connector.domain import OAuth2AuthConfig
-        from apps.shared.infra.oauth import OAuth2TokenClient
-
-        oauth_config = dict_to_auth_config("oauth2", {**template, **user_secrets})
-        if not isinstance(oauth_config, OAuth2AuthConfig):
-            raise IntegrationNotConnectedError(
-                "Invalid OAuth2 connector configuration",
-                {"code": "INTEGRATION_OAUTH_CONFIG_INVALID"},
-            )
-        tokens = await OAuth2TokenClient().refresh(
-            config=oauth_config,
-            refresh_token=user_secrets["refresh_token"],
+        tokens = await maybe_refresh_oauth2_secrets(
+            auth_type=connector.auth_type,
+            oauth_template=template,
+            user_secrets=user_secrets,
+            expires_at=binding.expires_at,
+            resource_type=RESOURCE_TYPE_API_CONNECTOR,
         )
+        if tokens is None:
+            return user_secrets
         refreshed = {**user_secrets, **tokens.to_secrets()}
         binding.secrets_enc = self.cipher.encrypt_dict(refreshed, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
         binding.expires_at = tokens.expires_at

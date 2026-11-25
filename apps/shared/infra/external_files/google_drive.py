@@ -7,13 +7,18 @@ from collections import deque
 from datetime import UTC, datetime
 from email.utils import parsedate_to_datetime
 from typing import Any
-from urllib.parse import urlencode
 
 import httpx
 
 from apps.config import AppConfig
 from apps.shared.core.exceptions import AuthenticationError, ValidationError
 from apps.shared.infra.external_files.port import ExternalFileEntry
+from apps.shared.infra.oauth import (
+    OAuth2TokenClient,
+    OAuthTokenClientConfig,
+    OAuthTokenSet,
+    build_authorize_url,
+)
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -233,10 +238,7 @@ class GoogleDriveClient:
             while True:
                 params: dict[str, Any] = {
                     "q": f"'{current_folder}' in parents and trashed = false",
-                    "fields": (
-                        "nextPageToken,"
-                        "files(id,name,mimeType,modifiedTime,parents,shortcutDetails)"
-                    ),
+                    "fields": ("nextPageToken,files(id,name,mimeType,modifiedTime,parents,shortcutDetails)"),
                     "pageSize": 200,
                     # Required so shared / team folders (not only My Drive) return children.
                     "corpora": "allDrives",
@@ -306,18 +308,18 @@ class GoogleDriveClient:
         state: str,
         code_challenge: str,
     ) -> str:
-        params = {
-            "client_id": client_id,
-            "redirect_uri": redirect_uri,
-            "response_type": "code",
-            "scope": GOOGLE_DRIVE_SCOPE,
-            "state": state,
-            "code_challenge": code_challenge,
-            "code_challenge_method": "S256",
-            "access_type": "offline",
-            "prompt": "consent",
-        }
-        return f"{GOOGLE_AUTHORIZE_URL}?{urlencode(params)}"
+        return build_authorize_url(
+            GOOGLE_AUTHORIZE_URL,
+            client_id=client_id,
+            redirect_uri=redirect_uri,
+            state=state,
+            code_challenge=code_challenge,
+            scopes=[GOOGLE_DRIVE_SCOPE],
+            extra_params={
+                "access_type": "offline",
+                "prompt": "consent",
+            },
+        )
 
     @staticmethod
     async def exchange_code(
@@ -327,29 +329,26 @@ class GoogleDriveClient:
         redirect_uri: str,
         code: str,
         code_verifier: str,
-        http_client: httpx.AsyncClient,
-    ) -> dict[str, Any]:
-        response = await http_client.post(
-            GOOGLE_TOKEN_URL,
-            data={
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "code": code,
-                "redirect_uri": redirect_uri,
-                "grant_type": "authorization_code",
-                "code_verifier": code_verifier,
-            },
-            timeout=30.0,
-        )
-        if response.status_code != 200:
-            logger.warning(
-                "google_drive_token_exchange_failed status=%s body=%s", response.status_code, response.text[:500]
+        token_client: OAuth2TokenClient | None = None,
+    ) -> OAuthTokenSet:
+        client = token_client or OAuth2TokenClient()
+        try:
+            return await client.exchange_code(
+                config=OAuthTokenClientConfig(
+                    token_url=GOOGLE_TOKEN_URL,
+                    client_id=client_id,
+                    client_secret=client_secret,
+                ),
+                code=code,
+                code_verifier=code_verifier,
+                redirect_uri=redirect_uri,
             )
+        except ValidationError as exc:
+            logger.warning("google_drive_token_exchange_failed error=%s", exc)
             raise AuthenticationError(
                 "Google Drive token exchange failed",
                 {"code": "DRIVE_TOKEN_EXCHANGE_FAILED"},
-            )
-        return response.json()
+            ) from exc
 
     @staticmethod
     async def refresh_access_token(
@@ -357,24 +356,21 @@ class GoogleDriveClient:
         client_id: str,
         client_secret: str,
         refresh_token: str,
-        http_client: httpx.AsyncClient,
-    ) -> dict[str, Any]:
-        response = await http_client.post(
-            GOOGLE_TOKEN_URL,
-            data={
-                "client_id": client_id,
-                "client_secret": client_secret,
-                "refresh_token": refresh_token,
-                "grant_type": "refresh_token",
-            },
-            timeout=30.0,
-        )
-        if response.status_code != 200:
-            logger.warning(
-                "google_drive_token_refresh_failed status=%s body=%s", response.status_code, response.text[:500]
+        token_client: OAuth2TokenClient | None = None,
+    ) -> OAuthTokenSet:
+        client = token_client or OAuth2TokenClient()
+        try:
+            return await client.refresh(
+                config=OAuthTokenClientConfig(
+                    token_url=GOOGLE_TOKEN_URL,
+                    client_id=client_id,
+                    client_secret=client_secret,
+                ),
+                refresh_token=refresh_token,
             )
+        except ValidationError as exc:
+            logger.warning("google_drive_token_refresh_failed error=%s", exc)
             raise AuthenticationError(
                 "Google Drive token refresh failed",
                 {"code": "DRIVE_TOKEN_REFRESH_FAILED"},
-            )
-        return response.json()
+            ) from exc

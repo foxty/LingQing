@@ -86,6 +86,10 @@ def validate_merged_secrets_for_auth_type(
         return
     if auth_type == AUTH_TYPE_OAUTH2:
         _require_keys(merged, "access_token", message="OAuth2 access token is required")
+        allowed_keys = {"access_token", "refresh_token", "token_type", "scope"}
+        unexpected = sorted(set(merged) - allowed_keys)
+        if unexpected:
+            raise ValidationError(f"Unsupported OAuth2 credential fields: {', '.join(unexpected)}")
         return
     raise ValidationError(f"Unsupported auth_type: {auth_type}")
 
@@ -99,14 +103,10 @@ def validate_data_source_user_integration(
     """BYOT data source: auth_type is driven by data source engine type (db_password vs pat)."""
     validate_user_integration_auth_type_string(auth_type)
     if auth_type not in DATA_SOURCE_USER_AUTH_TYPES:
-        raise ValidationError(
-            f"auth_type must be one of: {', '.join(sorted(DATA_SOURCE_USER_AUTH_TYPES))}"
-        )
+        raise ValidationError(f"auth_type must be one of: {', '.join(sorted(DATA_SOURCE_USER_AUTH_TYPES))}")
     expected = expected_data_source_user_auth_type(data_source_type)
     if auth_type != expected:
-        raise ValidationError(
-            f"auth_type must be '{expected}' for data source type '{data_source_type}'"
-        )
+        raise ValidationError(f"auth_type must be '{expected}' for data source type '{data_source_type}'")
     validate_merged_secrets_for_auth_type(auth_type, merged_secrets)
 
 

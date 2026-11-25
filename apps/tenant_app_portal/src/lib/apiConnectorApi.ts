@@ -1,6 +1,5 @@
 import { API_ENDPOINTS } from '@/constants/api'
 import api from '@/lib/api'
-import config from '@/lib/config'
 import type { PaginatedResponse } from '@/lib/documentsApi'
 import type { PaginatedListResponse } from '@/lib/paginatedList'
 import type {
@@ -8,24 +7,6 @@ import type {
   UserIntegrationConnectionSummary,
   UserIntegrationConnectionUpsert,
 } from '@/lib/userIntegrationConnection'
-
-/** Backend route registered on the API service (see oauth/flow.py). */
-export const API_CONNECTOR_OAUTH_CALLBACK_PATH = '/api-connectors/oauth/callback'
-
-/**
- * Absolute callback URL for OAuth app registration.
- * Uses VITE_BACKEND_URL when absolute; otherwise current origin + relative API prefix.
- */
-export function getDefaultApiConnectorOAuthRedirectUri(): string {
-  const base = config.backendUrl.replace(/\/$/, '')
-  const path = API_CONNECTOR_OAUTH_CALLBACK_PATH
-  if (/^https?:\/\//i.test(base)) {
-    return `${base}${path}`
-  }
-  const prefix = base.startsWith('/') ? base : `/${base}`
-  const origin = typeof window !== 'undefined' ? window.location.origin : ''
-  return `${origin}${prefix}${path}`
-}
 
 export type { UserIntegrationConnection, UserIntegrationConnectionUpsert }
 
@@ -52,6 +33,7 @@ export interface ApiConnector {
   status: string
   credential_mode?: 'shared' | 'user'
   user_connection_status?: 'not_connected' | 'connected' | 'expired' | null
+  can_write?: boolean
   masked_fields?: string[]
   created_at: string
   updated_at: string

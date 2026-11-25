@@ -1,4 +1,4 @@
-"""Router unit tests for API connector OAuth start + shared callback."""
+"""Router unit tests for integration OAuth callback + API connector oauth/start."""
 
 from __future__ import annotations
 
@@ -12,8 +12,11 @@ from fastapi.testclient import TestClient
 from apps.shared.core.auth import get_current_user
 from apps.shared.core.exception_handlers import register_exception_handlers
 from apps.shared.db.session import get_db
+from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR
+from apps.shared.external_systems.oauth import OAuthCallbackOutcome
 from apps.shared.schemas.user import UserDTO
-from apps.tenant_app_service.routers import api_connectors
+from apps.tenant_app_service import integration_oauth_callback
+from apps.tenant_app_service.routers import api_connectors, integration_oauth
 
 
 @pytest.fixture
@@ -21,6 +24,7 @@ def oauth_router_app(monkeypatch):
     api = FastAPI()
     register_exception_handlers(api)
     api.include_router(api_connectors.router)
+    api.include_router(integration_oauth.router)
 
     async def _fake_user():
         return UserDTO(id=1, username="admin", role="admin", tenant_id=1, tenant_name="t1")
@@ -42,36 +46,39 @@ def oauth_router_app(monkeypatch):
 
     monkeypatch.setattr(api_connectors, "_service", _fake_service)
 
-    class _FakeFlow:
+    class _FakeConnectorFlow:
         def __init__(self, db_session):
             self.db = db_session
 
-        async def start(self, *, actor, connector_id):
+        async def start(self, *, actor, resource_type, resource_id):
             assert actor.user_id == 1
-            assert connector_id == 42
+            assert resource_type == RESOURCE_TYPE_API_CONNECTOR
+            assert resource_id == 42
             return "https://auth.example.test/authorize?state=synthetic&client_id=c"
+
+    class _FakeIntegrationFlow:
+        def __init__(self, db_session):
+            self.db = db_session
 
         async def complete_from_callback(self, *, code, state):
             assert code == "auth-code"
             assert state == "encrypted-state"
-            return 42
+            return OAuthCallbackOutcome(
+                resource_type=RESOURCE_TYPE_API_CONNECTOR,
+                resource_id=42,
+                portal_url="https://portal.example.test/api-connectors/42?oauth=connected",
+            )
 
         @staticmethod
-        def portal_success_url(connector_id: int) -> str:
-            return f"https://portal.example.test/api-connectors/{connector_id}?oauth=connected"
-
-        @staticmethod
-        def portal_error_url(*, connector_id: int | None = None) -> str:
-            if connector_id is not None:
-                return f"https://portal.example.test/api-connectors/{connector_id}?oauth=error"
+        def portal_error_url_for_state(
+            state: str | None, *, default_resource_type: str = RESOURCE_TYPE_API_CONNECTOR
+        ) -> str:
+            if state == "encrypted-state":
+                return "https://portal.example.test/api-connectors/42?oauth=error"
             return "https://portal.example.test/api-connectors?oauth=error"
 
-    monkeypatch.setattr(api_connectors, "ApiConnectorOAuthFlow", _FakeFlow)
-    monkeypatch.setattr(
-        api_connectors.OAuthStateCodec,
-        "decode",
-        lambda self, state: SimpleNamespace(connector_id=42),
-    )
+    monkeypatch.setattr(api_connectors, "IntegrationOAuthFlow", _FakeConnectorFlow)
+    monkeypatch.setattr(integration_oauth_callback, "IntegrationOAuthFlow", _FakeIntegrationFlow)
 
     return api, db
 
@@ -88,11 +95,11 @@ def test_oauth_callback_success_redirects_and_commits(oauth_router_app):
     api, db = oauth_router_app
     client = TestClient(api, follow_redirects=False)
     response = client.get(
-        "/api-connectors/oauth/callback",
+        "/integrations/oauth/callback",
         params={"code": "auth-code", "state": "encrypted-state"},
     )
     assert response.status_code in (302, 307)
-    assert response.headers["location"] == ("https://portal.example.test/api-connectors/42?oauth=connected")
+    assert response.headers["location"] == "https://portal.example.test/api-connectors/42?oauth=connected"
     db.commit.assert_awaited_once()
     db.rollback.assert_not_awaited()
 
@@ -100,18 +107,23 @@ def test_oauth_callback_success_redirects_and_commits(oauth_router_app):
 def test_oauth_callback_provider_error_redirects_without_complete(oauth_router_app, monkeypatch):
     api, db = oauth_router_app
 
-    class _BoomFlow:
+    class _NoCompleteFlow:
         def __init__(self, db_session):
-            raise AssertionError("complete should not run on provider error")
+            pass
+
+        async def complete_from_callback(self, *, code, state):
+            raise AssertionError("complete_from_callback should not run on provider error")
 
         @staticmethod
-        def portal_error_url(*, connector_id: int | None = None) -> str:
-            return f"https://portal.example.test/api-connectors/{connector_id}?oauth=error"
+        def portal_error_url_for_state(
+            state: str | None, *, default_resource_type: str = RESOURCE_TYPE_API_CONNECTOR
+        ) -> str:
+            return "https://portal.example.test/api-connectors/42?oauth=error"
 
-    monkeypatch.setattr(api_connectors, "ApiConnectorOAuthFlow", _BoomFlow)
+    monkeypatch.setattr(integration_oauth_callback, "IntegrationOAuthFlow", _NoCompleteFlow)
     client = TestClient(api, follow_redirects=False)
     response = client.get(
-        "/api-connectors/oauth/callback",
+        "/integrations/oauth/callback",
         params={"error": "access_denied", "state": "encrypted-state"},
     )
     assert response.status_code in (302, 307)
@@ -131,13 +143,15 @@ def test_oauth_callback_validation_error_rolls_back(oauth_router_app, monkeypatc
             raise ValidationError("bad state")
 
         @staticmethod
-        def portal_error_url(*, connector_id: int | None = None) -> str:
-            return f"https://portal.example.test/api-connectors/{connector_id}?oauth=error"
+        def portal_error_url_for_state(
+            state: str | None, *, default_resource_type: str = RESOURCE_TYPE_API_CONNECTOR
+        ) -> str:
+            return "https://portal.example.test/api-connectors/42?oauth=error"
 
-    monkeypatch.setattr(api_connectors, "ApiConnectorOAuthFlow", _FailFlow)
+    monkeypatch.setattr(integration_oauth_callback, "IntegrationOAuthFlow", _FailFlow)
     client = TestClient(api, follow_redirects=False)
     response = client.get(
-        "/api-connectors/oauth/callback",
+        "/integrations/oauth/callback",
         params={"code": "auth-code", "state": "encrypted-state"},
     )
     assert response.status_code in (302, 307)

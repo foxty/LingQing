@@ -145,13 +145,24 @@ export default function ApiConnectorsPage() {
     }
     if (oauth === 'connected') {
       showSuccess(t('apiConnectors.oauthConnected', 'Account connected'))
+      void fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam).catch(() => undefined)
     } else if (oauth === 'error') {
       showError(t('apiConnectors.oauthFailed', 'OAuth connection failed. Try Connect again.'))
     }
     const next = new URLSearchParams(searchParams)
     next.delete('oauth')
     setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams, showError, showSuccess, t])
+  }, [
+    CONNECTORS_PAGE_SIZE,
+    currentPage,
+    fetchConnectors,
+    searchParam,
+    searchParams,
+    setSearchParams,
+    showError,
+    showSuccess,
+    t,
+  ])
 
   useEffect(() => {
     if (connectorsPage !== currentPage) {
@@ -333,10 +344,10 @@ export default function ApiConnectorsPage() {
                           }
                           tagsTitle={t('apiConnectors.manageTags')}
                           onEdit={() => openEditConnectorForm(connector)}
-                          editHidden={!canEditConnector}
+                          editHidden={!canEditConnector || connector.can_write === false}
                           editTitle={t('apiConnectors.editConnector')}
                           onDelete={() => deleteConfirm.open(connector)}
-                          deleteHidden={!canDeleteConnector}
+                          deleteHidden={!canDeleteConnector || connector.can_write === false}
                           deleteTitle={t('apiConnectors.deleteConnector')}
                         />
                       </TableCell>

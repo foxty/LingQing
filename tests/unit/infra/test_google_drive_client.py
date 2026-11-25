@@ -2,16 +2,21 @@
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from unittest.mock import AsyncMock
+
 import httpx
 import pytest
 
-from apps.shared.core.exceptions import AuthenticationError
+from apps.shared.core.exceptions import AuthenticationError, ValidationError
 from apps.shared.infra.external_files.google_drive import (
     GOOGLE_MIME_DOCUMENT,
     GOOGLE_MIME_SHORTCUT,
+    GOOGLE_TOKEN_URL,
     GoogleDriveClient,
 )
 from apps.shared.infra.external_files.port import ExternalFileEntry
+from apps.shared.infra.oauth import OAuthTokenSet
 
 pytestmark = pytest.mark.asyncio
 
@@ -101,9 +106,7 @@ async def test_list_folder_tree_resolves_supported_shortcut_to_target():
                     "modifiedTime": "2026-11-10T08:00:00.000Z",
                 },
             )
-        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(
-            request.url
-        ):
+        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(request.url):
             return httpx.Response(
                 200,
                 json={
@@ -134,9 +137,7 @@ async def test_list_folder_tree_resolves_supported_shortcut_to_target():
 
 async def test_list_folder_tree_skips_shortcut_to_unsupported_target():
     def handler(request: httpx.Request) -> httpx.Response:
-        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(
-            request.url
-        ):
+        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(request.url):
             return httpx.Response(
                 200,
                 json={
@@ -174,9 +175,7 @@ async def test_list_folder_tree_dedupes_direct_file_and_shortcut_target():
                     "modifiedTime": "2026-11-01T10:00:00.000Z",
                 },
             )
-        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(
-            request.url
-        ):
+        if "/files" in str(request.url) and "alt=media" not in str(request.url) and "/export" not in str(request.url):
             return httpx.Response(
                 200,
                 json={
@@ -282,37 +281,54 @@ async def test_download_file_google_native_export():
 
 
 async def test_exchange_code_success():
-    transport = httpx.MockTransport(
-        lambda request: httpx.Response(
-            200,
-            json={"access_token": "access", "refresh_token": "refresh", "expires_in": 3600},
+    fake_token_client = AsyncMock()
+    fake_token_client.exchange_code = AsyncMock(
+        return_value=OAuthTokenSet(
+            access_token="access",
+            refresh_token="refresh",
+            token_type="Bearer",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
         )
     )
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        payload = await GoogleDriveClient.exchange_code(
-            client_id="cid",
-            client_secret="secret",
-            redirect_uri="https://app.example/callback",
-            code="auth-code",
-            code_verifier="verifier",
-            http_client=http_client,
-        )
-    assert payload["access_token"] == "access"
-    assert payload["refresh_token"] == "refresh"
+    tokens = await GoogleDriveClient.exchange_code(
+        client_id="cid",
+        client_secret="secret",
+        redirect_uri="https://app.example/callback",
+        code="auth-code",
+        code_verifier="verifier",
+        token_client=fake_token_client,
+    )
+    assert tokens.access_token == "access"
+    assert tokens.refresh_token == "refresh"
+    call_cfg = fake_token_client.exchange_code.await_args.kwargs["config"]
+    assert call_cfg.token_url == GOOGLE_TOKEN_URL
+    assert call_cfg.client_id == "cid"
 
 
 async def test_exchange_code_failure_raises():
-    transport = httpx.MockTransport(lambda request: httpx.Response(400, json={"error": "invalid_grant"}))
-    async with httpx.AsyncClient(transport=transport) as http_client:
-        with pytest.raises(AuthenticationError):
-            await GoogleDriveClient.exchange_code(
-                client_id="cid",
-                client_secret="secret",
-                redirect_uri="https://app.example/callback",
-                code="bad-code",
-                code_verifier="verifier",
-                http_client=http_client,
-            )
+    fake_token_client = AsyncMock()
+    fake_token_client.exchange_code = AsyncMock(side_effect=ValidationError("invalid_grant"))
+    with pytest.raises(AuthenticationError):
+        await GoogleDriveClient.exchange_code(
+            client_id="cid",
+            client_secret="secret",
+            redirect_uri="https://app.example/callback",
+            code="bad-code",
+            code_verifier="verifier",
+            token_client=fake_token_client,
+        )
+
+
+async def test_refresh_access_token_failure_raises():
+    fake_token_client = AsyncMock()
+    fake_token_client.refresh = AsyncMock(side_effect=ValidationError("invalid_grant"))
+    with pytest.raises(AuthenticationError):
+        await GoogleDriveClient.refresh_access_token(
+            client_id="cid",
+            client_secret="secret",
+            refresh_token="bad-refresh",
+            token_client=fake_token_client,
+        )
 
 
 async def test_build_authorize_url_contains_pkce_params():

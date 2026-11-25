@@ -45,6 +45,7 @@ from apps.tenant_app_service.routers import (
     documents,
     health,
     hitl,
+    integration_oauth,
     integration_packs,
     live_apps,
     llm_config,
@@ -140,6 +141,7 @@ app.include_router(document_sources.router)
 app.include_router(document_sync.router)
 app.include_router(data_sources.router)
 app.include_router(api_connectors.router)
+app.include_router(integration_oauth.router)
 app.include_router(integration_packs.router)
 app.include_router(search.router)
 app.include_router(artifact_context.router)

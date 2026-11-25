@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-24T13:47:08.031560+00:00",
+  "generated_at": "2026-11-25T00:42:22.691316+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -903,6 +903,12 @@
                 "type": "null"
               }
             ]
+          },
+          "can_write": {
+            "type": "boolean",
+            "title": "Can Write",
+            "description": "Whether the current actor may update this connector (ABAC + owner/admin policy).",
+            "default": false
           },
           "created_at": {
             "type": "string",
@@ -9796,7 +9802,6 @@
     "GET_/agents/{agent_id}/usage/events": "get_agent_usage_events_agents__agent_id__usage_events_get",
     "GET_/agents/{agent_id}/usage/summary": "get_agent_usage_summary_agents__agent_id__usage_summary_get",
     "GET_/api-connectors": "list_connectors_api_connectors_get",
-    "GET_/api-connectors/oauth/callback": "api_connector_oauth_callback_api_connectors_oauth_callback_get",
     "GET_/api-connectors/operations/search": "search_operations_api_connectors_operations_search_get",
     "GET_/api-connectors/{connector_id}": "get_connector_api_connectors__connector_id__get",
     "GET_/api-connectors/{connector_id}/connections": "list_api_connector_connections_api_connectors__connector_id__connections_get",
@@ -9845,6 +9850,7 @@
     "GET_/feedback/stats": "get_feedback_stats_feedback_stats_get",
     "GET_/hitl/approvals/{proposal_id}": "get_approval_hitl_approvals__proposal_id__get",
     "GET_/integration-packs": "list_api_connector_packs_integration_packs_get",
+    "GET_/integrations/oauth/callback": "integration_oauth_callback_integrations_oauth_callback_get",
     "GET_/llm-config/models": "list_models_llm_config_models_get",
     "GET_/llm-config/providers": "list_llm_providers_llm_config_providers_get",
     "GET_/llm-config/providers/by-category": "list_providers_by_category_llm_config_providers_by_category_get",
@@ -10381,75 +10387,6 @@
       },
       "constraints": {
         "side_effect": true,
-        "idempotent": true
-      }
-    },
-    "api_connector_oauth_callback_api_connectors_oauth_callback_get": {
-      "operation_key": "GET_/api-connectors/oauth/callback",
-      "method": "GET",
-      "path": "/api-connectors/oauth/callback",
-      "summary": "Api Connector Oauth Callback",
-      "description": "Shared Slack/IdP browser callback for all API connector OAuth installs.",
-      "request": {
-        "query_params": [
-          {
-            "name": "code",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Code"
-            },
-            "description": ""
-          },
-          {
-            "name": "state",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "State"
-            },
-            "description": ""
-          },
-          {
-            "name": "error",
-            "required": false,
-            "schema": {
-              "anyOf": [
-                {
-                  "type": "string"
-                },
-                {
-                  "type": "null"
-                }
-              ],
-              "title": "Error"
-            },
-            "description": ""
-          }
-        ]
-      },
-      "response": {
-        "success_status": "200",
-        "error_statuses": [
-          "422"
-        ]
-      },
-      "constraints": {
-        "side_effect": false,
         "idempotent": true
       }
     },
@@ -14085,6 +14022,75 @@
       "constraints": {
         "side_effect": true,
         "idempotent": false
+      }
+    },
+    "integration_oauth_callback_integrations_oauth_callback_get": {
+      "operation_key": "GET_/integrations/oauth/callback",
+      "method": "GET",
+      "path": "/integrations/oauth/callback",
+      "summary": "Integration Oauth Callback",
+      "description": "Shared IdP browser callback for user-scoped integrations.",
+      "request": {
+        "query_params": [
+          {
+            "name": "code",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Code"
+            },
+            "description": ""
+          },
+          {
+            "name": "state",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "State"
+            },
+            "description": ""
+          },
+          {
+            "name": "error",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": false,
+        "idempotent": true
       }
     },
     "list_agents_agents_get": {
