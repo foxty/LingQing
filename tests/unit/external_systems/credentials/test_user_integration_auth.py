@@ -3,7 +3,6 @@
 import pytest
 
 from apps.shared.core.exceptions import ValidationError
-from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
 from apps.shared.domain.value_objects import DataSourceType
 from apps.shared.external_systems.api_connector.constants import AUTH_TYPE_BEARER, AUTH_TYPE_NONE
 from apps.shared.external_systems.credentials.domain import (
@@ -12,8 +11,8 @@ from apps.shared.external_systems.credentials.domain import (
 )
 from apps.shared.external_systems.credentials.user_integration_auth import (
     expected_data_source_user_auth_type,
-    validate_data_source_user_integration,
     validate_api_connector_user_integration,
+    validate_data_source_user_integration,
     validate_merged_secrets_for_auth_type,
 )
 
@@ -67,4 +66,35 @@ def test_api_connector_rejects_none_auth_on_connector():
             connector_auth_type=AUTH_TYPE_NONE,
             auth_type=AUTH_TYPE_NONE,
             merged_secrets={},
+        )
+
+def test_oauth_user_credentials_accept_only_token_fields():
+    validate_merged_secrets_for_auth_type(
+        "oauth2",
+        {
+            "access_token": "synthetic-access",
+            "refresh_token": "synthetic-refresh",
+            "token_type": "Bearer",
+            "scope": "read",
+        },
+    )
+
+    with pytest.raises(ValidationError, match="token_url"):
+        validate_merged_secrets_for_auth_type(
+            "oauth2",
+            {
+                "access_token": "synthetic-access",
+                "token_url": "https://attacker.example.test/token",
+            },
+        )
+
+
+def test_oauth_user_credentials_reject_endpoint_override_fields():
+    with pytest.raises(ValidationError, match="client_id"):
+        validate_merged_secrets_for_auth_type(
+            "oauth2",
+            {
+                "access_token": "synthetic-access",
+                "client_id": "attacker-client",
+            },
         )

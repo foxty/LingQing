@@ -216,13 +216,14 @@ export default function ApiConnectorDetailPage() {
     }
     if (oauth === 'connected') {
       showSuccess(t('apiConnectorDetail.oauthConnected'))
+      void fetchConnectors().catch(() => undefined)
     } else if (oauth === 'error') {
       showError(t('apiConnectorDetail.oauthFailed'))
     }
     const next = new URLSearchParams(searchParams)
     next.delete('oauth')
     setSearchParams(next, { replace: true })
-  }, [searchParams, setSearchParams, showError, showSuccess, t])
+  }, [fetchConnectors, searchParams, setSearchParams, showError, showSuccess, t])
 
   useEffect(() => {
     if (!Number.isFinite(connectorIdNumber)) {

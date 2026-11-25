@@ -58,11 +58,14 @@ class OAuth2TokenClient:
                 request_data["client_secret"] = config.client_secret
 
         timeout = aiohttp.ClientTimeout(total=30)
-        async with aiohttp.ClientSession(timeout=timeout) as session:
-            async with session.post(config.token_url, data=request_data, auth=auth) as response:
-                payload = await self._response_payload(response)
-                if response.status < 200 or response.status >= 300:
-                    raise ValidationError(f"OAuth token endpoint returned HTTP {response.status}")
+        try:
+            async with aiohttp.ClientSession(timeout=timeout) as session:
+                async with session.post(config.token_url, data=request_data, auth=auth) as response:
+                    payload = await self._response_payload(response)
+                    if response.status < 200 or response.status >= 300:
+                        raise ValidationError(f"OAuth token endpoint returned HTTP {response.status}")
+        except (aiohttp.ClientError, TimeoutError) as exc:
+            raise ValidationError("OAuth token endpoint request failed") from exc
 
         token_payload = self._nested_payload(payload, config.token_response_path)
         error = token_payload.get("error") or payload.get("error")

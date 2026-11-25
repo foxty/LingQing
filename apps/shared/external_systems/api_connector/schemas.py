@@ -210,6 +210,10 @@ class ApiConnectorResponse(MaskedFieldsMixin):
     status: ConnectorStatus
     credential_mode: CredentialModeStr = CREDENTIAL_MODE_SHARED
     user_connection_status: UserConnectionStatus | None = None
+    can_write: bool = Field(
+        default=False,
+        description="Whether the current actor may update this connector (ABAC + owner/admin policy).",
+    )
     created_at: datetime
     updated_at: datetime
 

@@ -51,6 +51,7 @@ i18n.addResourceBundle(
       test: 'Test connection',
       disconnect: 'Disconnect',
       connectWithOAuth: 'Connect account',
+      reconnectWithOAuth: 'Reconnect account',
       oauthAdminHint:
         'OAuth must be completed by the member in the portal (Connect). Admins can disconnect an existing binding here.',
       accountLabel: 'Account label (optional)',
@@ -82,6 +83,7 @@ i18n.addResourceBundle(
       test: '测试连接',
       disconnect: '断开',
       connectWithOAuth: '连接账号',
+      reconnectWithOAuth: '重新连接账号',
       oauthAdminHint: 'OAuth 需由成员本人在门户中完成连接。管理员可在此断开已有绑定。',
       accountLabel: '账号备注（可选）',
       saved: '连接已保存',
@@ -409,6 +411,10 @@ export default function MyIntegrationConnectionPanel({
 
   if (resourceKind === 'api_connector' && authTypeHint === 'oauth2') {
     const isAdminTarget = targetUserId != null
+    const oauthAlreadyLinked = statusKey === 'connected' || statusKey === 'expired'
+    const oauthPrimaryLabel = oauthAlreadyLinked
+      ? t('myIntegrationConnection.reconnectWithOAuth')
+      : t('myIntegrationConnection.connectWithOAuth')
     return (
       <div className={compact ? 'space-y-3' : 'rounded-lg border p-4 space-y-3 bg-card'}>
         <p
@@ -432,10 +438,11 @@ export default function MyIntegrationConnectionPanel({
             <Button
               type="button"
               size="sm"
+              variant={oauthAlreadyLinked ? 'secondary' : 'default'}
               onClick={() => void startOAuthConnection()}
-              disabled={busy}
+              disabled={busy || isLoading}
             >
-              {t('myIntegrationConnection.connectWithOAuth')}
+              {isLoading ? '…' : oauthPrimaryLabel}
             </Button>
           ) : null}
           <Button

@@ -69,8 +69,7 @@ async def test_apply_sync_diff_imports_same_filename_different_drive_ids(sync_se
     assert result == SyncDiffResult(added=2, updated=0, deleted=0)
     assert sync_service._intake_remote_file.await_count == 2
     external_ids = {
-        call.kwargs["external_file_id"]
-        for call in sync_service._sync_repo.create_external_file.await_args_list
+        call.kwargs["external_file_id"] for call in sync_service._sync_repo.create_external_file.await_args_list
     }
     assert external_ids == {"drive-file-a", "drive-file-b"}
 
@@ -524,9 +523,18 @@ async def test_resolve_access_token_refreshes_when_expired(sync_service: Documen
     sync_service._sync_repo.encrypt_credentials = MagicMock(return_value={"enc": "updated"})
     sync_service.db_session = AsyncMock()
 
+    from apps.shared.infra.oauth import OAuthTokenSet
+
     with patch(
         "apps.shared.document.sync_service.GoogleDriveClient.refresh_access_token",
-        new=AsyncMock(return_value={"access_token": "new-access", "expires_in": 3600}),
+        new=AsyncMock(
+            return_value=OAuthTokenSet(
+                access_token="new-access",
+                refresh_token=None,
+                token_type="Bearer",
+                expires_at=datetime.now(UTC) + timedelta(hours=1),
+            )
+        ),
     ):
         token = await sync_service._resolve_access_token(connection)
 

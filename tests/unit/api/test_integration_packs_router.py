@@ -97,7 +97,7 @@ def test_install_pack_returns_connector(packs_app):
             "pack_id": "slack-user",
             "client_id": "synthetic-client",
             "client_secret": "synthetic-secret",
-            "redirect_uri": "https://api.example.test/api-connectors/oauth/callback",
+            "redirect_uri": "https://api.example.test/integrations/oauth/callback",
         },
     )
     assert response.status_code == 201

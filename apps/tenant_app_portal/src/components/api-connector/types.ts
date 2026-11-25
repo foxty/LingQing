@@ -1,5 +1,5 @@
+import { getDefaultIntegrationOAuthRedirectUri } from '@/lib/integrationOAuth'
 import {
-  getDefaultApiConnectorOAuthRedirectUri,
   type ApiConnector,
   type ApiConnectorAuthType,
   type ApiConnectorCreateRequest,
@@ -97,7 +97,7 @@ export const defaultOAuth2Config: OAuth2FormConfig = {
 export function createDefaultOAuth2Config(): OAuth2FormConfig {
   return {
     ...defaultOAuth2Config,
-    redirectUri: getDefaultApiConnectorOAuthRedirectUri(),
+    redirectUri: getDefaultIntegrationOAuthRedirectUri(),
   }
 }
 

@@ -1007,3 +1007,11 @@ async def test_update_connector_enriches_user_connection_status(
 
     assert updated.name == "slack-user-renamed"
     assert updated.user_connection_status == "connected"
+    # Response DTO must use StrEnum values so FastAPI/Pydantic JSON serialization is clean.
+    from apps.shared.external_systems.domain.types import UserConnectionStatus
+    import warnings
+
+    assert isinstance(updated.user_connection_status, UserConnectionStatus)
+    with warnings.catch_warnings():
+        warnings.simplefilter("error", UserWarning)
+        updated.model_dump(mode="json")

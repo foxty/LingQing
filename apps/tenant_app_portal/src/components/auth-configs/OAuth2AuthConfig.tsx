@@ -9,7 +9,7 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import type { SecretCredentialFieldHandle } from '@/hooks/useSecretCredentialField'
-import { getDefaultApiConnectorOAuthRedirectUri } from '@/lib/apiConnectorApi'
+import { getDefaultIntegrationOAuthRedirectUri } from '@/lib/integrationOAuth'
 import { useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 
@@ -162,7 +162,7 @@ export function OAuth2AuthConfig({
           value={redirectUri}
           onChange={(event) => onRedirectUriChange(event.target.value)}
           disabled={submitting}
-          placeholder={getDefaultApiConnectorOAuthRedirectUri()}
+          placeholder={getDefaultIntegrationOAuthRedirectUri()}
         />
         <p className="text-xs text-muted-foreground">
           {t('components.authConfigs.oauthRedirectHelp')}

@@ -10,8 +10,8 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.external_systems.credentials.domain import (
     CREDENTIAL_MODE_USER,
     CREDENTIAL_STATUS_ACTIVE,
-    IntegrationPurpose,
     RESOURCE_TYPE_DATA_SOURCE,
+    IntegrationPurpose,
 )
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
 

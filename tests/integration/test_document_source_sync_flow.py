@@ -100,17 +100,21 @@ class TestDocumentSourceSyncFlow:
         authorize_url = authorize_resp.json()["authorize_url"]
         state = parse_qs(urlparse(authorize_url).query)["state"][0]
 
-        token_payload = {
-            "access_token": "drive-access-token",
-            "refresh_token": "drive-refresh-token",
-            "expires_in": 3600,
-            "token_type": "Bearer",
-        }
+        from datetime import UTC, datetime, timedelta
+
+        from apps.shared.infra.oauth import OAuthTokenSet
+
+        token_set = OAuthTokenSet(
+            access_token="drive-access-token",
+            refresh_token="drive-refresh-token",
+            token_type="Bearer",
+            expires_at=datetime.now(UTC) + timedelta(hours=1),
+        )
 
         with (
             patch(
                 "apps.shared.document.sync_service.GoogleDriveClient.exchange_code",
-                new=AsyncMock(return_value=token_payload),
+                new=AsyncMock(return_value=token_set),
             ),
             patch(
                 "apps.shared.document.sync_service.GoogleDriveClient.get_account_email",
@@ -467,9 +471,7 @@ class TestDocumentSourceSyncFlow:
         )
         assert list_resp.status_code == 200, list_resp.text
         items = list_resp.json()["items"]
-        assert any(
-            item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items
-        )
+        assert any(item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items)
 
     async def test_sync_reimports_when_mapping_targets_other_collection(self, document_sync_setup):
         """Mapping must be scoped to the connector collection — wrong collection_id triggers re-import."""
@@ -570,9 +572,7 @@ class TestDocumentSourceSyncFlow:
         )
         assert list_resp.status_code == 200, list_resp.text
         items = list_resp.json()["items"]
-        assert any(
-            item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items
-        )
+        assert any(item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items)
 
     async def test_sync_reimports_when_mapping_has_no_document_id(self, document_sync_setup):
         """Orphan mapping (document_id cleared) must re-import instead of counting as unchanged on Drive."""
@@ -670,6 +670,4 @@ class TestDocumentSourceSyncFlow:
         )
         assert list_resp.status_code == 200, list_resp.text
         items = list_resp.json()["items"]
-        assert any(
-            item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items
-        )
+        assert any(item["filename"] == drive_filename and item.get("intake_source") == "drive_sync" for item in items)

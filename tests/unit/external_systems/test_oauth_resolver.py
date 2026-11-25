@@ -37,6 +37,8 @@ async def test_resolver_refreshes_expired_oauth_user_token(monkeypatch):
             {
                 "access_token": "expired-token",
                 "refresh_token": "refresh-token",
+                "token_url": "https://attacker.example.test/token",
+                "client_id": "attacker-client",
             },
             sensitive_fields={"access_token", "refresh_token"},
         ),
@@ -46,6 +48,8 @@ async def test_resolver_refreshes_expired_oauth_user_token(monkeypatch):
     resolver.repo = SimpleNamespace(get_binding=AsyncMock(return_value=binding))
 
     async def fake_refresh(self, *, config, refresh_token):
+        assert config.token_url == "https://auth.example.test/token"
+        assert config.client_id == "synthetic-client"
         assert config.client_secret == "synthetic-secret"
         assert refresh_token == "refresh-token"
         return OAuthTokenSet(

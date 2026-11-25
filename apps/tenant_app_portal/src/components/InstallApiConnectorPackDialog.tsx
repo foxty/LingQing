@@ -21,10 +21,8 @@ import {
 } from '@/components/ui/select'
 import { useNotification } from '@/hooks/useNotification'
 import { useApiConnectorPacks } from '@/hooks/useApiConnectorPacks'
-import {
-  getDefaultApiConnectorOAuthRedirectUri,
-  type ApiConnector,
-} from '@/lib/apiConnectorApi'
+import type { ApiConnector } from '@/lib/apiConnectorApi'
+import { getDefaultIntegrationOAuthRedirectUri } from '@/lib/integrationOAuth'
 import { getApiErrorMessage } from '@/lib/api'
 
 i18n.addResourceBundle(
@@ -82,12 +80,12 @@ export default function InstallApiConnectorPackDialog({ open, onOpenChange, onIn
   const [packId, setPackId] = useState('')
   const [clientId, setClientId] = useState('')
   const [clientSecret, setClientSecret] = useState('')
-  const [redirectUri, setRedirectUri] = useState(() => getDefaultApiConnectorOAuthRedirectUri())
+  const [redirectUri, setRedirectUri] = useState(() => getDefaultIntegrationOAuthRedirectUri())
   const { packs, packsLoading, installPack, installing } = useApiConnectorPacks(open)
 
   useEffect(() => {
     if (!open) return
-    setRedirectUri(getDefaultApiConnectorOAuthRedirectUri())
+    setRedirectUri(getDefaultIntegrationOAuthRedirectUri())
     setClientId('')
     setClientSecret('')
   }, [open])
@@ -104,7 +102,7 @@ export default function InstallApiConnectorPackDialog({ open, onOpenChange, onIn
         pack_id: packId,
         client_id: clientId.trim(),
         client_secret: clientSecret,
-        redirect_uri: redirectUri.trim() || getDefaultApiConnectorOAuthRedirectUri(),
+        redirect_uri: redirectUri.trim() || getDefaultIntegrationOAuthRedirectUri(),
       })
       showSuccess(t('connectorPackDialog.installed'))
       onInstalled(connector)
@@ -165,7 +163,7 @@ export default function InstallApiConnectorPackDialog({ open, onOpenChange, onIn
               id="pack-redirect-uri"
               value={redirectUri}
               onChange={(event) => setRedirectUri(event.target.value)}
-              placeholder={getDefaultApiConnectorOAuthRedirectUri()}
+              placeholder={getDefaultIntegrationOAuthRedirectUri()}
             />
             <p className="text-xs text-muted-foreground">
               {t('connectorPackDialog.redirectUriHelp')}

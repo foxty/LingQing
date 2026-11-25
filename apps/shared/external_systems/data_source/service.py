@@ -61,6 +61,7 @@ from apps.shared.external_systems.data_source.schemas import (
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_USER,
     IntegrationPurpose,
+    UserConnectionStatus,
     effective_credential_mode,
 )
 from apps.shared.infra.analytics_db import create_db_manager_from_config
@@ -361,7 +362,9 @@ class DataSourceService(TenantAwareService):
             response = db_data_source_to_public_api_response(entity)
             status = status_by_id.get(entity.id)
             if status is not None:
-                response = response.model_copy(update={"user_connection_status": status})
+                response = response.model_copy(
+                    update={"user_connection_status": UserConnectionStatus(status)}
+                )
             items.append(response)
         return items, pagination
 
@@ -394,7 +397,7 @@ class DataSourceService(TenantAwareService):
         )
         if status is None:
             return response
-        return response.model_copy(update={"user_connection_status": status})
+        return response.model_copy(update={"user_connection_status": UserConnectionStatus(status)})
 
     async def _enrich_domains_user_connection_status(
         self,

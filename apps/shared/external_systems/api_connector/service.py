@@ -77,6 +77,7 @@ from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_SHARED,
     CREDENTIAL_MODE_USER,
     CredentialModeStr,
+    UserConnectionStatus,
     effective_credential_mode,
 )
 from apps.shared.search.repository import ResourceIndexRepository
@@ -178,27 +179,37 @@ class ApiConnectorService:
     async def _connector_rows_to_responses(self, rows: list[ApiConnector]) -> list[ApiConnectorResponse]:
         return [connector_domain_to_response(connector_entity_to_domain(row, cipher=self.cipher)) for row in rows]
 
-    async def _enrich_connector_responses_user_connection_status(
+    async def _enrich_connector_responses_for_actor(
         self,
         responses: list[ApiConnectorResponse],
         actor: ActorContext,
     ) -> list[ApiConnectorResponse]:
-        """Attach actor-scoped user_connection_status for per-user connectors."""
+        """Attach actor-scoped capabilities (write) and user connection status."""
         if not responses:
             return responses
         resolver = IntegrationCredentialResolver(self.db_session)
         enriched: list[ApiConnectorResponse] = []
         for item in responses:
-            if item.credential_mode != CREDENTIAL_MODE_USER:
-                enriched.append(item)
-                continue
-            status, _ = await resolver.connection_status_for_actor(
+            can_write = await evaluate_resource_action(
+                db_session=self.db_session,
                 tenant_id=self.tenant_id,
                 user_id=actor.user_id,
+                user_role=actor.user_role,
                 resource_type=RESOURCE_TYPE_API_CONNECTOR,
                 resource_id=item.id,
+                resource_owner_id=item.owner_id,
+                action=ABAC_ACTION_WRITE,
             )
-            enriched.append(item.model_copy(update={"user_connection_status": status}))
+            updates: dict[str, object] = {"can_write": can_write}
+            if item.credential_mode == CREDENTIAL_MODE_USER:
+                status, _ = await resolver.connection_status_for_actor(
+                    tenant_id=self.tenant_id,
+                    user_id=actor.user_id,
+                    resource_type=RESOURCE_TYPE_API_CONNECTOR,
+                    resource_id=item.id,
+                )
+                updates["user_connection_status"] = UserConnectionStatus(status)
+            enriched.append(item.model_copy(update=updates))
         return enriched
 
     async def _connector_abac_scope(self, *, actor: ActorContext) -> AuthzSqlFilter:
@@ -292,7 +303,7 @@ class ApiConnectorService:
                 query=query,
             )
             responses = await self._connector_rows_to_responses(rows)
-            return await self._enrich_connector_responses_user_connection_status(responses, actor), pagination
+            return await self._enrich_connector_responses_for_actor(responses, actor), pagination
 
         allowed_rows = await self._readable_connector_rows_for_actor(
             actor=actor,
@@ -306,7 +317,7 @@ class ApiConnectorService:
 
         page_rows = allowed_rows[pagination.offset : pagination.offset + pagination.page_size]
         responses = await self._connector_rows_to_responses(page_rows)
-        return await self._enrich_connector_responses_user_connection_status(responses, actor), pagination
+        return await self._enrich_connector_responses_for_actor(responses, actor), pagination
 
     async def get_connector_for_actor(self, *, connector_id: int, actor: ActorContext) -> ApiConnectorResponse:
         connector = await self.connector_repo.get_by_id_and_tenant(connector_id, self.tenant_id)
@@ -326,7 +337,7 @@ class ApiConnectorService:
         if not allowed:
             raise AuthorizationError("Access denied to API connector")
         response = connector_domain_to_response(connector_entity_to_domain(connector, cipher=self.cipher))
-        enriched = await self._enrich_connector_responses_user_connection_status([response], actor)
+        enriched = await self._enrich_connector_responses_for_actor([response], actor)
         return enriched[0]
 
     async def update_connector_for_actor(
@@ -420,7 +431,7 @@ class ApiConnectorService:
             connector_entity_to_domain(updated_with_owner or updated, cipher=self.cipher)
         )
         # Same enrichment as get/list — UI replaces the list row with this payload.
-        enriched = await self._enrich_connector_responses_user_connection_status([response], actor)
+        enriched = await self._enrich_connector_responses_for_actor([response], actor)
         return enriched[0]
 
     @transaction

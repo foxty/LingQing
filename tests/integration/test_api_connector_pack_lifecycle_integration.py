@@ -65,7 +65,7 @@ async def test_builtin_slack_pack_install_persists_connector_and_operations(asyn
         pack_id="slack-user",
         client_id="synthetic-client",
         client_secret="synthetic-secret",
-        redirect_uri="https://api.example.test/api-connectors/oauth/callback",
+        redirect_uri="https://api.example.test/integrations/oauth/callback",
     )
 
     created = await service.install(actor=actor, request=request)

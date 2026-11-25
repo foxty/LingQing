@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-24T13:47:08.031560+00:00",
+  "generated_at": "2026-11-25T00:30:09.842485+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -195,11 +195,6 @@
     {
       "operation_key": "GET_/api-connectors",
       "summary": "List Connectors",
-      "risk_level": "read"
-    },
-    {
-      "operation_key": "GET_/api-connectors/oauth/callback",
-      "summary": "Api Connector Oauth Callback",
       "risk_level": "read"
     },
     {
@@ -440,6 +435,11 @@
     {
       "operation_key": "GET_/integration-packs",
       "summary": "List Api Connector Packs",
+      "risk_level": "read"
+    },
+    {
+      "operation_key": "GET_/integrations/oauth/callback",
+      "summary": "Integration Oauth Callback",
       "risk_level": "read"
     },
     {

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import '@/components/api-connector/formI18n'
 import { AuthSection } from '@/components/api-connector/AuthSection'
@@ -43,8 +43,14 @@ export function ApiConnectorFormDialog({
   const { showError, showSuccess } = useNotification()
   const mode: 'create' | 'edit' = connector && onUpdate ? 'edit' : 'create'
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+  const submitErrorRef = useRef<HTMLDivElement>(null)
 
   const form = useApiConnectorForm({ open, connector, mode })
+
+  useEffect(() => {
+    if (!form.submitError) return
+    submitErrorRef.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' })
+  }, [form.submitError])
 
   const closeWithoutConfirm = () => {
     setShowCloseConfirm(false)
@@ -119,11 +125,6 @@ export function ApiConnectorFormDialog({
           </DialogHeader>
 
           <div className="space-y-4">
-            {form.submitError ? (
-              <Alert variant="destructive">
-                <AlertDescription>{form.submitError}</AlertDescription>
-              </Alert>
-            ) : null}
             <div className="divide-y divide-border">
               <IdentitySection
                 submitting={submitting}
@@ -176,17 +177,24 @@ export function ApiConnectorFormDialog({
             </div>
           </div>
 
-          <DialogFooter>
-            <Button variant="outline" onClick={closeWithConfirm} disabled={submitting}>
-              {t('common.cancel')}
-            </Button>
-            <Button onClick={handleSubmit} disabled={submitting}>
-              {submitting
-                ? t('components.addApiConnectorDialog.saving')
-                : mode === 'edit'
-                  ? t('common.saveChanges')
-                  : t('common.create')}
-            </Button>
+          <DialogFooter className="gap-3 sm:flex-col sm:items-stretch sm:space-x-0">
+            {form.submitError ? (
+              <Alert ref={submitErrorRef} variant="destructive" className="text-left">
+                <AlertDescription>{form.submitError}</AlertDescription>
+              </Alert>
+            ) : null}
+            <div className="flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+              <Button variant="outline" onClick={closeWithConfirm} disabled={submitting}>
+                {t('common.cancel')}
+              </Button>
+              <Button onClick={handleSubmit} disabled={submitting}>
+                {submitting
+                  ? t('components.addApiConnectorDialog.saving')
+                  : mode === 'edit'
+                    ? t('common.saveChanges')
+                    : t('common.create')}
+              </Button>
+            </div>
           </DialogFooter>
         </DialogContent>
       </Dialog>
