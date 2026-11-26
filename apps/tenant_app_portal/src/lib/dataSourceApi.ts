@@ -408,6 +408,15 @@ export async function deleteAsset(dataSourceId: number, assetName: string): Prom
 /**
  * Batch delete multiple assets (convenience wrapper)
  */
+export async function startMyDataSourceOAuth(
+  dataSourceId: number
+): Promise<{ authorization_url: string }> {
+  const response = await api.post<{ authorization_url: string }>(
+    `/data-sources/${dataSourceId}/oauth/start`
+  )
+  return response.data
+}
+
 export async function getMyDataSourceConnection(
   dataSourceId: number
 ): Promise<UserIntegrationConnection> {

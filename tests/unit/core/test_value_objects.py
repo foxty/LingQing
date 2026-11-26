@@ -74,6 +74,19 @@ def test_byot_connection_template_from_dict():
     assert connection.username is None
 
 
+def test_databricks_user_mode_template_allows_missing_password():
+    connection = DatabaseConnectionVO.from_dict(
+        {
+            "host": "adb-example.azuredatabricks.net",
+            "extra_params": {"http_path": "/sql/1.0/warehouses/synthetic"},
+            "user_credential_auth_type": "oauth2",
+        },
+        user_mode_template=True,
+    )
+    assert connection.password is None
+    assert connection.host == "adb-example.azuredatabricks.net"
+
+
 def test_postgres_to_url_percent_encodes_password_special_characters():
     password = "u9YG28hrsuHit&LliR4ZmILb"
     connection = DatabaseConnectionVO.from_dict(

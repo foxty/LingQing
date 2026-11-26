@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-25T00:30:09.842485+00:00",
+  "generated_at": "2026-11-26T05:36:31.689779+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -775,6 +775,11 @@
     {
       "operation_key": "POST_/data-sources/{data_source_id}/connections/users/{user_id}/test",
       "summary": "Admin Test User Data Source Connection",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/data-sources/{data_source_id}/oauth/start",
+      "summary": "Start My Data Source Oauth",
       "risk_level": "write"
     },
     {

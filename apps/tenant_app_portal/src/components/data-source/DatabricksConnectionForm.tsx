@@ -9,6 +9,7 @@ i18n.addResourceBundle(
     components: {
       databricksForm: {
         serverHostname: 'Server Hostname',
+        workspaceUrl: 'Workspace URL',
         accessToken: 'Access Token',
         httpPath: 'HTTP Path',
         testConnection: 'Test Connection',
@@ -17,7 +18,8 @@ i18n.addResourceBundle(
         connectFailed: 'Connection failed',
         completeRequiredFields: 'Fill in all required connection fields before testing.',
         hint: 'Enter your Databricks connection details. Required fields are marked with *. After saving, search for tables across catalogs and schemas.',
-        hintUserMode: 'Workspace and warehouse only. Put the access token under Sync login.',
+        hintUserMode:
+          'Workspace URL and warehouse ID only. Per-user OAuth and SQL use this host; sync token goes under Sync login.',
       },
     },
   },
@@ -32,6 +34,7 @@ i18n.addResourceBundle(
     components: {
       databricksForm: {
         serverHostname: '服务器主机名',
+        workspaceUrl: '工作区 URL',
         accessToken: '访问令牌',
         httpPath: 'HTTP 路径',
         testConnection: '测试连接',
@@ -40,7 +43,7 @@ i18n.addResourceBundle(
         connectFailed: '连接失败',
         completeRequiredFields: '请先填写所有必填连接字段再测试。',
         hint: '输入 Databricks 连接详情。必填字段标有 *。保存后可按目录、模式或表名搜索。',
-        hintUserMode: '仅需工作区与仓库；访问令牌填在下方同步账号。',
+        hintUserMode: '仅需工作区 URL 与仓库 ID；OAuth 与 SQL 均使用该主机；同步令牌填在下方同步账号。',
       },
     },
   },
@@ -222,7 +225,9 @@ export default function DatabricksConnectionForm({
     <div className="space-y-2.5">
       <div className={dsFieldRowClass}>
         <Label htmlFor="host" className={dsFieldLabelClass}>
-          {t('components.databricksForm.serverHostname')}{' '}
+          {isUserCredentialMode
+            ? t('components.databricksForm.workspaceUrl')
+            : t('components.databricksForm.serverHostname')}{' '}
           <span className="text-destructive">*</span>
         </Label>
         <Input

@@ -23,16 +23,18 @@ from apps.shared.external_systems.data_source.schemas import (
     TestConnectionRequest,
     TestConnectionResponse,
 )
-from apps.shared.external_systems.data_source.service import DataSourceService
 from apps.shared.external_systems.data_source.temp_table_repository import TempTableRepository
 
 
-# Lazy import to avoid circular dependency with search module
 def __getattr__(name: str):
     if name == "AssetMetadataService":
         from apps.shared.external_systems.data_source.asset_metadata_service import AssetMetadataService
 
         return AssetMetadataService
+    if name == "DataSourceService":
+        from apps.shared.external_systems.data_source.service import DataSourceService
+
+        return DataSourceService
     raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 

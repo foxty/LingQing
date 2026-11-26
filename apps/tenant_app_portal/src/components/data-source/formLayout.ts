@@ -35,3 +35,8 @@ export const dsFieldRowStartClass = 'grid grid-cols-[7.25rem_minmax(0,1fr)] gap-
 export const dsFieldPairRowClass =
   'grid w-full min-w-0 grid-cols-[7.25rem_minmax(0,1fr)_5.5rem_minmax(0,1fr)] gap-x-3 items-center'
 
+/**
+ * Indent nested content to the value column of ``dsFieldRowClass`` (label width + gap).
+ * Keep in sync with ``grid-cols-[7.25rem_minmax(0,1fr)] gap-x-3``.
+ */
+export const dsFormValueColumnInsetClass = 'ml-[calc(7.25rem+0.75rem)] min-w-0'

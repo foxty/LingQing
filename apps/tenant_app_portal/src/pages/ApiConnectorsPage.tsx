@@ -33,6 +33,11 @@ import { ACL_SHARE_RESOURCE_TYPES } from '@/lib/aclSharesApi'
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import type { ApiConnector } from '@/lib/apiConnectorApi'
 import { actionRules } from '@/lib/permissionRules'
+import {
+  consumeIntegrationOAuthToastOnce,
+  readOAuthCallbackHint,
+  stripIntegrationOAuthCallbackParams,
+} from '@/lib/integrationOAuth'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import { Cable } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -143,15 +148,25 @@ export default function ApiConnectorsPage() {
     if (!oauth) {
       return
     }
+    if (!consumeIntegrationOAuthToastOnce(searchParams)) {
+      setSearchParams(stripIntegrationOAuthCallbackParams(searchParams), { replace: true })
+      return
+    }
     if (oauth === 'connected') {
       showSuccess(t('apiConnectors.oauthConnected', 'Account connected'))
       void fetchConnectors(currentPage, CONNECTORS_PAGE_SIZE, searchParam).catch(() => undefined)
     } else if (oauth === 'error') {
-      showError(t('apiConnectors.oauthFailed', 'OAuth connection failed. Try Connect again.'))
+      const hint = readOAuthCallbackHint(searchParams)
+      showError(
+        hint
+          ? t('apiConnectors.oauthFailedHint', {
+              hint,
+              defaultValue: `${hint}. Try Connect again.`,
+            })
+          : t('apiConnectors.oauthFailed', 'OAuth connection failed. Try Connect again.')
+      )
     }
-    const next = new URLSearchParams(searchParams)
-    next.delete('oauth')
-    setSearchParams(next, { replace: true })
+    setSearchParams(stripIntegrationOAuthCallbackParams(searchParams), { replace: true })
   }, [
     CONNECTORS_PAGE_SIZE,
     currentPage,

@@ -180,12 +180,15 @@ export default function AdminUserConnectionsSection(props: Props) {
 
   const authTypeHint =
     props.kind === 'data_source'
-      ? dataSourceUserAuthTypeHint(props.dataSource.type)
+      ? dataSourceUserAuthTypeHint(props.dataSource.type, props.dataSource.config)
       : apiConnectorAuthTypeHint(props.apiConnector.auth_type)
 
   const secretFields =
     props.kind === 'data_source'
-      ? dataSourceSecretFields(props.dataSource.type)
+      ? (() => {
+          const hint = dataSourceUserAuthTypeHint(props.dataSource.type, props.dataSource.config)
+          return hint === 'oauth2' ? [] : dataSourceSecretFields(props.dataSource.type)
+        })()
       : apiConnectorSecretFields(props.apiConnector.auth_type)
 
   const openForUser = (userId: number, username?: string) => {

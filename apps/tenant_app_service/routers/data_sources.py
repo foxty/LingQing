@@ -47,6 +47,8 @@ from apps.shared.external_systems.data_source.schemas import (
     DiscoverAssetsResponse,
     TestConnectionResponse,
 )
+from apps.shared.external_systems.oauth.dtos import IntegrationOAuthStartResponse
+from apps.shared.external_systems.oauth.flow import IntegrationOAuthFlow
 from apps.shared.schemas.pagination import PaginatedResponse
 from apps.shared.schemas.user import UserDTO
 from apps.shared.tag.adapters import domain_tag_value_to_api
@@ -103,6 +105,23 @@ async def get_my_data_source_connection(
     await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
     cred_service = UserIntegrationCredentialService(db)
     return await cred_service.get_my_connection_data_source(actor=actor, data_source_id=data_source_id)
+
+
+@router.post("/{data_source_id}/oauth/start", response_model=IntegrationOAuthStartResponse)
+async def start_my_data_source_oauth(
+    data_source_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(require_permission(Permissions.DATA_SOURCES_READ)),
+):
+    actor = _actor_from_user(current_user)
+    ds_service = _create_data_source_service(db, current_user.tenant_id)
+    await ds_service.require_read_access_for_actor(data_source_id=data_source_id, actor=actor)
+    authorization_url = await IntegrationOAuthFlow(db).start(
+        actor=actor,
+        resource_type=RESOURCE_TYPE_DATA_SOURCE,
+        resource_id=data_source_id,
+    )
+    return IntegrationOAuthStartResponse(authorization_url=authorization_url)
 
 
 @router.put("/{data_source_id}/connections/me", response_model=UserIntegrationConnectionResponse)

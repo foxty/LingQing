@@ -17,6 +17,7 @@ async def integration_oauth_callback(
     code: str | None = None,
     state: str | None = None,
     error: str | None = None,
+    error_description: str | None = None,
 ):
     """Shared IdP browser callback for user-scoped integrations."""
     return await handle_integration_oauth_callback(
@@ -24,4 +25,5 @@ async def integration_oauth_callback(
         code=code,
         state=state,
         error=error,
+        error_description=error_description,
     )

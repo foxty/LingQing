@@ -5,7 +5,7 @@ credential_mode (on data_sources / api_connectors) answers *who* supplies secret
   user   — each member stores secrets in user_integration_credentials
 
 auth_type is separate: it describes *how* credentials are shaped and applied.
-  - Data sources: user row auth_type is db_password | pat (not HTTP).
+  - Data sources: user row auth_type is db_password | pat | oauth2 (Databricks U2M).
   - API connectors: admin sets auth_type on the connector (HTTP scheme); per-user
     bindings use the same value and must match it on upsert (see user_integration_auth).
 
@@ -27,7 +27,10 @@ from apps.shared.external_systems.domain.types import (
 )
 
 # user_integration_credentials.auth_type when resource_type = data_source
-DataSourceUserCredentialAuthTypeStr: TypeAlias = Literal["db_password", "pat"]
+DataSourceUserCredentialAuthTypeStr: TypeAlias = Literal["db_password", "pat", "oauth2"]
+
+# data_sources.config.user_credential_auth_type (Databricks BYOT query mode)
+UserCredentialAuthTypeStr: TypeAlias = Literal["pat", "oauth2"]
 
 # user_integration_credentials.auth_type when resource_type = api_connector (BYOT subset only)
 ApiConnectorUserCredentialAuthTypeStr: TypeAlias = Literal["api_key", "bearer", "basic", "oauth2"]
@@ -51,7 +54,9 @@ AUTH_TYPE_BASIC = "basic"
 AUTH_TYPE_CUSTOM = "custom"
 AUTH_TYPE_OAUTH2 = "oauth2"
 
-DATA_SOURCE_USER_AUTH_TYPES = frozenset({USER_INTEGRATION_AUTH_DB_PASSWORD, USER_INTEGRATION_AUTH_PAT})
+DATA_SOURCE_USER_AUTH_TYPES = frozenset(
+    {USER_INTEGRATION_AUTH_DB_PASSWORD, USER_INTEGRATION_AUTH_PAT, AUTH_TYPE_OAUTH2}
+)
 BYOT_CONNECTOR_AUTH_TYPES = frozenset({AUTH_TYPE_API_KEY, AUTH_TYPE_BEARER, AUTH_TYPE_BASIC, AUTH_TYPE_OAUTH2})
 
 __all__ = [
@@ -71,6 +76,7 @@ __all__ = [
     "CREDENTIAL_STATUS_REVOKED",
     "DATA_SOURCE_USER_AUTH_TYPES",
     "DataSourceUserCredentialAuthTypeStr",
+    "UserCredentialAuthTypeStr",
     "RESOURCE_TYPE_API_CONNECTOR",
     "RESOURCE_TYPE_DATA_SOURCE",
     "USER_INTEGRATION_AUTH_DB_PASSWORD",

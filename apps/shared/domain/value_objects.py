@@ -161,6 +161,8 @@ class DatabaseConnectionVO:
     username: str | None = None
     password: str | None = None
     extra_params: dict[str, Any] | None = None
+    # When True, Databricks template has no shared PAT (per-user PAT/OAuth at resolve time).
+    user_mode_template: bool = False
 
     def __post_init__(self):
         """Validate connection configuration based on detected datasource type."""
@@ -170,7 +172,10 @@ class DatabaseConnectionVO:
 
         # Detect datasource type and validate accordingly
         if self._is_databricks_connection():
-            self._validate_databricks()
+            if self.user_mode_template:
+                self._validate_databricks_user_template()
+            else:
+                self._validate_databricks()
         elif self._is_byot_connection_template():
             self._validate_byot_template()
         else:
@@ -198,6 +203,13 @@ class DatabaseConnectionVO:
 
         if not self.extra_params or not (self.extra_params.get("warehouse_id") or self.extra_params.get("http_path")):
             raise ValueError("Databricks connection requires extra_params with 'warehouse_id' or 'http_path'")
+
+    def _validate_databricks_user_template(self) -> None:
+        """Databricks user-mode admin template: workspace + warehouse/http_path only."""
+        if not self.host:
+            raise ValueError("Databricks user-mode template requires host")
+        if not self.extra_params or not (self.extra_params.get("warehouse_id") or self.extra_params.get("http_path")):
+            raise ValueError("Databricks user-mode template requires extra_params with 'warehouse_id' or 'http_path'")
 
     def _is_byot_connection_template(self) -> bool:
         """User-mode data source: shared template has endpoint only; creds are per-user."""
@@ -301,7 +313,7 @@ class DatabaseConnectionVO:
         return data
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "DatabaseConnectionVO":
+    def from_dict(cls, data: dict[str, Any], *, user_mode_template: bool = False) -> "DatabaseConnectionVO":
         """Deserialize from dictionary."""
         return cls(
             connection_url=data.get("connection_url"),
@@ -311,6 +323,7 @@ class DatabaseConnectionVO:
             username=data.get("username") or data.get("user"),
             password=data.get("password"),
             extra_params=data.get("extra_params"),
+            user_mode_template=user_mode_template,
         )
 
     @classmethod

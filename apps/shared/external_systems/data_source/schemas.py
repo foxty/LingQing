@@ -212,7 +212,6 @@ class DataSourceQueryRequest(BaseModel):
     sql: str = Field(..., min_length=1, description="Read-only SQL query")
     limit: int = Field(default=200, ge=1, le=10000, description="Maximum rows to return")
 
-
 class AssetSchemaResponse(BaseModel):
     """Asset schema response."""
 

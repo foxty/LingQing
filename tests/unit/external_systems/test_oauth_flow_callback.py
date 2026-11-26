@@ -12,6 +12,7 @@ from apps.shared.external_systems.oauth.flow import (
     ApiConnectorOAuthTarget,
     IntegrationOAuthFlow,
     OAuthAuthorizationSpec,
+    append_oauth_error_hints,
 )
 from apps.shared.external_systems.oauth.state import OAuthStateCodec
 from apps.shared.infra.oauth import OAuthTokenSet
@@ -144,6 +145,21 @@ async def test_integration_oauth_flow_routes_custom_resource_target(monkeypatch)
     assert outcome.portal_url == "https://portal.example.test/data-sources?ds=77&oauth=connected"
     assert len(saved_calls) == 1
     assert saved_calls[0]["actor"].user_id == 34
+
+
+def test_append_oauth_error_hints_adds_query_params():
+    url = "https://portal.example.test/data-sources?ds=7&oauth=error"
+    enriched = append_oauth_error_hints(
+        url,
+        oauth_code="access_denied",
+        oauth_detail="User declined consent",
+        oauth_reason="token_exchange_failed",
+    )
+    assert "oauth=error" in enriched
+    assert "ds=7" in enriched
+    assert "oauth_code=access_denied" in enriched
+    assert "oauth_detail=User+declined+consent" in enriched
+    assert "oauth_reason=token_exchange_failed" in enriched
 
 
 def test_api_connector_default_redirect_uri_uses_integration_callback(monkeypatch):

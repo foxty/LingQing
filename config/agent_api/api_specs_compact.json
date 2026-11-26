@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-25T00:42:22.691316+00:00",
+  "generated_at": "2026-11-26T05:36:31.689779+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -689,19 +689,6 @@
         ],
         "title": "ApiConnectorListResponse",
         "description": "Paginated API connector list response."
-      },
-      "ApiConnectorOAuthStartResponse": {
-        "properties": {
-          "authorization_url": {
-            "type": "string",
-            "title": "Authorization Url"
-          }
-        },
-        "type": "object",
-        "required": [
-          "authorization_url"
-        ],
-        "title": "ApiConnectorOAuthStartResponse"
       },
       "ApiConnectorPackListResponse": {
         "properties": {
@@ -6083,6 +6070,20 @@
         ],
         "title": "InstallApiConnectorPackRequest"
       },
+      "IntegrationOAuthStartResponse": {
+        "properties": {
+          "authorization_url": {
+            "type": "string",
+            "title": "Authorization Url"
+          }
+        },
+        "type": "object",
+        "required": [
+          "authorization_url"
+        ],
+        "title": "IntegrationOAuthStartResponse",
+        "description": "Browser authorization URL returned from ``…/oauth/start`` endpoints."
+      },
       "LLMDefaultsResponseDTO": {
         "properties": {
           "agent_profile_id": {
@@ -9918,6 +9919,7 @@
     "POST_/data-sources/{data_source_id}/assets/upload-csv": "upload_csv_data_sources__data_source_id__assets_upload_csv_post",
     "POST_/data-sources/{data_source_id}/connections/me/test": "test_my_data_source_connection_data_sources__data_source_id__connections_me_test_post",
     "POST_/data-sources/{data_source_id}/connections/users/{user_id}/test": "admin_test_user_data_source_connection_data_sources__data_source_id__connections_users__user_id__test_post",
+    "POST_/data-sources/{data_source_id}/oauth/start": "start_my_data_source_oauth_data_sources__data_source_id__oauth_start_post",
     "POST_/data-sources/{data_source_id}/query": "query_data_source_data_sources__data_source_id__query_post",
     "POST_/data-sources/{data_source_id}/tags": "bind_data_source_tag_data_sources__data_source_id__tags_post",
     "POST_/data-sources/{data_source_id}/test-connection": "test_saved_data_source_connection_data_sources__data_source_id__test_connection_post",
@@ -14079,6 +14081,22 @@
               "title": "Error"
             },
             "description": ""
+          },
+          {
+            "name": "error_description",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Error Description"
+            },
+            "description": ""
           }
         ]
       },
@@ -17183,7 +17201,40 @@
       "response": {
         "success_status": "200",
         "success_schema": {
-          "$ref": "#/components/schemas/ApiConnectorOAuthStartResponse"
+          "$ref": "#/components/schemas/IntegrationOAuthStartResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "start_my_data_source_oauth_data_sources__data_source_id__oauth_start_post": {
+      "operation_key": "POST_/data-sources/{data_source_id}/oauth/start",
+      "method": "POST",
+      "path": "/data-sources/{data_source_id}/oauth/start",
+      "summary": "Start My Data Source Oauth",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "data_source_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Data Source Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/IntegrationOAuthStartResponse"
         },
         "error_statuses": [
           "422"

@@ -7,7 +7,11 @@ from typing import Any
 from apps.shared.db import models as db_models
 from apps.shared.domain.value_objects import AssetMetaVO, ColumnVO, DatabaseConnectionVO
 from apps.shared.external_systems.data_source.catalog_sync import CatalogSyncCredentials
-from apps.shared.external_systems.data_source.domain import AssetMetadataDomain, DataSourceDomain
+from apps.shared.external_systems.data_source.domain import (
+    AssetMetadataDomain,
+    DataSourceDomain,
+    connection_vo_from_data_source_template,
+)
 from apps.shared.external_systems.data_source.schemas import (
     AssetMetadataCreate,
     AssetMetadataResponse,
@@ -186,7 +190,11 @@ def db_data_source_to_domain(db_ds: db_models.DataSource | None) -> DataSourceDo
         name=db_ds.name,
         type=db_ds.type,
         managed=db_ds.managed,
-        connection=DatabaseConnectionVO.from_dict(db_ds.config),
+        connection=connection_vo_from_data_source_template(
+            db_ds.config,
+            data_source_type=db_ds.type,
+            credential_mode=db_ds.credential_mode,
+        ),
         description=db_ds.description,
         owner_id=db_ds.owner_id,
         owner_name=(db_ds.owner_user.username if db_ds.owner_user else None),
@@ -285,11 +293,16 @@ def api_data_source_create_to_domain(
         name=api_create.name,
         type=api_create.type,
         managed=api_create.managed,
-        connection=DatabaseConnectionVO.from_dict(api_create.config or {}),
+        connection=connection_vo_from_data_source_template(
+            api_create.config or {},
+            data_source_type=api_create.type,
+            credential_mode=api_create.credential_mode,
+        ),
         description=api_create.description,
         owner_id=owner_id,
         owner_name=None,
         asset_count=0,
+        credential_mode=effective_credential_mode(api_create.credential_mode),
         created_at=datetime.now(UTC),
         updated_at=datetime.now(UTC),
     )

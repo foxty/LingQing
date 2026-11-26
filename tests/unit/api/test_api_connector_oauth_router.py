@@ -127,7 +127,9 @@ def test_oauth_callback_provider_error_redirects_without_complete(oauth_router_a
         params={"error": "access_denied", "state": "encrypted-state"},
     )
     assert response.status_code in (302, 307)
-    assert "oauth=error" in response.headers["location"]
+    location = response.headers["location"]
+    assert "oauth=error" in location
+    assert "oauth_code=access_denied" in location
     db.commit.assert_not_awaited()
 
 
@@ -155,6 +157,8 @@ def test_oauth_callback_validation_error_rolls_back(oauth_router_app, monkeypatc
         params={"code": "auth-code", "state": "encrypted-state"},
     )
     assert response.status_code in (302, 307)
-    assert response.headers["location"].endswith("?oauth=error")
+    location = response.headers["location"]
+    assert "oauth=error" in location
+    assert "oauth_reason=bad+state" in location or "oauth_reason=bad%20state" in location
     db.rollback.assert_awaited_once()
     db.commit.assert_not_awaited()
