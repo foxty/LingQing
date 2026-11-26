@@ -462,8 +462,9 @@ class ApiConnectorService:
     async def _cleanup_connector_dependents(self, *, connector_id: int) -> None:
         """Remove polymorphic dependents that have no FK cascade to api_connectors."""
         operations = await self.operation_repo.list_by_connector(self.tenant_id, connector_id)
-        for operation in operations:
-            await self._delete_api_operation_resource_index(operation.id)
+        operation_ids = [operation.id for operation in operations]
+        if operation_ids:
+            await self._delete_api_operation_resource_indexes(operation_ids)
 
         deleted_bindings = await UserIntegrationCredentialRepository(self.db_session).delete_bindings_for_resource(
             tenant_id=self.tenant_id,
@@ -1136,11 +1137,21 @@ class ApiConnectorService:
 
     async def _delete_api_operation_resource_index(self, operation_id: int) -> None:
         """Delete ResourceIndex record for an API operation."""
+        await self._delete_api_operation_resource_indexes([operation_id])
+
+    async def _delete_api_operation_resource_indexes(self, operation_ids: list[int]) -> None:
+        """Batch-delete ResourceIndex rows and vector chunks for API operations."""
+        if not operation_ids:
+            return
         try:
             resource_index_svc = await self._get_resource_index_service()
-            await resource_index_svc.delete(RESOURCE_TYPE_API_CONNECTOR, operation_id)
+            await resource_index_svc.delete_many(RESOURCE_TYPE_API_CONNECTOR, operation_ids)
         except Exception as exc:
-            logger.warning("Failed to delete resource index for api operation %d: %s", operation_id, exc)
+            logger.warning(
+                "Failed to delete resource indexes for %s api operations: %s",
+                len(operation_ids),
+                exc,
+            )
 
     async def _safe_remove_operation_index(self, operation: ApiOperationIndex) -> None:
         await self._delete_api_operation_resource_index(operation.id)

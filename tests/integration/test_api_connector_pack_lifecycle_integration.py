@@ -36,6 +36,7 @@ def stub_resource_index_service(monkeypatch):
     async def _create(cls, tenant_id, db_session, **_kwargs):
         service = cls(tenant_id=tenant_id, db_session=db_session, embeddings=MagicMock())
         service.rag_manager.remove_by_resource = AsyncMock(return_value=0)
+        service.rag_manager.remove_by_resources = AsyncMock(return_value=0)
         return service
 
     monkeypatch.setattr(ResourceIndexService, "create", _create)

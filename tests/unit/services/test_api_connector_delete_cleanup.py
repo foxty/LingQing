@@ -140,3 +140,76 @@ async def test_delete_connector_removes_user_credentials_and_acl(async_db_sessio
     assert acls.scalars().all() == []
 
     assert await service.connector_repo.get_by_id_and_tenant(connector.id, tenant.id) is None
+
+
+@pytest.mark.asyncio
+async def test_delete_connector_batches_resource_index_cleanup(async_db_session, monkeypatch):
+    suffix = uuid4().hex[:8]
+    tenant = Tenant(name=f"del_batch_{suffix}", slug=f"del-batch-{suffix}", config=None)
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+    owner = User(
+        username=f"del_batch_owner_{suffix}",
+        email=None,
+        hashed_password="synthetic",
+        role="admin",
+        tenant_id=tenant.id,
+    )
+    async_db_session.add(owner)
+    await async_db_session.flush()
+
+    actor = ActorContext(tenant_id=tenant.id, user_id=owner.id, user_role=owner.role)
+    service = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
+    connector = await service.create_connector(
+        owner_id=owner.id,
+        name=f"del-batch-{suffix}",
+        description=None,
+        base_url="https://api.example.test",
+        auth_type="none",
+        auth_config={},
+        rate_policy=RatePolicyDomain(),
+        schema_source_type="manual",
+        schema_source_url=None,
+    )
+    op_a = await service.add_manual_operation_for_actor(
+        connector_id=connector.id,
+        actor=actor,
+        method="GET",
+        path_template="/a",
+        operation_id="op_a",
+        summary="A",
+        description=None,
+        tags=[],
+        request_schema={"type": "object"},
+        response_schema={"type": "object"},
+    )
+    op_b = await service.add_manual_operation_for_actor(
+        connector_id=connector.id,
+        actor=actor,
+        method="GET",
+        path_template="/b",
+        operation_id="op_b",
+        summary="B",
+        description=None,
+        tags=[],
+        request_schema={"type": "object"},
+        response_schema={"type": "object"},
+    )
+
+    captured: dict[str, object] = {}
+
+    class _FakeIndexService:
+        async def delete_many(self, resource_type, resource_ids):
+            captured["resource_type"] = resource_type
+            captured["resource_ids"] = list(resource_ids)
+            return len(resource_ids)
+
+    async def _fake_get_resource_index_service():
+        return _FakeIndexService()
+
+    monkeypatch.setattr(service, "_get_resource_index_service", _fake_get_resource_index_service)
+
+    await service.delete_connector_for_actor(connector_id=connector.id, actor=actor)
+
+    assert captured["resource_type"] == RESOURCE_TYPE_API_CONNECTOR
+    assert set(captured["resource_ids"]) == {op_a.id, op_b.id}

@@ -345,14 +345,8 @@ class RAGManager:
             logger.error(f"Error retrieving resource_ids: {e}", exc_info=True)
             return set()
 
-    async def delete_by_resource_type(self, resource_type: str, resource_ids: set[int]) -> int:
-        """Delete vectors for specific resource_ids within a resource_type.
-
-        Used for orphan cleanup.
-
-        Args:
-            resource_type: Resource type filter
-            resource_ids: Set of resource_ids to delete
+    async def remove_by_resources(self, resource_type: str, resource_ids: list[int] | set[int]) -> int:
+        """Delete vectors for many resource_ids of one resource_type (batched ``$in``).
 
         Returns:
             Number of chunks deleted
@@ -360,12 +354,16 @@ class RAGManager:
         if not resource_ids:
             return 0
 
-        logger.warning(f"Deleting {len(resource_ids)} orphaned resource_ids for type='{resource_type}'")
+        resource_id_list = list(resource_ids)
+        logger.info(
+            "Removing vectors for %s resource_ids type=%s tenant_id=%s",
+            len(resource_id_list),
+            resource_type,
+            self.tenant_id,
+        )
 
         try:
-            # Delete in batches to avoid large where clauses
             deleted = 0
-            resource_id_list = list(resource_ids)
             batch_size = 100
             for i in range(0, len(resource_id_list), batch_size):
                 batch = resource_id_list[i : i + batch_size]
@@ -383,12 +381,26 @@ class RAGManager:
                     await self._backend.delete(ids=results["ids"])
                     deleted += len(results["ids"])
 
-            logger.info(f"Deleted {deleted} orphaned chunks for type='{resource_type}'")
+            logger.info(
+                "Removed %s vector chunks for type=%s tenant_id=%s",
+                deleted,
+                resource_type,
+                self.tenant_id,
+            )
             return deleted
-
         except Exception as e:
-            logger.error(f"Failed to delete orphaned vectors: {e}", exc_info=True)
+            logger.error(f"Failed to remove vectors by resource_ids: {e}", exc_info=True)
             raise
+
+    async def delete_by_resource_type(self, resource_type: str, resource_ids: set[int]) -> int:
+        """Delete vectors for specific resource_ids within a resource_type.
+
+        Used for orphan cleanup.
+        """
+        if not resource_ids:
+            return 0
+        logger.warning(f"Deleting {len(resource_ids)} orphaned resource_ids for type='{resource_type}'")
+        return await self.remove_by_resources(resource_type, resource_ids)
 
     async def get_chunks_by_resource(
         self,
