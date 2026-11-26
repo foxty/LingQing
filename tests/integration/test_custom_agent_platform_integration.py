@@ -168,4 +168,4 @@ async def test_get_agent_graph_custom_agent_passes_spec_tool_limits(async_db_ses
     assert preloaded["agent_id"] == agent.id
     assert "tags" not in preloaded
     limits = {item["name"]: item for item in preloaded["default_tools"]}
-    assert limits["search_documents"]["limit"] == 5
+    assert limits["search_documents"]["limit"] == 10

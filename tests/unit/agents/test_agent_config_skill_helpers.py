@@ -110,12 +110,12 @@ def manager_factory(tmp_path):
 # === Tool Resolution Tests ===
 
 
-def test_loaded_skill_tools_inherit_platform_policy(manager_factory, mock_runtime):
-    """Platform hitl_test_echo limit (3) wins over skill limit (5) when both are merged."""
+def test_loaded_skill_tool_limit_overrides_platform_default(manager_factory, mock_runtime):
+    """Skill-declared hitl_test_echo limit (5) overrides platform default (3)."""
     manager = manager_factory()
     tool_config = manager.get_tool_config(["dashboard_builder"], "hitl_test_echo", mock_runtime)
     assert tool_config is not None
-    assert tool_config.limit == 3
+    assert tool_config.limit == 5
 
 
 def test_get_tools_for_skill_mapping(manager_factory, mock_runtime):

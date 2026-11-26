@@ -96,5 +96,5 @@ async def test_get_agent_graph_custom_agent_builds_loaded_config(monkeypatch):
     assert config["example_questions"] == ["Example?"]
 
     by_name = {item["name"]: item for item in config["default_tools"]}
-    assert by_name["search_documents"]["limit"] == 5
+    assert by_name["search_documents"]["limit"] == 10
     assert "load_skill" in by_name
