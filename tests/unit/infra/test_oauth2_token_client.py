@@ -165,7 +165,7 @@ async def test_exchange_raises_on_http_error_status(monkeypatch):
 @pytest.mark.asyncio
 async def test_exchange_maps_transport_error_to_validation_error(monkeypatch):
     class _FailingSession(_FakeSession):
-        def post(self, url, data=None, auth=None):
+        def post(self, url, data=None, auth=None, headers=None):
             raise aiohttp.ClientConnectionError("synthetic connection failure")
 
     monkeypatch.setattr("apps.shared.infra.oauth.client.aiohttp.ClientSession", _FailingSession)
