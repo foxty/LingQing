@@ -12,7 +12,7 @@ def test_materialize_resolves_name_only_default_tools(tmp_path):
             {
                 "platform": {
                     "tool_specs": {
-                        "search_documents": {"limit": 5, "cacheable": True},
+                        "search_documents": {"limit": 10, "cacheable": True},
                         "load_skill": {"limit": 10},
                     }
                 },
@@ -37,7 +37,7 @@ def test_materialize_resolves_name_only_default_tools(tmp_path):
         loader.get_system_agent_config(-1, materialize=False) or {}
     )
     by_name = {item["name"]: item for item in materialized["default_tools"]}
-    assert by_name["search_documents"]["limit"] == 5
+    assert by_name["search_documents"]["limit"] == 10
     assert by_name["search_documents"]["cacheable"] is True
     assert by_name["load_skill"]["limit"] == 10
     assert materialized["prompt_mode"] == "platform"
@@ -48,7 +48,7 @@ def test_load_yaml_agent_config_materializes_agent_one():
     names = {item["name"] for item in config.get("default_tools", [])}
     assert "search_documents" in names
     search = next(item for item in config["default_tools"] if item["name"] == "search_documents")
-    assert search.get("limit") == 5
+    assert search.get("limit") == 10
 
 
 def test_load_mini_agent_yaml_uses_standalone_prompt_mode():

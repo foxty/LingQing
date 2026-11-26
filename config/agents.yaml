@@ -60,10 +60,11 @@ platform:
       result_retention: long_lived
       cacheable: true
     search_documents:
-      limit: 5
+      limit: 10
       cacheable: true
     retrieve_resource_context:
-      limit: 5
+      limit: 10
+      cacheable: true
     search_apis:
       limit: 10
       cacheable: true

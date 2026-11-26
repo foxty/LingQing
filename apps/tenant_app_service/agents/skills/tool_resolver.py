@@ -31,7 +31,9 @@ def resolve_effective_skill_tools(
     Rules:
     - Preserve first-seen order (default first, then skill additions).
     - Deduplicate by tool name.
-    - If duplicated, apply stricter limit (min wins; ``inf`` = unlimited).
+    - If duplicated on skill overlay, a skill-declared finite limit replaces the
+      existing limit (platform default or a prior skill). Omitted skill limits keep
+      the current value. Later loaded skills win when both declare a limit.
     - If ``tool_registry`` is provided:
       - ``strict_registry=True``: raise ValueError on unknown tool.
       - ``strict_registry=False``: silently skip unknown tools.
@@ -57,7 +59,7 @@ def resolve_effective_skill_tools(
         existing = merged[tool.name]
         merged[tool.name] = ToolConfig(
             name=tool.name,
-            limit=_merge_limit(existing.limit, tool.limit),
+            limit=_merge_skill_limit(existing.limit, tool.limit),
             hitl=existing.hitl if existing.hitl else tool.hitl,
             result_retention=tool.result_retention
             if tool.result_retention != RETENTION_TRANSIENT
@@ -122,9 +124,11 @@ def _normalize_tool_defs(
     return normalized
 
 
-def _merge_limit(existing: int, incoming: int) -> int:
-    """Merge limits — stricter (smaller) wins."""
-    return min(existing, incoming)
+def _merge_skill_limit(existing: int, skill_limit: int) -> int:
+    """Last skill wins: explicit skill limit replaces platform/prior skill limits."""
+    if skill_limit == TOOL_LIMIT_UNLIMITED:
+        return existing
+    return skill_limit
 
 
 def _is_tool_allowed(

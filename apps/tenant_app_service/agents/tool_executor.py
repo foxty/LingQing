@@ -178,6 +178,25 @@ class ToolExecutor:
             if hitl_message is not None:
                 return ToolExecResult(hitl_message, tool_call_counts, tool_cache)
 
+        # Identical cacheable calls return cached output without consuming a limit slot.
+        cache_key = _build_cache_key(tool_name, tool_args) if tool_config.cacheable else None
+        if cache_key and cache_key in tool_cache:
+            self.logger.debug(f"Cache hit for tool: {tool_name}")
+            cached_content = tool_cache[cache_key]
+            return ToolExecResult(
+                ToolMessage(
+                    id=str(uuid4()),
+                    content=cached_content,
+                    tool_call_id=tool_call_id,
+                    additional_kwargs=_tool_kwargs_with_status(
+                        {**additional_kwargs, "cached": True},
+                        ToolResultStatus.SUCCESS,
+                    ),
+                ),
+                tool_call_counts,
+                tool_cache,
+            )
+
         # Check if tool has exceeded its limit
         if current_count >= tool_config.limit:
             warning_msg = (
@@ -199,26 +218,6 @@ class ToolExecutor:
                     ),
                 ),
                 tool_call_counts,
-                tool_cache,
-            )
-
-        # Check cache for cacheable tools
-        cache_key = _build_cache_key(tool_name, tool_args) if tool_config.cacheable else None
-        if cache_key and cache_key in tool_cache:
-            self.logger.debug(f"Cache hit for tool: {tool_name}")
-            cached_content = tool_cache[cache_key]
-            updated_counts = self._increment_tool_count(tool_call_counts, tool_name, current_count)
-            return ToolExecResult(
-                ToolMessage(
-                    id=str(uuid4()),
-                    content=cached_content,
-                    tool_call_id=tool_call_id,
-                    additional_kwargs=_tool_kwargs_with_status(
-                        {**additional_kwargs, "cached": True},
-                        ToolResultStatus.SUCCESS,
-                    ),
-                ),
-                updated_counts,
                 tool_cache,
             )
 
