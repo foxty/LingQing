@@ -35,60 +35,8 @@ def _oauth_user_config() -> dict:
     }
 
 
-@pytest.fixture
-def stub_data_source_api_response(monkeypatch):
-    from datetime import UTC, datetime
-
-    from apps.shared.external_systems.data_source.schemas import DataSourceResponse
-
-    def _fake(entity):
-        now = datetime.now(UTC)
-        return DataSourceResponse(
-            id=entity.id,
-            tenant_id=entity.tenant_id,
-            name=entity.name,
-            type=entity.type,
-            managed=entity.managed,
-            config={},
-            description=entity.description,
-            owner_name=None,
-            created_at=entity.created_at or now,
-            updated_at=entity.updated_at or now,
-            asset_count=0,
-            credential_mode=entity.credential_mode,
-        )
-
-    from apps.shared.domain.value_objects import DatabaseConnectionVO
-    from apps.shared.external_systems.data_source.domain import DataSourceDomain
-
-    def _fake_domain(entity):
-        return DataSourceDomain(
-            id=entity.id,
-            tenant_id=entity.tenant_id,
-            name=entity.name,
-            type=entity.type,
-            managed=entity.managed,
-            connection=DatabaseConnectionVO(connection_url="databricks://stub"),
-            description=entity.description,
-            owner_id=entity.owner_id,
-            asset_count=entity.asset_count or 0,
-            credential_mode=entity.credential_mode,
-            created_at=entity.created_at or now,
-            updated_at=entity.updated_at or now,
-        )
-
-    monkeypatch.setattr(
-        "apps.shared.external_systems.data_source.service.db_data_source_to_public_api_response",
-        _fake,
-    )
-    monkeypatch.setattr(
-        "apps.shared.external_systems.data_source.service.db_data_source_to_domain",
-        _fake_domain,
-    )
-
-
 @pytest.mark.asyncio
-async def test_create_data_source_encrypts_user_oauth_secret(async_db_session, stub_data_source_api_response):
+async def test_create_data_source_encrypts_user_oauth_secret(async_db_session):
     tenant, owner = await create_tenant_user(async_db_session, tenant_name="ds-oauth-create", username="ds-admin")
     service = DataSourceService(
         tenant_id=tenant.id,
@@ -135,9 +83,7 @@ async def test_create_data_source_rejects_oauth_without_redirect_uri(async_db_se
 
 
 @pytest.mark.asyncio
-async def test_update_data_source_merge_preserves_user_oauth_client_secret(
-    async_db_session, stub_data_source_api_response
-):
+async def test_update_data_source_merge_preserves_user_oauth_client_secret(async_db_session):
     tenant, owner = await create_tenant_user(async_db_session, tenant_name="ds-oauth-patch", username="ds-patcher")
     await seed_data_source_owner_policies(async_db_session, tenant.id, base_id=9100)
     service = DataSourceService(

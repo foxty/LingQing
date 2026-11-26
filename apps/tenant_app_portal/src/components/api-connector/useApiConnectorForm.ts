@@ -21,9 +21,8 @@ import {
   defaultBasicConfig,
   defaultCustomAuthConfig,
   createDefaultOAuth2Config,
-  scopesToText,
-  textToScopes,
 } from '@/components/api-connector/types'
+import { apiConnectorOAuthScopeSuggestions } from '@/lib/integrationOAuthScopeSuggestions'
 
 const maskedAuthSecretPath = (field: string) => `auth_config.${field}`
 
@@ -419,6 +418,11 @@ export function useApiConnectorForm({ open, connector, mode }: UseApiConnectorFo
 
   const credentialModeLocked = packLocked || authType === 'oauth2'
 
+  const oauthScopeSuggestions = useMemo(
+    () => apiConnectorOAuthScopeSuggestions(connector?.pack_ref, oauth2Config.authorizeUrl),
+    [connector?.pack_ref, oauth2Config.authorizeUrl],
+  )
+
   return {
     packLocked,
     credentialModeLocked,
@@ -440,9 +444,7 @@ export function useApiConnectorForm({ open, connector, mode }: UseApiConnectorFo
     setCustomAuthConfig,
     oauth2Config,
     setOauth2Config,
-    scopesText: scopesToText(oauth2Config.scopes),
-    setScopesText: (text: string) =>
-      setOauth2Config((prev) => ({ ...prev, scopes: textToScopes(text) })),
+    oauthScopeSuggestions,
     schemaSourceType,
     setSchemaSourceType,
     schemaSourceUrl,

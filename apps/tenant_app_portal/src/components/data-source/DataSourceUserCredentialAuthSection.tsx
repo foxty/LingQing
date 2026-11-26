@@ -42,6 +42,8 @@ i18n.addResourceBundle(
         rdbmsPasswordHelp: 'Members enter their own database username and password on Data Assets.',
         oauthAppHelp:
           'Client ID and secret from your Databricks OAuth app. OIDC URLs derive from the workspace URL; authorize scopes must match the OAuth app.',
+        oauthScopesRequired:
+          'Enter at least one authorize scope (must match your Databricks OAuth app).',
       },
     },
   },
@@ -64,6 +66,7 @@ i18n.addResourceBundle(
         rdbmsPasswordHelp: '成员在数据资产页填写自己的数据库账号与密码。',
         oauthAppHelp:
           '填写 OAuth 客户端 ID 与密钥；OIDC 地址由工作区 URL 推导；授权 scopes 须与 OAuth 应用一致。',
+        oauthScopesRequired: '请至少填写一个授权 scope（须与 Databricks OAuth 应用一致）。',
       },
     },
   },

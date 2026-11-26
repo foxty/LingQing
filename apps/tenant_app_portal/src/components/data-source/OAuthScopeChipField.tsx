@@ -44,7 +44,8 @@ i18n.addResourceBundle(
 type OAuthScopeChipFieldProps = {
   id?: string
   scopes: string[]
-  suggestions: readonly string[]
+  /** Preset scopes for autocomplete; omit for custom-only entry. */
+  suggestions?: readonly string[]
   onChange: (scopes: string[]) => void
   disabled?: boolean
   errorMsg?: string
@@ -52,10 +53,12 @@ type OAuthScopeChipFieldProps = {
   onFocusInput?: () => void
 }
 
+const EMPTY_SCOPE_SUGGESTIONS: readonly string[] = []
+
 export default function OAuthScopeChipField({
   id: idProp,
   scopes,
-  suggestions,
+  suggestions = EMPTY_SCOPE_SUGGESTIONS,
   onChange,
   disabled = false,
   errorMsg,

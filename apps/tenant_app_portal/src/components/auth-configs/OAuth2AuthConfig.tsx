@@ -1,3 +1,4 @@
+import OAuthScopeChipField from '@/components/data-source/OAuthScopeChipField'
 import { SensitiveCredentialField } from '@/components/SensitiveCredentialField'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
@@ -27,7 +28,7 @@ i18n.addResourceBundle(
         oauthAuthorizeUrl: 'Authorize URL',
         oauthTokenUrl: 'Token URL',
         oauthScopes: 'Scopes',
-        oauthScopesHelp: 'Space- or comma-separated scopes requested at authorize time.',
+        oauthScopesHelp: 'Add scopes required by your OAuth app. Type, paste, or pick suggestions.',
         oauthScopeParam: 'Scope query param',
         oauthTokenAuthMethod: 'Token auth method',
         oauthTokenResponsePath: 'Token response path',
@@ -56,7 +57,7 @@ i18n.addResourceBundle(
         oauthAuthorizeUrl: '授权地址',
         oauthTokenUrl: '令牌地址',
         oauthScopes: 'Scopes',
-        oauthScopesHelp: '授权时请求的 scope，可用空格或逗号分隔。',
+        oauthScopesHelp: '填写 OAuth 应用要求的 scope，可输入、粘贴或从建议中选择。',
         oauthScopeParam: 'Scope 查询参数名',
         oauthTokenAuthMethod: '令牌鉴权方式',
         oauthTokenResponsePath: '令牌响应路径',
@@ -77,7 +78,8 @@ export interface OAuth2AuthConfigProps {
   maskedClientSecret?: string | null
   authorizeUrl: string
   tokenUrl: string
-  scopesText: string
+  scopes: string[]
+  scopeSuggestions?: readonly string[]
   scopeParam: string
   tokenAuthMethod: string
   tokenResponsePath: string
@@ -93,7 +95,7 @@ export interface OAuth2AuthConfigProps {
   onClientSecretDraftChange?: (value: string) => void
   onAuthorizeUrlChange: (value: string) => void
   onTokenUrlChange: (value: string) => void
-  onScopesTextChange: (value: string) => void
+  onScopesChange: (scopes: string[]) => void
   onScopeParamChange: (value: string) => void
   onTokenAuthMethodChange: (value: string) => void
   onTokenResponsePathChange: (value: string) => void
@@ -106,7 +108,8 @@ export function OAuth2AuthConfig({
   maskedClientSecret,
   authorizeUrl,
   tokenUrl,
-  scopesText,
+  scopes,
+  scopeSuggestions,
   scopeParam,
   tokenAuthMethod,
   tokenResponsePath,
@@ -121,7 +124,7 @@ export function OAuth2AuthConfig({
   onClientSecretDraftChange,
   onAuthorizeUrlChange,
   onTokenUrlChange,
-  onScopesTextChange,
+  onScopesChange,
   onScopeParamChange,
   onTokenAuthMethodChange,
   onTokenResponsePathChange,
@@ -186,10 +189,10 @@ export function OAuth2AuthConfig({
               <dd className="break-all font-mono">{tokenUrl}</dd>
             </div>
           ) : null}
-          {scopesText ? (
+          {scopes.length ? (
             <div className="grid gap-0.5 sm:grid-cols-[7rem_1fr]">
               <dt>{t('components.authConfigs.oauthScopes')}</dt>
-              <dd className="break-all font-mono">{scopesText}</dd>
+              <dd className="break-all font-mono">{scopes.join(' ')}</dd>
             </div>
           ) : null}
         </dl>
@@ -221,12 +224,13 @@ export function OAuth2AuthConfig({
           </div>
           <div className="space-y-1">
             <Label htmlFor="oauth2-scopes">{t('components.authConfigs.oauthScopes')}</Label>
-            <Input
+            <OAuthScopeChipField
               id="oauth2-scopes"
-              value={scopesText}
-              onChange={(event) => onScopesTextChange(event.target.value)}
+              scopes={scopes}
+              suggestions={scopeSuggestions}
               disabled={submitting}
-              placeholder="search:read channels:history"
+              placeholder="search:read"
+              onChange={onScopesChange}
             />
             <p className="text-xs text-muted-foreground">
               {t('components.authConfigs.oauthScopesHelp')}

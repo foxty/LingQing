@@ -6,6 +6,7 @@ import {
   rdbmsConnectionSchema,
   rdbmsUserTemplateConnectionSchema,
 } from '@/components/data-source/RDBMSConnectionForm'
+import '@/components/data-source/DataSourceUserCredentialAuthSection'
 import type { DataSourceUserAuthFieldErrors } from '@/components/data-source/DataSourceUserCredentialAuthSection'
 import type { DataSourceConnectionFieldErrors } from '@/components/data-source/formLayout'
 import type { DataSourceFormValues } from '@/components/data-source/addDataSourceDialogModel'
@@ -16,6 +17,7 @@ import {
   type DatabricksUserCredentialAuthType,
 } from '@/lib/dataSourceUserAuth'
 import { validateSecretRequired, validateSecretWhenEditing } from '@/lib/sensitiveCredential'
+import i18n from '@/i18n/config'
 
 const connectionFieldKeys = new Set<keyof DataSourceConnectionFieldErrors>([
   'host',
@@ -160,7 +162,7 @@ export async function validateDataSourceFormSubmit(options: {
       oauthErrors.oauthClientSecret = clientSecretEditErr
     }
     if (!options.oauth2Config.scopes.length) {
-      oauthErrors.oauthScopes = 'Enter at least one authorize scope (must match your Databricks OAuth app)'
+      oauthErrors.oauthScopes = i18n.t('components.dataSourceUserAuth.oauthScopesRequired')
     }
     if (Object.values(oauthErrors).some(Boolean)) {
       return { ok: false, connectionFieldErrors: fieldErrors, userAuthFieldErrors: oauthErrors }

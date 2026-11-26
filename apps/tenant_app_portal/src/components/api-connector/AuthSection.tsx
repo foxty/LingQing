@@ -34,7 +34,7 @@ interface AuthSectionProps {
   basicConfig: BasicConfig
   customAuthConfig: CustomAuthFormConfig
   oauth2Config: OAuth2FormConfig
-  scopesText: string
+  oauthScopeSuggestions: readonly string[]
   fieldErrors: Partial<Record<FieldErrorKey, string>>
   apiKeyValueSecret: SecretCredentialFieldHandle
   bearerSecret: SecretCredentialFieldHandle
@@ -45,7 +45,6 @@ interface AuthSectionProps {
   onBasicConfigChange: (updater: (prev: BasicConfig) => BasicConfig) => void
   onCustomAuthConfigChange: (next: CustomAuthFormConfig) => void
   onOauth2ConfigChange: (updater: (prev: OAuth2FormConfig) => OAuth2FormConfig) => void
-  onScopesTextChange: (value: string) => void
   clearFieldError: (key: FieldErrorKey) => void
 }
 
@@ -59,7 +58,7 @@ export function AuthSection({
   basicConfig,
   customAuthConfig,
   oauth2Config,
-  scopesText,
+  oauthScopeSuggestions,
   fieldErrors,
   apiKeyValueSecret,
   bearerSecret,
@@ -70,7 +69,6 @@ export function AuthSection({
   onBasicConfigChange,
   onCustomAuthConfigChange,
   onOauth2ConfigChange,
-  onScopesTextChange,
   clearFieldError,
 }: AuthSectionProps) {
   const { t } = useTranslation()
@@ -178,7 +176,8 @@ export function AuthSection({
             }
             authorizeUrl={oauth2Config.authorizeUrl}
             tokenUrl={oauth2Config.tokenUrl}
-            scopesText={scopesText}
+            scopes={oauth2Config.scopes}
+            scopeSuggestions={oauthScopeSuggestions}
             scopeParam={oauth2Config.scopeParam}
             tokenAuthMethod={oauth2Config.tokenAuthMethod}
             tokenResponsePath={oauth2Config.tokenResponsePath}
@@ -207,7 +206,9 @@ export function AuthSection({
               clearFieldError('oauthTokenUrl')
               onOauth2ConfigChange((prev) => ({ ...prev, tokenUrl: value }))
             }}
-            onScopesTextChange={onScopesTextChange}
+            onScopesChange={(nextScopes) =>
+              onOauth2ConfigChange((prev) => ({ ...prev, scopes: nextScopes }))
+            }
             onScopeParamChange={(value) =>
               onOauth2ConfigChange((prev) => ({ ...prev, scopeParam: value }))
             }
