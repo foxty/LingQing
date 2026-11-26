@@ -37,6 +37,9 @@ class ApiConnectorPackService:
             manifest.pack_ref,
         )
         if existing is not None:
+            if existing.agent_instructions != manifest.agent_instructions:
+                existing.agent_instructions = manifest.agent_instructions
+                await self._connectors.connector_repo.update(existing)
             return await self._connectors.get_connector_for_actor(
                 connector_id=existing.id,
                 actor=actor,
@@ -66,6 +69,7 @@ class ApiConnectorPackService:
             credential_mode=manifest.connector.credential_mode,
             execution_rules=manifest.execution_rules.to_domain(),
             pack_ref=manifest.pack_ref,
+            agent_instructions=manifest.agent_instructions,
         )
 
         for operation_template in manifest.operations:

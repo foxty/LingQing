@@ -54,9 +54,9 @@ i18n.addResourceBundle('en', 'translation', {
     cancel: 'Cancel',
     share: 'Share',
     confirmCancelTitle: 'Cancel task',
-    confirmCancel: 'Are you sure you want to cancel "{name}"?',
+    confirmCancel: 'Are you sure you want to cancel "{{name}}"?',
     confirmDeleteTitle: 'Delete task',
-    confirmDelete: 'Are you sure you want to delete "{name}"?',
+    confirmDelete: 'Are you sure you want to delete "{{name}}"?',
   }
 }, true, true)
 
@@ -87,9 +87,9 @@ i18n.addResourceBundle('zh', 'translation', {
     cancel: '取消',
     share: '分享',
     confirmCancelTitle: '取消任务',
-    confirmCancel: '确定要取消"{name}"吗？',
+    confirmCancel: '确定要取消"{{name}}"吗？',
     confirmDeleteTitle: '删除任务',
-    confirmDelete: '确定要删除"{name}"吗？',
+    confirmDelete: '确定要删除"{{name}}"吗？',
   }
 }, true, true)
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'

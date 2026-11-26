@@ -54,6 +54,7 @@ class ApiConnectorPackManifest(BaseModel):
 
     pack_id: str = Field(..., pattern=r"^[a-z0-9][a-z0-9-]*$")
     version: str = Field(..., pattern=r"^\d+\.\d+\.\d+$")
+    agent_instructions: str | None = Field(default=None, max_length=8000)
     connector: PackConnectorSchema
     oauth: PackOAuthSchema
     execution_rules: ApiExecutionRulesSchema = Field(default_factory=ApiExecutionRulesSchema)

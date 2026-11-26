@@ -204,6 +204,7 @@ class ApiConnectorResponse(MaskedFieldsMixin):
     rate_policy: ApiRatePolicySchema
     execution_rules: ApiExecutionRulesSchema = Field(default_factory=ApiExecutionRulesSchema)
     pack_ref: str | None = None
+    agent_instructions: str | None = None
     schema_source_type: SchemaSourceType
     schema_source_url: str | None
     schema_metadata: dict[str, Any]

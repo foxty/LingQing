@@ -60,7 +60,12 @@ class OAuth2TokenClient:
         timeout = aiohttp.ClientTimeout(total=30)
         try:
             async with aiohttp.ClientSession(timeout=timeout) as session:
-                async with session.post(config.token_url, data=request_data, auth=auth) as response:
+                async with session.post(
+                    config.token_url,
+                    data=request_data,
+                    auth=auth,
+                    headers={"Accept": "application/json"},
+                ) as response:
                     payload = await self._response_payload(response)
                     if response.status < 200 or response.status >= 300:
                         raise ValidationError(f"OAuth token endpoint returned HTTP {response.status}")

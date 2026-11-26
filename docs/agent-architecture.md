@@ -35,7 +35,7 @@ graph TD
     O --> R["Skill Resolution Service\n(SkillResolutionService)"]
 
     Q --> S["Built-in Tools\n(search_documents, etc.)"]
-    Q --> T["Custom Tools\n(api_connector, etc.)"]
+    Q --> T["Custom Tools\n(call_external_api, etc.)"]
 
     R --> U["Skill Configurations\n(YAML files)"]
     R --> V["Tenant-scoped Skills"]

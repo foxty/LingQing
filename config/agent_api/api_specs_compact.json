@@ -827,6 +827,17 @@
             ],
             "title": "Pack Ref"
           },
+          "agent_instructions": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Agent Instructions"
+          },
           "schema_source_type": {
             "type": "string",
             "enum": [
