@@ -145,6 +145,11 @@ class ToolResult:
         return cls(content=cls._coerce_content(content), status=ToolResultStatus.SUCCESS, metadata=metadata or {})
 
     @classmethod
+    def partial(cls, content: Any, metadata: dict[str, Any] | None = None) -> "ToolResult":
+        """Partial success (e.g. structurally truncated but still usable payload)."""
+        return cls(content=cls._coerce_content(content), status=ToolResultStatus.PARTIAL, metadata=metadata or {})
+
+    @classmethod
     def error_result(
         cls,
         message: Any,

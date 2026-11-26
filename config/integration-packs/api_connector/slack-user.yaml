@@ -1,17 +1,18 @@
 pack_id: slack-user
-version: 1.1.0
+version: 1.1.1
 
 agent_instructions: |
   Use this connector to search and read Slack conversations visible to the connected
   user. Match the operation to the intent: keyword search, channel history, or thread
   replies; resolve user, channel, and file metadata only when context is incomplete.
-  Bound retrieval to about 100 messages per call and at most 3 pages unless the user
-  requests more. Resolve Slack IDs to display names and use message permalinks for
-  citations. Do not send messages or change workspace settings; the bundled operations
-  are read-only. On missing_scope, identify the failed operation and required scope.
-  On empty or not-found results, explain that visibility follows the connected user's
-  permissions; on missing or expired credentials, ask the user to connect or reconnect
-  this connector.
+  For summarization or status digests, start with count around 10–20 and at most a few
+  pages; widen only when the user asks for exhaustive recall. If a tool result reports
+  body_truncated, reduce count on the next call instead of repeating the same size.
+  Resolve Slack IDs to display names and use message permalinks for citations. Do not
+  send messages or change workspace settings; the bundled operations are read-only. On
+  missing_scope, identify the failed operation and required scope. On empty or not-found
+  results, explain that visibility follows the connected user's permissions; on missing
+  or expired credentials, ask the user to connect or reconnect this connector.
 
 connector:
   name: Slack (user)

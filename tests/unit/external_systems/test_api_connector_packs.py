@@ -41,6 +41,9 @@ def test_builtin_slack_pack_is_curated_for_user_oauth():
     assert manifest.execution_rules.success_json_path == "ok"
     assert manifest.agent_instructions is not None
     assert "permalinks" in manifest.agent_instructions
+    assert "10–20" in manifest.agent_instructions
+    assert "body_truncated" in manifest.agent_instructions
+    assert manifest.version == "1.1.1"
     assert set(manifest.oauth.scopes) >= {
         "search:read",
         "users:read",
