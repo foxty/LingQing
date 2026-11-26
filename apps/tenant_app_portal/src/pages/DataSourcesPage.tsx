@@ -39,10 +39,15 @@ import type { DataSource } from '@/lib/dataSourceApi'
 import { listAssets } from '@/lib/dataSourceApi'
 import { useFormatUserDateTime } from '@/hooks/useUserDateTimeFormat'
 import { actionRules } from '@/lib/permissionRules'
+import {
+  consumeIntegrationOAuthToastOnce,
+  readOAuthCallbackHint,
+  stripIntegrationOAuthCallbackParams,
+} from '@/lib/integrationOAuth'
 import { TAG_RESOURCE_TYPES } from '@/lib/tagsApi'
 import { Database, RefreshCw } from 'lucide-react'
 import { useEffect, useState, type MouseEvent } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Trans, useTranslation } from 'react-i18next'
 import i18n from '@/i18n/config'
 
@@ -75,6 +80,9 @@ i18n.addResourceBundle('en', 'translation', {
     fetchError: 'Failed to fetch data sources',
     deleteSuccess: 'Data source deleted successfully',
     deleteFailed: 'Failed to delete data source',
+    oauthConnected: 'Account connected',
+    oauthFailed: 'OAuth connection failed. Try Connect again.',
+    oauthFailedHint: '{{hint}}. Try Connect again.',
   }
 }, true, true)
 
@@ -107,6 +115,9 @@ i18n.addResourceBundle('zh', 'translation', {
     fetchError: '获取数据源失败',
     deleteSuccess: '数据源删除成功',
     deleteFailed: '删除数据源失败',
+    oauthConnected: '账号已连接',
+    oauthFailed: 'OAuth 连接失败，请重新连接。',
+    oauthFailedHint: '{{hint}}。请重新连接。',
   }
 }, true, true)
 
@@ -116,6 +127,7 @@ export default function DataSourcesPage() {
   const { t } = useTranslation()
   const formatUserDateTime = useFormatUserDateTime()
   const navigate = useNavigate()
+  const [searchParams, setSearchParams] = useSearchParams()
   const { loading: authLoading, hasAny } = useAuth()
   const { dataSources, loading, page, total, totalPages, fetchDataSources, removeDataSource } =
     useDataSources()
@@ -150,6 +162,37 @@ export default function DataSourcesPage() {
       setCurrentPage(page)
     }
   }, [page, currentPage])
+
+  useEffect(() => {
+    const oauth = searchParams.get('oauth')
+    if (!oauth) {
+      return
+    }
+    if (!consumeIntegrationOAuthToastOnce(searchParams)) {
+      setSearchParams(stripIntegrationOAuthCallbackParams(searchParams), { replace: true })
+      return
+    }
+    const searchParam = searchQuery.trim() || undefined
+    if (oauth === 'connected') {
+      showSuccess(t('dataSources.oauthConnected'))
+      void fetchDataSources(currentPage, DATA_SOURCE_PAGE_SIZE, searchParam).catch(() => undefined)
+    } else if (oauth === 'error') {
+      const hint = readOAuthCallbackHint(searchParams)
+      showError(
+        hint ? t('dataSources.oauthFailedHint', { hint }) : t('dataSources.oauthFailed')
+      )
+    }
+    setSearchParams(stripIntegrationOAuthCallbackParams(searchParams), { replace: true })
+  }, [
+    currentPage,
+    fetchDataSources,
+    searchParams,
+    searchQuery,
+    setSearchParams,
+    showError,
+    showSuccess,
+    t,
+  ])
 
   const handleDataSourceClick = (dataSource: DataSource) => {
     navigate(`/data-sources/${dataSource.id}/assets`)

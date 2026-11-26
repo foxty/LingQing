@@ -39,6 +39,7 @@ from apps.shared.external_systems.domain.types import (
     CredentialModeStr,
     UserConnectionStatus,
 )
+from apps.shared.external_systems.oauth.dtos import IntegrationOAuthStartResponse
 from apps.shared.schemas.masked_fields import MaskedFieldsMixin
 from apps.shared.schemas.pagination import PaginatedResponse
 
@@ -226,8 +227,8 @@ class SyncSchemaRequest(BaseModel):
     file_content: str | None = None
 
 
-class ApiConnectorOAuthStartResponse(BaseModel):
-    authorization_url: str
+# Stable OpenAPI component name (same shape as integration kernel DTO).
+ApiConnectorOAuthStartResponse = IntegrationOAuthStartResponse
 
 
 class SyncSchemaSummaryDTO(BaseModel):

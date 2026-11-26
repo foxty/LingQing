@@ -3,8 +3,18 @@
 export const BYOT_CONNECTOR_AUTH_TYPES = ['api_key', 'bearer', 'basic', 'oauth2'] as const
 export type ByotConnectorAuthType = (typeof BYOT_CONNECTOR_AUTH_TYPES)[number]
 
-export function dataSourceUserAuthTypeHint(dataSourceType: string): 'db_password' | 'pat' {
-  return dataSourceType === 'databricks' ? 'pat' : 'db_password'
+export function dataSourceUserAuthTypeHint(
+  dataSourceType: string,
+  config?: Record<string, unknown> | null
+): 'db_password' | 'pat' | 'oauth2' {
+  if (dataSourceType === 'databricks') {
+    const mode = config?.user_credential_auth_type
+    if (mode === 'oauth2') {
+      return 'oauth2'
+    }
+    return 'pat'
+  }
+  return 'db_password'
 }
 
 export function dataSourceSecretFields(type: string): { key: string; label: string }[] {

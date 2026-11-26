@@ -11,6 +11,7 @@ from apps.shared.domain.value_objects import (
     AssetTypeStr,
     ColumnVO,
     DatabaseConnectionVO,
+    DataSourceType,
     DataSourceTypeStr,
 )
 from apps.shared.external_systems.data_source.catalog_sync import CatalogSyncCredentials
@@ -19,6 +20,7 @@ from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_USER,
     CredentialModeStr,
     UserConnectionStatusStr,
+    effective_credential_mode,
 )
 
 SQL_DIALECT_HINTS = {
@@ -35,6 +37,20 @@ SQL_DIALECT_HINTS = {
         "limit": "LIMIT n",
     },
 }
+
+
+def connection_vo_from_data_source_template(
+    config: dict[str, Any] | None,
+    *,
+    data_source_type: DataSourceTypeStr,
+    credential_mode: str | None,
+) -> DatabaseConnectionVO:
+    """Deserialize admin connection config with validation rules for shared vs per-user templates."""
+    user_mode_template = (
+        data_source_type == DataSourceType.DATABRICKS
+        and effective_credential_mode(credential_mode) == CREDENTIAL_MODE_USER
+    )
+    return DatabaseConnectionVO.from_dict(config or {}, user_mode_template=user_mode_template)
 
 
 @dataclass

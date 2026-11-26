@@ -8,7 +8,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { useNotification } from '@/hooks/useNotification'
-import { useApiConnectorOAuth } from '@/hooks/useApiConnectorOAuth'
+import { useIntegrationOAuth } from '@/hooks/useIntegrationOAuth'
 import { getApiErrorMessage, sanitizeUserFacingMessage } from '@/lib/api'
 import type {
   UserIntegrationConnectionClient,
@@ -137,7 +137,7 @@ export default function MyIntegrationConnectionPanel({
   const { t } = useTranslation()
   const queryClient = useQueryClient()
   const { showError, showSuccess } = useNotification()
-  const { startOAuth, starting } = useApiConnectorOAuth()
+  const { startOAuth, starting } = useIntegrationOAuth(resourceKind)
   const [plainSecrets, setPlainSecrets] = useState<Record<string, string>>({})
   const [accountLabel, setAccountLabel] = useState('')
   const [configuredSecretKeys, setConfiguredSecretKeys] = useState<Set<string>>(() => new Set())
@@ -409,7 +409,7 @@ export default function MyIntegrationConnectionPanel({
   })
   const busy = saveMutation.isPending || testMutation.isPending || starting
 
-  if (resourceKind === 'api_connector' && authTypeHint === 'oauth2') {
+  if ((resourceKind === 'api_connector' || resourceKind === 'data_source') && authTypeHint === 'oauth2') {
     const isAdminTarget = targetUserId != null
     const oauthAlreadyLinked = statusKey === 'connected' || statusKey === 'expired'
     const oauthPrimaryLabel = oauthAlreadyLinked

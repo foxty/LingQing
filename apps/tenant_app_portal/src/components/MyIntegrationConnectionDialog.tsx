@@ -96,8 +96,12 @@ export default function MyIntegrationConnectionDialog({
             resourceKind="data_source"
             resourceId={dataSource.id}
             credentialMode="user"
-            authTypeHint={dataSourceUserAuthTypeHint(dataSource.type)}
-            secretFields={dataSourceSecretFields(dataSource.type)}
+            authTypeHint={dataSourceUserAuthTypeHint(dataSource.type, dataSource.config)}
+            secretFields={
+              dataSourceUserAuthTypeHint(dataSource.type, dataSource.config) === 'oauth2'
+                ? []
+                : dataSourceSecretFields(dataSource.type)
+            }
             compact
             onConnectionChanged={onConnectionChanged}
             onSaved={() => onOpenChange(false)}

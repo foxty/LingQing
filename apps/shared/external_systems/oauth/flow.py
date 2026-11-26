@@ -9,12 +9,19 @@ from typing import Protocol
 from apps.config import get_settings
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.domain.actor import ActorContext
-from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR
-from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
+from apps.shared.domain.value_objects import DataSourceType
 from apps.shared.external_systems.api_connector.domain import OAuth2AuthConfig
 from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository
+from apps.shared.external_systems.credentials.domain import AUTH_TYPE_OAUTH2
 from apps.shared.external_systems.credentials.dtos import UserIntegrationConnectionUpsertRequest
 from apps.shared.external_systems.credentials.service import UserIntegrationCredentialService
+from apps.shared.external_systems.data_source.repository import DataSourceRepository
+from apps.shared.external_systems.data_source.user_oauth import (
+    USER_CREDENTIAL_AUTH_OAUTH2,
+    oauth_client_fields_from_data_source_config,
+    user_credential_auth_type_from_config,
+)
 from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER
 from apps.shared.external_systems.oauth.state import OAuthStateCodec
 from apps.shared.infra.oauth import (
@@ -27,6 +34,32 @@ from apps.shared.utils.field_cipher import FieldCipher
 
 # Canonical shared browser callback on the API (registered once per IdP OAuth app).
 INTEGRATION_OAUTH_CALLBACK_PATH = "/integrations/oauth/callback"
+
+
+def _clip_oauth_hint(value: str, *, max_len: int) -> str:
+    cleaned = " ".join(value.split())
+    return cleaned[:max_len]
+
+
+def append_oauth_error_hints(
+    url: str,
+    *,
+    oauth_code: str | None = None,
+    oauth_detail: str | None = None,
+    oauth_reason: str | None = None,
+) -> str:
+    """Append safe, truncated OAuth failure hints to a portal redirect URL."""
+    from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
+
+    parsed = urlparse(url)
+    pairs = list(parse_qsl(parsed.query, keep_blank_values=True))
+    if oauth_code:
+        pairs.append(("oauth_code", _clip_oauth_hint(oauth_code, max_len=80)))
+    if oauth_detail:
+        pairs.append(("oauth_detail", _clip_oauth_hint(oauth_detail, max_len=240)))
+    if oauth_reason:
+        pairs.append(("oauth_reason", _clip_oauth_hint(oauth_reason, max_len=200)))
+    return urlunparse(parsed._replace(query=urlencode(pairs)))
 
 
 @dataclass(frozen=True)
@@ -74,6 +107,65 @@ class IntegrationOAuthTarget(Protocol):
     def portal_error_url(self, *, resource_id: int | None = None) -> str: ...
 
 
+class DataSourceOAuthTarget:
+    """``IntegrationOAuthTarget`` for Databricks per-user OAuth2 (U2M SQL)."""
+
+    resource_type = RESOURCE_TYPE_DATA_SOURCE
+
+    def __init__(self, db_session, *, cipher: FieldCipher | None = None) -> None:
+        self._db = db_session
+        self._repo = DataSourceRepository(db_session)
+        self._cipher = cipher or FieldCipher()
+
+    async def _require_oauth_data_source(self, *, actor: ActorContext, data_source_id: int):
+        entity = await self._repo.get_by_id_and_tenant(data_source_id, actor.tenant_id)
+        if entity is None:
+            raise ResourceNotFoundError(f"Data source not found: {data_source_id}")
+        if entity.managed or entity.credential_mode != CREDENTIAL_MODE_USER:
+            raise ValidationError("Data source is not configured for per-user credentials")
+        if entity.type != DataSourceType.DATABRICKS:
+            raise ValidationError("OAuth2 user credentials are only supported for Databricks data sources")
+        if user_credential_auth_type_from_config(entity.config) != USER_CREDENTIAL_AUTH_OAUTH2:
+            raise ValidationError("Data source is not configured for user OAuth2")
+        return entity
+
+    async def load_oauth_spec(self, *, actor: ActorContext, resource_id: int) -> OAuthAuthorizationSpec:
+        entity = await self._require_oauth_data_source(actor=actor, data_source_id=resource_id)
+        fields = oauth_client_fields_from_data_source_config(entity.config, cipher=self._cipher)
+        oauth = OAuth2AuthConfig(**fields)
+        return ApiConnectorOAuthTarget.spec_from_connector_config(oauth)
+
+    async def save_tokens(
+        self,
+        *,
+        actor: ActorContext,
+        resource_id: int,
+        tokens: OAuthTokenSet,
+    ) -> None:
+        await self._require_oauth_data_source(actor=actor, data_source_id=resource_id)
+        credential_service = UserIntegrationCredentialService(self._db)
+        await credential_service.upsert_data_source_connection(
+            actor=actor,
+            data_source_id=resource_id,
+            body=UserIntegrationConnectionUpsertRequest(
+                auth_type=AUTH_TYPE_OAUTH2,
+                secrets=tokens.to_secrets(),
+                expires_at=tokens.expires_at,
+            ),
+        )
+
+    @staticmethod
+    def portal_success_url(resource_id: int) -> str:
+        return f"{get_settings().PORTAL_ORIGIN.rstrip('/')}/data-sources?ds={resource_id}&oauth=connected"
+
+    @staticmethod
+    def portal_error_url(*, resource_id: int | None = None) -> str:
+        portal = get_settings().PORTAL_ORIGIN.rstrip("/")
+        if resource_id is not None:
+            return f"{portal}/data-sources?ds={resource_id}&oauth=error"
+        return f"{portal}/data-sources?oauth=error"
+
+
 class ApiConnectorOAuthTarget:
     """``IntegrationOAuthTarget`` implementation for user-mode OAuth2 API connectors."""
 
@@ -90,6 +182,8 @@ class ApiConnectorOAuthTarget:
             raise ResourceNotFoundError(f"ApiConnector not found: {connector_id}")
         if connector.auth_type != "oauth2" or connector.credential_mode != CREDENTIAL_MODE_USER:
             raise ValidationError("API connector is not configured for user OAuth2")
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+
         domain = connector_entity_to_domain(connector, cipher=self._cipher)
         if not isinstance(domain.auth_config, OAuth2AuthConfig):
             raise ValidationError("Invalid OAuth2 connector configuration")
@@ -164,6 +258,7 @@ class IntegrationOAuthFlow:
         else:
             self._targets = {
                 RESOURCE_TYPE_API_CONNECTOR: ApiConnectorOAuthTarget(db_session, cipher=self._cipher),
+                RESOURCE_TYPE_DATA_SOURCE: DataSourceOAuthTarget(db_session, cipher=self._cipher),
             }
 
     def _require_target(self, resource_type: str) -> IntegrationOAuthTarget:

@@ -10,7 +10,7 @@ from apps.shared.core.exceptions import IntegrationNotConnectedError
 from apps.shared.db.models import ApiConnector, DataSource, UserIntegrationCredential
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
-from apps.shared.external_systems.credentials.domain import CREDENTIAL_STATUS_ACTIVE
+from apps.shared.external_systems.credentials.domain import AUTH_TYPE_OAUTH2, CREDENTIAL_STATUS_ACTIVE
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
 from apps.shared.external_systems.credentials.sensitive_config import (
     API_CONNECTOR_USER_MODE_STRIP_KEYS,
@@ -57,7 +57,20 @@ class IntegrationCredentialResolver:
         user_secrets = self.cipher.decrypt_dict(
             binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS
         )
-        merged = {**strip_sensitive_fields(base, sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS), **user_secrets}
+        if binding.auth_type == AUTH_TYPE_OAUTH2:
+            from apps.shared.external_systems.data_source.user_oauth import oauth_token_refresh_template
+
+            template = oauth_token_refresh_template(data_source.config or {}, cipher=self.cipher)
+            user_secrets = await self._maybe_refresh_oauth2_user_secrets(
+                binding=binding,
+                template=template,
+                user_secrets=user_secrets,
+                resource_type=RESOURCE_TYPE_DATA_SOURCE,
+            )
+            overlay = {"password": user_secrets.get("access_token")}
+        else:
+            overlay = user_secrets
+        merged = {**strip_sensitive_fields(base, sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS), **overlay}
         return merged
 
     async def resolve_api_connector_auth_config(
@@ -84,12 +97,13 @@ class IntegrationCredentialResolver:
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
             resource_id=connector.id,
         )
-        user_secrets = await self._maybe_refresh_oauth2_user_secrets(
-            connector=connector,
-            binding=binding,
-            template=template,
-            user_secrets=user_secrets,
-        )
+        if connector.auth_type == AUTH_TYPE_OAUTH2:
+            user_secrets = await self._maybe_refresh_oauth2_user_secrets(
+                binding=binding,
+                template=template,
+                user_secrets=user_secrets,
+                resource_type=RESOURCE_TYPE_API_CONNECTOR,
+            )
         return self._merge_user_secrets_into_connector_template(
             template=template,
             user_secrets=user_secrets,
@@ -132,22 +146,23 @@ class IntegrationCredentialResolver:
         )
         return binding, user_secrets
 
+
     async def _maybe_refresh_oauth2_user_secrets(
         self,
         *,
-        connector: ApiConnector,
         binding: UserIntegrationCredential,
         template: dict[str, Any],
         user_secrets: dict[str, Any],
+        resource_type: str,
     ) -> dict[str, Any]:
         from apps.shared.external_systems.oauth.refresh import maybe_refresh_oauth2_secrets
 
         tokens = await maybe_refresh_oauth2_secrets(
-            auth_type=connector.auth_type,
+            auth_type=AUTH_TYPE_OAUTH2,
             oauth_template=template,
             user_secrets=user_secrets,
             expires_at=binding.expires_at,
-            resource_type=RESOURCE_TYPE_API_CONNECTOR,
+            resource_type=resource_type,
         )
         if tokens is None:
             return user_secrets

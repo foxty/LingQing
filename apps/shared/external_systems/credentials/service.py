@@ -142,11 +142,16 @@ class UserIntegrationCredentialService:
             resource_id=ds.id,
             incoming=body.secrets,
         )
+        from apps.shared.external_systems.data_source.user_oauth import (
+            user_credential_auth_type_from_config,
+        )
+
         validate_user_integration_upsert(
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             auth_type=body.auth_type,
             merged_secrets=merged_secrets,
             data_source_type=ds.type,
+            user_credential_auth_type=user_credential_auth_type_from_config(ds.config),
         )
         secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
         now = datetime.now(UTC)

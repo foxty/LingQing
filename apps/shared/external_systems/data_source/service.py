@@ -58,6 +58,11 @@ from apps.shared.external_systems.data_source.schemas import (
     DiscoveredAsset,
     TestConnectionResponse,
 )
+from apps.shared.external_systems.data_source.user_oauth import (
+    merge_user_oauth_into_config,
+    prepare_user_oauth_config_for_storage,
+    validate_databricks_user_oauth_settings,
+)
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_USER,
     IntegrationPurpose,
@@ -450,12 +455,22 @@ class DataSourceService(TenantAwareService):
         if config is not None:
             base = dict(entity.config or {}) if entity else {}
             merged = CatalogSyncCredentials.merge_incoming_into_config(base, config)
+            merged = merge_user_oauth_into_config(base, merged)
             if mode == CREDENTIAL_MODE_USER:
                 config = strip_user_mode_connection_template(merged)
             else:
                 config = merged
         elif mode == CREDENTIAL_MODE_USER and entity and entity.config:
             config = strip_user_mode_connection_template(entity.config)
+
+        validate_databricks_user_oauth_settings(
+            data_source_type=(entity.type if entity else DataSourceType.POSTGRES),
+            credential_mode=mode,
+            managed=entity.managed if entity else True,
+            config=config if config is not None else (entity.config if entity else {}),
+        )
+        if config is not None:
+            config = prepare_user_oauth_config_for_storage(config)
 
         updated = await self.data_source_repo.update_fields(
             data_source_id=data_source_id,
@@ -654,6 +669,13 @@ class DataSourceService(TenantAwareService):
         credential_mode = effective_credential_mode(data_source_data.credential_mode)
         if credential_mode == CREDENTIAL_MODE_USER:
             config = strip_user_mode_connection_template(config)
+        validate_databricks_user_oauth_settings(
+            data_source_type=data_source_data.type,
+            credential_mode=credential_mode,
+            managed=data_source_data.managed,
+            config=config,
+        )
+        config = prepare_user_oauth_config_for_storage(config)
 
         data_source = await self.data_source_repo.create_from_domain(
             tenant_id=self.tenant_id,

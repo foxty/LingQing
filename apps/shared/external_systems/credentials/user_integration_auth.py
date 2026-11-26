@@ -37,9 +37,13 @@ def _non_empty(value: object) -> bool:
 
 def expected_data_source_user_auth_type(
     data_source_type: DataSourceTypeStr | str,
+    *,
+    user_credential_auth_type: str | None = None,
 ) -> DataSourceUserCredentialAuthTypeStr:
-    """Map warehouse engine type to the only allowed user credential auth_type."""
+    """Map warehouse engine type to the allowed user credential auth_type."""
     if data_source_type == DataSourceType.DATABRICKS:
+        if user_credential_auth_type == AUTH_TYPE_OAUTH2:
+            return AUTH_TYPE_OAUTH2
         return USER_INTEGRATION_AUTH_PAT
     return USER_INTEGRATION_AUTH_DB_PASSWORD
 
@@ -99,12 +103,16 @@ def validate_data_source_user_integration(
     data_source_type: DataSourceTypeStr | str,
     auth_type: DataSourceUserCredentialAuthTypeStr | str,
     merged_secrets: dict[str, str],
+    user_credential_auth_type: str | None = None,
 ) -> None:
-    """BYOT data source: auth_type is driven by data source engine type (db_password vs pat)."""
+    """BYOT data source: auth_type is driven by engine type and admin user_credential_auth_type."""
     validate_user_integration_auth_type_string(auth_type)
     if auth_type not in DATA_SOURCE_USER_AUTH_TYPES:
         raise ValidationError(f"auth_type must be one of: {', '.join(sorted(DATA_SOURCE_USER_AUTH_TYPES))}")
-    expected = expected_data_source_user_auth_type(data_source_type)
+    expected = expected_data_source_user_auth_type(
+        data_source_type,
+        user_credential_auth_type=user_credential_auth_type,
+    )
     if auth_type != expected:
         raise ValidationError(f"auth_type must be '{expected}' for data source type '{data_source_type}'")
     validate_merged_secrets_for_auth_type(auth_type, merged_secrets)
@@ -136,6 +144,7 @@ def validate_user_integration_upsert(
     merged_secrets: dict[str, str],
     data_source_type: DataSourceTypeStr | str | None = None,
     connector_auth_type: ApiConnectorDefinitionAuthTypeStr | str | None = None,
+    user_credential_auth_type: str | None = None,
 ) -> None:
     if resource_type == RESOURCE_TYPE_DATA_SOURCE:
         if not data_source_type:
@@ -144,6 +153,7 @@ def validate_user_integration_upsert(
             data_source_type=data_source_type,
             auth_type=auth_type,
             merged_secrets=merged_secrets,
+            user_credential_auth_type=user_credential_auth_type,
         )
         return
     if resource_type == RESOURCE_TYPE_API_CONNECTOR:

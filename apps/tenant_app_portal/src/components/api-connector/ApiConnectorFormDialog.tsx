@@ -151,7 +151,7 @@ export function ApiConnectorFormDialog({
                 basicConfig={form.basicConfig}
                 customAuthConfig={form.customAuthConfig}
                 oauth2Config={form.oauth2Config}
-                scopesText={form.scopesText}
+                oauthScopeSuggestions={form.oauthScopeSuggestions}
                 fieldErrors={form.fieldErrors}
                 apiKeyValueSecret={form.apiKeyValueSecret}
                 bearerSecret={form.bearerSecret}
@@ -162,7 +162,6 @@ export function ApiConnectorFormDialog({
                 onBasicConfigChange={form.setBasicConfig}
                 onCustomAuthConfigChange={form.setCustomAuthConfig}
                 onOauth2ConfigChange={form.setOauth2Config}
-                onScopesTextChange={form.setScopesText}
                 clearFieldError={form.clearFieldError}
               />
               <SchemaSection

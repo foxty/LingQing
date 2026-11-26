@@ -1,8 +1,8 @@
 """OAuth 2.0 application kernel for user-scoped integrations."""
 
+from apps.shared.external_systems.oauth.dtos import IntegrationOAuthStartResponse
 from apps.shared.external_systems.oauth.flow import (
     INTEGRATION_OAUTH_CALLBACK_PATH,
-    ApiConnectorOAuthTarget,
     IntegrationOAuthFlow,
     IntegrationOAuthTarget,
     OAuthAuthorizationSpec,
@@ -18,8 +18,8 @@ from apps.shared.external_systems.oauth.state import OAuthState, OAuthStateCodec
 __all__ = [
     "INTEGRATION_OAUTH_CALLBACK_PATH",
     "REFRESH_LEEWAY_SECONDS",
-    "ApiConnectorOAuthTarget",
     "IntegrationOAuthFlow",
+    "IntegrationOAuthStartResponse",
     "IntegrationOAuthTarget",
     "OAuthAuthorizationSpec",
     "OAuthCallbackOutcome",

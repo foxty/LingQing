@@ -50,3 +50,41 @@ def test_redact_lists_path_when_preview_unavailable():
     redacted, paths = redact_data_source_config_for_api({"host": "h", "password": "enc:not-valid-ciphertext"})
     assert "password" not in redacted
     assert paths == ["config.password"]
+
+
+def test_db_data_source_to_public_api_response_user_mode_databricks_oauth_template():
+    from datetime import UTC, datetime
+
+    entity = DataSource(
+        id=7,
+        tenant_id=1,
+        name="dbx-u2m",
+        type="databricks",
+        managed=False,
+        credential_mode="user",
+        config={
+            "host": "adb-example.azuredatabricks.net",
+            "extra_params": {"http_path": "/sql/1.0/warehouses/synthetic"},
+            "user_credential_auth_type": "oauth2",
+            "user_oauth": {"client_id": "cid", "client_secret": "enc:secret"},
+        },
+        owner_id=1,
+        asset_count=0,
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    response = db_data_source_to_public_api_response(entity)
+    assert response.id == 7
+    assert response.credential_mode == "user"
+    assert response.config["host"] == "adb-example.azuredatabricks.net"
+
+
+def test_redact_masks_user_oauth_client_secret():
+    redacted, paths = redact_data_source_config_for_api(
+        {
+            "host": "adb.example.net",
+            "user_oauth": {"client_id": "cid", "client_secret": "super-secret-value"},
+        }
+    )
+    assert redacted["user_oauth"]["client_secret"] == "su**************ue"
+    assert paths == ["config.user_oauth.client_secret"]

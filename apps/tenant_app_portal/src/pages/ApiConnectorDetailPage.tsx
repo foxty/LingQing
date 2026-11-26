@@ -21,6 +21,11 @@ import { useApiConnectors } from '@/hooks/useApiConnectors'
 import { actionRules } from '@/lib/permissionRules'
 import { useNotification } from '@/hooks/useNotification'
 import { getApiErrorMessage } from '@/lib/api'
+import {
+  consumeIntegrationOAuthToastOnce,
+  readOAuthCallbackHint,
+  stripIntegrationOAuthCallbackParams,
+} from '@/lib/integrationOAuth'
 import type { ApiOperation, ApiOperationCallResponse } from '@/lib/apiConnectorApi'
 import { Braces, Cable, Info, Plus, RefreshCw, TriangleAlert, Upload } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
@@ -84,6 +89,7 @@ i18n.addResourceBundle('en', 'translation', {
     tabUserAccess: 'User access',
     oauthConnected: 'Account connected',
     oauthFailed: 'OAuth connection failed. Try Connect again.',
+    oauthFailedHint: '{{hint}}. Try Connect again.',
   }
 }, true, true)
 
@@ -145,6 +151,7 @@ i18n.addResourceBundle('zh', 'translation', {
     tabUserAccess: '用户访问',
     oauthConnected: '账号已连接',
     oauthFailed: 'OAuth 连接失败，请重新连接。',
+    oauthFailedHint: '{{hint}}。请重新连接。',
   }
 }, true, true)
 
@@ -214,15 +221,20 @@ export default function ApiConnectorDetailPage() {
     if (!oauth) {
       return
     }
+    if (!consumeIntegrationOAuthToastOnce(searchParams)) {
+      setSearchParams(stripIntegrationOAuthCallbackParams(searchParams), { replace: true })
+      return
+    }
     if (oauth === 'connected') {
       showSuccess(t('apiConnectorDetail.oauthConnected'))
       void fetchConnectors().catch(() => undefined)
     } else if (oauth === 'error') {
-      showError(t('apiConnectorDetail.oauthFailed'))
+      const hint = readOAuthCallbackHint(searchParams)
+      showError(
+        hint ? t('apiConnectorDetail.oauthFailedHint', { hint }) : t('apiConnectorDetail.oauthFailed')
+      )
     }
-    const next = new URLSearchParams(searchParams)
-    next.delete('oauth')
-    setSearchParams(next, { replace: true })
+    setSearchParams(stripIntegrationOAuthCallbackParams(searchParams), { replace: true })
   }, [fetchConnectors, searchParams, setSearchParams, showError, showSuccess, t])
 
   useEffect(() => {
