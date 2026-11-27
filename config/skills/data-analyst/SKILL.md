@@ -19,21 +19,21 @@ metadata:
   owner: platform
 tools:
   - name: search_data_assets
-    limit: 10
+    limit: 15
   - name: search_documents
-    limit: 10
+    limit: 15
   - name: retrieve_resource_context
-    limit: 10
+    limit: 15
   - name: run_sql_query_on_datasource
-    limit: 30
+    limit: 99
   - name: create_chart_from_sql
-    limit: 10
+    limit: 15
   - name: create_chart_from_structured_data
-    limit: 10
+    limit: 15
   - name: create_chart_grid_from_sql
-    limit: 10
+    limit: 15
   - name: create_chart_grid_from_structured_data
-    limit: 10
+    limit: 15
 ---
 
 ## Responsibilities
