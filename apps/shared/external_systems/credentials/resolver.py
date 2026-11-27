@@ -53,14 +53,11 @@ class IntegrationCredentialResolver:
                 {"code": "INTEGRATION_NOT_CONNECTED", "resource_type": RESOURCE_TYPE_DATA_SOURCE},
             )
 
-        binding = await self._require_active_binding(
+        binding, user_secrets = await self._load_active_user_secrets(
             tenant_id=data_source.tenant_id,
             user_id=actor.user_id,
             resource_type=RESOURCE_TYPE_DATA_SOURCE,
             resource_id=data_source.id,
-        )
-        user_secrets = self.cipher.decrypt_dict(
-            binding.secrets_enc, sensitive_fields=USER_BINDING_POLICY.encrypt_leaves
         )
         if binding.auth_type == AUTH_TYPE_OAUTH2:
             from apps.shared.external_systems.data_source.user_oauth import oauth_token_refresh_template
@@ -193,6 +190,21 @@ class IntegrationCredentialResolver:
         stripped = strip_connector_auth_user_mode_template(template, auth_type=auth_type)
         return {**stripped, **user_secrets}
 
+    def _binding_shows_expired_status(self, row: UserIntegrationCredential) -> bool:
+        """UI 'expired' means reconnect is required, not merely stale access-token TTL."""
+        if row.expires_at is None:
+            return False
+        if row.expires_at.replace(tzinfo=UTC) >= datetime.now(UTC):
+            return False
+        if row.auth_type == AUTH_TYPE_OAUTH2:
+            user_secrets = self.cipher.decrypt_dict(
+                row.secrets_enc, sensitive_fields=USER_BINDING_POLICY.encrypt_leaves
+            )
+            refresh_token = user_secrets.get("refresh_token")
+            if isinstance(refresh_token, str) and refresh_token.strip():
+                return False
+        return True
+
     async def connection_status_for_actor(
         self,
         *,
@@ -215,36 +227,6 @@ class IntegrationCredentialResolver:
         )
         if row is None or row.status != CREDENTIAL_STATUS_ACTIVE:
             return USER_CONNECTION_NOT_CONNECTED, row
-        if row.expires_at and row.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
+        if self._binding_shows_expired_status(row):
             return USER_CONNECTION_EXPIRED, row
         return USER_CONNECTION_CONNECTED, row
-
-    async def _require_active_binding(
-        self,
-        *,
-        tenant_id: int,
-        user_id: int,
-        resource_type: str,
-        resource_id: int,
-    ):
-        row = await self.repo.get_binding(
-            tenant_id=tenant_id,
-            user_id=user_id,
-            resource_type=resource_type,
-            resource_id=resource_id,
-        )
-        if row is None or row.status != CREDENTIAL_STATUS_ACTIVE:
-            raise IntegrationNotConnectedError(
-                "Connect your account to use this integration",
-                {
-                    "code": "INTEGRATION_NOT_CONNECTED",
-                    "resource_type": resource_type,
-                    "resource_id": resource_id,
-                },
-            )
-        if row.expires_at and row.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
-            raise IntegrationNotConnectedError(
-                "Integration credentials expired; reconnect to continue",
-                {"code": "INTEGRATION_CREDENTIAL_EXPIRED", "resource_type": resource_type},
-            )
-        return row

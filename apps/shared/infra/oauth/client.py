@@ -4,6 +4,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from urllib.parse import parse_qs
 
 import aiohttp
 
@@ -104,9 +105,19 @@ class OAuth2TokenClient:
 
     @staticmethod
     async def _response_payload(response: aiohttp.ClientResponse) -> dict[str, Any]:
+        content_type = (response.headers.get("Content-Type") or "").lower()
+        if "application/x-www-form-urlencoded" in content_type:
+            text = await response.text()
+            parsed = parse_qs(text, keep_blank_values=True)
+            return {key: values[0] if len(values) == 1 else values for key, values in parsed.items()}
+
         try:
             payload = await response.json(content_type=None)
         except Exception as exc:
+            text = await response.text()
+            if "=" in text and "&" in text:
+                parsed = parse_qs(text, keep_blank_values=True)
+                return {key: values[0] if len(values) == 1 else values for key, values in parsed.items()}
             raise ValidationError("OAuth token endpoint returned a non-JSON response") from exc
         if not isinstance(payload, dict):
             raise ValidationError("OAuth token endpoint returned an invalid response")
