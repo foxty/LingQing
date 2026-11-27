@@ -1,7 +1,7 @@
 """Leaf key names treated as secrets in integration JSON (auth_config, BYOT blobs, nested extra_config).
 
 ``FieldCipher`` only encrypts/decrypts — callers pass ``sensitive_fields`` from the relevant
-``*/sensitive_config.py`` (or this set when the payload uses standard integration key names).
+``*_secrets_policy.py`` modules (or this set when the payload uses standard integration key names).
 """
 
 from __future__ import annotations

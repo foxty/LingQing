@@ -169,22 +169,12 @@ def merge_user_oauth_into_config(
     *,
     cipher: FieldCipher | None = None,
 ) -> dict[str, Any]:
-    """Merge PATCH config while preserving encrypted ``user_oauth.client_secret`` when omitted."""
-    from apps.shared.utils.secret_merge import merge_dict_preserve_secrets
+    """Merge PATCH config while preserving encrypted secrets when omitted."""
+    from apps.shared.external_systems.data_source.config_secrets_policy import (
+        DATA_SOURCE_CONFIG_POLICY,
+        prepare_data_source_config_for_storage,
+    )
+    from apps.shared.utils.secret_engines import merge_config
 
-    merged = merge_dict_preserve_secrets(existing, incoming, sensitive_keys=USER_OAUTH_SENSITIVE_FIELDS)
-    return prepare_user_oauth_config_for_storage(merged, cipher=cipher)
-
-
-def prepare_user_oauth_config_for_storage(
-    config: dict[str, Any],
-    *,
-    cipher: FieldCipher | None = None,
-) -> dict[str, Any]:
-    """Encrypt OAuth client secret leaves before persistence."""
-    cipher = cipher or FieldCipher()
-    out = deepcopy(config)
-    block = out.get(USER_OAUTH_CONFIG_KEY)
-    if isinstance(block, dict) and block:
-        out[USER_OAUTH_CONFIG_KEY] = cipher.encrypt_dict(block, sensitive_fields=USER_OAUTH_SENSITIVE_FIELDS)
-    return out
+    merged = merge_config(existing, incoming, DATA_SOURCE_CONFIG_POLICY)
+    return prepare_data_source_config_for_storage(merged, cipher=cipher)

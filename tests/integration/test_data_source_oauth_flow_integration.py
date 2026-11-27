@@ -17,11 +17,11 @@ from apps.shared.db.session import get_db
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_DATA_SOURCE
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
+from apps.shared.external_systems.data_source.config_secrets_policy import prepare_data_source_config_for_storage
 from apps.shared.external_systems.data_source.user_oauth import (
     USER_CREDENTIAL_AUTH_OAUTH2,
     USER_OAUTH_CONFIG_KEY,
     databricks_oidc_urls,
-    prepare_user_oauth_config_for_storage,
 )
 from apps.shared.external_systems.credentials.domain import CREDENTIAL_STATUS_ACTIVE
 from apps.shared.external_systems.oauth.flow import IntegrationOAuthFlow
@@ -32,7 +32,7 @@ from apps.tenant_app_service.server import app
 
 def _databricks_oauth_config(cipher: FieldCipher) -> dict:
     auth, token = databricks_oidc_urls("adb-example.azuredatabricks.net")
-    return prepare_user_oauth_config_for_storage(
+    return prepare_data_source_config_for_storage(
         {
             "host": "adb-example.azuredatabricks.net",
             "user_credential_auth_type": USER_CREDENTIAL_AUTH_OAUTH2,

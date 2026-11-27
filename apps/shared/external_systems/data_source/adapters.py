@@ -20,11 +20,10 @@ from apps.shared.external_systems.data_source.schemas import (
     DataSourceResponse,
     DiscoveredAsset,
 )
-from apps.shared.external_systems.data_source.sensitive_config import DATA_SOURCE_GET_SECRET_SPECS
+from apps.shared.external_systems.data_source.config_secrets_policy import DATA_SOURCE_CONFIG_POLICY
 from apps.shared.external_systems.domain.types import effective_credential_mode
 from apps.shared.utils.sensitive_redaction import (
     config_has_secret_value,
-    redact_secret_leaves_for_get,
 )
 
 # ============ Domain to DTO Conversions ============
@@ -130,14 +129,12 @@ def _mask_secret_for_api_display(raw: Any) -> str | None:
 
 
 def redact_data_source_config_for_api(config: dict[str, Any] | None) -> tuple[dict[str, Any], list[str]]:
-    """Redact secrets for GET per ``DATA_SOURCE_GET_SECRET_SPECS``."""
+    """Redact secrets for GET per ``DATA_SOURCE_CONFIG_POLICY``."""
     if not config:
         return {}, []
-    return redact_secret_leaves_for_get(
-        config,
-        DATA_SOURCE_GET_SECRET_SPECS,
-        mask_value=_mask_secret_for_api_display,
-    )
+    from apps.shared.utils.secret_engines import redact_for_get
+
+    return redact_for_get(config, DATA_SOURCE_CONFIG_POLICY, mask_value=_mask_secret_for_api_display)
 
 
 def db_data_source_to_api_response(

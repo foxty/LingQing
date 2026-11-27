@@ -14,11 +14,11 @@ from sqlalchemy.pool import NullPool
 
 from apps.shared.db.models import Tenant, TenantMembership, User
 from apps.shared.db.session import get_db
+from apps.shared.external_systems.data_source.config_secrets_policy import prepare_data_source_config_for_storage
 from apps.shared.external_systems.data_source.user_oauth import (
     USER_CREDENTIAL_AUTH_OAUTH2,
     USER_OAUTH_CONFIG_KEY,
     databricks_oidc_urls,
-    prepare_user_oauth_config_for_storage,
 )
 from apps.shared.utils.field_cipher import FieldCipher
 from apps.tenant_app_service.server import app
@@ -96,7 +96,7 @@ def _byot_oauth_template_config(*, cipher: FieldCipher | None = None) -> dict:
             "scopes": ["sql", "offline_access"],
         },
     }
-    return prepare_user_oauth_config_for_storage(raw, cipher=cipher) if cipher else raw
+    return prepare_data_source_config_for_storage(raw, cipher=cipher) if cipher else raw
 
 
 def _form_create(

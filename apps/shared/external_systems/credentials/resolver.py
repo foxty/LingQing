@@ -12,14 +12,14 @@ from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
 from apps.shared.external_systems.credentials.domain import AUTH_TYPE_OAUTH2, CREDENTIAL_STATUS_ACTIVE
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
-from apps.shared.external_systems.credentials.sensitive_config import (
-    API_CONNECTOR_USER_MODE_STRIP_KEYS,
-    DATA_SOURCE_USER_MODE_STRIP_KEYS,
-    OAUTH2_USER_TOKEN_KEYS,
-    USER_INTEGRATION_SENSITIVE_LEAF_KEYS,
+from apps.shared.external_systems.credentials.user_secrets_policy import (
+    USER_BINDING_POLICY,
+    prepare_user_binding_secrets_for_storage,
 )
+from apps.shared.external_systems.data_source.config_secrets_policy import DATA_SOURCE_CONFIG_POLICY
 from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER, IntegrationPurpose
-from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
+from apps.shared.utils.field_cipher import FieldCipher
+from apps.shared.utils.secret_engines import strip_template
 
 __all__ = ["IntegrationCredentialResolver"]
 
@@ -55,7 +55,7 @@ class IntegrationCredentialResolver:
             resource_id=data_source.id,
         )
         user_secrets = self.cipher.decrypt_dict(
-            binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS
+            binding.secrets_enc, sensitive_fields=USER_BINDING_POLICY.encrypt_leaves
         )
         if binding.auth_type == AUTH_TYPE_OAUTH2:
             from apps.shared.external_systems.data_source.user_oauth import oauth_token_refresh_template
@@ -70,7 +70,9 @@ class IntegrationCredentialResolver:
             overlay = {"password": user_secrets.get("access_token")}
         else:
             overlay = user_secrets
-        merged = {**strip_sensitive_fields(base, sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS), **overlay}
+        template_strip = DATA_SOURCE_CONFIG_POLICY.template_strip
+        base_stripped = strip_template(base, template_strip) if template_strip else base
+        merged = {**base_stripped, **overlay}
         return merged
 
     async def resolve_api_connector_auth_config(
@@ -112,7 +114,7 @@ class IntegrationCredentialResolver:
 
     def _decrypt_connector_auth_template(self, connector: ApiConnector) -> dict[str, Any]:
         raw_template = connector.auth_config or {}
-        return self.cipher.decrypt_dict(raw_template, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        return self.cipher.decrypt_dict(raw_template, sensitive_fields=USER_BINDING_POLICY.encrypt_leaves)
 
     async def _load_active_user_secrets(
         self,
@@ -142,7 +144,7 @@ class IntegrationCredentialResolver:
                 },
             )
         user_secrets = self.cipher.decrypt_dict(
-            binding.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS
+            binding.secrets_enc, sensitive_fields=USER_BINDING_POLICY.encrypt_leaves
         )
         return binding, user_secrets
 
@@ -167,7 +169,7 @@ class IntegrationCredentialResolver:
         if tokens is None:
             return user_secrets
         refreshed = {**user_secrets, **tokens.to_secrets()}
-        binding.secrets_enc = self.cipher.encrypt_dict(refreshed, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        binding.secrets_enc = prepare_user_binding_secrets_for_storage(refreshed, cipher=self.cipher)
         binding.expires_at = tokens.expires_at
         binding.updated_at = datetime.now(UTC)
         await self.db_session.flush()
@@ -180,8 +182,10 @@ class IntegrationCredentialResolver:
         user_secrets: dict[str, Any],
         auth_type: str,
     ) -> dict[str, Any]:
-        strip_keys = OAUTH2_USER_TOKEN_KEYS if auth_type == "oauth2" else API_CONNECTOR_USER_MODE_STRIP_KEYS
-        return {**strip_sensitive_fields(template, sensitive_keys=strip_keys), **user_secrets}
+        from apps.shared.external_systems.byot_template_strip import strip_connector_auth_user_mode_template
+
+        stripped = strip_connector_auth_user_mode_template(template, auth_type=auth_type)
+        return {**stripped, **user_secrets}
 
     async def connection_status_for_actor(
         self,

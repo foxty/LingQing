@@ -58,9 +58,9 @@ from apps.shared.external_systems.data_source.schemas import (
     DiscoveredAsset,
     TestConnectionResponse,
 )
+from apps.shared.external_systems.data_source.config_secrets_policy import prepare_data_source_config_for_storage
 from apps.shared.external_systems.data_source.user_oauth import (
     merge_user_oauth_into_config,
-    prepare_user_oauth_config_for_storage,
     validate_databricks_user_oauth_settings,
 )
 from apps.shared.external_systems.domain.types import (
@@ -470,7 +470,7 @@ class DataSourceService(TenantAwareService):
             config=config if config is not None else (entity.config if entity else {}),
         )
         if config is not None:
-            config = prepare_user_oauth_config_for_storage(config)
+            config = prepare_data_source_config_for_storage(config)
 
         updated = await self.data_source_repo.update_fields(
             data_source_id=data_source_id,
@@ -675,7 +675,7 @@ class DataSourceService(TenantAwareService):
             managed=data_source_data.managed,
             config=config,
         )
-        config = prepare_user_oauth_config_for_storage(config)
+        config = prepare_data_source_config_for_storage(config)
 
         data_source = await self.data_source_repo.create_from_domain(
             tenant_id=self.tenant_id,
