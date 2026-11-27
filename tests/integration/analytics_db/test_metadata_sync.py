@@ -6,6 +6,7 @@ import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.models import DataSource, Tenant, User
+from apps.shared.external_systems.data_source.config_secrets_policy import prepare_data_source_config_for_storage
 from apps.shared.external_systems.data_source.repository import AssetMetadataRepository, DataSourceRepository
 from apps.shared.external_systems.data_source.service import DataSourceService
 from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER
@@ -57,14 +58,8 @@ async def test_metadata_sync_db_manager_connects_and_discovers(
         async_db_session.add(user)
         await async_db_session.flush()
 
-        data_source = DataSource(
-            tenant_id=tenant.id,
-            owner_id=user.id,
-            name=f"user_sync_{suffix}",
-            type="postgres",
-            managed=False,
-            credential_mode=CREDENTIAL_MODE_USER,
-            config={
+        config = prepare_data_source_config_for_storage(
+            {
                 "host": conn.host,
                 "port": conn.port,
                 "database": conn.database,
@@ -72,7 +67,16 @@ async def test_metadata_sync_db_manager_connects_and_discovers(
                     "username": conn.username,
                     "password": conn.password,
                 },
-            },
+            }
+        )
+        data_source = DataSource(
+            tenant_id=tenant.id,
+            owner_id=user.id,
+            name=f"user_sync_{suffix}",
+            type="postgres",
+            managed=False,
+            credential_mode=CREDENTIAL_MODE_USER,
+            config=config,
         )
         async_db_session.add(data_source)
         await async_db_session.flush()
