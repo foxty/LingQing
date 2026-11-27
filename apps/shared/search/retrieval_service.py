@@ -671,14 +671,25 @@ class SearchService(TenantAwareService):
     # ==================== API Connector Search ====================
 
     async def search_api_connectors(
-        self, query: str, page: int = 1, page_size: int = 10
+        self,
+        query: str,
+        page: int = 1,
+        page_size: int = 10,
+        connector_id: int | None = None,
     ) -> tuple[list[SearchResultItem], PaginationRequest]:
         raw_query = (query or "").strip()
-        logger.info("Searching api connectors: query='%s...', page=%s, page_size=%s", raw_query[:50], page, page_size)
+        logger.info(
+            "Searching api connectors: query='%s...', page=%s, page_size=%s, connector_id=%s",
+            raw_query[:50],
+            page,
+            page_size,
+            connector_id,
+        )
         authz_filter = await self._get_api_connector_authz_filter()
         if authz_filter is not None and authz_filter.deny_all:
             return [], PaginationRequest.with_total(page=page, page_size=page_size, total=0)
         scoped_ids = await self._resolve_api_connector_scope_ids(authz_filter)
+        scoped_ids = self._apply_connector_id_filter(scoped_ids, connector_id)
         if scoped_ids == []:
             return [], PaginationRequest.with_total(page=page, page_size=page_size, total=0)
         params = PaginationRequest(page=page, page_size=page_size)
@@ -1032,6 +1043,18 @@ class SearchService(TenantAwareService):
 
     async def _scoped_allowed_ids(self, resource_type, allowed_ids: list[int] | None) -> list[int] | None:
         return allowed_ids
+
+    @staticmethod
+    def _apply_connector_id_filter(
+        scoped_ids: list[int] | None,
+        connector_id: int | None,
+    ) -> list[int] | None:
+        """Intersect authz/agent scope with an optional caller connector_id filter."""
+        if connector_id is None:
+            return scoped_ids
+        if scoped_ids is None:
+            return [connector_id]
+        return [connector_id] if connector_id in scoped_ids else []
 
     async def _filter_connector_ids(self, authz_filter_clause) -> list[int]:
         stmt = select(ApiConnector.id).where(ApiConnector.tenant_id == self.tenant_id, authz_filter_clause)

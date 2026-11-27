@@ -2,7 +2,7 @@
 
 from datetime import UTC, datetime
 
-from sqlalchemy import case, func, literal_column, or_, select, text, update
+from sqlalchemy import case, delete, func, literal_column, or_, select, text, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.db.base_repository import BaseRepository
@@ -774,3 +774,17 @@ class ResourceIndexRepository(BaseRepository[ResourceIndex]):
             await self.db.flush()
             return True
         return False
+
+    async def delete_by_resources(self, tenant_id: int, resource_type: str, resource_ids: list[int]) -> int:
+        """Delete resource index rows for many resource_ids in one statement."""
+        if not resource_ids:
+            return 0
+        result = await self.db.execute(
+            delete(ResourceIndex).where(
+                ResourceIndex.tenant_id == tenant_id,
+                ResourceIndex.resource_type == resource_type,
+                ResourceIndex.resource_id.in_(resource_ids),
+            )
+        )
+        await self.db.flush()
+        return int(result.rowcount or 0)

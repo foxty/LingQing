@@ -1,0 +1,236 @@
+pack_id: github-user
+version: 1.0.0
+
+agent_instructions: |
+  Use this connector for GitHub repositories, issues, pull requests, and comments
+  visible to the connected user. Start with a focused search, using qualifiers such
+  as `repo:owner/name`, `is:issue`, `is:pr`, and `state:open`, then fetch details
+  only for relevant results. Treat items from a repository's issues endpoint that
+  contain a `pull_request` field as pull requests. Bound retrieval to 100 results per
+  call and at most 3 pages unless the user requests more. The bundled operations are
+  read-only. On forbidden or not-found responses, explain that access follows the
+  connected user's repository permissions; on missing or expired credentials, ask
+  the user to connect or reconnect this connector.
+
+connector:
+  name: GitHub (user)
+  description: Read repositories, issues, and pull requests with the connected user's permissions.
+  base_url: https://api.github.com
+  credential_mode: user
+  auth_type: oauth2
+
+oauth:
+  authorize_url: https://github.com/login/oauth/authorize
+  token_url: https://github.com/login/oauth/access_token
+  scope_param: scope
+  scopes:
+    - repo
+    - read:user
+    - user:email
+
+execution_rules:
+  default_request_encoding: json
+
+operations:
+  - method: GET
+    path: /user
+    operation_id: github_get_authenticated_user
+    summary: Get the authenticated GitHub user.
+    request_schema:
+      type: object
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /user/repos
+    operation_id: github_list_user_repositories
+    summary: List repositories accessible to the authenticated user.
+    request_schema:
+      type: object
+      properties:
+        query:
+          type: object
+          properties:
+            visibility: { type: string, enum: [all, public, private] }
+            affiliation: { type: string }
+            sort: { type: string, enum: [created, updated, pushed, full_name] }
+            direction: { type: string, enum: [asc, desc] }
+            per_page: { type: integer, minimum: 1, maximum: 100 }
+            page: { type: integer, minimum: 1 }
+    response_schema:
+      type: array
+      items: { type: object }
+
+  - method: GET
+    path: /search/repositories
+    operation_id: github_search_repositories
+    summary: Search GitHub repositories.
+    request_schema:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: object
+          required: [q]
+          properties:
+            q: { type: string }
+            sort: { type: string, enum: [stars, forks, help-wanted-issues, updated] }
+            order: { type: string, enum: [asc, desc] }
+            per_page: { type: integer, minimum: 1, maximum: 100 }
+            page: { type: integer, minimum: 1 }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /search/issues
+    operation_id: github_search_issues_and_pull_requests
+    summary: Search GitHub issues and pull requests.
+    request_schema:
+      type: object
+      required: [query]
+      properties:
+        query:
+          type: object
+          required: [q]
+          properties:
+            q: { type: string }
+            sort: { type: string, enum: [comments, reactions, reactions-+1, reactions--1, reactions-smile, reactions-thinking_face, reactions-heart, reactions-tada, interactions, created, updated] }
+            order: { type: string, enum: [asc, desc] }
+            per_page: { type: integer, minimum: 1, maximum: 100 }
+            page: { type: integer, minimum: 1 }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /repos/{owner}/{repo}
+    operation_id: github_get_repository
+    summary: Get a GitHub repository.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [owner, repo]
+          properties:
+            owner: { type: string }
+            repo: { type: string }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /repos/{owner}/{repo}/issues
+    operation_id: github_list_repository_issues
+    summary: List issues in a repository; GitHub may also return pull requests.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [owner, repo]
+          properties:
+            owner: { type: string }
+            repo: { type: string }
+        query:
+          type: object
+          properties:
+            state: { type: string, enum: [open, closed, all] }
+            labels: { type: string }
+            sort: { type: string, enum: [created, updated, comments] }
+            direction: { type: string, enum: [asc, desc] }
+            since: { type: string, format: date-time }
+            per_page: { type: integer, minimum: 1, maximum: 100 }
+            page: { type: integer, minimum: 1 }
+    response_schema:
+      type: array
+      items: { type: object }
+
+  - method: GET
+    path: /repos/{owner}/{repo}/issues/{issue_number}
+    operation_id: github_get_issue
+    summary: Get a repository issue or pull request issue record.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [owner, repo, issue_number]
+          properties:
+            owner: { type: string }
+            repo: { type: string }
+            issue_number: { type: integer, minimum: 1 }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /repos/{owner}/{repo}/issues/{issue_number}/comments
+    operation_id: github_list_issue_comments
+    summary: List comments on a repository issue or pull request.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [owner, repo, issue_number]
+          properties:
+            owner: { type: string }
+            repo: { type: string }
+            issue_number: { type: integer, minimum: 1 }
+        query:
+          type: object
+          properties:
+            since: { type: string, format: date-time }
+            per_page: { type: integer, minimum: 1, maximum: 100 }
+            page: { type: integer, minimum: 1 }
+    response_schema:
+      type: array
+      items: { type: object }
+
+  - method: GET
+    path: /repos/{owner}/{repo}/pulls
+    operation_id: github_list_pull_requests
+    summary: List pull requests in a repository.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [owner, repo]
+          properties:
+            owner: { type: string }
+            repo: { type: string }
+        query:
+          type: object
+          properties:
+            state: { type: string, enum: [open, closed, all] }
+            head: { type: string }
+            base: { type: string }
+            sort: { type: string, enum: [created, updated, popularity, long-running] }
+            direction: { type: string, enum: [asc, desc] }
+            per_page: { type: integer, minimum: 1, maximum: 100 }
+            page: { type: integer, minimum: 1 }
+    response_schema:
+      type: array
+      items: { type: object }
+
+  - method: GET
+    path: /repos/{owner}/{repo}/pulls/{pull_number}
+    operation_id: github_get_pull_request
+    summary: Get a pull request.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [owner, repo, pull_number]
+          properties:
+            owner: { type: string }
+            repo: { type: string }
+            pull_number: { type: integer, minimum: 1 }
+    response_schema:
+      type: object

@@ -27,5 +27,6 @@ def test_load_agent_one_materializes_tool_limits():
     loader = AgentConfigLoader()
     config = loader.materialize_system_agent_document(loader.get_system_agent_config(-1) or {})
     by_name = {item["name"]: item for item in config.get("default_tools", [])}
-    assert by_name["search_documents"]["limit"] == 5
+    assert by_name["search_documents"]["limit"] == 10
+    assert by_name["retrieve_resource_context"]["limit"] == 10
     assert by_name["run_bash_script"]["limit"] == 20

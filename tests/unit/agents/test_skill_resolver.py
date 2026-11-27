@@ -23,7 +23,7 @@ def test_merge_default_and_skill_tools_preserves_order_and_additions():
     ]
 
 
-def test_duplicate_tool_uses_stricter_limit():
+def test_duplicate_tool_skill_override_tightens_platform_default():
     default_tools = [{"name": "search_knowledge_base", "limit": 5}]
     skill_tools = [{"name": "search_knowledge_base", "limit": 2}]
 
@@ -32,6 +32,29 @@ def test_duplicate_tool_uses_stricter_limit():
     assert len(merged) == 1
     assert merged[0].name == "search_knowledge_base"
     assert merged[0].limit == 2
+
+
+def test_duplicate_tool_skill_override_raises_above_platform_default():
+    default_tools = [{"name": "search_documents", "limit": 5}]
+    skill_tools = [{"name": "search_documents", "limit": 10}]
+
+    merged = resolve_effective_skill_tools(default_tools=default_tools, skill_tools=skill_tools)
+
+    assert merged[0].limit == 10
+
+
+def test_duplicate_tool_last_loaded_skill_limit_wins():
+    default_tools = [{"name": "search_documents", "limit": 5}]
+    first_skill = [{"name": "search_documents", "limit": 30}]
+    after_first = resolve_effective_skill_tools(default_tools=default_tools, skill_tools=first_skill)
+    second_skill = [{"name": "search_documents", "limit": 8}]
+    after_second = resolve_effective_skill_tools(default_tools=after_first, skill_tools=second_skill)
+
+    assert after_second[0].limit == 8
+
+    third_skill = [{"name": "search_documents", "limit": 12}]
+    merged = resolve_effective_skill_tools(default_tools=after_second, skill_tools=third_skill)
+    assert merged[0].limit == 12
 
 
 def test_duplicate_tool_unlimited_and_finite_prefers_finite():

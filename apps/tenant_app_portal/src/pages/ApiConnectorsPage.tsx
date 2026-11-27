@@ -64,7 +64,7 @@ i18n.addResourceBundle('en', 'translation', {
     deleteConnector: 'Delete connector',
     deletedUser: 'Deleted User',
     fetchError: 'Failed to fetch API connectors',
-    confirmDelete: 'Are you sure you want to delete "{name}"?',
+    confirmDelete: 'Are you sure you want to delete "{{name}}"?',
     deleteSuccess: 'API connector deleted successfully',
     deleteFailed: 'Failed to delete API connector',
   }
@@ -91,7 +91,7 @@ i18n.addResourceBundle('zh', 'translation', {
     deleteConnector: '删除连接器',
     deletedUser: '已删除用户',
     fetchError: '获取API连接器失败',
-    confirmDelete: '确定要删除"{name}"吗？',
+    confirmDelete: '确定要删除"{{name}}"吗？',
     deleteSuccess: 'API连接器删除成功',
     deleteFailed: '删除API连接器失败',
   }

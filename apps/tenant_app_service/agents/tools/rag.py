@@ -53,9 +53,15 @@ class SearchQueryInput(BaseModel):
     page_size: int = Field(default=DEFAULT_PAGE_SIZE, ge=1, le=MAX_PAGE_SIZE)
 
 
+class SearchApisInput(SearchQueryInput):
+    connector_id: int | None = Field(
+        default=None,
+        description="Optional connector ID to limit search to one installed API connector",
+    )
+
+
 SearchDocumentsInput = SearchQueryInput
 SearchDataAssetsInput = SearchQueryInput
-SearchApisInput = SearchQueryInput
 
 
 class RetrieveResourceContextInput(BaseModel):
@@ -195,11 +201,14 @@ async def search_apis(
     config: RunnableConfig,
     page: int = 1,
     page_size: int = DEFAULT_PAGE_SIZE,
+    connector_id: int | None = None,
 ) -> ToolResult:
     """Search API operations by keyword (path, summary, tags).
 
-    Returns lightweight metadata (operation_uid, method, path, summary, connector_name).
-    Use the api_connector tool (get_operation_detail) to expand full request/response schema.
+    Returns lightweight metadata (operation_uid, method, path, summary, connector_id,
+    connector_name). Optionally pass ``connector_id`` to stay inside one connector.
+    Use ``get_api_connector_info`` once for provider guidance, ``get_api_operation_detail``
+    for schemas, and ``call_external_api`` to execute.
     """
     return await _run_search(
         config,
@@ -207,7 +216,12 @@ async def search_apis(
         query=query,
         page=page,
         page_size=page_size,
-        search_fn=lambda service, q, p, ps: service.search_api_connectors(query=q, page=p, page_size=ps),
+        search_fn=lambda service, q, p, ps: service.search_api_connectors(
+            query=q,
+            page=p,
+            page_size=ps,
+            connector_id=connector_id,
+        ),
     )
 
 

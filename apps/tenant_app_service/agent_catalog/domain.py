@@ -14,7 +14,13 @@ SYSTEM_AGENT_ONE_NAME = "Agent One"
 CORE_SKILL_TOOLS = ("load_skill", "unload_skill", "read_skill_file")
 KNOWLEDGE_TOOLS = ("search_documents", "retrieve_resource_context")
 DATA_SOURCE_TOOLS = ("list_data_sources", "search_data_assets", "retrieve_resource_context")
-API_CONNECTOR_TOOLS = ("search_apis", "retrieve_resource_context", "api_connector")
+API_CONNECTOR_TOOLS = (
+    "search_apis",
+    "retrieve_resource_context",
+    "get_api_connector_info",
+    "get_api_operation_detail",
+    "call_external_api",
+)
 SCHEDULER_TOOLS = (
     "list_scheduled_tasks",
     "get_scheduled_task",

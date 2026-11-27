@@ -77,6 +77,18 @@ def test_derive_tool_names_from_skills_and_context():
     )
     assert workspace == ["run_bash_script"]
 
+    api_tools = derive_tool_names(
+        skills=[],
+        knowledge_base_ids=[],
+        data_source_ids=[],
+        api_connector_ids=[9],
+    )
+    assert "search_apis" in api_tools
+    assert "get_api_connector_info" in api_tools
+    assert "get_api_operation_detail" in api_tools
+    assert "call_external_api" in api_tools
+    assert "api_connector" not in api_tools
+
 
 def test_capability_profile_parses_platform_capabilities():
     profile = AgentCapabilityProfile.from_config(

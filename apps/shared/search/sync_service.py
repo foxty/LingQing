@@ -136,27 +136,34 @@ class ResourceIndexService:
 
     async def delete(self, resource_type: SearchableResourceType, resource_id: int) -> bool:
         """Delete resource index record and its underlying vector store entries."""
-        record = await self._repo.get_by_resource(self.tenant_id, resource_type, resource_id)
-        if not record:
-            return False
+        deleted = await self.delete_many(resource_type, [resource_id])
+        return deleted > 0
+
+    async def delete_many(self, resource_type: SearchableResourceType, resource_ids: list[int]) -> int:
+        """Delete many resource index rows and their vector entries in batches."""
+        ids = [resource_id for resource_id in resource_ids if isinstance(resource_id, int)]
+        if not ids:
+            return 0
 
         try:
-            removed_vectors = await self.rag_manager.remove_by_resource(record.resource_type, record.resource_id)
-            if removed_vectors:
+            removed_chunks = await self.rag_manager.remove_by_resources(resource_type, ids)
+            if removed_chunks:
                 logger.info(
-                    "Removed vector entries for %s/%s (tenant_id=%s)",
+                    "Removed %s vector chunks for %s (%s resources, tenant_id=%s)",
+                    removed_chunks,
                     resource_type,
-                    resource_id,
+                    len(ids),
                     self.tenant_id,
                 )
         except Exception as exc:
             logger.warning(
-                "Failed to remove vector store entries for resource index %d: %s",
-                record.id,
+                "Failed to remove vector store entries for %s (%s resources): %s",
+                resource_type,
+                len(ids),
                 exc,
             )
 
-        return await self._repo.delete_by_resource(self.tenant_id, resource_type, resource_id)
+        return await self._repo.delete_by_resources(self.tenant_id, resource_type, ids)
 
     # ==================== Status Operations ====================
 

@@ -556,7 +556,33 @@ class TestToolCaching(TestToolExecutor):
         assert msg2.content == "file content"
         assert msg2.additional_kwargs.get("cached") is True
         mock_tool.ainvoke.assert_called_once()
-        assert counts2["read_file"] == 2
+        assert counts2["read_file"] == 1
+
+    async def test_cache_hit_before_limit_does_not_consume_limit(self, runnable_config):
+        """Identical cacheable calls at the limit should still return cached output."""
+        args = {"query": "revenue"}
+        call1 = self._create_tool_call("search_documents", args)
+        call2 = self._create_tool_call("search_documents", args)
+
+        mock_tool = AsyncMock()
+        mock_tool.ainvoke.return_value = ToolResult.success("doc hits")
+
+        cfg = self._make_cacheable_config(mock_tool)
+        cfg.limit = 1
+        self.agent_config.get_tool_config.return_value = cfg
+
+        msg1, counts, cache = await self.executor.execute_single_tool(call1, {}, runnable_config, tool_cache={})
+        assert counts["search_documents"] == 1
+
+        msg2, counts2, _ = await self.executor.execute_single_tool(
+            call2, counts, runnable_config, tool_cache=cache
+        )
+
+        assert msg2.content == "doc hits"
+        assert msg2.additional_kwargs.get("cached") is True
+        assert msg2.additional_kwargs[TOOL_RESULT_STATUS_KEY] == ToolResultStatus.SUCCESS
+        assert counts2["search_documents"] == 1
+        mock_tool.ainvoke.assert_called_once()
 
     async def test_non_cacheable_tool_does_not_cache(self, runnable_config):
         """Non-cacheable tools should never store results."""
