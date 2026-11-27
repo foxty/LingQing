@@ -735,8 +735,8 @@ def _create_single_series_figure(
         tickangle = int(y_tick.get("tickangle", 0))
         fig.update_layout(
             title=title_layout,
-            xaxis=_yaxis_layout(x_label or y_label, y_samples),
-            yaxis=_xaxis(y_label, x_values, showgrid=False, **y_tick),
+            xaxis=_yaxis_layout(y_label, y_samples),
+            yaxis=_xaxis(x_label, x_values, showgrid=False, **y_tick),
             template=theme,
             hovermode="closest",
             showlegend=False,
