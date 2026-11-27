@@ -67,10 +67,7 @@ from apps.shared.external_systems.api_connector.schemas import (
     ApiOperationStatsResponse,
     SyncSchemaSummaryDTO,
 )
-from apps.shared.external_systems.api_connector.sensitive_config import (
-    AUTH_CONFIG_SENSITIVE_FIELDS,
-    OAUTH2_USER_TOKEN_KEYS,
-)
+from apps.shared.external_systems.byot_template_strip import strip_connector_auth_user_mode_template
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
 from apps.shared.external_systems.domain.types import (
@@ -83,7 +80,7 @@ from apps.shared.external_systems.domain.types import (
 from apps.shared.search.repository import ResourceIndexRepository
 from apps.shared.search.schemas import ResourceIndexCreateDTO
 from apps.shared.tag.repository import TagBindingRepository
-from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
+from apps.shared.utils.field_cipher import FieldCipher
 
 if TYPE_CHECKING:
     from apps.shared.search.sync_service import ResourceIndexService
@@ -146,14 +143,13 @@ class ApiConnectorService:
         auth_config_dict = auth_config_to_dict(auth_config)
         self._validate_auth_config(auth_type, auth_config_dict, credential_mode=credential_mode)
         if credential_mode == CREDENTIAL_MODE_USER:
-            auth_config_dict = strip_sensitive_fields(
-                auth_config_dict,
-                sensitive_keys=OAUTH2_USER_TOKEN_KEYS
-                if auth_type == AUTH_TYPE_OAUTH2
-                else AUTH_CONFIG_SENSITIVE_FIELDS,
-            )
+            auth_config_dict = strip_connector_auth_user_mode_template(auth_config_dict, auth_type=auth_type)
 
-        encrypted_auth = self.cipher.encrypt_dict(auth_config_dict, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS)
+        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
+            prepare_auth_config_for_storage,
+        )
+
+        encrypted_auth = prepare_auth_config_for_storage(auth_config_dict, cipher=self.cipher)
 
         connector = ApiConnector(
             tenant_id=self.tenant_id,
@@ -386,24 +382,31 @@ class ApiConnectorService:
             connector.auth_type = auth_type
         if auth_config is not None:
             # Merge with existing auth_config to preserve unmodified sensitive fields
-            existing_decrypted = self.cipher.decrypt_dict(
-                connector.auth_config or {}, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS
+            from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
+                AUTH_CONFIG_POLICY,
+                decrypt_auth_config_from_storage,
+                prepare_auth_config_for_storage,
+            )
+            from apps.shared.utils.secret_engines import merge_config
+
+            existing_decrypted = decrypt_auth_config_from_storage(
+                connector.auth_config or {},
+                cipher=self.cipher,
             )
 
-            # Merge preserves stored secrets when keys are omitted or sentinels/masks (see secret_wire).
-            merged_config = self._merge_auth_config(existing_decrypted, auth_config_to_dict(auth_config))
+            merged_config = merge_config(
+                existing_decrypted,
+                auth_config_to_dict(auth_config),
+                AUTH_CONFIG_POLICY,
+            )
             mode = effective_credential_mode(credential_mode or connector.credential_mode)
             if mode == CREDENTIAL_MODE_USER:
-                merged_config = strip_sensitive_fields(
+                merged_config = strip_connector_auth_user_mode_template(
                     merged_config,
-                    sensitive_keys=OAUTH2_USER_TOKEN_KEYS
-                    if (auth_type or connector.auth_type) == AUTH_TYPE_OAUTH2
-                    else AUTH_CONFIG_SENSITIVE_FIELDS,
+                    auth_type=(auth_type or connector.auth_type),
                 )
 
-            connector.auth_config = self.cipher.encrypt_dict(
-                merged_config, sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS
-            )
+            connector.auth_config = prepare_auth_config_for_storage(merged_config, cipher=self.cipher)
         if credential_mode is not None:
             connector.credential_mode = credential_mode
         if rate_policy is not None:
@@ -417,9 +420,13 @@ class ApiConnectorService:
         if status is not None:
             connector.status = status
 
-        final_auth_config = self.cipher.decrypt_dict(
+        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
+            decrypt_auth_config_from_storage,
+        )
+
+        final_auth_config = decrypt_auth_config_from_storage(
             connector.auth_config or {},
-            sensitive_fields=AUTH_CONFIG_SENSITIVE_FIELDS,
+            cipher=self.cipher,
         )
         self._validate_auth_config(
             connector.auth_type,
@@ -1208,13 +1215,10 @@ class ApiConnectorService:
     @staticmethod
     def _merge_auth_config(existing: dict[str, Any], incoming: dict[str, Any]) -> dict[str, Any]:
         """Merge incoming auth_config with existing; preserve secrets unless client sends a new value."""
-        from apps.shared.utils.secret_merge import merge_dict_preserve_secrets
+        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import AUTH_CONFIG_POLICY
+        from apps.shared.utils.secret_engines import merge_config
 
-        return merge_dict_preserve_secrets(
-            existing,
-            incoming,
-            sensitive_keys=AUTH_CONFIG_SENSITIVE_FIELDS,
-        )
+        return merge_config(existing, incoming, AUTH_CONFIG_POLICY)
 
     @staticmethod
     def _validate_auth_config(

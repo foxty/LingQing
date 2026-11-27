@@ -15,7 +15,7 @@ from apps.shared.core.exceptions import ValidationError
 
 
 def strip_sensitive_fields(data: dict[str, Any], *, sensitive_keys: frozenset[str]) -> dict[str, Any]:
-    """Remove top-level secret keys from a config dict (caller supplies key names from ``sensitive_config``)."""
+    """Remove top-level secret keys from a config dict (caller supplies key names from secret policies)."""
     cleaned = deepcopy(data)
     for key in list(cleaned.keys()):
         if key in sensitive_keys:

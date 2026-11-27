@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from apps.shared.core.exceptions import ValidationError
+from apps.shared.external_systems.data_source.config_secrets_policy import prepare_data_source_config_for_storage
 from apps.shared.external_systems.data_source.user_oauth import (
     USER_CREDENTIAL_AUTH_OAUTH2,
     USER_OAUTH_CONFIG_KEY,
@@ -12,7 +13,6 @@ from apps.shared.external_systems.data_source.user_oauth import (
     merge_user_oauth_into_config,
     oauth_client_fields_from_data_source_config,
     oauth_token_refresh_template,
-    prepare_user_oauth_config_for_storage,
     user_credential_auth_type_from_config,
     validate_databricks_user_oauth_settings,
 )
@@ -287,9 +287,9 @@ def test_oauth_token_refresh_template_shape():
     assert template["token_url"].endswith("/oidc/v1/token")
 
 
-def test_prepare_user_oauth_config_encrypts_client_secret():
+def test_prepare_data_source_config_encrypts_client_secret():
     cipher = FieldCipher(_CIPHER_KEY)
-    stored = prepare_user_oauth_config_for_storage(
+    stored = prepare_data_source_config_for_storage(
         {
             "host": "adb-example.azuredatabricks.net",
             USER_OAUTH_CONFIG_KEY: {"client_id": "c", "client_secret": "plain-secret"},
@@ -303,7 +303,7 @@ def test_prepare_user_oauth_config_encrypts_client_secret():
 
 def test_merge_user_oauth_preserves_client_secret_when_omitted_on_patch():
     cipher = FieldCipher(_CIPHER_KEY)
-    existing = prepare_user_oauth_config_for_storage(
+    existing = prepare_data_source_config_for_storage(
         {
             USER_OAUTH_CONFIG_KEY: {
                 "client_id": "c",

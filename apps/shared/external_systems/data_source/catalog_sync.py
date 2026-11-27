@@ -80,27 +80,18 @@ class CatalogSyncCredentials:
         incoming: dict[str, Any] | None,
     ) -> dict[str, Any]:
         """Merge admin PATCH payload; preserve stored secrets when client omits or sends placeholders."""
-        from apps.shared.external_systems.data_source.sensitive_config import (
-            DATA_SOURCE_MERGE_SENSITIVE_LEAF_KEYS,
-        )
-        from apps.shared.utils.secret_merge import merge_dict_preserve_secrets
+        from apps.shared.external_systems.data_source.config_secrets_policy import DATA_SOURCE_CONFIG_POLICY
+        from apps.shared.utils.secret_engines import merge_config
 
-        return merge_dict_preserve_secrets(
-            existing,
-            incoming,
-            sensitive_keys=DATA_SOURCE_MERGE_SENSITIVE_LEAF_KEYS,
-        )
+        return merge_config(existing, incoming, DATA_SOURCE_CONFIG_POLICY)
 
 
 def strip_user_mode_connection_template(data: dict[str, Any]) -> dict[str, Any]:
     """Domain: persisted template for user-mode sources — endpoint fields only, not shared login."""
-    from apps.shared.external_systems.data_source.sensitive_config import (
-        DATA_SOURCE_MERGE_SENSITIVE_LEAF_KEYS,
-    )
+    from apps.shared.external_systems.data_source.config_secrets_policy import DATA_SOURCE_CONFIG_POLICY
+    from apps.shared.utils.secret_engines import strip_template
 
-    strip_keys = frozenset(DATA_SOURCE_MERGE_SENSITIVE_LEAF_KEYS | {"username", "user", "connection_url"})
-    cleaned = deepcopy(data)
-    for key in list(cleaned.keys()):
-        if key in strip_keys:
-            del cleaned[key]
-    return cleaned
+    template = DATA_SOURCE_CONFIG_POLICY.template_strip
+    if template is None:
+        return deepcopy(data)
+    return strip_template(data, template)

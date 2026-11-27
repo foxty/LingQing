@@ -7,6 +7,10 @@ from typing import Any
 from apps.shared.db import models as db_models
 from apps.shared.domain.value_objects import AssetMetaVO, ColumnVO, DatabaseConnectionVO
 from apps.shared.external_systems.data_source.catalog_sync import CatalogSyncCredentials
+from apps.shared.external_systems.data_source.config_secrets_policy import (
+    DATA_SOURCE_CONFIG_POLICY,
+    decrypt_data_source_config_from_storage,
+)
 from apps.shared.external_systems.data_source.domain import (
     AssetMetadataDomain,
     DataSourceDomain,
@@ -20,11 +24,9 @@ from apps.shared.external_systems.data_source.schemas import (
     DataSourceResponse,
     DiscoveredAsset,
 )
-from apps.shared.external_systems.data_source.sensitive_config import DATA_SOURCE_GET_SECRET_SPECS
 from apps.shared.external_systems.domain.types import effective_credential_mode
 from apps.shared.utils.sensitive_redaction import (
     config_has_secret_value,
-    redact_secret_leaves_for_get,
 )
 
 # ============ Domain to DTO Conversions ============
@@ -130,14 +132,12 @@ def _mask_secret_for_api_display(raw: Any) -> str | None:
 
 
 def redact_data_source_config_for_api(config: dict[str, Any] | None) -> tuple[dict[str, Any], list[str]]:
-    """Redact secrets for GET per ``DATA_SOURCE_GET_SECRET_SPECS``."""
+    """Redact secrets for GET per ``DATA_SOURCE_CONFIG_POLICY``."""
     if not config:
         return {}, []
-    return redact_secret_leaves_for_get(
-        config,
-        DATA_SOURCE_GET_SECRET_SPECS,
-        mask_value=_mask_secret_for_api_display,
-    )
+    from apps.shared.utils.secret_engines import redact_for_get
+
+    return redact_for_get(config, DATA_SOURCE_CONFIG_POLICY, mask_value=_mask_secret_for_api_display)
 
 
 def db_data_source_to_api_response(
@@ -147,7 +147,7 @@ def db_data_source_to_api_response(
     masked_fields: list[str] | None = None,
 ) -> DataSourceResponse:
     """Map DB entity to API response using the supplied config payload."""
-    domain = db_data_source_to_domain(entity)
+    domain = db_data_source_to_domain(entity, decrypt_config=False)
     if domain is None:
         raise ValueError(f"Data source {entity.id} not found")
     return domain_data_source_to_api(
@@ -167,11 +167,16 @@ def db_data_source_to_public_api_response(entity: db_models.DataSource) -> DataS
     )
 
 
-def db_data_source_to_domain(db_ds: db_models.DataSource | None) -> DataSourceDomain | None:
+def db_data_source_to_domain(
+    db_ds: db_models.DataSource | None,
+    *,
+    decrypt_config: bool = True,
+) -> DataSourceDomain | None:
     """Convert DB DataSource to Domain DataSource.
 
     Args:
         db_ds: DB DataSource model with optional preloaded assets relationship
+        decrypt_config: When False, use persisted config as-is (GET redaction path).
 
     Returns:
         DataSourceDomain with populated assets list, or None if db_ds is None
@@ -184,6 +189,11 @@ def db_data_source_to_domain(db_ds: db_models.DataSource | None) -> DataSourceDo
     if hasattr(db_ds, "assets") and db_ds.assets:
         assets = [db_asset_metadata_to_domain(asset) for asset in db_ds.assets if asset]
 
+    config_payload = (
+        decrypt_data_source_config_from_storage(db_ds.config or {})
+        if decrypt_config
+        else dict(db_ds.config or {})
+    )
     return DataSourceDomain(
         id=db_ds.id,
         tenant_id=db_ds.tenant_id,
@@ -191,7 +201,7 @@ def db_data_source_to_domain(db_ds: db_models.DataSource | None) -> DataSourceDo
         type=db_ds.type,
         managed=db_ds.managed,
         connection=connection_vo_from_data_source_template(
-            db_ds.config,
+            config_payload,
             data_source_type=db_ds.type,
             credential_mode=db_ds.credential_mode,
         ),
@@ -200,7 +210,7 @@ def db_data_source_to_domain(db_ds: db_models.DataSource | None) -> DataSourceDo
         owner_name=(db_ds.owner_user.username if db_ds.owner_user else None),
         asset_count=db_ds.asset_count,
         credential_mode=effective_credential_mode(db_ds.credential_mode),
-        catalog_sync=CatalogSyncCredentials.from_data_source_config(db_ds.config),
+        catalog_sync=CatalogSyncCredentials.from_data_source_config(config_payload),
         created_at=db_ds.created_at,
         updated_at=db_ds.updated_at,
         assets=assets,

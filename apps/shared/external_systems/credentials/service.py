@@ -20,12 +20,12 @@ from apps.shared.external_systems.credentials.dtos import (
 )
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
-from apps.shared.external_systems.credentials.sensitive_config import (
-    API_CONNECTOR_USER_MODE_STRIP_KEYS,
-    DATA_SOURCE_USER_MODE_STRIP_KEYS,
-    USER_INTEGRATION_SENSITIVE_LEAF_KEYS,
-)
 from apps.shared.external_systems.credentials.user_integration_auth import validate_user_integration_upsert
+from apps.shared.external_systems.credentials.user_secrets_policy import (
+    USER_BINDING_POLICY,
+    prepare_user_binding_secrets_for_storage,
+)
+from apps.shared.external_systems.data_source.catalog_sync import strip_user_mode_connection_template
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_USER,
     USER_CONNECTION_CONNECTED,
@@ -153,7 +153,7 @@ class UserIntegrationCredentialService:
             data_source_type=ds.type,
             user_credential_auth_type=user_credential_auth_type_from_config(ds.config),
         )
-        secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        secrets_enc = prepare_user_binding_secrets_for_storage(merged_secrets, cipher=self.cipher)
         now = datetime.now(UTC)
         provision_kwargs: dict = {}
         if provisioned_by_user_id is not None:
@@ -210,7 +210,7 @@ class UserIntegrationCredentialService:
             merged_secrets=merged_secrets,
             connector_auth_type=conn.auth_type,
         )
-        secrets_enc = self.cipher.encrypt_dict(merged_secrets, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+        secrets_enc = prepare_user_binding_secrets_for_storage(merged_secrets, cipher=self.cipher)
         now = datetime.now(UTC)
         provision_kwargs: dict = {}
         if provisioned_by_user_id is not None:
@@ -376,8 +376,6 @@ class UserIntegrationCredentialService:
     ) -> UserIntegrationConnectionTestResponse:
         from copy import deepcopy
 
-        from apps.shared.utils.field_cipher import strip_sensitive_fields
-
         binding_user_id = actor.user_id if binding_user_id is None else binding_user_id
         if binding_user_id != actor.user_id:
             await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=binding_user_id)
@@ -399,10 +397,7 @@ class UserIntegrationCredentialService:
                 data_source_type=ds.type,
             )
             resolved_config = {
-                **strip_sensitive_fields(
-                    deepcopy(ds.config or {}),
-                    sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS,
-                ),
+                **strip_user_mode_connection_template(deepcopy(ds.config or {})),
                 **merged_secrets,
             }
         else:
@@ -448,8 +443,6 @@ class UserIntegrationCredentialService:
     ) -> UserIntegrationConnectionTestResponse:
         from copy import deepcopy
 
-        from apps.shared.utils.field_cipher import strip_sensitive_fields
-
         binding_user_id = actor.user_id if binding_user_id is None else binding_user_id
         if binding_user_id != actor.user_id:
             await self._require_active_tenant_member(tenant_id=actor.tenant_id, user_id=binding_user_id)
@@ -471,14 +464,16 @@ class UserIntegrationCredentialService:
                     merged_secrets=merged_secrets,
                     connector_auth_type=conn.auth_type,
                 )
-                template = strip_sensitive_fields(
+                from apps.shared.external_systems.byot_template_strip import strip_connector_auth_user_mode_template
+
+                template = strip_connector_auth_user_mode_template(
                     deepcopy(conn.auth_config or {}),
-                    sensitive_keys=API_CONNECTOR_USER_MODE_STRIP_KEYS,
+                    auth_type=body.auth_type,
                 )
                 auth_dict = {**template, **merged_secrets}
                 if not any(
                     _non_empty_str(auth_dict.get(k))
-                    for k in USER_INTEGRATION_SENSITIVE_LEAF_KEYS
+                    for k in USER_BINDING_POLICY.encrypt_leaves
                     if k in auth_dict
                 ):
                     return UserIntegrationConnectionTestResponse(
@@ -597,7 +592,7 @@ class UserIntegrationCredentialService:
         secrets: dict[str, str] = {}
         masked_fields: list[str] = []
         if row is not None and row.secrets_enc:
-            decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+            decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=USER_BINDING_POLICY.encrypt_leaves)
             secrets, masked_fields = redact_user_integration_secrets_for_api(decrypted)
         return UserIntegrationConnectionResponse(
             resource_type=resource_type,
@@ -651,10 +646,10 @@ class UserIntegrationCredentialService:
         )
         existing: dict[str, str] = {}
         if row is not None and row.secrets_enc:
-            decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=USER_INTEGRATION_SENSITIVE_LEAF_KEYS)
+            decrypted = self.cipher.decrypt_dict(row.secrets_enc, sensitive_fields=USER_BINDING_POLICY.encrypt_leaves)
             existing = {k: v for k, v in decrypted.items() if isinstance(v, str)}
         merged = {**existing, **incoming}
-        for key in USER_INTEGRATION_SENSITIVE_LEAF_KEYS:
+        for key in USER_BINDING_POLICY.encrypt_leaves:
             if key not in incoming:
                 continue
             if not _non_empty_str(incoming.get(key)):

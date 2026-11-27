@@ -2,7 +2,7 @@
 
 **Project:** LingQing — Enterprise AI Agent Platform (LangGraph, FastAPI, React)
 
-**Document map:** [Core Principles](#core-principles) · [Backend](#backend-guidelines) (layers, DB, exceptions, API) · [Frontend](#frontend-guidelines) · [Testing & CI](#testing--ci) · [Testing guide](docs/testing-guide.md) (pyramid, **layer → test type**, commands) · [Common Pitfalls](#common-pitfalls) · [Agent Workflow](#agent-workflow) (final check, git, PR, output, [release notes](#release-notes-agents))
+**Document map:** [Core Principles](#core-principles) · [Backend](#backend-guidelines) (layers, DB, exceptions, API, [JSON secrets](#integration-json-secrets-enc--decrypt--mask)) · [Frontend](#frontend-guidelines) · [Testing & CI](#testing--ci) · [Testing guide](docs/testing-guide.md) (pyramid, **layer → test type**, commands) · [Common Pitfalls](#common-pitfalls) · [Agent Workflow](#agent-workflow) (final check, git, PR, output, [release notes](#release-notes-agents))
 
 ## Core Principles
 
@@ -78,7 +78,7 @@ There is **no separate “service layer”** below Application. Classes in **`se
 
 **Incremental strictness:** New behavior → put rules on **domain** first; add port interfaces when swapping implementations or testing demands it; keep use cases thin. Refactor **inward**; no big-bang folder moves required.
 
-Add `<module>/application/` when use cases need **orchestration** (multiple steps, multiple committed sessions, cross-module glue, or long I/O). A single-session use case may live in **`services.py`** with **Presentation → `SomeService(db)`** — still Application layer. Session rules: [Database sessions](#database-sessions). Example: `chat/__init__.py` module docstring.
+Session-scoped use cases stay in **`services.py`** (**Presentation → `SomeService(db)`**). Session rules: [Database sessions](#database-sessions). Example: `chat/__init__.py`. When to add **`application/`** orchestration: [Backend Module Structure](#backend-module-structure-per-service-module).
 
 **Layer detail (presentation):**
 
@@ -118,6 +118,18 @@ Session lifecycle is owned by the **Application** entry point — not by reposit
 - Treat DTO fields as public contracts; avoid breaking changes without migration.
 - Add fields backward-compatibly first (optional/defaulted), then migrate callers.
 - Keep response envelopes and error shapes consistent across routers.
+
+### Integration JSON secrets (enc / decrypt / mask)
+
+**Rule:** **persist** with `prepare_*_for_storage`, **runtime** (DB manager / resolver / execute) with `decrypt_*_from_storage`, **GET** with `redact_*` on the **stored** JSON (do not full-decrypt configs for list/detail APIs).
+
+| Blob | Policy module |
+| --- | --- |
+| Data source `config` | `data_source/config_secrets_policy.py` |
+| Connector `auth_config` | `api_connector/auth_config_secrets_policy.py` |
+| BYOT `secrets_enc` | `credentials/user_secrets_policy.py` |
+
+Engines: `apps/shared/utils/secret_engines.py` (`encrypt_config`, `decrypt_config`, `merge_config`, `redact_for_get`, `strip_template`). Shared leaf names: `integration_secret_keys.py`. BYOT template strip (avoid import cycles): `byot_template_strip.py`. PATCH omitting secrets → `merge_config` then `prepare_*` on save; user overlay → strip template then merge binding secrets.
 
 **Backend Module Structure (per service module):**
 
@@ -202,6 +214,8 @@ _Quick ❌/✅ index. Normative detail lives in [Core Principles](#core-principl
 - ❌ Type duplication → Single source in `lib/`.
 - ❌ `print` or ad-hoc logging → Use structured logger.
 - ❌ Secrets in code → Use `EnvConfig` in `apps/config.py`.
+- ❌ Ad-hoc `FieldCipher` / leaf key sets → Use owning `*_secrets_policy.py` + [JSON secrets](#integration-json-secrets-enc--decrypt--mask).
+- ❌ Decrypt on GET adapters → Redact stored ciphertext; decrypt only on runtime paths.
 - ❌ Missing tenant isolation in queries.
 - ❌ Production names in tests → Use `uuid`/factories with generic prefixes (`test_*`).
 
@@ -225,7 +239,7 @@ _Process, mandatory pre-done review, git/PR (only when asked), and reply format.
 - Clarify inputs when requirements incomplete. Minimal diffs; targeted edits.
 - Create TODO plan for multi-step tasks; give brief updates.
 - **Before finishing any task that changes code** (and again before a user-requested commit), run the **Final check** below. Fix violations in scope; call out gaps explicitly if the user did not ask to fix them.
-- **Security (all code):** secrets via `EnvConfig`; tenant isolation in services/repos; least privilege and redacted logs — see [Core Principles](#core-principles) and [Common Pitfalls](#common-pitfalls).
+- **Security (all code):** env secrets via `EnvConfig`; integration JSON via [JSON secrets](#integration-json-secrets-enc--decrypt--mask); tenant isolation; least privilege and redacted logs — [Common Pitfalls](#common-pitfalls).
 
 ### Release notes (agents)
 
@@ -248,8 +262,9 @@ _Review the diff against sections above — not style preferences. Check each bo
 - [ ] **Database sessions** — [Database sessions](#database-sessions): no pinning `Depends(get_db)` for streaming/long waits; repos `flush()` only; commits only where this doc allows.
 - [ ] **Exceptions** — [Exception handling](#exception-handling): domain exceptions bubble; no router catch-and-log; chain with `from e`.
 - [ ] **API contracts** — [API contracts](#api-contracts): backward-compatible DTO/event fields or explicit versioning.
+- [ ] **JSON secrets** — [Integration JSON secrets](#integration-json-secrets-enc--decrypt--mask): encrypt at persist, decrypt at runtime, mask on GET (stored JSON).
 - [ ] **Frontend** — [Frontend Guidelines](#frontend-guidelines) + `DESIGN.md`: Components → Hooks → `lib/*Api.ts`; one feedback channel per event.
-- [ ] **Imports, logging, secrets** — [Core Principles](#core-principles) + [Common Pitfalls](#common-pitfalls): `apps.*`, `get_logger`, no hardcoded secrets.
+- [ ] **Imports, logging, env secrets** — [Core Principles](#core-principles) + [Common Pitfalls](#common-pitfalls): `apps.*`, `get_logger`, no hardcoded secrets.
 - [ ] **Scope** — [Core Principles](#core-principles): minimal diff; KISS / YAGNI (no drive-by refactors).
 
 **Tests**

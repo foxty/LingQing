@@ -14,21 +14,28 @@ from apps.shared.external_systems.credentials.domain import (
     IntegrationPurpose,
 )
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
+from apps.shared.external_systems.data_source.config_secrets_policy import prepare_data_source_config_for_storage
+from apps.shared.external_systems.credentials.user_secrets_policy import prepare_user_binding_secrets_for_storage
+from apps.shared.utils.field_cipher import FieldCipher
 
 
 @pytest.mark.asyncio
 async def test_resolve_shared_mode_ignores_user_binding():
     db = MagicMock()
+    cipher = FieldCipher("synthetic-resolver-shared-mode-key")
     entity = DataSource(
         id=1,
         tenant_id=10,
         name="ds",
         type="databricks",
         managed=False,
-        config={"host": "x", "password": "shared-pat"},
+        config=prepare_data_source_config_for_storage(
+            {"host": "x", "password": "shared-pat"},
+            cipher=cipher,
+        ),
         credential_mode="shared",
     )
-    resolver = IntegrationCredentialResolver(db)
+    resolver = IntegrationCredentialResolver(db, cipher=cipher)
     resolver.repo.get_binding = AsyncMock(return_value=None)
 
     config = await resolver.resolve_data_source_config(
@@ -64,15 +71,19 @@ async def test_resolve_user_mode_requires_binding():
 
 
 @pytest.mark.asyncio
-async def test_resolve_user_mode_merges_secrets(monkeypatch):
+async def test_resolve_user_mode_merges_secrets():
     db = MagicMock()
+    cipher = FieldCipher("synthetic-resolver-user-merge-key")
     entity = DataSource(
         id=3,
         tenant_id=10,
         name="ds",
         type="databricks",
         managed=False,
-        config={"host": "x", "password": "admin-should-strip"},
+        config=prepare_data_source_config_for_storage(
+            {"host": "x", "password": "admin-should-strip"},
+            cipher=cipher,
+        ),
         credential_mode=CREDENTIAL_MODE_USER,
     )
     actor = ActorContext(tenant_id=10, user_id=7, user_role="member")
@@ -82,12 +93,14 @@ async def test_resolve_user_mode_merges_secrets(monkeypatch):
         resource_type=RESOURCE_TYPE_DATA_SOURCE,
         resource_id=3,
         auth_type="pat",
-        secrets_enc={"password": "enc"},
+        secrets_enc=prepare_user_binding_secrets_for_storage(
+            {"password": "user-pat"},
+            cipher=cipher,
+        ),
         status=CREDENTIAL_STATUS_ACTIVE,
     )
-    resolver = IntegrationCredentialResolver(db)
+    resolver = IntegrationCredentialResolver(db, cipher=cipher)
     resolver.repo.get_binding = AsyncMock(return_value=binding)
-    resolver.cipher.decrypt_dict = MagicMock(return_value={"password": "user-pat"})
 
     config = await resolver.resolve_data_source_config(
         data_source=entity,

@@ -3,7 +3,7 @@
 import pytest
 
 from apps.shared.core.exceptions import ValidationError
-from apps.shared.external_systems.credentials.sensitive_config import DATA_SOURCE_USER_MODE_STRIP_KEYS
+from apps.shared.external_systems.data_source.config_secrets_policy import DATA_SOURCE_CONFIG_POLICY
 from apps.shared.external_systems.integration_secret_keys import INTEGRATION_SECRET_LEAF_KEYS
 from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
 
@@ -359,7 +359,7 @@ def test_strip_sensitive_fields_requires_key_set():
         "password": "enc:secret",
         "api_key": "x",
     }
-    stripped = strip_sensitive_fields(raw, sensitive_keys=DATA_SOURCE_USER_MODE_STRIP_KEYS)
+    stripped = strip_sensitive_fields(raw, sensitive_keys=DATA_SOURCE_CONFIG_POLICY.user_mode_strip_top_level)
     assert stripped == {"host": "db.internal", "api_key": "x"}
     connector_stripped = strip_sensitive_fields(raw, sensitive_keys=INTEGRATION_SECRET_LEAF_KEYS)
     assert "password" not in connector_stripped
