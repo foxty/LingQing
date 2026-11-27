@@ -87,7 +87,11 @@ class IntegrationCredentialResolver:
         actor: ActorContext | None,
         purpose: IntegrationPurpose,
     ) -> dict[str, Any]:
-        template = self._decrypt_connector_auth_template(connector)
+        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
+            decrypt_auth_config_from_storage,
+        )
+
+        template = decrypt_auth_config_from_storage(connector.auth_config or {}, cipher=self.cipher)
         mode = getattr(connector, "credential_mode", None) or "shared"
         if mode != CREDENTIAL_MODE_USER:
             return template
@@ -117,9 +121,6 @@ class IntegrationCredentialResolver:
             auth_type=connector.auth_type,
         )
 
-    def _decrypt_connector_auth_template(self, connector: ApiConnector) -> dict[str, Any]:
-        raw_template = connector.auth_config or {}
-        return self.cipher.decrypt_dict(raw_template, sensitive_fields=USER_BINDING_POLICY.encrypt_leaves)
 
     async def _load_active_user_secrets(
         self,

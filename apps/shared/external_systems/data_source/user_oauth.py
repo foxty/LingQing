@@ -168,12 +168,13 @@ def merge_user_oauth_into_config(
     *,
     cipher: FieldCipher | None = None,
 ) -> dict[str, Any]:
-    """Merge PATCH config while preserving encrypted secrets when omitted."""
+    """Merge PATCH config while preserving stored secrets when omitted (plaintext in/out)."""
     from apps.shared.external_systems.data_source.config_secrets_policy import (
         DATA_SOURCE_CONFIG_POLICY,
-        prepare_data_source_config_for_storage,
+        decrypt_data_source_config_from_storage,
     )
     from apps.shared.utils.secret_engines import merge_config
 
-    merged = merge_config(existing, incoming, DATA_SOURCE_CONFIG_POLICY)
-    return prepare_data_source_config_for_storage(merged, cipher=cipher)
+    cipher = cipher or FieldCipher()
+    base = decrypt_data_source_config_from_storage(existing, cipher=cipher) if existing else {}
+    return merge_config(base, incoming, DATA_SOURCE_CONFIG_POLICY)

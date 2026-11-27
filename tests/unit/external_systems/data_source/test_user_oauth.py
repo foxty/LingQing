@@ -320,5 +320,5 @@ def test_merge_user_oauth_preserves_client_secret_when_omitted_on_patch():
         {USER_OAUTH_CONFIG_KEY: {"client_id": "c-next"}},
         cipher=cipher,
     )
-    assert cipher.decrypt(merged[USER_OAUTH_CONFIG_KEY]["client_secret"]) == "keep-me"
+    assert merged[USER_OAUTH_CONFIG_KEY]["client_secret"] == "keep-me"
     assert merged[USER_OAUTH_CONFIG_KEY]["client_id"] == "c-next"
