@@ -32,9 +32,14 @@ def test_render_horizontal_bar(capture_figure):
         title="Sales",
         x_key="region",
         y_key="sales",
+        x_label="Region",
+        y_label="Sales (USD)",
     )
     trace = capture_figure["fig"].data[0]
     assert trace.orientation == "h"
+    fig = capture_figure["fig"]
+    assert fig.layout.xaxis.title.text == "<b>Sales (USD)</b>"
+    assert fig.layout.yaxis.title.text == "<b>Region</b>"
 
 
 def test_render_waterfall(capture_figure):
