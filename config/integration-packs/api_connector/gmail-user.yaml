@@ -1,0 +1,117 @@
+pack_id: gmail-user
+version: 1.0.0
+
+agent_instructions: |
+  Use this connector to search and read Gmail messages and threads for the connected user.
+  Prefer users.messages.list with a Gmail search ``q`` string, then fetch full content with
+  users.messages.get only for relevant message IDs. Default to format=metadata or format=full
+  based on whether body text is needed; keep maxResults around 10–25 and at most a few
+  nextPageToken pages unless the user wants exhaustive history. For threads, use
+  users.threads.list then users.threads.get when conversation context matters. Do not send,
+  draft, label, or delete mail; bundled operations are read-only. On 403, explain mailbox
+  access limits; on missing or expired credentials, ask the user to connect or reconnect.
+
+connector:
+  name: Gmail (user)
+  description: Search and read Gmail with the connected user's permissions.
+  base_url: https://gmail.googleapis.com/gmail/v1
+  credential_mode: user
+  auth_type: oauth2
+
+oauth:
+  authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scope_param: scope
+  scopes:
+    - https://www.googleapis.com/auth/gmail.readonly
+
+execution_rules:
+  default_request_encoding: json
+
+operations:
+  - method: GET
+    path: /users/me/profile
+    operation_id: gmail_get_profile
+    summary: Get the connected Gmail address and mailbox stats.
+    request_schema:
+      type: object
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /users/me/messages
+    operation_id: gmail_list_messages
+    summary: List message IDs matching a Gmail search query (q).
+    request_schema:
+      type: object
+      properties:
+        query:
+          type: object
+          properties:
+            q: { type: string }
+            labelIds: { type: string }
+            maxResults: { type: integer, minimum: 1, maximum: 500 }
+            pageToken: { type: string }
+            includeSpamTrash: { type: boolean }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /users/me/messages/{id}
+    operation_id: gmail_get_message
+    summary: Get one Gmail message by ID (headers and optional body per format).
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string }
+        query:
+          type: object
+          properties:
+            format: { type: string, enum: [minimal, full, raw, metadata] }
+            metadataHeaders: { type: string }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /users/me/threads
+    operation_id: gmail_list_threads
+    summary: List thread IDs matching a Gmail search query (q).
+    request_schema:
+      type: object
+      properties:
+        query:
+          type: object
+          properties:
+            q: { type: string }
+            labelIds: { type: string }
+            maxResults: { type: integer, minimum: 1, maximum: 500 }
+            pageToken: { type: string }
+            includeSpamTrash: { type: boolean }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /users/me/threads/{id}
+    operation_id: gmail_get_thread
+    summary: Get one Gmail thread and its messages by thread ID.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [id]
+          properties:
+            id: { type: string }
+        query:
+          type: object
+          properties:
+            format: { type: string, enum: [minimal, full, metadata] }
+            metadataHeaders: { type: string }
+    response_schema:
+      type: object

@@ -1,5 +1,5 @@
 pack_id: slack-user
-version: 1.1.1
+version: 1.2.0
 
 agent_instructions: |
   Use this connector to search and read Slack conversations visible to the connected
@@ -7,12 +7,19 @@ agent_instructions: |
   replies; resolve user, channel, and file metadata only when context is incomplete.
   For summarization or status digests, start with count around 10–20 and at most a few
   pages; widen only when the user asks for exhaustive recall. If a tool result reports
-  body_truncated, reduce count on the next call instead of repeating the same size.
+  body_truncated, reduce count/limit on the next call instead of repeating the same size.
   Resolve Slack IDs to display names and use message permalinks for citations. Do not
   send messages or change workspace settings; the bundled operations are read-only. On
   missing_scope, identify the failed operation and required scope. On empty or not-found
   results, explain that visibility follows the connected user's permissions; on missing
   or expired credentials, ask the user to connect or reconnect this connector.
+  Search modifiers: ``in:`` targets a channel name, not a person; do not use ``in:charlotte``
+  for DMs. Prefer ``from:<exact_username>`` (no @, e.g. ``from:charlotte.s``) only after
+  resolving the handle via users.lookupByEmail, users.list, or users.info. For a DM thread
+  with someone, list DMs with conversations.list (types=im) or users.conversations
+  (types=im), match their user ID on each IM, then read with conversations.history on
+  that channel id—usually better than workspace search. Ask the user for email, handle,
+  or channel name when lookup is ambiguous.
 
 connector:
   name: Slack (user)
@@ -182,6 +189,39 @@ operations:
               required: [email]
               properties:
                 email: { type: string, format: email }
+    response_schema:
+      type: object
+  - method: POST
+    path: /users.list
+    operation_id: slack_users_list
+    summary: List workspace members (paginate with cursor to find a display name or handle).
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                limit: { type: integer, maximum: 200 }
+                cursor: { type: string }
+                include_locale: { type: boolean }
+    response_schema:
+      type: object
+  - method: POST
+    path: /users.conversations
+    operation_id: slack_users_conversations
+    summary: List conversations the connected user can access (use types=im to find DM channel IDs).
+    request_schema:
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              properties:
+                types: { type: string }
+                exclude_archived: { type: boolean }
+                limit: { type: integer, maximum: 200 }
+                cursor: { type: string }
     response_schema:
       type: object
   - method: POST

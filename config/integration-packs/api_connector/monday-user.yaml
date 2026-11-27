@@ -1,0 +1,51 @@
+pack_id: monday-user
+version: 1.0.0
+
+agent_instructions: |
+  Use this connector to read monday.com boards, items, and updates via the GraphQL API.
+  Call monday_graphql with read-only queries; start by listing boards or searching items
+  with tight limits (e.g. first 25 rows) before fetching column values for specific item
+  IDs. Prefer explicit column IDs when the user names fields; avoid mutation fields
+  entirely. If the response includes errors in the JSON ``errors`` array, surface the
+  message and simplify the query. The bundled operations are read-only by policy; do not
+  run create_item, change_column_value, or other mutations. On auth failures, ask the user
+  to connect or reconnect; on permission errors, explain workspace visibility.
+
+connector:
+  name: monday.com (user)
+  description: Read monday.com boards and items via GraphQL with the connected user's OAuth token.
+  base_url: https://api.monday.com
+  credential_mode: user
+  auth_type: oauth2
+
+oauth:
+  authorize_url: https://auth.monday.com/oauth2/authorize
+  token_url: https://auth.monday.com/oauth2/token
+  scope_param: scope
+  scopes:
+    - me:read
+    - boards:read
+    - workspaces:read
+    - updates:read
+    - tags:read
+
+execution_rules:
+  default_request_encoding: json
+
+operations:
+  - method: POST
+    path: /v2
+    operation_id: monday_graphql
+    summary: Run a read-only monday.com GraphQL query (pass query and optional variables in the body).
+    request_schema:
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string }
+                variables: { type: object, additionalProperties: true }
+    response_schema:
+      type: object

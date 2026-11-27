@@ -43,7 +43,8 @@ def test_builtin_slack_pack_is_curated_for_user_oauth():
     assert "permalinks" in manifest.agent_instructions
     assert "10–20" in manifest.agent_instructions
     assert "body_truncated" in manifest.agent_instructions
-    assert manifest.version == "1.1.1"
+    assert "users.conversations" in manifest.agent_instructions
+    assert manifest.version == "1.2.0"
     assert set(manifest.oauth.scopes) >= {
         "search:read",
         "users:read",
@@ -59,6 +60,8 @@ def test_builtin_slack_pack_is_curated_for_user_oauth():
         "slack_conversation_members",
         "slack_user_info",
         "slack_user_lookup_by_email",
+        "slack_users_list",
+        "slack_users_conversations",
         "slack_file_info",
         "slack_get_message_permalink",
     }
@@ -87,3 +90,40 @@ def test_builtin_github_pack_is_read_only_and_curated_for_user_oauth():
         "github_list_pull_requests",
         "github_get_pull_request",
     }
+
+
+def test_builtin_google_drive_pack_uses_google_oauth_and_read_paths():
+    manifest = ApiConnectorPackCatalog().get("google-drive-user")
+
+    assert manifest.oauth.authorize_url == "https://accounts.google.com/o/oauth2/v2/auth"
+    assert manifest.oauth.scopes == ["https://www.googleapis.com/auth/drive.readonly"]
+    assert {operation.method for operation in manifest.operations} == {"GET"}
+    assert "google_drive_list_files" in {op.operation_id for op in manifest.operations}
+
+
+def test_builtin_gmail_pack_is_read_only_get_operations():
+    manifest = ApiConnectorPackCatalog().get("gmail-user")
+
+    assert manifest.connector.base_url == "https://gmail.googleapis.com/gmail/v1"
+    assert manifest.oauth.scopes == ["https://www.googleapis.com/auth/gmail.readonly"]
+    assert {operation.method for operation in manifest.operations} == {"GET"}
+
+
+def test_builtin_google_calendar_pack_covers_events_and_calendar_list():
+    manifest = ApiConnectorPackCatalog().get("google-calendar-user")
+
+    assert manifest.connector.base_url == "https://www.googleapis.com/calendar/v3"
+    ids = {op.operation_id for op in manifest.operations}
+    assert "google_calendar_list_events" in ids
+    assert "google_calendar_list_calendars" in ids
+
+
+def test_builtin_monday_pack_exposes_graphql_post():
+    manifest = ApiConnectorPackCatalog().get("monday-user")
+
+    assert manifest.connector.base_url == "https://api.monday.com"
+    assert manifest.oauth.authorize_url == "https://auth.monday.com/oauth2/authorize"
+    assert len(manifest.operations) == 1
+    assert manifest.operations[0].operation_id == "monday_graphql"
+    assert manifest.operations[0].method == "POST"
+    assert manifest.operations[0].path == "/v2"
