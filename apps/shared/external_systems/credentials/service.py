@@ -20,10 +20,12 @@ from apps.shared.external_systems.credentials.dtos import (
 )
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
-from apps.shared.external_systems.credentials.user_secrets_policy import prepare_user_binding_secrets_for_storage
-from apps.shared.external_systems.data_source.catalog_sync import strip_user_mode_connection_template
-from apps.shared.external_systems.credentials.user_secrets_policy import USER_BINDING_POLICY
 from apps.shared.external_systems.credentials.user_integration_auth import validate_user_integration_upsert
+from apps.shared.external_systems.credentials.user_secrets_policy import (
+    USER_BINDING_POLICY,
+    prepare_user_binding_secrets_for_storage,
+)
+from apps.shared.external_systems.data_source.catalog_sync import strip_user_mode_connection_template
 from apps.shared.external_systems.domain.types import (
     CREDENTIAL_MODE_USER,
     USER_CONNECTION_CONNECTED,

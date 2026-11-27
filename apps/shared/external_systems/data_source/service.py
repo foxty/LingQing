@@ -50,6 +50,7 @@ from apps.shared.external_systems.data_source.catalog_sync import (
     CatalogSyncCredentials,
     strip_user_mode_connection_template,
 )
+from apps.shared.external_systems.data_source.config_secrets_policy import prepare_data_source_config_for_storage
 from apps.shared.external_systems.data_source.domain import DataSourceDomain
 from apps.shared.external_systems.data_source.schemas import (
     DataSourceCreate,
@@ -58,7 +59,6 @@ from apps.shared.external_systems.data_source.schemas import (
     DiscoveredAsset,
     TestConnectionResponse,
 )
-from apps.shared.external_systems.data_source.config_secrets_policy import prepare_data_source_config_for_storage
 from apps.shared.external_systems.data_source.user_oauth import (
     merge_user_oauth_into_config,
     validate_databricks_user_oauth_settings,

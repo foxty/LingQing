@@ -54,3 +54,17 @@ def prepare_data_source_config_for_storage(
 
     cipher = cipher or FieldCipher()
     return encrypt_config(config, DATA_SOURCE_CONFIG_POLICY, cipher=cipher)
+
+
+def decrypt_data_source_config_from_storage(
+    config: dict[str, Any] | None,
+    *,
+    cipher: FieldCipher | None = None,
+) -> dict[str, Any]:
+    """Decrypt persisted data-source config for runtime (connections, resolver, domain mapping)."""
+    if not config:
+        return {}
+    from apps.shared.utils.secret_engines import decrypt_config
+
+    cipher = cipher or FieldCipher()
+    return decrypt_config(config, DATA_SOURCE_CONFIG_POLICY, cipher=cipher)

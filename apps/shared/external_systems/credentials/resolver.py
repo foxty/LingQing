@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from copy import deepcopy
 from datetime import UTC, datetime
 from typing import Any
 
@@ -16,7 +15,10 @@ from apps.shared.external_systems.credentials.user_secrets_policy import (
     USER_BINDING_POLICY,
     prepare_user_binding_secrets_for_storage,
 )
-from apps.shared.external_systems.data_source.config_secrets_policy import DATA_SOURCE_CONFIG_POLICY
+from apps.shared.external_systems.data_source.config_secrets_policy import (
+    DATA_SOURCE_CONFIG_POLICY,
+    decrypt_data_source_config_from_storage,
+)
 from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER, IntegrationPurpose
 from apps.shared.utils.field_cipher import FieldCipher
 from apps.shared.utils.secret_engines import strip_template
@@ -37,7 +39,10 @@ class IntegrationCredentialResolver:
         actor: ActorContext | None,
         purpose: IntegrationPurpose,
     ) -> dict[str, Any]:
-        base = deepcopy(data_source.config or {})
+        base = decrypt_data_source_config_from_storage(
+            data_source.config or {},
+            cipher=self.cipher,
+        )
         mode = getattr(data_source, "credential_mode", None) or "shared"
         if data_source.managed or mode != CREDENTIAL_MODE_USER:
             return base

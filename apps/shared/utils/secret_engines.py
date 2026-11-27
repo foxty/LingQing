@@ -6,7 +6,7 @@ from collections.abc import Callable
 from copy import deepcopy
 from typing import Any
 
-from apps.shared.utils.field_cipher import FieldCipher, strip_sensitive_fields
+from apps.shared.utils.field_cipher import FieldCipher
 from apps.shared.utils.secret_merge import merge_dict_preserve_secrets
 from apps.shared.utils.secret_policy import JsonSecretPolicy, TemplateStripPolicy
 from apps.shared.utils.sensitive_redaction import redact_secret_leaves_for_get

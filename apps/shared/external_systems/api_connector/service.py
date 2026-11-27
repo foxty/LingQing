@@ -145,7 +145,9 @@ class ApiConnectorService:
         if credential_mode == CREDENTIAL_MODE_USER:
             auth_config_dict = strip_connector_auth_user_mode_template(auth_config_dict, auth_type=auth_type)
 
-        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import prepare_auth_config_for_storage
+        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
+            prepare_auth_config_for_storage,
+        )
 
         encrypted_auth = prepare_auth_config_for_storage(auth_config_dict, cipher=self.cipher)
 
@@ -418,7 +420,9 @@ class ApiConnectorService:
         if status is not None:
             connector.status = status
 
-        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import decrypt_auth_config_from_storage
+        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
+            decrypt_auth_config_from_storage,
+        )
 
         final_auth_config = decrypt_auth_config_from_storage(
             connector.auth_config or {},

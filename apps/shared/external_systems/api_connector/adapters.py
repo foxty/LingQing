@@ -8,6 +8,10 @@ from typing import Any
 from pydantic import BaseModel
 
 from apps.shared.db.models import ApiConnector, ApiOperationIndex
+from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
+    decrypt_auth_config_from_storage,
+    redact_auth_config_for_api,
+)
 from apps.shared.external_systems.api_connector.constants import (
     AUTH_TYPE_API_KEY,
     AUTH_TYPE_BASIC,
@@ -34,10 +38,6 @@ from apps.shared.external_systems.api_connector.schemas import (
     ApiExecutionRulesSchema,
     ApiOperationResponse,
     ApiRatePolicySchema,
-)
-from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
-    decrypt_auth_config_from_storage,
-    redact_auth_config_for_api,
 )
 from apps.shared.external_systems.domain.types import effective_credential_mode
 from apps.shared.utils.field_cipher import FieldCipher
