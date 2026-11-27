@@ -25,22 +25,24 @@ def _build_runtime(timezone_iana: str | None) -> AgentRuntimeContext:
     )
 
 
-def test_prepare_system_messages_includes_runtime_timezone_preference():
+def test_prepare_system_messages_includes_runtime_environment():
     agent = AgentBase(load_yaml_agent_config(-1))
     runtime = _build_runtime("Asia/Shanghai")
 
     messages = agent._prepare_system_messages(runtime=runtime, loop_count=0, loaded_skills=[])
     contents = [msg.content for msg in messages]
 
-    assert any("Runtime User Preferences" in content for content in contents)
+    assert any("Runtime environment" in content for content in contents)
     assert any("timezone_iana: Asia/Shanghai" in content for content in contents)
+    assert any("local_calendar_date:" in content for content in contents)
 
 
-def test_prepare_system_messages_skips_preference_block_when_timezone_missing():
+def test_prepare_system_messages_includes_runtime_environment_when_timezone_missing():
     agent = AgentBase(load_yaml_agent_config(-1))
     runtime = _build_runtime(None)
 
     messages = agent._prepare_system_messages(runtime=runtime, loop_count=0, loaded_skills=[])
     contents = [msg.content for msg in messages]
 
-    assert not any("Runtime User Preferences" in content for content in contents)
+    assert any("Runtime environment" in content for content in contents)
+    assert any("timezone_iana: UTC" in content for content in contents)

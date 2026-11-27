@@ -45,6 +45,7 @@ from apps.tenant_app_service.agents.model_binding_manager import ModelBindingMan
 from apps.tenant_app_service.agents.ports.agent_run_port import AgentRunPort
 from apps.tenant_app_service.agents.ports.resolve_agent_run_port import resolve_agent_run_port
 from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
+from apps.tenant_app_service.agents.runtime_environment import build_runtime_environment_message
 from apps.tenant_app_service.agents.tool_executor import ToolExecutor
 
 
@@ -280,19 +281,9 @@ class AgentBase(ABC):
         if full_prompt:
             system_messages.append(SystemMessage(content=full_prompt))
 
-        # Inject runtime user preference context to reduce timezone ambiguity in scheduling tasks.
-        if runtime.user.timezone_iana:
-            system_messages.append(
-                SystemMessage(
-                    content=(
-                        "## Runtime User Preferences\n"
-                        f"- timezone_iana: {runtime.user.timezone_iana}\n"
-                        "- Interpret user mentioned times in this timezone unless user explicitly overrides.\n"
-                        "- For cron scheduling, cron fields are local time in timezone_iana "
-                        "(do NOT convert cron fields to UTC manually)."
-                    )
-                )
-            )
+        system_messages.append(
+            SystemMessage(content=build_runtime_environment_message(runtime))
+        )
 
         # Add iteration warning if approaching limit
         if loop_count >= self.agent_config.max_loop_iterations:
