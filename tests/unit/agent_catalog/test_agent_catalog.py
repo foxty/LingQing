@@ -179,6 +179,16 @@ def test_capability_profile_parses_config():
     assert profile.knowledge_base_ids == [1, 2]
 
 
+def test_capability_profile_round_trips_max_loop_iterations():
+    profile = AgentCapabilityProfile.from_config({"max_loop_iterations": 75})
+    assert profile.max_loop_iterations == 75
+    assert profile.to_config()["max_loop_iterations"] == 75
+
+    default_profile = AgentCapabilityProfile.from_config({"default_tools": []})
+    assert default_profile.max_loop_iterations is None
+    assert "max_loop_iterations" not in default_profile.to_config()
+
+
 def test_capability_profile_round_trips_model_profile_id():
     profile = AgentCapabilityProfile.from_config(
         {

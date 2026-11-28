@@ -1,20 +1,26 @@
-import { User, Paperclip } from 'lucide-react'
+import { Paperclip, User } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import './aiTurnMessageI18n'
 import { Message } from '@/types'
 import { getMessageAttachedArtifacts } from '@/lib/messageAttachedArtifacts'
 import { usePreferredDateTimeFormat, usePreferredTimezone } from '@/hooks/useCurrentUserProfile'
 import { formatChatTimestamp } from '@/lib/dateTime'
+import CollapsibleMessageBody from './CollapsibleMessageBody'
 import ContextChip from './ContextChip'
+import CopyIconButton, { useCopyToClipboard } from '@/components/CopyIconButton'
 
 interface HumanMessageProps {
   message: Message
 }
 
 export default function HumanMessage({ message }: HumanMessageProps) {
-  const { i18n } = useTranslation()
+  const { t, i18n } = useTranslation()
   const timeZone = usePreferredTimezone()
   const dateTimeFormat = usePreferredDateTimeFormat()
   const contextResources = getMessageAttachedArtifacts(message.message_metadata)
+  const resetKey = message.message_id
+  const { status: copyStatus, copy } = useCopyToClipboard(message.content ?? '', resetKey)
+
   const formattedTimestamp = message.timestamp
     ? formatChatTimestamp(message.timestamp, {
         timeZone,
@@ -48,12 +54,29 @@ export default function HumanMessage({ message }: HumanMessageProps) {
               <span className="font-medium">{message.artifact.title}</span>
             </div>
           )}
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
-          {formattedTimestamp ? (
-            <p className="mt-1 text-right text-xs tabular-nums text-primary-foreground/70">
-              {formattedTimestamp}
-            </p>
+          <CollapsibleMessageBody
+            contentLength={(message.content ?? '').length}
+            collapseCharThreshold={600}
+            maxHeightClass="max-h-64"
+            tone="onPrimary"
+          >
+            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          </CollapsibleMessageBody>
+          {copyStatus === 'error' ? (
+            <p className="mt-1 text-right text-[11px] text-primary-foreground/90">{t('workbench.copyFailed')}</p>
           ) : null}
+          <div className="mt-2 flex min-w-0 flex-wrap items-center justify-end gap-2 text-xs text-primary-foreground/70">
+            {formattedTimestamp ? (
+              <span className="shrink-0 tabular-nums">{formattedTimestamp}</span>
+            ) : null}
+            <CopyIconButton
+              status={copyStatus}
+              onCopy={() => void copy()}
+              label={t('workbench.copyHumanMessage')}
+              copiedLabel={t('workbench.copied')}
+              variant="onPrimary"
+            />
+          </div>
         </div>
       </div>
     </div>

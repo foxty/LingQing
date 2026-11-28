@@ -138,7 +138,12 @@ export default function AgentDetailPage() {
   const { data: agent, isLoading, isError } = useAgent(Number.isFinite(agentId) ? agentId : undefined)
   const settingsTabActive = activeTab === TAB_SETTINGS
   const formOptionsEnabled = settingsTabActive && !!agent && !agent.is_system
-  const { skills, llmProfiles, isLoading: formOptionsLoading } = useAgentFormOptions(formOptionsEnabled)
+  const {
+    skills,
+    llmProfiles,
+    platformMaxLoopIterations,
+    isLoading: formOptionsLoading,
+  } = useAgentFormOptions(formOptionsEnabled)
   const updateMutation = useUpdateAgent()
 
   const [formName, setFormName] = useState('')
@@ -284,10 +289,16 @@ export default function AgentDetailPage() {
     if (formOptionsEnabled && formOptionsLoading) {
       return
     }
-    const clientErrors = validateAgentFormFields(formName, formPrompt, {
-      nameRequired: t('agents.validation.nameRequired'),
-      promptRequired: t('agents.validation.promptRequired'),
-    })
+    const clientErrors = validateAgentFormFields(
+      formName,
+      formPrompt,
+      {
+        nameRequired: t('agents.validation.nameRequired'),
+        promptRequired: t('agents.validation.promptRequired'),
+        maxLoopIterationsRange: t('agents.validation.maxLoopIterationsRange'),
+      },
+      formConfig.max_loop_iterations
+    )
     if (hasAgentFormFieldErrors(clientErrors)) {
       setFieldErrors(clientErrors)
       setFormError(null)
@@ -391,6 +402,7 @@ export default function AgentDetailPage() {
               attachmentAccess={agent.attachment_access}
               formResourceKey={`${agent.id}:${agent.updated_at ?? ''}`}
               llmProfiles={llmProfiles}
+              platformMaxLoopIterations={platformMaxLoopIterations}
               readOnly={!canEdit}
               saving={updateMutation.isPending || (formOptionsEnabled && formOptionsLoading)}
               showActions={canEdit}

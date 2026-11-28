@@ -15,6 +15,8 @@ from apps.tenant_app_service.agents.skills.tool_resolver import resolve_effectiv
 
 logger = get_logger(__name__)
 
+DEFAULT_MAX_LOOP_ITERATIONS = 50
+
 
 class AgentConfig:
     """Read-only view of a locked agent document, plus runtime skill/tool/prompt binding."""
@@ -98,7 +100,7 @@ class AgentConfig:
     @property
     def max_loop_iterations(self) -> int:
         """Get max loop iterations."""
-        return self.get_config().get("max_loop_iterations", 50)
+        return self.get_config().get("max_loop_iterations", DEFAULT_MAX_LOOP_ITERATIONS)
 
     # === System Prompt (Runtime Skill-Aware) ===
 

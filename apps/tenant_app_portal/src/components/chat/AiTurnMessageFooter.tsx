@@ -1,10 +1,10 @@
-import { Check, Copy } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { formatChatTimestamp } from '@/lib/dateTime'
 import type { DateTimeFormatId } from '@/lib/datetimeFormats'
 import { SessionMetrics } from '@/types'
 import MessageFeedbackButtons from './MessageFeedbackButtons'
 import type { MessageFeedback } from '@/types'
+import CopyIconButton, { type CopyIconStatus } from '@/components/CopyIconButton'
 
 interface AiTurnMessageFooterProps {
   timestamp?: string
@@ -18,7 +18,7 @@ interface AiTurnMessageFooterProps {
   messageId?: string
   feedback?: MessageFeedback
   onFeedbackChange: (feedback: MessageFeedback | undefined) => void
-  copyStatus: 'idle' | 'copied' | 'error'
+  copyStatus: CopyIconStatus
   onCopy: () => void
 }
 
@@ -76,19 +76,12 @@ export default function AiTurnMessageFooter({
               feedback={feedback}
               onFeedbackChange={onFeedbackChange}
             />
-            <button
-              type="button"
-              onClick={onCopy}
-              className="inline-flex h-6 w-6 items-center justify-center rounded-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground"
-              title={copyStatus === 'copied' ? t('workbench.copied') : t('workbench.copyReply')}
-              aria-label={copyStatus === 'copied' ? t('workbench.copied') : t('workbench.copyReply')}
-            >
-              {copyStatus === 'copied' ? (
-                <Check className="h-3.5 w-3.5" />
-              ) : (
-                <Copy className="h-3.5 w-3.5" />
-              )}
-            </button>
+            <CopyIconButton
+              status={copyStatus}
+              onCopy={onCopy}
+              label={t('workbench.copyReply')}
+              copiedLabel={t('workbench.copied')}
+            />
           </div>
         ) : null}
       </div>

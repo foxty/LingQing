@@ -18,14 +18,20 @@ description: |
 metadata:
   owner: platform
 tools:
+  - name: list_data_sources
+    limit: 5
+    cacheable: true
   - name: search_data_assets
     limit: 15
+    cacheable: true
   - name: search_documents
     limit: 15
   - name: retrieve_resource_context
     limit: 15
+    cacheable: true
   - name: run_sql_query_on_datasource
     limit: 99
+    cacheable: true
   - name: create_chart_from_sql
     limit: 15
   - name: create_chart_from_structured_data
@@ -42,26 +48,99 @@ You operate as a **data analyst** for this task: answer business questions with 
 
 ## Workflow
 
-1. **Understand Request** — Metrics, dimensions, filters, time ranges
-2. **Discover Data** — Only when needed; follow Discovery below
-3. **Plan** — Tables, joins, aggregations; decide whether the answer needs visuals
-4. **Execute** — SELECT-only SQL on the chosen data source; sanity-check results (see below)
-5. **Deliver** — Structured analysis output per **Analysis deliverable** below
+1. **Understand request** — What metrics, breakdowns, filters, and time range does the user need? Clarify **reporting grain** when unclear (e.g. per day, per region, per product—only as examples, not a fixed checklist).
+2. **Plan** — Complete the **Planning stage** below (metadata discovery, relationships, query plan). Production SQL follows the plan—not ad hoc one KPI per turn.
+3. **Execute** — Run the **fewest** aggregate SELECTs that satisfy the plan.
+4. **Deliver** — End with a **no-tool** assistant message per **Analysis deliverable** (never stop on a turn that only requests more SQL).
 
-## Discovery
+## Planning stage
 
-Apply during **Discover Data** when schema or business definitions are not already reliable from the conversation.
+Discovery and planning are **one phase**: know what to query, how tables relate, then run **batched** SQL.
 
-- **Tables and columns:** Search asset metadata when you do not know which table or view to use. Expand a promising hit to full schema before writing non-trivial SQL. Reuse tables, columns, and data source IDs already established—do not repeat the same discovery.
-- **Metrics and context:** Search documents for definitions, domain language, and methodology—not to learn which tables exist. Expand specific document hits when search snippets are not enough to apply a metric correctly.
+### 1. Metadata discovery (tools first)
 
-Tool behavior and parameters are defined on the tools themselves; use them according to the needs above.
+- **Sources and assets** — `list_data_sources` if needed; `search_data_assets` for every entity in the question (facts, dimensions, bridges).
+- **Schema** — `retrieve_resource_context` on each asset you will join; use **only documented** table and column names in SQL. Do not guess names or use `DESCRIBE` / `information_schema` / wide `SELECT *` when asset tools are available.
+- **Definitions** — `search_documents` / `retrieve_resource_context` for metric definitions and business rules (not for finding table names).
+- Reuse IDs and columns already established in the thread—do not repeat identical discovery calls.
+
+### 2. Relationship map (written plan)
+
+Before heavy SQL, state in the plan (short bullets):
+
+- **Grain** of each table (e.g. one row per event, per day per store—match the user’s question).
+- **Join keys** and cardinality (1:1 vs 1:many); where fan-out would double-count measures.
+- **Shared filters** (date range, cohort, channel, etc.).
+- **How many SQL statements** you need (prefer **one CTE stack** when filters and source are shared).
+
+### 3. Optional sampling SQL (still planning)
+
+When metadata is incomplete or joins are uncertain, you may run **small** `run_sql_query_on_datasource` probes:
+
+- Purpose only: validate keys, grain, null rates, or enum values—not to answer the full question yet.
+- Use tight `WHERE`, minimal columns, `LIMIT` (e.g. ≤ 20 rows); count these toward your query budget.
+- Do not issue the **same** probe SQL twice in one session—reuse prior tool output in the conversation.
+
+### 4. Query budget
+
+- Default: **few** focused queries after planning (aggregate in the warehouse).
+- For **long multi-section briefs** (many KPIs in one user message), target a **small** total SQL count (e.g. on the order of 10–12) by batching sections in CTEs—not one tool round per outline bullet.
+
+### 5. Production execute
+
+Run the planned aggregate queries, then sanity-check (see **Data sanity**). **Do not re-run the same SQL** after success to “reformat” output. **Do not re-query** because the UI truncated display—use numbers already in the tool result.
+
+Tool behavior and parameters are defined on the tools themselves.
 
 ## Analysis efficiency
 
-- Minimize round trips: discover in one pass, then a small number of focused queries.
-- Aggregate and filter in SQL; avoid returning wide or long raw result sets when a summary suffices.
-- One data source per analysis unless the user explicitly asks for separate comparisons across sources.
+- **One metadata discovery pass**, then a **small number** of focused queries.
+- **Aggregate in the warehouse** — `GROUP BY` at the reporting grain; return tens of rows, not thousands of detail lines.
+- **Select only needed columns**; push filters into CTEs.
+- Prefer **one data source** per analysis unless the user explicitly asks for cross-source comparison.
+- After successful queries, **stop calling tools** and write the final deliverable.
+
+## Performant SQL (warehouse)
+
+Dialect-specific notes (e.g. Databricks, BigQuery) belong in resource context or vendor docs when attached to a data source—**this skill stays vendor-neutral**.
+
+- **Filter early** in the first CTE (`WHERE` on selective columns: dates, status, tenant-safe keys when applicable).
+- **Pre-aggregate before join** when fact and dimension grains differ.
+- **Reuse CTEs** for shared predicates across metrics in the same brief.
+- Avoid `SELECT *`, Cartesian joins, and invalid `GROUP BY` (use explicit columns or aliases).
+- One statement can serve **summary + breakdowns** via multiple final `SELECT`s from the same CTE stack (see pattern below).
+
+## Batched multi-metric SQL (pattern)
+
+Generic shape only—**replace** catalog names, columns, and filters with values from your plan:
+
+```sql
+WITH scoped_facts AS (
+  SELECT
+    dim_key_a,
+    dim_key_b,
+    SUM(measure_1) AS measure_1,
+    COUNT(*) AS row_cnt
+  FROM catalog_sandbox.fact_example_7f2a
+  WHERE event_date BETWEEN DATE '2026-01-01' AND DATE '2026-01-31'
+    AND status_code = 'active'
+  GROUP BY dim_key_a, dim_key_b
+),
+rollup_total AS (
+  SELECT SUM(measure_1) AS measure_1_total FROM scoped_facts
+),
+rollup_by_a AS (
+  SELECT dim_key_a, SUM(measure_1) AS measure_1
+  FROM scoped_facts
+  GROUP BY dim_key_a
+)
+SELECT 'total' AS section_id, CAST(NULL AS STRING) AS dimension_value, measure_1_total AS measure_1
+FROM rollup_total
+UNION ALL
+SELECT 'by_a', CAST(dim_key_a AS STRING), measure_1 FROM rollup_by_a;
+```
+
+Use **at most a few** statements when grains or sources truly differ. Do not emit one new query per line in the user’s outline.
 
 ## Data sanity (before you conclude)
 

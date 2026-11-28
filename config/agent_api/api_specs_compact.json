@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-26T05:36:31.689779+00:00",
+  "generated_at": "2026-11-28T09:30:01.148713+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -221,6 +221,20 @@
               }
             ],
             "title": "Model Profile Id"
+          },
+          "max_loop_iterations": {
+            "anyOf": [
+              {
+                "type": "integer",
+                "maximum": 200.0,
+                "minimum": 1.0
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max Loop Iterations",
+            "description": "Max LLM↔tool loop iterations before the run stops; omit for platform default (50)."
           }
         },
         "type": "object",

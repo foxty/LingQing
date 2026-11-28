@@ -5,6 +5,9 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from apps.tenant_app_service.agent_catalog.domain import VALID_PLATFORM_CAPABILITIES
+from apps.tenant_app_service.agents.agent_config import DEFAULT_MAX_LOOP_ITERATIONS
+
+MAX_LOOP_ITERATIONS_UPPER = 200
 
 
 class AgentCapabilityConfigDTO(BaseModel):
@@ -15,6 +18,15 @@ class AgentCapabilityConfigDTO(BaseModel):
     api_connector_ids: list[int] = Field(default_factory=list)
     platform_capabilities: list[str] = Field(default_factory=list)
     model_profile_id: int | None = None
+    max_loop_iterations: int | None = Field(
+        default=None,
+        ge=1,
+        le=MAX_LOOP_ITERATIONS_UPPER,
+        description=(
+            f"Max LLM↔tool loop iterations before the run stops; "
+            f"omit for platform default ({DEFAULT_MAX_LOOP_ITERATIONS})."
+        ),
+    )
 
     @field_validator("platform_capabilities")
     @classmethod

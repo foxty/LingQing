@@ -57,8 +57,6 @@ class AgentPool:
         agent_id = int(config["agent_id"])
 
         overrides = dict(config_overrides or {})
-        if "max_loop_iterations" not in overrides:
-            overrides["max_loop_iterations"] = 50
 
         agent_key = f"agent_{agent_id}"
         if cache_revision:

@@ -11,9 +11,10 @@ Architecture:
 
 import time
 from abc import ABC
+from collections.abc import Awaitable, Callable
 from dataclasses import asdict
 from datetime import UTC, datetime
-from typing import List, Literal
+from typing import Any, List, Literal, TypeVar
 from uuid import uuid4
 
 from langchain_core.messages import (
@@ -32,6 +33,7 @@ from apps.tenant_app_service.agents.context import extract_runtime_context
 from apps.tenant_app_service.agents.domain import (
     AgentLoadedConfig,
     AgentRuntimeContext,
+    PromptContextStats,
     SkillState,
     ToolCache,
     ToolCallCounts,
@@ -47,6 +49,8 @@ from apps.tenant_app_service.agents.ports.resolve_agent_run_port import resolve_
 from apps.tenant_app_service.agents.ports.run_scope import AgentRunScope
 from apps.tenant_app_service.agents.runtime_environment import build_runtime_environment_message
 from apps.tenant_app_service.agents.tool_executor import ToolExecutor
+
+_GraphDbT = TypeVar("_GraphDbT")
 
 
 class AgentState(TypedDict):
@@ -285,35 +289,175 @@ class AgentBase(ABC):
             SystemMessage(content=build_runtime_environment_message(runtime))
         )
 
-        # Add iteration warning if approaching limit
-        if loop_count >= self.agent_config.max_loop_iterations:
-            warning_msg = (
-                "⚠️ You have reached the maximum number of iterations. "
-                "Please provide a final answer based on the information gathered so far. "
-                "Only call tools again if absolutely necessary."
-            )
-            self.logger.warning(warning_msg)
-            system_messages.append(SystemMessage(content=warning_msg))
-
         return system_messages
 
+    def _is_finalize_text_only(self, state: AgentState, loop_count: int | None = None) -> bool:
+        """True when the next LLM turn must not bind tools (tool limit or max loop)."""
+        current = loop_count if loop_count is not None else state.get("loop_count", 0)
+        return bool(
+            state.get("tool_limit_blocked", False)
+            or current >= self.agent_config.max_loop_iterations
+        )
+
+    def _finalize_system_message(self, state: AgentState, loop_count: int) -> SystemMessage | None:
+        if not self._is_finalize_text_only(state, loop_count):
+            return None
+        if state.get("tool_limit_blocked"):
+            content = (
+                "⚠️ A tool has reached its maximum call limit for this turn. "
+                "Do not call any tools. Respond to the user with a final summary "
+                "using only information already in the conversation."
+            )
+        else:
+            content = (
+                "⚠️ Maximum agent iterations reached for this turn. "
+                "Do not call any tools. Respond to the user with a final summary "
+                "using only information already in the conversation."
+            )
+            self.logger.warning(
+                "Agent %s max loop finalize LLM at loop_count=%s (max=%s)",
+                self.agent_config.agent_name,
+                loop_count,
+                self.agent_config.max_loop_iterations,
+            )
+        return SystemMessage(content=content)
+
+    async def _with_graph_db_session(
+        self,
+        config: RunnableConfig,
+        coro_factory: Callable[[Any], Awaitable[_GraphDbT]],
+    ) -> _GraphDbT:
+        db_session = config.get("configurable", {}).get("db_session")
+        if db_session is not None:
+            return await coro_factory(db_session)
+        from apps.shared.db.session import app_db_session
+
+        async with app_db_session() as db:
+            return await coro_factory(db)
+
+    async def _invoke_llm_turn(
+        self,
+        state: AgentState,
+        config: RunnableConfig,
+        runtime: AgentRuntimeContext,
+        loop_count: int,
+        loaded_skills: list[str],
+        current_messages: list[BaseMessage],
+    ) -> tuple[AIMessage, set[str], PromptContextStats, int]:
+        """Prepare prompt, bind model, invoke LLM, and return response plus prep metadata."""
+        system_messages = self._prepare_system_messages(runtime, loop_count, loaded_skills)
+        finalize_message = self._finalize_system_message(state, loop_count)
+        if finalize_message is not None:
+            system_messages.append(finalize_message)
+
+        messages, removed_message_ids, prompt_context_stats = await self.message_preparer.prepare_for_llm(
+            current_messages, system_messages, config
+        )
+        self.logger.info("Prompt context stats: %s", asdict(prompt_context_stats))
+
+        finalize_text_only = self._is_finalize_text_only(state, loop_count)
+        tools = [] if finalize_text_only else self.agent_config.get_tools(loaded_skills, runtime)
+
+        run_id = (config.get("configurable") or {}).get("run_id")
+        thinking_effort = config.get("configurable", {}).get("thinking_effort", "none")
+
+        if run_id and runtime.thread_id:
+            messages = await self._with_graph_db_session(
+                config,
+                lambda db: compact_prepared_messages(
+                    messages,
+                    db=db,
+                    tenant_id=runtime.tenant.tenant_id,
+                    thread_id=runtime.thread_id,
+                    run_id=str(run_id),
+                    tools=tools,
+                    agent_run_port=resolve_agent_run_port(config),
+                ),
+            )
+
+        model_profile_id = self.agent_config.model_profile_id()
+        model_with_tools = await self._with_graph_db_session(
+            config,
+            lambda db: self._model_binding_manager.get_or_create(
+                model_profile_id=model_profile_id,
+                loaded_skills=loaded_skills,
+                tools=tools,
+                tenant_id=runtime.tenant.tenant_id,
+                db=db,
+                thinking_effort=thinking_effort,
+            ),
+        )
+
+        configured_model_id = self._model_binding_manager.get_configured_model_id()
+        profile_label = self._model_binding_manager.get_profile_label()
+        metrics_model = configured_model_id or profile_label or "unknown"
+        max_output_tokens = self._model_binding_manager.get_max_output_tokens()
+        async with llm_call_tracker(
+            metrics_model,
+            runtime,
+            prompt_context_stats=prompt_context_stats,
+            configured_model_id=configured_model_id,
+            max_output_tokens=max_output_tokens,
+            thinking_context=self._model_binding_manager.get_thinking_metrics_context(),
+        ) as tracker:
+            response = await model_with_tools.ainvoke(messages, config=config, stream=False)
+            if response:
+                response = ensure_visible_ai_content(response)
+            tracker.record_response(response)
+
+        return response, removed_message_ids, prompt_context_stats, len(messages)
+
+    @staticmethod
+    def _build_llm_error_message(exc: Exception) -> AIMessage:
+        return AIMessage(
+            id=str(uuid4()),
+            content=f"⚠️ LLM call failed: {exc}",
+            additional_kwargs={
+                "timestamp": datetime.now(UTC).isoformat(),
+                "error": True,
+            },
+        )
+
+    def _normalize_finalize_llm_response(
+        self,
+        response: AIMessage,
+        state: AgentState,
+        loop_count: int,
+    ) -> AIMessage:
+        response.additional_kwargs.setdefault("timestamp", datetime.now(UTC).isoformat())
+        if not self._is_finalize_text_only(state, loop_count) or not getattr(response, "tool_calls", None):
+            return response
+        fallback = (
+            "I reached the tool call limit for this turn; here is what I can answer from earlier results."
+            if state.get("tool_limit_blocked")
+            else "I reached the maximum iterations for this turn; here is what I can answer from earlier results."
+        )
+        return AIMessage(
+            id=response.id,
+            content=response.content or fallback,
+            tool_calls=[],
+            additional_kwargs=dict(response.additional_kwargs),
+        )
+
+    @staticmethod
+    def _build_llm_call_state_update(
+        *,
+        current_messages: list[BaseMessage],
+        removed_message_ids: set[str],
+        response: AIMessage,
+        loop_count: int,
+        skill_state: SkillState,
+    ) -> dict:
+        new_messages = [msg for msg in current_messages if msg.id not in removed_message_ids]
+        new_messages.append(response)
+        return {
+            "messages": new_messages,
+            "loop_count": loop_count + 1,
+            "skill_state": skill_state,
+        }
+
     async def _llm_call(self, state: AgentState, config: RunnableConfig | None = None) -> dict:
-        """Call the LLM with automatic stats tracking and message management.
-
-        This method handles:
-        - Pre-LLM summarization for context window control (via hook)
-        - System prompt injection (ephemeral)
-        - Stats tracking via V3 context managers
-        - Loop limit warnings
-        - Skill switch detection and model rebuild
-
-        Args:
-            state: Current agent state
-            config: Runtime configuration
-
-        Returns:
-            Updated state with LLM response and stats
-        """
+        """Call the LLM with automatic stats tracking and message management."""
         assert config is not None
         loop_count = state.get("loop_count", 0)
         tool_call_counts = state.get("tool_call_counts", {})
@@ -331,127 +475,44 @@ class AgentBase(ABC):
                 current_messages=current_messages,
             )
 
-        # init the vars incase exception happens
         start_time = time.time()
-        messages = []
-        removed_message_ids = set()
-        try:  # catch the entire llm processing to ensure errors can be save into the message
-            system_messages = self._prepare_system_messages(runtime, loop_count, loaded_skills)
-            tool_limit_finalize = state.get("tool_limit_blocked", False)
-            if tool_limit_finalize:
-                system_messages.append(
-                    SystemMessage(
-                        content=(
-                            "⚠️ A tool has reached its maximum call limit for this turn. "
-                            "Do not call any tools. Respond to the user with a final summary "
-                            "using only information already in the conversation."
-                        )
-                    )
-                )
-            # Prepare messages for LLM: sanitize + compress via MessagePreparer
-            messages, removed_message_ids, prompt_context_stats = await self.message_preparer.prepare_for_llm(
-                current_messages, system_messages, config
-            )
-            self.logger.info("Prompt context stats: %s", asdict(prompt_context_stats))
-            model_profile_id = self.agent_config.model_profile_id()
-            thinking_effort = config.get("configurable", {}).get("thinking_effort", "none")
-
-            # Resolve tools at runtime for tenant-scoped skills (none on tool-limit finalize pass)
-            tools = [] if tool_limit_finalize else self.agent_config.get_tools(loaded_skills, runtime)
-
-            db_session = config.get("configurable", {}).get("db_session")
-            configurable = config.get("configurable") or {}
-            run_id = configurable.get("run_id")
-
-            async def _with_graph_db(coro_factory):
-                if db_session is not None:
-                    return await coro_factory(db_session)
-                from apps.shared.db.session import app_db_session
-
-                async with app_db_session() as db:
-                    return await coro_factory(db)
-
-            if run_id and runtime.thread_id:
-                messages = await _with_graph_db(
-                    lambda db: compact_prepared_messages(
-                        messages,
-                        db=db,
-                        tenant_id=runtime.tenant.tenant_id,
-                        thread_id=runtime.thread_id,
-                        run_id=str(run_id),
-                        tools=tools,
-                        agent_run_port=resolve_agent_run_port(config),
-                    )
-                )
-            model_with_tools = await _with_graph_db(
-                lambda db: self._model_binding_manager.get_or_create(
-                    model_profile_id=model_profile_id,
-                    loaded_skills=loaded_skills,
-                    tools=tools,
-                    tenant_id=runtime.tenant.tenant_id,
-                    db=db,
-                    thinking_effort=thinking_effort,
-                )
-            )
-
-            response = None
-            configured_model_id = self._model_binding_manager.get_configured_model_id()
-            profile_label = self._model_binding_manager.get_profile_label()
-            metrics_model = configured_model_id or profile_label or "unknown"
-            max_output_tokens = self._model_binding_manager.get_max_output_tokens()
-            async with llm_call_tracker(
-                metrics_model,
+        removed_message_ids: set[str] = set()
+        prompt_message_count = 0
+        try:
+            response, removed_message_ids, _, prompt_message_count = await self._invoke_llm_turn(
+                state,
+                config,
                 runtime,
-                prompt_context_stats=prompt_context_stats,
-                configured_model_id=configured_model_id,
-                max_output_tokens=max_output_tokens,
-                thinking_context=self._model_binding_manager.get_thinking_metrics_context(),
-            ) as tracker:
-                # Force non-streaming so usage reflects one API response (not summed stream chunks).
-                response = await model_with_tools.ainvoke(messages, config=config, stream=False)
-                if response:
-                    response = ensure_visible_ai_content(response)
-                tracker.record_response(response)
+                loop_count,
+                loaded_skills,
+                current_messages,
+            )
         except Exception as exc:
             self.logger.error("LLM call failed for agent %s: %s", self.agent_config.agent_name, exc, exc_info=True)
-            response = AIMessage(
-                id=str(uuid4()),
-                content=f"⚠️ LLM call failed: {exc}",
-                additional_kwargs={
-                    "timestamp": datetime.now(UTC).isoformat(),
-                    "error": True,
-                },
-            )
+            response = self._build_llm_error_message(exc)
 
         duration_ms = (time.time() - start_time) * 1000
         skill_info = f"(loaded_skills={loaded_skills})"
         self.logger.info(
-            f"LLM call completed for agent {self.agent_config.agent_name} {skill_info}"
-            f"with {len(messages)} messages (iteration {loop_count}, tool usage: {tool_call_counts}, duration: {duration_ms:.2f}ms)"
+            "LLM call completed for agent %s %s with %s messages "
+            "(iteration %s, tool usage: %s, duration: %.2fms)",
+            self.agent_config.agent_name,
+            skill_info,
+            prompt_message_count,
+            loop_count,
+            tool_call_counts,
+            duration_ms,
         )
 
-        # Add timestamp & session_id to AI response for tracking
         if response:
-            response.additional_kwargs.setdefault("timestamp", datetime.now(UTC).isoformat())
-            if state.get("tool_limit_blocked") and getattr(response, "tool_calls", None):
-                response = AIMessage(
-                    id=response.id,
-                    content=response.content
-                    or "I reached the tool call limit for this turn; here is what I can answer from earlier results.",
-                    additional_kwargs=dict(response.additional_kwargs),
-                )
-
-        # Build state update - return complete message list
-        # Remove sanitized messages and add new response
-        new_messages = [msg for msg in current_messages if msg.id not in removed_message_ids]
-        new_messages.append(response)
-
-        state_update = {
-            "messages": new_messages,
-            "loop_count": loop_count + 1,
-            "skill_state": skill_state,
-        }
-        return state_update
+            response = self._normalize_finalize_llm_response(response, state, loop_count)
+        return self._build_llm_call_state_update(
+            current_messages=current_messages,
+            removed_message_ids=removed_message_ids,
+            response=response,
+            loop_count=loop_count,
+            skill_state=skill_state,
+        )
 
     async def _tool_node(self, state: AgentState, config: RunnableConfig | None = None) -> dict:
         assert config is not None
@@ -760,27 +821,31 @@ class AgentBase(ABC):
         loop_count = state.get("loop_count", 0)
         tool_call_counts = state.get("tool_call_counts", {})
         has_tool_calls = getattr(last_message, "tool_calls", None)
+        max_loop = self.agent_config.max_loop_iterations
 
-        # Determine stop reason
-        exceeded_max_iterations = loop_count > self.agent_config.max_loop_iterations
-        natural_stop = not has_tool_calls
-
-        # Continue to tool execution if not stopping
-        if not exceeded_max_iterations and not natural_stop:
-            self.logger.debug(
-                f"Continuing to tool execution (iteration {loop_count + 1}), tool usage: {tool_call_counts}"
-            )
-            return "tool_node"
-
-        # Log stop reason and proceed to save
-        if exceeded_max_iterations:
+        if loop_count > max_loop:
             self.logger.warning(
-                f"Agent {self.agent_config.agent_name} stopped (exceeded max iterations) after {loop_count} iterations"
+                "Agent %s stopped (exceeded max iterations) after %s iterations (max=%s)",
+                self.agent_config.agent_name,
+                loop_count,
+                max_loop,
             )
-        else:
-            self.logger.info(f"Agent {self.agent_config.agent_name} stopped naturally after {loop_count} iterations")
+            return "save_messages"
 
-        return "save_messages"
+        if not has_tool_calls:
+            self.logger.info(
+                "Agent %s stopped naturally after %s iterations",
+                self.agent_config.agent_name,
+                loop_count,
+            )
+            return "save_messages"
+
+        self.logger.debug(
+            "Continuing to tool execution (iteration %s), tool usage: %s",
+            loop_count + 1,
+            tool_call_counts,
+        )
+        return "tool_node"
 
     def build_graph(self) -> StateGraph:
         """Build the agent graph with integrated message management.

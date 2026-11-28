@@ -110,11 +110,13 @@ class AgentCapabilityProfile(BaseDomainModel):
     api_connector_ids: list[int] = field(default_factory=list)
     platform_capabilities: list[str] = field(default_factory=list)
     model_profile_id: int | None = None
+    max_loop_iterations: int | None = None
 
     @classmethod
     def from_config(cls, config: dict[str, Any] | None) -> AgentCapabilityProfile:
         raw = config or {}
         model_profile_id = raw.get("model_profile_id")
+        max_loop_raw = raw.get("max_loop_iterations")
         return cls(
             default_tools=_as_str_list(raw.get("default_tools")),
             skills=_as_str_list(raw.get("skills")),
@@ -123,6 +125,7 @@ class AgentCapabilityProfile(BaseDomainModel):
             api_connector_ids=_as_int_list(raw.get("api_connector_ids")),
             platform_capabilities=_normalize_platform_capabilities(raw.get("platform_capabilities")),
             model_profile_id=int(model_profile_id) if model_profile_id is not None else None,
+            max_loop_iterations=int(max_loop_raw) if max_loop_raw is not None else None,
         )
 
     def to_config(self) -> dict[str, Any]:
@@ -136,6 +139,8 @@ class AgentCapabilityProfile(BaseDomainModel):
         }
         if self.model_profile_id is not None:
             result["model_profile_id"] = self.model_profile_id
+        if self.max_loop_iterations is not None:
+            result["max_loop_iterations"] = self.max_loop_iterations
         return result
 
 

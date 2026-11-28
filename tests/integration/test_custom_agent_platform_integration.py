@@ -18,6 +18,9 @@ from apps.shared.schemas.user import UserDTO
 from apps.tenant_app_service.agents.runtime_capability import build_agent_capability_profile
 from apps.tenant_app_service.chat.turn_service import ChatTurnService
 from apps.tenant_app_service.agent_catalog.adapters import resolve_assignable_skills
+from apps.tenant_app_service.agent_catalog.dtos import AgentCapabilityConfigDTO, AgentUpdateRequest
+from apps.tenant_app_service.agent_catalog.services import AgentCatalogService
+from apps.tenant_app_service.agents.agent_base import AgentBase
 from apps.tenant_app_service.skills.resolution import get_default_skill_resolver, reset_default_skill_resolver
 
 from tests.conftest import project_root
@@ -169,3 +172,97 @@ async def test_get_agent_graph_custom_agent_passes_spec_tool_limits(async_db_ses
     assert "tags" not in preloaded
     limits = {item["name"]: item for item in preloaded["default_tools"]}
     assert limits["search_documents"]["limit"] == 10
+
+
+@pytest.mark.asyncio
+async def test_custom_agent_max_loop_update_flows_to_graph_preload(async_db_session: AsyncSession, monkeypatch):
+    """After catalog update (PUT-equivalent), graph preload must use the new max_loop_iterations."""
+    suffix = uuid4().hex[:8]
+    tenant = Tenant(name=f"loop-{suffix}", slug=f"loop-{suffix}", status="active")
+    async_db_session.add(tenant)
+    await async_db_session.flush()
+    await seed_default_policies(async_db_session, tenant.id)
+
+    user = User(
+        username=f"admin-{suffix}@example.com",
+        email=f"admin-{suffix}@example.com",
+        hashed_password="test",
+        role="admin",
+        tenant_id=tenant.id,
+        status="active",
+    )
+    async_db_session.add(user)
+    await async_db_session.flush()
+
+    agent = Agent(
+        tenant_id=tenant.id,
+        owner_id=user.id,
+        name=f"loop-agent-{suffix}",
+        description="loop cap",
+        system_prompt="Answer briefly.",
+        config={
+            "platform_capabilities": [],
+            "skills": [],
+            "knowledge_base_ids": [],
+            "data_source_ids": [],
+            "api_connector_ids": [],
+        },
+        tags=[],
+        example_questions=[],
+        status="active",
+        created_at=datetime.now(UTC),
+        updated_at=datetime.now(UTC),
+    )
+    async_db_session.add(agent)
+    await async_db_session.commit()
+
+    captured: list[dict] = []
+
+    async def capture_get_or_create(config, *, cache_revision=None, config_overrides=None):
+        captured.append({"config": dict(config), "cache_revision": cache_revision})
+        return object()
+
+    chat_service = ChatTurnService(tenant_id=tenant.id, db=async_db_session)
+    monkeypatch.setattr(chat_service.agent_pool, "get_or_create_agent", capture_get_or_create)
+
+    current_user = UserDTO(
+        id=user.id,
+        username=user.username,
+        role=user.role,
+        tenant_id=tenant.id,
+        tenant_name=tenant.name,
+    )
+    actor = ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role)
+    assignable = resolve_assignable_skills(tenant_id=tenant.id, user_id=user.id)
+
+    await chat_service._get_agent_graph(agent.id, current_user=current_user)
+    assert len(captured) == 1
+    first_cap = captured[0]["config"]["max_loop_iterations"]
+    assert isinstance(first_cap, int)
+
+    catalog = AgentCatalogService(tenant_id=tenant.id, db_session=async_db_session)
+    updated = await catalog.update_agent(
+        agent_id=agent.id,
+        payload=AgentUpdateRequest(
+            config=AgentCapabilityConfigDTO(
+                platform_capabilities=[],
+                skills=[],
+                knowledge_base_ids=[],
+                data_source_ids=[],
+                api_connector_ids=[],
+                max_loop_iterations=77,
+            )
+        ),
+        actor=actor,
+        assignable_skills=assignable,
+    )
+    assert updated.config.max_loop_iterations == 77
+
+    await chat_service._get_agent_graph(agent.id, current_user=current_user)
+    assert len(captured) == 2
+    second = captured[1]
+    assert second["config"]["max_loop_iterations"] == 77
+    assert second["cache_revision"] != captured[0]["cache_revision"]
+
+    runtime_agent = AgentBase(second["config"])
+    assert runtime_agent.agent_config.max_loop_iterations == 77

@@ -1,6 +1,26 @@
 import { useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
+import i18n from 'i18next'
 import { SessionMetrics } from '@/types'
+
+i18n.addResourceBundle('en', 'translation', {
+  workbench: {
+    sessionStatus: 'Session status:',
+    sessionStatusCompleted: 'Completed',
+    sessionStatusCompletedWithToolErrors: 'Completed (tool errors)',
+    sessionStatusActive: 'Active',
+    sessionStatusError: 'Error',
+  },
+}, true, true)
+i18n.addResourceBundle('zh', 'translation', {
+  workbench: {
+    sessionStatus: '会话状态：',
+    sessionStatusCompleted: '已完成',
+    sessionStatusCompletedWithToolErrors: '已完成（工具有误）',
+    sessionStatusActive: '进行中',
+    sessionStatusError: '错误',
+  },
+}, true, true)
 
 interface AiTurnSessionMetricsPanelProps {
   sessionMetrics: SessionMetrics
@@ -18,6 +38,16 @@ export default function AiTurnSessionMetricsPanel({
     if (evidence === 'content_blocks') return t('workbench.reasoningEvidenceBlocks')
     return t('workbench.reasoningEvidenceNone')
   }
+
+  const sessionStatusLabel = useMemo(() => {
+    const status = sessionMetrics.status
+    if (!status) return null
+    if (status === 'completed') return t('workbench.sessionStatusCompleted')
+    if (status === 'completed_with_tool_errors') return t('workbench.sessionStatusCompletedWithToolErrors')
+    if (status === 'active') return t('workbench.sessionStatusActive')
+    if (status === 'error') return t('workbench.sessionStatusError')
+    return status
+  }, [sessionMetrics.status, t])
 
   const usedModels = useMemo(() => {
     if (!sessionMetrics.model_usage) {
@@ -66,6 +96,12 @@ export default function AiTurnSessionMetricsPanel({
         <span className="text-muted-foreground">{t('workbench.duration')}</span>
         <span className="font-medium">{(sessionMetrics.duration_ms ?? 0).toFixed(2)}ms</span>
       </div>
+      {sessionStatusLabel ? (
+        <div className="flex justify-between gap-2">
+          <span className="text-muted-foreground">{t('workbench.sessionStatus')}</span>
+          <span className="text-right font-medium">{sessionStatusLabel}</span>
+        </div>
+      ) : null}
       {sessionMetrics.thinking ? (
         <>
           <div className="mt-2 border-t border-border pt-2 font-medium text-foreground">
