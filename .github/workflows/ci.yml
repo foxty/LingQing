@@ -80,7 +80,7 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y postgresql-client
 
       - name: Lint
-        run: npx nx run root:lint
+        run: npx nx run root:lint:check
 
       - name: Test
         run: npx nx run root:test:ci

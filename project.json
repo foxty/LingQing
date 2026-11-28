@@ -45,6 +45,13 @@
                 "cwd": "."
             }
         },
+        "lint:check": {
+            "executor": "nx:run-commands",
+            "options": {
+                "command": "uv run ruff check --no-fix apps/ scripts/",
+                "cwd": "."
+            }
+        },
         "format": {
             "executor": "nx:run-commands",
             "options": {
@@ -140,7 +147,7 @@
             "executor": "nx:run-commands",
             "options": {
                 "commands": [
-                    "uv run ruff check apps/ scripts/",
+                    "uv run ruff check --no-fix apps/ scripts/",
                     "uv run pytest tests/ -v -m 'not docling'",
                     "PYTHONPATH=. uv run python scripts/generate_agent_api_specs.py --check",
                     "npm run check-live-app-sdk"
