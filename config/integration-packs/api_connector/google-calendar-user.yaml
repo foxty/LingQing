@@ -1,0 +1,113 @@
+pack_id: google-calendar-user
+version: 1.0.0
+
+agent_instructions: |
+  Use this connector to read Google Calendar events and calendar lists for the connected user.
+  Start with users.calendarList.list or events on ``primary`` for the default calendar; narrow
+  with timeMin/timeMax and q when answering date-range questions. Use singleEvents=true and
+  orderBy=startTime for agenda-style answers. Keep maxResults around 20–50 per call. Do not
+  create, update, invite, or delete events; bundled operations are read-only. On 403/404,
+  explain calendar sharing and visibility; on missing or expired credentials, ask the user to
+  connect or reconnect this connector.
+
+connector:
+  name: Google Calendar (user)
+  description: Read calendars and events with the connected user's permissions.
+  base_url: https://www.googleapis.com/calendar/v3
+  credential_mode: user
+  auth_type: oauth2
+
+oauth:
+  authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scope_param: scope
+  scopes:
+    - https://www.googleapis.com/auth/calendar.readonly
+
+execution_rules:
+  default_request_encoding: json
+
+operations:
+  - method: GET
+    path: /users/me/calendarList
+    operation_id: google_calendar_list_calendars
+    summary: List calendars the connected user can access.
+    request_schema:
+      type: object
+      properties:
+        query:
+          type: object
+          properties:
+            maxResults: { type: integer, minimum: 1, maximum: 250 }
+            pageToken: { type: string }
+            minAccessRole: { type: string, enum: [freeBusyReader, reader, writer, owner] }
+            showDeleted: { type: boolean }
+            showHidden: { type: boolean }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /calendars/{calendarId}
+    operation_id: google_calendar_get_calendar
+    summary: Get metadata for one calendar (use calendarId primary for the default calendar).
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [calendarId]
+          properties:
+            calendarId: { type: string }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /calendars/{calendarId}/events
+    operation_id: google_calendar_list_events
+    summary: List events on a calendar within optional time bounds.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [calendarId]
+          properties:
+            calendarId: { type: string }
+        query:
+          type: object
+          properties:
+            q: { type: string }
+            timeMin: { type: string, format: date-time }
+            timeMax: { type: string, format: date-time }
+            maxResults: { type: integer, minimum: 1, maximum: 2500 }
+            pageToken: { type: string }
+            singleEvents: { type: boolean }
+            orderBy: { type: string, enum: [startTime, updated] }
+            showDeleted: { type: boolean }
+            timeZone: { type: string }
+            updatedMin: { type: string, format: date-time }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /calendars/{calendarId}/events/{eventId}
+    operation_id: google_calendar_get_event
+    summary: Get one calendar event by ID.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [calendarId, eventId]
+          properties:
+            calendarId: { type: string }
+            eventId: { type: string }
+        query:
+          type: object
+          properties:
+            timeZone: { type: string }
+    response_schema:
+      type: object

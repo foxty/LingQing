@@ -62,6 +62,7 @@ class ApiConnectorPackManifest(BaseModel):
 
     @property
     def pack_ref(self) -> str:
+        """Major compatibility identity stored on connectors (not full semver)."""
         major = self.version.split(".", maxsplit=1)[0]
         return f"{self.pack_id}@{major}"
 
@@ -75,10 +76,3 @@ class ApiConnectorPackSummary(BaseModel):
 
 class ApiConnectorPackListResponse(BaseModel):
     items: list[ApiConnectorPackSummary]
-
-
-class InstallApiConnectorPackRequest(BaseModel):
-    pack_id: str
-    client_id: str = Field(..., min_length=1)
-    client_secret: str = Field(..., min_length=1)
-    redirect_uri: str | None = None

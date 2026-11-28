@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-28T09:30:01.148713+00:00",
+  "generated_at": "2026-11-28T14:45:58.094471+00:00",
   "components": {
     "schemas": {
       "AclShareCandidateResponse": {
@@ -840,6 +840,33 @@
               }
             ],
             "title": "Pack Ref"
+          },
+          "installed_pack_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Installed Pack Version"
+          },
+          "pack_catalog_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pack Catalog Version"
+          },
+          "pack_update_available": {
+            "type": "boolean",
+            "title": "Pack Update Available",
+            "default": false
           },
           "agent_instructions": {
             "anyOf": [
@@ -6066,13 +6093,27 @@
             "title": "Pack Id"
           },
           "client_id": {
-            "type": "string",
-            "minLength": 1,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Client Id"
           },
           "client_secret": {
-            "type": "string",
-            "minLength": 1,
+            "anyOf": [
+              {
+                "type": "string",
+                "minLength": 1
+              },
+              {
+                "type": "null"
+              }
+            ],
             "title": "Client Secret"
           },
           "redirect_uri": {
@@ -6089,11 +6130,31 @@
         },
         "type": "object",
         "required": [
-          "pack_id",
-          "client_id",
-          "client_secret"
+          "pack_id"
         ],
         "title": "InstallApiConnectorPackRequest"
+      },
+      "InstallApiConnectorPackResponse": {
+        "properties": {
+          "connector": {
+            "$ref": "#/components/schemas/ApiConnectorResponse"
+          },
+          "sync_summary": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/PackSyncSummaryDTO"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "type": "object",
+        "required": [
+          "connector"
+        ],
+        "title": "InstallApiConnectorPackResponse"
       },
       "IntegrationOAuthStartResponse": {
         "properties": {
@@ -6843,6 +6904,54 @@
         ],
         "title": "OAuth2AuthConfigSchema",
         "description": "OAuth 2.0 application configuration; user tokens are stored separately."
+      },
+      "PackSyncSummaryDTO": {
+        "properties": {
+          "added": {
+            "type": "integer",
+            "title": "Added"
+          },
+          "updated": {
+            "type": "integer",
+            "title": "Updated"
+          },
+          "staled": {
+            "type": "integer",
+            "title": "Staled"
+          },
+          "unchanged": {
+            "type": "integer",
+            "title": "Unchanged"
+          },
+          "installed_pack_version": {
+            "type": "string",
+            "title": "Installed Pack Version"
+          },
+          "catalog_version": {
+            "type": "string",
+            "title": "Catalog Version"
+          },
+          "scopes_changed": {
+            "type": "boolean",
+            "title": "Scopes Changed",
+            "default": false
+          },
+          "scopes_expanded": {
+            "type": "boolean",
+            "title": "Scopes Expanded",
+            "default": false
+          }
+        },
+        "type": "object",
+        "required": [
+          "added",
+          "updated",
+          "staled",
+          "unchanged",
+          "installed_pack_version",
+          "catalog_version"
+        ],
+        "title": "PackSyncSummaryDTO"
       },
       "PaginatedResponse_ApiOperationResponse_": {
         "properties": {
@@ -8207,6 +8316,22 @@
           "skipped"
         ],
         "title": "SyncConnectorResultResponse"
+      },
+      "SyncPackResponse": {
+        "properties": {
+          "connector": {
+            "$ref": "#/components/schemas/ApiConnectorResponse"
+          },
+          "summary": {
+            "$ref": "#/components/schemas/PackSyncSummaryDTO"
+          }
+        },
+        "type": "object",
+        "required": [
+          "connector",
+          "summary"
+        ],
+        "title": "SyncPackResponse"
       },
       "SyncSchemaRequest": {
         "properties": {
@@ -9928,6 +10053,7 @@
     "POST_/api-connectors/{connector_id}/connections/users/{user_id}/test": "admin_test_user_api_connector_connection_api_connectors__connector_id__connections_users__user_id__test_post",
     "POST_/api-connectors/{connector_id}/oauth/start": "start_my_api_connector_oauth_api_connectors__connector_id__oauth_start_post",
     "POST_/api-connectors/{connector_id}/operations": "add_manual_operation_api_connectors__connector_id__operations_post",
+    "POST_/api-connectors/{connector_id}/sync-pack": "sync_pack_manifest_api_connectors__connector_id__sync_pack_post",
     "POST_/api-connectors/{connector_id}/sync-schema": "sync_schema_api_connectors__connector_id__sync_schema_post",
     "POST_/apps/v1/{app_id}/{environment}/api-connectors/{operation_uid}/call": "call_api_connector_v1_apps_v1__app_id___environment__api_connectors__operation_uid__call_post",
     "POST_/apps/v1/{app_id}/{environment}/data/import": "import_live_app_data_v1_apps_v1__app_id___environment__data_import_post",
@@ -14040,7 +14166,7 @@
       "response": {
         "success_status": "201",
         "success_schema": {
-          "$ref": "#/components/schemas/ApiConnectorResponse"
+          "$ref": "#/components/schemas/InstallApiConnectorPackResponse"
         },
         "error_statuses": [
           "422"
@@ -17260,6 +17386,39 @@
         "success_status": "200",
         "success_schema": {
           "$ref": "#/components/schemas/IntegrationOAuthStartResponse"
+        },
+        "error_statuses": [
+          "422"
+        ]
+      },
+      "constraints": {
+        "side_effect": true,
+        "idempotent": false
+      }
+    },
+    "sync_pack_manifest_api_connectors__connector_id__sync_pack_post": {
+      "operation_key": "POST_/api-connectors/{connector_id}/sync-pack",
+      "method": "POST",
+      "path": "/api-connectors/{connector_id}/sync-pack",
+      "summary": "Sync Pack Manifest",
+      "description": "",
+      "request": {
+        "path_params": [
+          {
+            "name": "connector_id",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "title": "Connector Id"
+            },
+            "description": ""
+          }
+        ]
+      },
+      "response": {
+        "success_status": "200",
+        "success_schema": {
+          "$ref": "#/components/schemas/SyncPackResponse"
         },
         "error_statuses": [
           "422"

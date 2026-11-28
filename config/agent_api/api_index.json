@@ -1,6 +1,6 @@
 {
   "version": "v1",
-  "generated_at": "2026-11-26T05:36:31.689779+00:00",
+  "generated_at": "2026-11-28T14:27:13.014630+00:00",
   "operations": [
     {
       "operation_key": "DELETE_/acl-shares/{resource_type}/{resource_id}/shares/{user_id}",
@@ -695,6 +695,11 @@
     {
       "operation_key": "POST_/api-connectors/{connector_id}/operations",
       "summary": "Add Manual Operation",
+      "risk_level": "write"
+    },
+    {
+      "operation_key": "POST_/api-connectors/{connector_id}/sync-pack",
+      "summary": "Sync Pack Manifest",
       "risk_level": "write"
     },
     {

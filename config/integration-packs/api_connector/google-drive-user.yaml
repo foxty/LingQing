@@ -1,0 +1,109 @@
+pack_id: google-drive-user
+version: 1.0.0
+
+agent_instructions: |
+  Use this connector to find and read Google Drive files the connected user can access.
+  Start with files.list using a focused ``q`` filter (name, mime type, parent folder, or
+  ``modifiedTime``), then call files.get or files.export only for relevant items. Prefer
+  ``fields`` to limit payload size. Use pageSize around 20–50 and at most a few pageToken
+  pages unless the user asks for exhaustive listing. For Google Docs/Sheets/Slides, export
+  to a sensible format (e.g. text/plain or PDF) instead of downloading native mime types
+  unless export is not needed. Do not create, move, trash, or share files; bundled operations
+  are read-only. On 403/404, explain that access follows the user's Drive permissions; on
+  missing or expired credentials, ask the user to connect or reconnect this connector.
+
+connector:
+  name: Google Drive (user)
+  description: Search and read Google Drive files with the connected user's permissions.
+  base_url: https://www.googleapis.com/drive/v3
+  credential_mode: user
+  auth_type: oauth2
+
+oauth:
+  authorize_url: https://accounts.google.com/o/oauth2/v2/auth
+  token_url: https://oauth2.googleapis.com/token
+  scope_param: scope
+  scopes:
+    - https://www.googleapis.com/auth/drive.readonly
+
+execution_rules:
+  default_request_encoding: json
+
+operations:
+  - method: GET
+    path: /about
+    operation_id: google_drive_about
+    summary: Get Drive storage quota and user info for the connected account.
+    request_schema:
+      type: object
+      properties:
+        query:
+          type: object
+          properties:
+            fields: { type: string }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /files
+    operation_id: google_drive_list_files
+    summary: List or search Drive files (use query parameter q for search).
+    request_schema:
+      type: object
+      properties:
+        query:
+          type: object
+          properties:
+            q: { type: string }
+            pageSize: { type: integer, minimum: 1, maximum: 1000 }
+            pageToken: { type: string }
+            orderBy: { type: string }
+            fields: { type: string }
+            includeItemsFromAllDrives: { type: boolean }
+            supportsAllDrives: { type: boolean }
+            corpora: { type: string, enum: [user, drive, domain, allDrives] }
+            driveId: { type: string }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /files/{fileId}
+    operation_id: google_drive_get_file
+    summary: Get metadata for one Drive file by ID.
+    request_schema:
+      type: object
+      required: [path]
+      properties:
+        path:
+          type: object
+          required: [fileId]
+          properties:
+            fileId: { type: string }
+        query:
+          type: object
+          properties:
+            fields: { type: string }
+            supportsAllDrives: { type: boolean }
+    response_schema:
+      type: object
+
+  - method: GET
+    path: /files/{fileId}/export
+    operation_id: google_drive_export_file
+    summary: Export a Google Workspace file (Docs, Sheets, Slides) to a downloadable MIME type.
+    request_schema:
+      type: object
+      required: [path, query]
+      properties:
+        path:
+          type: object
+          required: [fileId]
+          properties:
+            fileId: { type: string }
+        query:
+          type: object
+          required: [mimeType]
+          properties:
+            mimeType: { type: string }
+    response_schema:
+      type: string

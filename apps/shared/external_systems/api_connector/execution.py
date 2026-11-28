@@ -1,4 +1,8 @@
-"""Runtime external API execution for API connectors.
+"""Data plane: runtime external API execution for API connectors.
+
+Does not depend on integration packs, OpenAPI import, or connector admin flows.
+Committed DB rows and ``runtime.load_api_connector_execution_context`` are the
+handoff from control plane.
 
 Supports multiple authentication types:
 - none: No authentication
@@ -34,24 +38,20 @@ from urllib.parse import urljoin
 
 import aiohttp
 
-from apps.shared.authz.authz_query_builder import evaluate_resource_action
 from apps.shared.core.exceptions import ResourceNotFoundError, ValidationError
 from apps.shared.domain.actor import ActorContext
-from apps.shared.domain.types import ABAC_ACTION_READ, RESOURCE_TYPE_API_CONNECTOR
-from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain, operation_entity_to_domain
+from apps.shared.external_systems.api_connector.adapters import operation_entity_to_domain
 from apps.shared.external_systems.api_connector.constants import (
     AUTH_TYPE_CUSTOM,
-    CONNECTOR_STATUS_ACTIVE,
-    OPERATION_STATUS_ACTIVE,
     REQUEST_ENCODING_FORM,
     REQUEST_ENCODING_JSON,
 )
 from apps.shared.external_systems.api_connector.domain import ApiConnectorDomain, RequestEncoding
 from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository, ApiOperationIndexRepository
+from apps.shared.external_systems.api_connector.runtime import load_api_connector_execution_context
 from apps.shared.external_systems.api_connector.schemas import ApiOperationCallParameters
-from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
 from apps.shared.external_systems.domain.ports import UserIntegrationAuthPort
-from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER, IntegrationPurpose
+from apps.shared.external_systems.domain.types import CREDENTIAL_MODE_USER
 from apps.shared.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -150,10 +150,10 @@ class ApiConnectorExecutionService:
         actor: ActorContext,
         parameters: ApiOperationCallParameters | None,
     ) -> ApiExecutionResult:
-        operation = await self.operation_repo.get_by_uid_and_tenant(operation_uid, self.tenant_id)
-        if not operation or operation.status != OPERATION_STATUS_ACTIVE:
+        row = await self.operation_repo.get_by_uid_and_tenant(operation_uid, self.tenant_id)
+        if not row:
             raise ResourceNotFoundError(f"Api operation not found: {operation_uid}")
-        return await self._execute_operation(operation, actor, parameters)
+        return await self._execute_operation(operation_entity_to_domain(row), actor, parameters)
 
     async def execute_operation_by_id_for_actor(
         self,
@@ -162,10 +162,10 @@ class ApiConnectorExecutionService:
         actor: ActorContext,
         parameters: ApiOperationCallParameters | None,
     ) -> ApiExecutionResult:
-        operation = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
-        if not operation or operation.status != OPERATION_STATUS_ACTIVE:
+        row = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
+        if not row:
             raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
-        return await self._execute_operation(operation, actor, parameters)
+        return await self._execute_operation(operation_entity_to_domain(row), actor, parameters)
 
     async def _execute_operation(
         self,
@@ -173,32 +173,15 @@ class ApiConnectorExecutionService:
         actor: ActorContext,
         parameters: ApiOperationCallParameters | None,
     ) -> ApiExecutionResult:
-        operation_domain = operation_entity_to_domain(operation)
-
-        connector = await self.connector_repo.get_by_id_and_tenant(operation.connector_id, self.tenant_id)
-        if not connector or connector.status != CONNECTOR_STATUS_ACTIVE:
-            raise ResourceNotFoundError(f"Api connector not found: {operation.connector_id}")
-
-        auth_port = self._user_integration_auth or IntegrationCredentialResolver(self.db_session)
-        auth_dict = await auth_port.resolve_api_connector_auth_config(
-            connector=connector,
-            actor=actor,
-            purpose=IntegrationPurpose.EXECUTE,
-        )
-        connector_domain = connector_entity_to_domain(connector, auth_dict=auth_dict)
-
-        allowed = await evaluate_resource_action(
-            db_session=self.db_session,
+        ctx = await load_api_connector_execution_context(
             tenant_id=self.tenant_id,
-            user_id=actor.user_id,
-            user_role=actor.user_role,
-            resource_type=RESOURCE_TYPE_API_CONNECTOR,
-            resource_id=connector.id,
-            resource_owner_id=connector.owner_id,
-            action=ABAC_ACTION_READ,
+            db_session=self.db_session,
+            actor=actor,
+            operation=operation,
+            user_integration_auth=self._user_integration_auth,
         )
-        if not allowed:
-            raise ResourceNotFoundError(f"Access denied to API connector: {connector.id}")
+        operation_domain = ctx.operation_domain
+        connector_domain = ctx.connector_domain
 
         self._validate_base_url(connector_domain.base_url)
 

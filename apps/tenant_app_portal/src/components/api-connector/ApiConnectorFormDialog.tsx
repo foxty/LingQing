@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
+import { syncApiConnectorPack } from '@/lib/apiConnectorApi'
 import { useTranslation } from 'react-i18next'
 import '@/components/api-connector/formI18n'
 import { AuthSection } from '@/components/api-connector/AuthSection'
@@ -16,7 +17,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
-import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Button, buttonVariants } from '@/components/ui/button'
 import {
   Dialog,
@@ -28,6 +29,7 @@ import {
 } from '@/components/ui/dialog'
 import { useNotification } from '@/hooks/useNotification'
 import { getApiErrorMessage } from '@/lib/api'
+import { PackagePlus } from 'lucide-react'
 
 export function ApiConnectorFormDialog({
   open,
@@ -43,6 +45,15 @@ export function ApiConnectorFormDialog({
   const { showError, showSuccess } = useNotification()
   const mode: 'create' | 'edit' = connector && onUpdate ? 'edit' : 'create'
   const [showCloseConfirm, setShowCloseConfirm] = useState(false)
+  const [syncingPack, setSyncingPack] = useState(false)
+  const [showPackUpdateConfirm, setShowPackUpdateConfirm] = useState(false)
+  const showPackUpdate =
+    mode === 'edit' &&
+    Boolean(connector?.pack_update_available && connector?.can_write && connector.pack_ref)
+  const installedPackVersionLabel =
+    connector?.installed_pack_version?.trim() ||
+    t('components.addApiConnectorDialog.packUpdateInstalledUnknown')
+  const catalogPackVersionLabel = connector?.pack_catalog_version?.trim() || '—'
   const submitErrorRef = useRef<HTMLDivElement>(null)
 
   const form = useApiConnectorForm({ open, connector, mode })
@@ -65,6 +76,27 @@ export function ApiConnectorFormDialog({
       return
     }
     closeWithoutConfirm()
+  }
+
+  const handlePackSync = async () => {
+    if (!connector || syncingPack) return
+    try {
+      setSyncingPack(true)
+      form.setSubmitError(null)
+      const result = await syncApiConnectorPack(connector.id)
+      showSuccess(t('components.addApiConnectorDialog.packUpdateSuccess'))
+      if (result.summary.scopes_expanded) {
+        showSuccess(t('components.addApiConnectorDialog.packUpdateReconnect'))
+      }
+      onUpdated?.(result.connector)
+      setShowPackUpdateConfirm(false)
+    } catch (err: unknown) {
+      form.setSubmitError(
+        getApiErrorMessage(err, t('components.addApiConnectorDialog.submitFailed'))
+      )
+    } finally {
+      setSyncingPack(false)
+    }
   }
 
   const handleSubmit = async () => {
@@ -125,6 +157,34 @@ export function ApiConnectorFormDialog({
           </DialogHeader>
 
           <div className="space-y-4">
+            {showPackUpdate ? (
+              <Alert
+                variant="default"
+                className="border-primary bg-primary/5 text-foreground ring-1 ring-primary/25 [&>svg]:text-primary"
+              >
+                <PackagePlus className="h-4 w-4" aria-hidden />
+                <AlertTitle>{t('components.addApiConnectorDialog.packUpdateTitle')}</AlertTitle>
+                <AlertDescription className="space-y-3">
+                  <p>
+                    {t('components.addApiConnectorDialog.packUpdateAvailable', {
+                      catalog: catalogPackVersionLabel,
+                      installed: installedPackVersionLabel,
+                    })}
+                  </p>
+                  <Button
+                    type="button"
+                    variant="default"
+                    size="sm"
+                    disabled={syncingPack || submitting}
+                    onClick={() => setShowPackUpdateConfirm(true)}
+                  >
+                    {syncingPack
+                      ? t('components.addApiConnectorDialog.packUpdateApplying')
+                      : t('components.addApiConnectorDialog.packUpdateApply')}
+                  </Button>
+                </AlertDescription>
+              </Alert>
+            ) : null}
             <div className="divide-y divide-border">
               <IdentitySection
                 submitting={submitting}
@@ -197,6 +257,38 @@ export function ApiConnectorFormDialog({
           </DialogFooter>
         </DialogContent>
       </Dialog>
+
+      <AlertDialog open={showPackUpdateConfirm} onOpenChange={setShowPackUpdateConfirm}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              {t('components.addApiConnectorDialog.packUpdateConfirmTitle')}
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              {t('components.addApiConnectorDialog.packUpdateConfirmDesc', {
+                catalog: catalogPackVersionLabel,
+                installed: installedPackVersionLabel,
+              })}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={syncingPack}>
+              {t('common.cancel')}
+            </AlertDialogCancel>
+            <AlertDialogAction
+              disabled={syncingPack}
+              onClick={(event) => {
+                event.preventDefault()
+                void handlePackSync()
+              }}
+            >
+              {syncingPack
+                ? t('components.addApiConnectorDialog.packUpdateApplying')
+                : t('components.addApiConnectorDialog.packUpdateConfirmAction')}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <AlertDialog open={showCloseConfirm} onOpenChange={setShowCloseConfirm}>
         <AlertDialogContent>

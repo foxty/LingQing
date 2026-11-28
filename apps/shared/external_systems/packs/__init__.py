@@ -1,5 +1,6 @@
-"""Installable API connector pack catalog."""
+"""Integration pack catalog: load and validate shipped manifests (no tenant persistence)."""
 
-from apps.shared.external_systems.packs.service import ApiConnectorPackService
+from apps.shared.external_systems.packs.catalog import IntegrationPackCatalog
+from apps.shared.external_systems.packs.loader import ApiConnectorPackCatalog
 
-__all__ = ["ApiConnectorPackService"]
+__all__ = ["ApiConnectorPackCatalog", "IntegrationPackCatalog"]

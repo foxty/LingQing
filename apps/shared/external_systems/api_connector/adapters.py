@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import dataclasses
+from dataclasses import replace
+from datetime import UTC, datetime
 from typing import Any
 
 from pydantic import BaseModel
@@ -18,10 +20,14 @@ from apps.shared.external_systems.api_connector.constants import (
     AUTH_TYPE_BEARER,
     AUTH_TYPE_CUSTOM,
     AUTH_TYPE_OAUTH2,
+    CONNECTOR_STATUS_ACTIVE,
+    OPERATION_SOURCE_MANUAL,
+    OPERATION_STATUS_ACTIVE,
     TOKEN_AUTH_METHOD_CLIENT_SECRET_BASIC,
     TOKEN_AUTH_METHOD_CLIENT_SECRET_POST,
 )
 from apps.shared.external_systems.api_connector.domain import (
+    ApiConnectorCredentialSubject,
     ApiConnectorDomain,
     ApiKeyAuthConfig,
     ApiOperationDomain,
@@ -33,6 +39,7 @@ from apps.shared.external_systems.api_connector.domain import (
     OAuth2AuthConfig,
     RatePolicyDomain,
 )
+from apps.shared.external_systems.api_connector.schema_parser import OperationSpec
 from apps.shared.external_systems.api_connector.schemas import (
     ApiConnectorResponse,
     ApiExecutionRulesSchema,
@@ -169,11 +176,135 @@ def connector_entity_to_domain(
         status=connector.status,
         credential_mode=effective_credential_mode(connector.credential_mode),
         pack_ref=connector.pack_ref,
+        installed_pack_version=connector.installed_pack_version,
         agent_instructions=connector.agent_instructions,
         execution_rules=ExecutionRulesDomain.from_raw(connector.execution_rules),
         created_at=connector.created_at,
         updated_at=connector.updated_at,
     )
+
+
+def connector_entity_to_credential_subject(connector: ApiConnector) -> ApiConnectorCredentialSubject:
+    return ApiConnectorCredentialSubject(
+        id=connector.id,
+        tenant_id=connector.tenant_id,
+        auth_type=connector.auth_type,
+        credential_mode=effective_credential_mode(connector.credential_mode),
+        auth_config_encrypted=connector.auth_config or {},
+    )
+
+
+def connector_domain_with_resolved_auth(
+    connector: ApiConnectorDomain,
+    auth_dict: dict[str, Any],
+) -> ApiConnectorDomain:
+    return replace(connector, auth_config=dict_to_auth_config(connector.auth_type, auth_dict))
+
+
+def new_connector_entity_from_create(
+    *,
+    tenant_id: int,
+    owner_id: int,
+    name: str,
+    description: str | None,
+    base_url: str,
+    auth_type: str,
+    auth_config_encrypted: dict[str, Any],
+    rate_policy: dict[str, Any],
+    schema_source_type: str,
+    schema_source_url: str | None,
+    credential_mode: str,
+    pack_ref: str | None,
+    installed_pack_version: str | None,
+    agent_instructions: str | None,
+    execution_rules: dict[str, Any],
+) -> ApiConnector:
+    return ApiConnector(
+        tenant_id=tenant_id,
+        owner_id=owner_id,
+        name=name,
+        description=description,
+        base_url=base_url,
+        auth_type=auth_type,
+        auth_config=auth_config_encrypted,
+        rate_policy=rate_policy,
+        schema_source_type=schema_source_type,
+        schema_source_url=schema_source_url,
+        status=CONNECTOR_STATUS_ACTIVE,
+        credential_mode=credential_mode,
+        pack_ref=pack_ref,
+        installed_pack_version=installed_pack_version,
+        agent_instructions=agent_instructions,
+        execution_rules=execution_rules,
+    )
+
+
+def imported_operation_domain_from_spec(
+    *,
+    connector_id: int,
+    owner_id: int,
+    spec: OperationSpec,
+) -> ApiOperationDomain:
+    return ApiOperationDomain.draft_imported_from_fields(
+        connector_id=connector_id,
+        owner_id=owner_id,
+        method=spec.method,
+        path_template=spec.path_template,
+        operation_id=spec.operation_id,
+        summary=spec.summary,
+        description=spec.description,
+        tags=spec.tags,
+        request_schema=spec.request_schema,
+        response_schema=spec.response_schema,
+        auth_requirement=spec.auth_requirement,
+    )
+
+
+def manual_operation_domain_from_values(
+    *,
+    connector_id: int,
+    owner_id: int,
+    method: str,
+    path_template: str,
+    operation_id: str | None,
+    summary: str,
+    description: str | None,
+    tags: list[str],
+    request_schema: dict[str, Any],
+    response_schema: dict[str, Any],
+    auth_requirement: str,
+    risk_level: str,
+) -> ApiOperationDomain:
+    now = datetime.now(UTC)
+    seed = f"{method}:{path_template}:{operation_id or ''}"
+    operation_uid = ApiOperationDomain.build_operation_uid(
+        connector_id=connector_id,
+        seed=seed,
+        source=OPERATION_SOURCE_MANUAL,
+    )
+    domain = ApiOperationDomain(
+        id=0,
+        connector_id=connector_id,
+        operation_uid=operation_uid,
+        method=method,
+        path_template=path_template,
+        operation_id=operation_id,
+        summary=summary,
+        description=description,
+        tags=tags,
+        request_schema=request_schema,
+        response_schema=response_schema,
+        auth_requirement=auth_requirement,
+        risk_level=risk_level,
+        source=OPERATION_SOURCE_MANUAL,
+        upstream_key=None,
+        content_hash=None,
+        status=OPERATION_STATUS_ACTIVE,
+        owner_id=owner_id,
+        created_at=now,
+        updated_at=now,
+    )
+    return replace(domain, content_hash=domain.spec_content_hash())
 
 
 def operation_entity_to_domain(
@@ -236,6 +367,7 @@ def connector_domain_to_response(connector: ApiConnectorDomain) -> ApiConnectorR
         rate_policy=ApiRatePolicySchema.from_domain(connector.rate_policy),
         execution_rules=ApiExecutionRulesSchema(**connector.execution_rules.to_dict()),
         pack_ref=connector.pack_ref,
+        installed_pack_version=connector.installed_pack_version,
         agent_instructions=connector.agent_instructions,
         schema_source_type=connector.schema_source_type,
         schema_source_url=connector.schema_source_url,
@@ -248,6 +380,55 @@ def connector_domain_to_response(connector: ApiConnectorDomain) -> ApiConnectorR
         created_at=connector.created_at,
         updated_at=connector.updated_at,
     )
+
+
+def operation_domain_to_new_entity(domain: ApiOperationDomain, *, tenant_id: int) -> ApiOperationIndex:
+    """Map domain to a new ORM row (insert). Persistence boundary only."""
+    return ApiOperationIndex(
+        tenant_id=tenant_id,
+        connector_id=domain.connector_id,
+        owner_id=domain.owner_id,
+        operation_uid=domain.operation_uid,
+        method=domain.method,
+        path_template=domain.path_template,
+        operation_id=domain.operation_id,
+        summary=domain.summary,
+        description=domain.description,
+        tags=domain.tags,
+        request_schema=domain.request_schema,
+        response_schema=domain.response_schema,
+        auth_requirement=domain.auth_requirement,
+        risk_level=domain.risk_level,
+        source=domain.source,
+        upstream_key=domain.upstream_key,
+        content_hash=domain.content_hash,
+        status=domain.status,
+    )
+
+
+def apply_operation_domain_to_entity(entity: ApiOperationIndex, domain: ApiOperationDomain) -> None:
+    """Copy mutable operation fields from domain onto an existing ORM row."""
+    entity.method = domain.method
+    entity.path_template = domain.path_template
+    entity.operation_uid = domain.operation_uid
+    entity.operation_id = domain.operation_id
+    entity.summary = domain.summary
+    entity.description = domain.description
+    entity.tags = domain.tags
+    entity.request_schema = domain.request_schema
+    entity.response_schema = domain.response_schema
+    entity.upstream_key = domain.upstream_key
+    entity.content_hash = domain.content_hash
+    entity.status = domain.status
+    entity.updated_at = domain.updated_at
+
+
+def apply_connector_pack_metadata_to_entity(entity: ApiConnector, domain: ApiConnectorDomain) -> None:
+    """Persist pack-driven connector metadata fields from domain."""
+    entity.agent_instructions = domain.agent_instructions
+    entity.execution_rules = domain.execution_rules.to_dict()
+    entity.installed_pack_version = domain.installed_pack_version
+    entity.updated_at = domain.updated_at
 
 
 def operation_domain_to_response(operation: ApiOperationDomain) -> ApiOperationResponse:

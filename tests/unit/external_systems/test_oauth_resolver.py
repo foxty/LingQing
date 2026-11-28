@@ -9,6 +9,7 @@ from apps.shared.db.models import DataSource
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
 from apps.shared.external_systems.credentials.domain import AUTH_TYPE_OAUTH2
+from apps.shared.external_systems.api_connector.domain import ApiConnectorCredentialSubject
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
 from apps.shared.external_systems.data_source.user_oauth import (
     USER_CREDENTIAL_AUTH_OAUTH2,
@@ -29,12 +30,12 @@ async def test_resolver_refreshes_expired_oauth_user_token(monkeypatch):
     cipher = FieldCipher("synthetic-oauth-resolver-key")
     db = SimpleNamespace(flush=AsyncMock())
     resolver = IntegrationCredentialResolver(db, cipher=cipher)
-    connector = SimpleNamespace(
+    connector = ApiConnectorCredentialSubject(
         id=31,
         tenant_id=17,
         credential_mode="user",
         auth_type="oauth2",
-        auth_config=cipher.encrypt_dict(
+        auth_config_encrypted=cipher.encrypt_dict(
             {
                 "authorize_url": "https://auth.example.test/authorize",
                 "token_url": "https://auth.example.test/token",

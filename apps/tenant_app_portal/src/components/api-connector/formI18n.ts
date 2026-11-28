@@ -19,6 +19,19 @@ i18n.addResourceBundle(
         credentialModeUser: 'Per-user (BYOT)',
         credentialModeOauthLocked: 'OAuth2 requires per-user (BYOT) credentials.',
         packLockedHint: 'Set by connector pack',
+        packUpdateTitle: 'Connector pack update',
+        packUpdateAvailable:
+          'Template v{{catalog}} is available (installed v{{installed}}). Update operations and agent instructions without changing OAuth client credentials.',
+        packUpdateInstalledUnknown: 'not recorded',
+        packUpdateApply: 'Update pack',
+        packUpdateConfirmTitle: 'Apply pack update?',
+        packUpdateConfirmDesc:
+          'Update this connector from v{{installed}} to v{{catalog}}. New API operations and agent guidance will be applied. OAuth client ID and secret on this connector are not changed.',
+        packUpdateConfirmAction: 'Apply update',
+        packUpdateApplying: 'Updating pack…',
+        packUpdateSuccess: 'Connector pack updated',
+        packUpdateReconnect:
+          'OAuth scopes changed. Ask users who use this connector to reconnect so new permissions apply.',
         authConfig: 'Authentication',
         configured: 'Configured',
         authType: 'Auth type',
@@ -75,6 +88,18 @@ i18n.addResourceBundle(
         credentialModeUser: '按用户（BYOT）',
         credentialModeOauthLocked: 'OAuth2 必须使用按用户（BYOT）凭证。',
         packLockedHint: '由连接器模板设定',
+        packUpdateTitle: '连接器模板有更新',
+        packUpdateAvailable:
+          '模板 v{{catalog}} 可用（当前 v{{installed}}）。可在不修改 OAuth 客户端密钥的情况下更新操作与 Agent 指引。',
+        packUpdateInstalledUnknown: '未记录',
+        packUpdateApply: '更新模板',
+        packUpdateConfirmTitle: '确认应用模板更新？',
+        packUpdateConfirmDesc:
+          '将此连接器从 v{{installed}} 更新到 v{{catalog}}。将应用新的 API 操作与 Agent 指引；不会更改连接器上的 OAuth 客户端 ID 与密钥。',
+        packUpdateConfirmAction: '确认更新',
+        packUpdateApplying: '正在更新模板…',
+        packUpdateSuccess: '连接器模板已更新',
+        packUpdateReconnect: 'OAuth 权限范围已变更，请使用该连接器的用户重新连接以获取新权限。',
         authConfig: '认证',
         configured: '已配置',
         authType: '认证类型',

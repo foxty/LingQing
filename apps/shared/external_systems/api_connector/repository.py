@@ -10,13 +10,15 @@ from sqlalchemy.sql.elements import ColumnElement
 from apps.shared.db.base_repository import BaseRepository
 from apps.shared.db.models import ApiConnector, ApiOperationIndex
 from apps.shared.external_systems.api_connector.constants import (
+    CONNECTOR_STATUS_ACTIVE,
     OPERATION_SOURCE_IMPORTED,
     OPERATION_SOURCE_MANUAL,
     OPERATION_STATUS_ACTIVE,
     OPERATION_STATUS_DISABLED,
     OPERATION_STATUS_STALE,
 )
-from apps.shared.external_systems.api_connector.domain import OperationStatus
+from apps.shared.external_systems.api_connector.domain import ConnectorExecutionLoad, OperationStatus
+from apps.shared.utils.field_cipher import FieldCipher
 
 
 class ApiConnectorRepository(BaseRepository[ApiConnector]):
@@ -32,6 +34,57 @@ class ApiConnectorRepository(BaseRepository[ApiConnector]):
             .where(ApiConnector.id == connector_id, ApiConnector.tenant_id == tenant_id)
         )
         return result.scalar_one_or_none()
+
+    async def get_domain_by_id_and_tenant(
+        self,
+        connector_id: int,
+        tenant_id: int,
+        *,
+        cipher: FieldCipher | None = None,
+    ):
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+
+        row = await self.get_by_id_and_tenant(connector_id, tenant_id)
+        if row is None:
+            return None
+        cipher = cipher or FieldCipher()
+        return connector_entity_to_domain(row, cipher=cipher)
+
+    async def get_domain_by_pack_ref(
+        self,
+        tenant_id: int,
+        pack_ref: str,
+        *,
+        cipher: FieldCipher | None = None,
+    ):
+        from apps.shared.external_systems.api_connector.adapters import connector_entity_to_domain
+
+        row = await self.get_by_tenant_and_pack_ref(tenant_id, pack_ref)
+        if row is None:
+            return None
+        cipher = cipher or FieldCipher()
+        return connector_entity_to_domain(row, cipher=cipher)
+
+    async def get_execution_load(
+        self,
+        connector_id: int,
+        tenant_id: int,
+        *,
+        cipher: FieldCipher | None = None,
+    ) -> ConnectorExecutionLoad | None:
+        from apps.shared.external_systems.api_connector.adapters import (
+            connector_entity_to_credential_subject,
+            connector_entity_to_domain,
+        )
+
+        row = await self.get_by_id_and_tenant(connector_id, tenant_id)
+        if row is None or row.status != CONNECTOR_STATUS_ACTIVE:
+            return None
+        cipher = cipher or FieldCipher()
+        return ConnectorExecutionLoad(
+            connector=connector_entity_to_domain(row, cipher=cipher),
+            credential_subject=connector_entity_to_credential_subject(row),
+        )
 
     async def get_by_tenant_and_name(self, tenant_id: int, name: str) -> ApiConnector | None:
         result = await self.db.execute(

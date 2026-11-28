@@ -3,8 +3,10 @@
 from __future__ import annotations
 
 import base64
-from dataclasses import dataclass, field
-from datetime import datetime
+import hashlib
+import json
+from dataclasses import dataclass, field, replace
+from datetime import UTC, datetime
 from typing import Any, Literal, Mapping, Sequence, TypedDict
 
 from apps.shared.core.exceptions import ValidationError
@@ -64,6 +66,25 @@ AuthRequirement = Literal[AUTH_REQUIREMENT_REQUIRED, AUTH_REQUIREMENT_NONE]
 RiskLevel = Literal[RISK_LEVEL_LOW, RISK_LEVEL_MEDIUM, RISK_LEVEL_HIGH]
 OperationStatus = Literal[OPERATION_STATUS_ACTIVE, OPERATION_STATUS_DISABLED, OPERATION_STATUS_STALE]
 OperationSource = Literal[OPERATION_SOURCE_IMPORTED, OPERATION_SOURCE_MANUAL]
+
+
+@dataclass(frozen=True)
+class ApiConnectorCredentialSubject:
+    """Identity + stored auth blob for credential resolution (no ORM)."""
+
+    id: int
+    tenant_id: int
+    auth_type: AuthType
+    credential_mode: CredentialModeStr
+    auth_config_encrypted: dict[str, Any]
+
+
+@dataclass(frozen=True)
+class ConnectorExecutionLoad:
+    """Connector snapshot for runtime execution (domain + credential port input)."""
+
+    connector: ApiConnectorDomain
+    credential_subject: ApiConnectorCredentialSubject
 
 
 class ExecutionRulesDict(TypedDict):
@@ -359,8 +380,26 @@ class ApiConnectorDomain(BaseDomainModel):
     owner_name: str | None = None
     credential_mode: CredentialModeStr = CREDENTIAL_MODE_SHARED
     pack_ref: str | None = None
+    installed_pack_version: str | None = None
     agent_instructions: str | None = None
     execution_rules: ExecutionRulesDomain = field(default_factory=ExecutionRulesDomain)
+
+    def assert_runnable_for_execution(self) -> None:
+        if self.status != CONNECTOR_STATUS_ACTIVE:
+            raise ValidationError(f"Api connector is not active: status={self.status}")
+
+    def apply_pack_manifest_metadata(
+        self,
+        *,
+        agent_instructions: str | None,
+        execution_rules: ExecutionRulesDomain,
+        installed_pack_version: str,
+        updated_at: datetime,
+    ) -> None:
+        self.agent_instructions = agent_instructions
+        self.execution_rules = execution_rules
+        self.installed_pack_version = installed_pack_version
+        self.updated_at = updated_at
 
     def build_headers(self, extra_headers: dict[str, Any] | None = None) -> dict[str, str]:
         """Build HTTP headers for API request based on authentication type.
@@ -618,6 +657,215 @@ class ApiOperationDomain(BaseDomainModel):
     last_vector_synced_at: datetime | None = None
     last_vector_sync_error: str | None = None
     last_vector_sync_failed_at: datetime | None = None
+
+    def assert_runnable_for_execution(self) -> None:
+        if self.status != OPERATION_STATUS_ACTIVE:
+            raise ValidationError(f"Api operation is not runnable: status={self.status}")
+
+    def is_pack_managed(self, pack_id: str) -> bool:
+        if pack_id in (self.tags or []):
+            return True
+        upstream = self.upstream_key or ""
+        return upstream.startswith("pack:")
+
+    def spec_content_hash(self) -> str:
+        return self.compute_content_hash(
+            method=self.method,
+            path_template=self.path_template,
+            operation_id=self.operation_id,
+            summary=self.summary,
+            description=self.description,
+            tags=self.tags,
+            request_schema=self.request_schema,
+            response_schema=self.response_schema,
+            auth_requirement=self.auth_requirement,
+        )
+
+    def needs_openapi_resync(self, incoming: ApiOperationDomain) -> bool:
+        if self.status == OPERATION_STATUS_STALE:
+            return True
+        return self.content_hash != incoming.content_hash
+
+    def apply_openapi_import(self, incoming: ApiOperationDomain, *, at: datetime) -> ApiOperationDomain:
+        next_status = self.status
+        if self.status != OPERATION_STATUS_DISABLED:
+            next_status = OPERATION_STATUS_ACTIVE
+        return replace(
+            self,
+            method=incoming.method,
+            path_template=incoming.path_template,
+            operation_id=incoming.operation_id,
+            summary=incoming.summary,
+            description=incoming.description,
+            tags=incoming.tags,
+            request_schema=incoming.request_schema,
+            response_schema=incoming.response_schema,
+            auth_requirement=incoming.auth_requirement,
+            upstream_key=incoming.upstream_key,
+            content_hash=incoming.content_hash,
+            status=next_status,
+            updated_at=at,
+        )
+
+    def marked_stale(self, *, at: datetime) -> ApiOperationDomain:
+        return replace(self, status=OPERATION_STATUS_STALE, updated_at=at)
+
+    @classmethod
+    def draft_imported_from_fields(
+        cls,
+        *,
+        connector_id: int,
+        owner_id: int,
+        method: str,
+        path_template: str,
+        operation_id: str | None,
+        summary: str,
+        description: str | None,
+        tags: list[str] | None,
+        request_schema: dict[str, Any] | None,
+        response_schema: dict[str, Any] | None,
+        auth_requirement: AuthRequirement,
+        now: datetime | None = None,
+    ) -> ApiOperationDomain:
+        at = now or datetime.now(UTC)
+        upstream_key = cls.build_upstream_key(method, path_template)
+        content_hash = cls.compute_content_hash(
+            method=method,
+            path_template=path_template,
+            operation_id=operation_id,
+            summary=summary,
+            description=description,
+            tags=tags,
+            request_schema=request_schema,
+            response_schema=response_schema,
+            auth_requirement=auth_requirement,
+        )
+        operation_uid = cls.build_operation_uid(
+            connector_id=connector_id,
+            seed=upstream_key,
+            source=OPERATION_SOURCE_IMPORTED,
+        )
+        return cls(
+            id=0,
+            connector_id=connector_id,
+            operation_uid=operation_uid,
+            method=method,
+            path_template=path_template,
+            operation_id=operation_id,
+            summary=summary,
+            description=description,
+            tags=list(tags or []),
+            request_schema=request_schema,
+            response_schema=response_schema,
+            auth_requirement=auth_requirement,
+            risk_level=RISK_LEVEL_MEDIUM,
+            source=OPERATION_SOURCE_IMPORTED,
+            upstream_key=upstream_key,
+            content_hash=content_hash,
+            status=OPERATION_STATUS_ACTIVE,
+            owner_id=owner_id,
+            created_at=at,
+            updated_at=at,
+        )
+
+    @classmethod
+    def draft_pack_managed(
+        cls,
+        *,
+        connector_id: int,
+        owner_id: int,
+        pack_id: str,
+        method: str,
+        path_template: str,
+        operation_id: str,
+        summary: str,
+        description: str | None,
+        request_schema: dict[str, Any],
+        response_schema: dict[str, Any],
+        target_status: OperationStatus,
+        operation_uid_seed: str,
+        now: datetime | None = None,
+    ) -> ApiOperationDomain:
+        at = now or datetime.now(UTC)
+        upstream_key = cls.build_pack_upstream_key(operation_id)
+        content_hash = cls.compute_content_hash(
+            method=method,
+            path_template=path_template,
+            operation_id=operation_id,
+            summary=summary,
+            description=description,
+            tags=[pack_id],
+            request_schema=request_schema,
+            response_schema=response_schema,
+            auth_requirement=AUTH_REQUIREMENT_REQUIRED,
+        )
+        return cls(
+            id=0,
+            connector_id=connector_id,
+            operation_uid=cls.build_operation_uid(
+                connector_id=connector_id,
+                seed=operation_uid_seed,
+                source=OPERATION_SOURCE_MANUAL,
+            ),
+            method=method,
+            path_template=path_template,
+            operation_id=operation_id,
+            summary=summary,
+            description=description,
+            tags=[pack_id],
+            request_schema=request_schema,
+            response_schema=response_schema,
+            auth_requirement=AUTH_REQUIREMENT_REQUIRED,
+            risk_level=RISK_LEVEL_MEDIUM,
+            source=OPERATION_SOURCE_MANUAL,
+            upstream_key=upstream_key,
+            content_hash=content_hash,
+            status=target_status,
+            owner_id=owner_id,
+            created_at=at,
+            updated_at=at,
+        )
+
+    @staticmethod
+    def build_operation_uid(*, connector_id: int, seed: str, source: str) -> str:
+        raw = f"{connector_id}:{source}:{seed}".encode()
+        return hashlib.sha256(raw).hexdigest()[:32]
+
+    @staticmethod
+    def build_upstream_key(method: str, path_template: str) -> str:
+        seed = f"{method.upper()}|{path_template.strip()}"
+        return hashlib.sha256(seed.encode()).hexdigest()[:32]
+
+    @staticmethod
+    def build_pack_upstream_key(operation_id: str) -> str:
+        return f"pack:{operation_id}"
+
+    @staticmethod
+    def compute_content_hash(
+        *,
+        method: str,
+        path_template: str,
+        operation_id: str | None,
+        summary: str | None,
+        description: str | None,
+        tags: list[str] | None,
+        request_schema: dict[str, Any] | None,
+        response_schema: dict[str, Any] | None,
+        auth_requirement: str,
+    ) -> str:
+        payload = {
+            "method": method,
+            "path_template": path_template,
+            "operation_id": operation_id,
+            "summary": summary,
+            "description": description,
+            "tags": tags,
+            "request_schema": request_schema,
+            "response_schema": response_schema,
+            "auth_requirement": auth_requirement,
+        }
+        encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(encoded.encode()).hexdigest()[:32]
 
     def to_searchable_text(self) -> str:
         """Build semantic/search text for vector indexing."""

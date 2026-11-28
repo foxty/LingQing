@@ -67,6 +67,7 @@ i18n.addResourceBundle('en', 'translation', {
     confirmDelete: 'Are you sure you want to delete "{{name}}"?',
     deleteSuccess: 'API connector deleted successfully',
     deleteFailed: 'Failed to delete API connector',
+    packUpdateBadge: 'Pack update',
   }
 }, true, true)
 
@@ -94,6 +95,7 @@ i18n.addResourceBundle('zh', 'translation', {
     confirmDelete: '确定要删除"{{name}}"吗？',
     deleteSuccess: 'API连接器删除成功',
     deleteFailed: '删除API连接器失败',
+    packUpdateBadge: '模板有更新',
   }
 }, true, true)
 
@@ -291,12 +293,19 @@ export default function ApiConnectorsPage() {
                     <TableRow key={connector.id}>
                       <TableCell className="py-2.5">
                         <div className="flex flex-col gap-1">
-                          <button
-                            className="text-sm font-medium hover:underline text-left"
-                            onClick={() => openConnectorManagement(connector.id)}
-                          >
-                            {connector.name}
-                          </button>
+                          <div className="flex flex-wrap items-center gap-2">
+                            <button
+                              className="text-sm font-medium hover:underline text-left"
+                              onClick={() => openConnectorManagement(connector.id)}
+                            >
+                              {connector.name}
+                            </button>
+                            {connector.pack_update_available ? (
+                              <Badge className="shrink-0 text-[10px] uppercase tracking-wide">
+                                {t('apiConnectors.packUpdateBadge')}
+                              </Badge>
+                            ) : null}
+                          </div>
                           {canReadTags && (connectorTagsMap[connector.id]?.length || 0) > 0 && (
                             <TagChips tags={connectorTagsMap[connector.id]} tagKeys={tagKeys} compact />
                           )}
@@ -396,6 +405,7 @@ export default function ApiConnectorsPage() {
       <InstallApiConnectorPackDialog
         open={packDialogOpen}
         onOpenChange={setPackDialogOpen}
+        connectors={connectors}
         onInstalled={(connector) => openConnectorManagement(connector.id)}
       />
 
