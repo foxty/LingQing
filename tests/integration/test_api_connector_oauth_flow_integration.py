@@ -389,8 +389,10 @@ async def test_expired_oauth_user_token_refresh_persists_binding(async_db_sessio
     assert connector_row is not None
 
     resolver = IntegrationCredentialResolver(async_db_session, cipher=cipher)
+    from apps.shared.external_systems.api_connector.adapters import connector_entity_to_credential_subject
+
     resolved = await resolver.resolve_api_connector_auth_config(
-        connector=connector_row,
+        connector=connector_entity_to_credential_subject(connector_row),
         actor=actor,
         purpose=IntegrationPurpose.EXECUTE,
     )

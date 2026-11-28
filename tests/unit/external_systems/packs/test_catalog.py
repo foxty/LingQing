@@ -1,6 +1,10 @@
+"""Builtin and synthetic API connector pack manifest catalog tests."""
+
 from pathlib import Path
 
+from apps.shared.external_systems.packs.catalog import IntegrationPackCatalog
 from apps.shared.external_systems.packs.loader import ApiConnectorPackCatalog
+from apps.shared.external_systems.packs.schemas import ApiConnectorPackManifest
 
 
 def test_pack_catalog_loads_minimal_manifest(tmp_path: Path):
@@ -127,3 +131,9 @@ def test_builtin_monday_pack_exposes_graphql_post():
     assert manifest.operations[0].operation_id == "monday_graphql"
     assert manifest.operations[0].method == "POST"
     assert manifest.operations[0].path == "/v2"
+
+
+def test_api_connector_catalog_satisfies_integration_pack_catalog_port():
+    catalog: IntegrationPackCatalog[ApiConnectorPackManifest] = ApiConnectorPackCatalog()
+    manifest = catalog.get("slack-user")
+    assert manifest.pack_id == "slack-user"

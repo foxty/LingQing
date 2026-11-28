@@ -13,6 +13,7 @@ DEFAULT_PACK_DIRECTORY = Path(__file__).resolve().parents[4] / "config" / "integ
 
 
 class ApiConnectorPackCatalog:
+    """Filesystem catalog; structurally implements ``IntegrationPackCatalog[ApiConnectorPackManifest]``."""
     def __init__(self, pack_directory: Path | None = None) -> None:
         self._directory = pack_directory or DEFAULT_PACK_DIRECTORY
 

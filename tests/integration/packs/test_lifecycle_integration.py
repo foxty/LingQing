@@ -1,4 +1,4 @@
-"""Integration: pack install + connector delete cascade (real Postgres)."""
+"""Integration: pack install, sync, and connector delete cascade (real Postgres)."""
 
 from __future__ import annotations
 
@@ -22,8 +22,8 @@ from apps.shared.external_systems.api_connector.domain import RatePolicyDomain
 from apps.shared.external_systems.api_connector.service import ApiConnectorService
 from apps.shared.external_systems.credentials.repository import UserIntegrationCredentialRepository
 from apps.shared.external_systems.packs.loader import ApiConnectorPackCatalog
-from apps.shared.external_systems.packs.schemas import InstallApiConnectorPackRequest
-from apps.shared.external_systems.packs.service import ApiConnectorPackService
+from apps.shared.external_systems.api_connector.schemas import InstallPackOAuthInput
+from apps.shared.external_systems.packs.versioning import build_pack_operation_upstream_key
 from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.utils.field_cipher import FieldCipher
 
@@ -61,32 +61,52 @@ async def test_builtin_slack_pack_install_persists_connector_and_operations(asyn
 
     catalog = ApiConnectorPackCatalog()
     manifest = catalog.get("slack-user")
-    service = ApiConnectorPackService(tenant.id, async_db_session, catalog=catalog)
-    request = InstallApiConnectorPackRequest(
-        pack_id="slack-user",
+    service = ApiConnectorService(tenant.id, async_db_session)
+    oauth = InstallPackOAuthInput(
         client_id="synthetic-client",
         client_secret="synthetic-secret",
         redirect_uri="https://api.example.test/integrations/oauth/callback",
     )
 
-    created = await service.install(actor=actor, request=request)
-    repeated = await service.install(actor=actor, request=request)
+    created_connector, created_summary = await service.install_integration_pack_for_actor(
+        actor=actor,
+        manifest=manifest,
+        oauth=oauth,
+    )
+    repeated_connector, repeated_summary = await service.install_integration_pack_for_actor(
+        actor=actor,
+        manifest=manifest,
+        oauth=InstallPackOAuthInput(client_id=None, client_secret=None, redirect_uri=None),
+    )
 
-    assert created.id == repeated.id
-    assert created.pack_ref == manifest.pack_ref
-    assert created.auth_type == "oauth2"
-    assert created.credential_mode == "user"
-    assert created.base_url == "https://slack.com/api"
-    assert created.execution_rules.default_request_encoding == "form"
-    assert created.execution_rules.success_json_path == "ok"
+    assert created_connector.id == repeated_connector.id
+    assert created_connector.pack_ref == manifest.pack_ref
+    assert created_connector.installed_pack_version == manifest.version
+    assert created_connector.auth_type == "oauth2"
+    assert created_connector.credential_mode == "user"
+    assert created_connector.base_url == "https://slack.com/api"
+    assert created_connector.execution_rules.default_request_encoding == "form"
+    assert created_connector.execution_rules.success_json_path == "ok"
+    assert created_summary.added == len(manifest.operations)
+    assert repeated_summary is not None
 
     connector_svc = ApiConnectorService(tenant_id=tenant.id, db_session=async_db_session)
-    operations = await connector_svc.operation_repo.list_by_connector(tenant.id, created.id)
+    operations = await connector_svc.operation_repo.list_by_connector(tenant.id, created_connector.id)
     assert {op.operation_id for op in operations} == {
         operation.operation_id for operation in manifest.operations
     }
-    assert all(op.connector_id == created.id for op in operations)
+    assert all(op.connector_id == created_connector.id for op in operations)
     assert all(op.tenant_id == tenant.id for op in operations)
+    assert all(
+        (op.upstream_key or "").startswith("pack:")
+        for op in operations
+        if op.operation_id
+    )
+    assert all(
+        op.upstream_key == build_pack_operation_upstream_key(op.operation_id)
+        for op in operations
+        if op.operation_id
+    )
 
 
 @pytest.mark.asyncio
@@ -200,7 +220,6 @@ async def test_delete_connector_removes_credentials_acl_ops_and_resource_index(
     )
     await async_db_session.flush()
 
-    # add_manual_operation registers a ResourceIndex row for the operation
     indexed = await async_db_session.execute(
         select(ResourceIndex).where(
             ResourceIndex.tenant_id == tenant.id,

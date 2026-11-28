@@ -1,11 +1,15 @@
-"""Service layer for API connector management and schema indexing."""
+"""Control plane: API connector and operation index lifecycle.
+
+Covers CRUD, OpenAPI/schema sync, manual operations, ABAC-enriched list/detail,
+and resource-index side effects. Pack install/sync and runtime HTTP execution
+live elsewhere (``packs/``, ``execution.py``).
+"""
 
 from __future__ import annotations
 
-import hashlib
-import json
+from dataclasses import replace
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -22,7 +26,7 @@ from apps.shared.core.exceptions import (
     ValidationError,
 )
 from apps.shared.core.transaction import transaction
-from apps.shared.db.models import AclGrant, ApiConnector, ApiOperationIndex, ResourceAcl
+from apps.shared.db.models import AclGrant, ApiConnector, ResourceAcl
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import (
     ABAC_ACTION_READ,
@@ -30,17 +34,21 @@ from apps.shared.domain.types import (
     RESOURCE_TYPE_API_CONNECTOR,
 )
 from apps.shared.external_systems.api_connector.adapters import (
+    apply_connector_pack_metadata_to_entity,
+    apply_operation_domain_to_entity,
     auth_config_to_dict,
     connector_domain_to_response,
     connector_entity_to_domain,
+    imported_operation_domain_from_spec,
+    manual_operation_domain_from_values,
+    new_connector_entity_from_create,
+    operation_domain_to_new_entity,
     operation_entity_to_domain,
 )
 from apps.shared.external_systems.api_connector.constants import (
     ALLOWED_HTTP_METHODS,
     AUTH_REQUIREMENT_REQUIRED,
     AUTH_TYPE_OAUTH2,
-    CONNECTOR_STATUS_ACTIVE,
-    OPERATION_SOURCE_IMPORTED,
     OPERATION_SOURCE_MANUAL,
     OPERATION_STATUS_ACTIVE,
     OPERATION_STATUS_DISABLED,
@@ -60,11 +68,19 @@ from apps.shared.external_systems.api_connector.domain import (
     RiskLevel,
     SchemaSourceType,
 )
+from apps.shared.external_systems.api_connector.operation_catalog import ApiOperationResourceIndexWriter
+from apps.shared.external_systems.api_connector.pack_operations import (
+    apply_pack_manifest,
+    install_integration_pack,
+    sync_installed_pack_for_connector,
+)
 from apps.shared.external_systems.api_connector.repository import ApiConnectorRepository, ApiOperationIndexRepository
 from apps.shared.external_systems.api_connector.schema_parser import OpenApiParser, OperationSpec, SchemaSourceResolver
 from apps.shared.external_systems.api_connector.schemas import (
     ApiConnectorResponse,
     ApiOperationStatsResponse,
+    InstallPackOAuthInput,
+    PackSyncSummaryDTO,
     SyncSchemaSummaryDTO,
 )
 from apps.shared.external_systems.byot_template_strip import strip_connector_auth_user_mode_template
@@ -77,13 +93,12 @@ from apps.shared.external_systems.domain.types import (
     UserConnectionStatus,
     effective_credential_mode,
 )
+from apps.shared.external_systems.packs.catalog import IntegrationPackCatalog
+from apps.shared.external_systems.packs.schemas import ApiConnectorPackManifest
+from apps.shared.external_systems.packs.versioning import pack_update_metadata
 from apps.shared.search.repository import ResourceIndexRepository
-from apps.shared.search.schemas import ResourceIndexCreateDTO
 from apps.shared.tag.repository import TagBindingRepository
 from apps.shared.utils.field_cipher import FieldCipher
-
-if TYPE_CHECKING:
-    from apps.shared.search.sync_service import ResourceIndexService
 from apps.shared.utils.logger import get_logger
 from apps.shared.utils.pagination import PaginationRequest
 
@@ -91,7 +106,7 @@ logger = get_logger(__name__)
 
 
 class ApiConnectorService:
-    """Manages API connectors and operation index lifecycle."""
+    """Control-plane use cases for connectors and indexed operations (desired state)."""
 
     def __init__(self, tenant_id: int, db_session: AsyncSession):
         self.tenant_id = tenant_id
@@ -99,19 +114,11 @@ class ApiConnectorService:
         self.connector_repo = ApiConnectorRepository(db_session)
         self.operation_repo = ApiOperationIndexRepository(db_session)
         self.cipher = FieldCipher()
-        self._resource_index_service: ResourceIndexService | None = None
+        self._operation_index_writer = ApiOperationResourceIndexWriter(
+            tenant_id=tenant_id,
+            db_session=db_session,
+        )
         self._resource_index_repo: ResourceIndexRepository | None = None
-
-    async def _get_resource_index_service(self) -> ResourceIndexService:
-        """Lazy-initialize ResourceIndexService."""
-        if self._resource_index_service is None:
-            from apps.shared.search.sync_service import ResourceIndexService
-
-            self._resource_index_service = await ResourceIndexService.create(
-                tenant_id=self.tenant_id,
-                db_session=self.db_session,
-            )
-        return self._resource_index_service
 
     def _get_resource_index_repo(self) -> ResourceIndexRepository:
         """Lazy-initialize ResourceIndexRepository."""
@@ -134,8 +141,9 @@ class ApiConnectorService:
         credential_mode: CredentialModeStr = CREDENTIAL_MODE_SHARED,
         execution_rules: ExecutionRulesDomain | None = None,
         pack_ref: str | None = None,
+        installed_pack_version: str | None = None,
         agent_instructions: str | None = None,
-    ) -> ApiConnectorDomain:
+    ) -> ApiConnectorResponse:
         existing = await self.connector_repo.get_by_tenant_and_name(self.tenant_id, name)
         if existing:
             raise DuplicateResourceError(f"API connector already exists: {name}")
@@ -151,20 +159,20 @@ class ApiConnectorService:
 
         encrypted_auth = prepare_auth_config_for_storage(auth_config_dict, cipher=self.cipher)
 
-        connector = ApiConnector(
+        connector = new_connector_entity_from_create(
             tenant_id=self.tenant_id,
             owner_id=owner_id,
             name=name,
             description=description,
             base_url=base_url,
             auth_type=auth_type,
-            auth_config=encrypted_auth,
+            auth_config_encrypted=encrypted_auth,
             rate_policy=self._to_rate_policy_dict(rate_policy),
             schema_source_type=schema_source_type,
             schema_source_url=schema_source_url,
-            status=CONNECTOR_STATUS_ACTIVE,
             credential_mode=credential_mode,
             pack_ref=pack_ref,
+            installed_pack_version=installed_pack_version,
             agent_instructions=agent_instructions,
             execution_rules=(execution_rules or ExecutionRulesDomain()).to_dict(),
         )
@@ -207,6 +215,12 @@ class ApiConnectorService:
                     resource_id=item.id,
                 )
                 updates["user_connection_status"] = UserConnectionStatus(status)
+            catalog_version, pack_update_available = pack_update_metadata(
+                pack_ref=item.pack_ref,
+                installed_pack_version=item.installed_pack_version,
+            )
+            updates["pack_catalog_version"] = catalog_version
+            updates["pack_update_available"] = pack_update_available
             enriched.append(item.model_copy(update=updates))
         return enriched
 
@@ -471,7 +485,7 @@ class ApiConnectorService:
         operations = await self.operation_repo.list_by_connector(self.tenant_id, connector_id)
         operation_ids = [operation.id for operation in operations]
         if operation_ids:
-            await self._delete_api_operation_resource_indexes(operation_ids)
+            await self._operation_index_writer.remove_for_operation_ids(operation_ids)
 
         deleted_bindings = await UserIntegrationCredentialRepository(self.db_session).delete_bindings_for_resource(
             tenant_id=self.tenant_id,
@@ -543,77 +557,36 @@ class ApiConnectorService:
         existing_imported = await self.operation_repo.list_imported_by_connector(self.tenant_id, connector.id)
         existing_by_upstream_key = {row.upstream_key: row for row in existing_imported if row.upstream_key}
 
-        incoming_by_upstream_key: dict[str, tuple[OperationSpec, str]] = {}
+        incoming_by_upstream_key: dict[str, ApiOperationDomain] = {}
         for spec in specs:
-            upstream_key = self._build_upstream_key(
-                method=spec.method,
-                path_template=spec.path_template,
+            draft = imported_operation_domain_from_spec(
+                connector_id=connector.id,
+                owner_id=connector.owner_id,
+                spec=spec,
             )
-            content_hash = self._build_operation_content_hash(spec)
-            incoming_by_upstream_key[upstream_key] = (spec, content_hash)
+            incoming_by_upstream_key[draft.upstream_key] = draft
 
         added = 0
         updated = 0
         unchanged = 0
-        for upstream_key, (spec, content_hash) in incoming_by_upstream_key.items():
+        now = datetime.now(UTC)
+        for upstream_key, draft in incoming_by_upstream_key.items():
             current = existing_by_upstream_key.get(upstream_key)
-            operation_uid = self._build_operation_uid(
-                connector_id=connector.id,
-                seed=upstream_key,
-                source=OPERATION_SOURCE_IMPORTED,
-            )
             if current is None:
-                entity = ApiOperationIndex(
-                    tenant_id=self.tenant_id,
-                    connector_id=connector.id,
-                    owner_id=connector.owner_id,
-                    operation_uid=operation_uid,
-                    method=spec.method,
-                    path_template=spec.path_template,
-                    operation_id=spec.operation_id,
-                    summary=spec.summary,
-                    description=spec.description,
-                    tags=spec.tags,
-                    request_schema=spec.request_schema,
-                    response_schema=spec.response_schema,
-                    auth_requirement=spec.auth_requirement,
-                    source=OPERATION_SOURCE_IMPORTED,
-                    upstream_key=upstream_key,
-                    content_hash=content_hash,
-                    status=OPERATION_STATUS_ACTIVE,
-                )
-                await self.operation_repo.create(entity)
-                await self._create_api_operation_resource_index(entity)
+                saved = await self.create_operation_domain(draft)
+                await self._operation_index_writer.create_for_operation(saved)
                 added += 1
                 continue
 
-            should_update = current.content_hash != content_hash
-            if current.status == OPERATION_STATUS_STALE:
-                should_update = True
-
-            if should_update:
-                current.method = spec.method
-                current.path_template = spec.path_template
-                current.operation_id = spec.operation_id
-                current.summary = spec.summary
-                current.description = spec.description
-                current.tags = spec.tags
-                current.request_schema = spec.request_schema
-                current.response_schema = spec.response_schema
-                current.auth_requirement = spec.auth_requirement
-                current.upstream_key = upstream_key
-                current.content_hash = content_hash
-                if current.status != OPERATION_STATUS_DISABLED:
-                    current.status = OPERATION_STATUS_ACTIVE
-                current.updated_at = datetime.now(UTC)
-                await self.operation_repo.update(current)
-                if current.status == OPERATION_STATUS_ACTIVE:
-                    await self._create_api_operation_resource_index(current)
-                else:
-                    await self._safe_remove_operation_index(current)
-                updated += 1
-            else:
+            current_domain = operation_entity_to_domain(current)
+            if not current_domain.needs_openapi_resync(draft):
                 unchanged += 1
+                continue
+
+            updated_domain = current_domain.apply_openapi_import(draft, at=now)
+            await self.update_operation_domain(updated_domain)
+            await self._operation_index_writer.refresh_for_operation(updated_domain)
+            updated += 1
 
         staled = 0
         # Mark upstream-removed imported operations as stale.
@@ -622,10 +595,9 @@ class ApiConnectorService:
                 continue
             if existing.status == OPERATION_STATUS_STALE:
                 continue
-            existing.status = OPERATION_STATUS_STALE
-            existing.updated_at = datetime.now(UTC)
-            await self.operation_repo.update(existing)
-            await self._safe_remove_operation_index(existing)
+            stale_domain = operation_entity_to_domain(existing).marked_stale(at=now)
+            await self.update_operation_domain(stale_domain)
+            await self._operation_index_writer.remove_for_operation(stale_domain)
             staled += 1
 
         connector.schema_metadata = schema_metadata
@@ -637,6 +609,136 @@ class ApiConnectorService:
             staled=staled,
             unchanged=unchanged,
         )
+
+    async def install_integration_pack_for_actor(
+        self,
+        *,
+        actor: ActorContext,
+        manifest: ApiConnectorPackManifest,
+        oauth: InstallPackOAuthInput,
+    ) -> tuple[ApiConnectorResponse, PackSyncSummaryDTO]:
+        return await install_integration_pack(self, actor=actor, manifest=manifest, oauth=oauth)
+
+    async def sync_installed_pack_for_connector_for_actor(
+        self,
+        *,
+        actor: ActorContext,
+        connector_id: int,
+        catalog: IntegrationPackCatalog[ApiConnectorPackManifest],
+    ) -> tuple[ApiConnectorResponse, PackSyncSummaryDTO]:
+        return await sync_installed_pack_for_connector(
+            self, actor=actor, connector_id=connector_id, catalog=catalog
+        )
+
+    async def apply_pack_manifest_for_actor(
+        self,
+        *,
+        connector_id: int,
+        actor: ActorContext,
+        manifest: ApiConnectorPackManifest,
+    ) -> tuple[ApiConnectorResponse, PackSyncSummaryDTO]:
+        return await apply_pack_manifest(self, connector_id=connector_id, actor=actor, manifest=manifest)
+
+    async def require_write_access_for_actor(self, actor: ActorContext, connector: ApiConnectorDomain) -> None:
+        allowed = await evaluate_resource_action(
+            db_session=self.db_session,
+            tenant_id=self.tenant_id,
+            user_id=actor.user_id,
+            user_role=actor.user_role,
+            resource_type=RESOURCE_TYPE_API_CONNECTOR,
+            resource_id=connector.id,
+            resource_owner_id=connector.owner_id,
+            action=ABAC_ACTION_WRITE,
+        )
+        if not allowed:
+            raise AuthorizationError("Write access denied to API connector")
+
+    async def get_connector_domain(self, connector_id: int) -> ApiConnectorDomain | None:
+        return await self.connector_repo.get_domain_by_id_and_tenant(
+            connector_id,
+            self.tenant_id,
+            cipher=self.cipher,
+        )
+
+    async def get_connector_by_pack_ref(self, pack_ref: str) -> ApiConnectorDomain | None:
+        return await self.connector_repo.get_domain_by_pack_ref(self.tenant_id, pack_ref, cipher=self.cipher)
+
+    async def save_connector_pack_metadata(self, connector: ApiConnectorDomain) -> None:
+        row = await self.connector_repo.get_by_id_and_tenant(connector.id, self.tenant_id)
+        if row is None:
+            raise ResourceNotFoundError(f"Api connector not found: {connector.id}")
+        apply_connector_pack_metadata_to_entity(row, connector)
+        await self.connector_repo.update(row)
+
+    async def sync_pack_oauth_scopes(self, connector_id: int, manifest_scopes: list[str]) -> tuple[bool, bool]:
+        from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
+            decrypt_auth_config_from_storage,
+            prepare_auth_config_for_storage,
+        )
+
+        row = await self.connector_repo.get_by_id_and_tenant(connector_id, self.tenant_id)
+        if row is None:
+            raise ResourceNotFoundError(f"Api connector not found: {connector_id}")
+        if row.auth_type != AUTH_TYPE_OAUTH2:
+            return False, False
+
+        decrypted = decrypt_auth_config_from_storage(row.auth_config or {}, cipher=self.cipher)
+        old_scopes = set(decrypted.get("scopes") or [])
+        new_scopes = set(manifest_scopes)
+        if old_scopes == new_scopes:
+            return False, False
+
+        decrypted["scopes"] = list(manifest_scopes)
+        row.auth_config = prepare_auth_config_for_storage(decrypted, cipher=self.cipher)
+        await self.connector_repo.update(row)
+        return True, bool(new_scopes - old_scopes)
+
+    async def list_operation_domains_for_connector(self, connector_id: int) -> list[ApiOperationDomain]:
+        rows = await self.operation_repo.list_by_connector(self.tenant_id, connector_id)
+        return [operation_entity_to_domain(row) for row in rows]
+
+    async def create_operation_domain(self, operation: ApiOperationDomain) -> ApiOperationDomain:
+        entity = operation_domain_to_new_entity(operation, tenant_id=self.tenant_id)
+        await self.operation_repo.create(entity)
+        return operation_entity_to_domain(entity)
+
+    async def update_operation_domain(self, operation: ApiOperationDomain) -> None:
+        entity = await self.operation_repo.get_by_id_and_tenant(operation.id, self.tenant_id)
+        if entity is None:
+            raise ResourceNotFoundError(f"Api operation not found: {operation.id}")
+        apply_operation_domain_to_entity(entity, operation)
+        await self.operation_repo.update(entity)
+
+    async def refresh_operation_resource_index(self, operation: ApiOperationDomain) -> None:
+        await self._operation_index_writer.refresh_for_operation(operation)
+
+    async def remove_operation_resource_index(self, operation: ApiOperationDomain) -> None:
+        await self._operation_index_writer.remove_for_operation(operation)
+
+    async def delete_operation_by_id(self, operation_id: int) -> None:
+        entity = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
+        if entity is None:
+            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
+        await self.operation_repo.delete(entity)
+
+    async def _load_operation_domain_or_raise(self, operation_id: int) -> ApiOperationDomain:
+        entity = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
+        if entity is None:
+            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
+        return operation_entity_to_domain(entity)
+
+    async def _require_operation_write_access(
+        self,
+        *,
+        actor: ActorContext,
+        operation_id: int,
+    ) -> ApiOperationDomain:
+        domain = await self._load_operation_domain_or_raise(operation_id)
+        connector = await self.get_connector_domain(domain.connector_id)
+        if connector is None:
+            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
+        await self.require_write_access_for_actor(actor, connector)
+        return domain
 
     async def add_manual_operation_for_actor(
         self,
@@ -654,22 +756,10 @@ class ApiConnectorService:
         auth_requirement: AuthRequirement = AUTH_REQUIREMENT_REQUIRED,
         risk_level: RiskLevel = RISK_LEVEL_MEDIUM,
     ) -> ApiOperationDomain:
-        connector = await self.connector_repo.get_by_id_and_tenant(connector_id, self.tenant_id)
-        if not connector:
+        connector = await self.get_connector_domain(connector_id)
+        if connector is None:
             raise ResourceNotFoundError(f"ApiConnector not found: {connector_id}")
-
-        can_write = await evaluate_resource_action(
-            db_session=self.db_session,
-            tenant_id=self.tenant_id,
-            user_id=actor.user_id,
-            user_role=actor.user_role,
-            resource_type=RESOURCE_TYPE_API_CONNECTOR,
-            resource_id=connector.id,
-            resource_owner_id=connector.owner_id,
-            action=ABAC_ACTION_WRITE,
-        )
-        if not can_write:
-            raise AuthorizationError("Write access denied to API connector")
+        await self.require_write_access_for_actor(actor, connector)
 
         method_upper = method.upper()
         if method_upper not in ALLOWED_HTTP_METHODS:
@@ -679,16 +769,9 @@ class ApiConnectorService:
         if not response_schema:
             raise ValidationError("response_schema is required for manual operation")
 
-        seed = f"{method_upper}:{path_template}:{operation_id or ''}"
-        entity = ApiOperationIndex(
-            tenant_id=self.tenant_id,
-            connector_id=connector.id,
+        domain = manual_operation_domain_from_values(
+            connector_id=connector_id,
             owner_id=actor.user_id,
-            operation_uid=self._build_operation_uid(
-                connector_id=connector.id,
-                seed=seed,
-                source=OPERATION_SOURCE_MANUAL,
-            ),
             method=method_upper,
             path_template=path_template,
             operation_id=operation_id,
@@ -699,15 +782,10 @@ class ApiConnectorService:
             response_schema=response_schema,
             auth_requirement=auth_requirement,
             risk_level=risk_level,
-            source=OPERATION_SOURCE_MANUAL,
-            upstream_key=None,
-            content_hash=None,
-            status=OPERATION_STATUS_ACTIVE,
         )
-        entity.content_hash = self._build_operation_content_hash_for_entity(entity)
-        created = await self.operation_repo.create(entity)
-        await self._create_api_operation_resource_index(created)
-        return operation_entity_to_domain(created)
+        created = await self.create_operation_domain(domain)
+        await self._operation_index_writer.create_for_operation(created)
+        return created
 
     async def update_operation_status_for_actor(
         self,
@@ -719,35 +797,11 @@ class ApiConnectorService:
         if status not in {OPERATION_STATUS_ACTIVE, OPERATION_STATUS_DISABLED}:
             raise ValidationError("Only active/disabled statuses are allowed for operation status updates")
 
-        operation = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
-        if not operation:
-            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
-
-        connector = await self.connector_repo.get_by_id_and_tenant(operation.connector_id, self.tenant_id)
-        if not connector:
-            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
-
-        can_write = await evaluate_resource_action(
-            db_session=self.db_session,
-            tenant_id=self.tenant_id,
-            user_id=actor.user_id,
-            user_role=actor.user_role,
-            resource_type=RESOURCE_TYPE_API_CONNECTOR,
-            resource_id=connector.id,
-            resource_owner_id=connector.owner_id,
-            action=ABAC_ACTION_WRITE,
-        )
-        if not can_write:
-            raise AuthorizationError("Write access denied to API operation")
-
-        operation.status = status
-        operation.updated_at = datetime.now(UTC)
-        updated = await self.operation_repo.update(operation)
-        if updated.status == OPERATION_STATUS_ACTIVE:
-            await self._create_api_operation_resource_index(updated)
-        else:
-            await self._safe_remove_operation_index(updated)
-        return operation_entity_to_domain(updated)
+        domain = await self._require_operation_write_access(actor=actor, operation_id=operation_id)
+        updated = replace(domain, status=status, updated_at=datetime.now(UTC))
+        await self.update_operation_domain(updated)
+        await self.refresh_operation_resource_index(updated)
+        return updated
 
     async def update_operation_for_actor(
         self,
@@ -765,90 +819,56 @@ class ApiConnectorService:
         auth_requirement: AuthRequirement | None = None,
         risk_level: RiskLevel | None = None,
     ) -> ApiOperationDomain:
-        operation = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
-        if not operation:
-            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
-        if operation.source != OPERATION_SOURCE_MANUAL:
+        domain = await self._require_operation_write_access(actor=actor, operation_id=operation_id)
+        if domain.source != OPERATION_SOURCE_MANUAL:
             raise ValidationError("Imported operations cannot be edited. Disable and add a manual operation instead")
 
-        connector = await self.connector_repo.get_by_id_and_tenant(operation.connector_id, self.tenant_id)
-        if not connector:
-            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
-
-        can_write = await evaluate_resource_action(
-            db_session=self.db_session,
-            tenant_id=self.tenant_id,
-            user_id=actor.user_id,
-            user_role=actor.user_role,
-            resource_type=RESOURCE_TYPE_API_CONNECTOR,
-            resource_id=connector.id,
-            resource_owner_id=connector.owner_id,
-            action=ABAC_ACTION_WRITE,
-        )
-        if not can_write:
-            raise AuthorizationError("Write access denied to API operation")
-
+        updates: dict[str, Any] = {}
         if method is not None:
             method_upper = method.upper()
             if method_upper not in ALLOWED_HTTP_METHODS:
                 raise ValidationError(f"Unsupported method: {method}")
-            operation.method = method_upper
+            updates["method"] = method_upper
         if path_template is not None:
-            operation.path_template = path_template
+            updates["path_template"] = path_template
         if operation_id_new is not None:
-            operation.operation_id = operation_id_new
+            updates["operation_id"] = operation_id_new
         if summary is not None:
-            operation.summary = summary
+            updates["summary"] = summary
         if description is not None:
-            operation.description = description
+            updates["description"] = description
         if tags is not None:
-            operation.tags = tags
+            updates["tags"] = tags
         if request_schema is not None:
-            operation.request_schema = request_schema
+            updates["request_schema"] = request_schema
         if response_schema is not None:
-            operation.response_schema = response_schema
+            updates["response_schema"] = response_schema
         if auth_requirement is not None:
-            operation.auth_requirement = auth_requirement
+            updates["auth_requirement"] = auth_requirement
         if risk_level is not None:
-            operation.risk_level = risk_level
+            updates["risk_level"] = risk_level
 
-        seed = f"{operation.method}:{operation.path_template}:{operation.operation_id or ''}"
-        operation.operation_uid = self._build_operation_uid(
-            connector_id=operation.connector_id,
+        updated = replace(domain, **updates)
+        seed = f"{updated.method}:{updated.path_template}:{updated.operation_id or ''}"
+        operation_uid = ApiOperationDomain.build_operation_uid(
+            connector_id=updated.connector_id,
             seed=seed,
             source=OPERATION_SOURCE_MANUAL,
         )
-        operation.content_hash = self._build_operation_content_hash_for_entity(operation)
-        operation.updated_at = datetime.now(UTC)
-        updated = await self.operation_repo.update(operation)
-        return operation_entity_to_domain(updated)
+        with_uid = replace(updated, operation_uid=operation_uid, updated_at=datetime.now(UTC))
+        with_hash = replace(with_uid, content_hash=with_uid.spec_content_hash())
+        await self.update_operation_domain(with_hash)
+        if with_hash.status == OPERATION_STATUS_ACTIVE:
+            await self._operation_index_writer.create_for_operation(with_hash)
+        return with_hash
 
     async def delete_operation_for_actor(self, *, operation_id: int, actor: ActorContext) -> None:
-        operation = await self.operation_repo.get_by_id_and_tenant(operation_id, self.tenant_id)
-        if not operation:
-            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
-        if operation.source != OPERATION_SOURCE_MANUAL:
+        domain = await self._require_operation_write_access(actor=actor, operation_id=operation_id)
+        if domain.source != OPERATION_SOURCE_MANUAL:
             raise ValidationError("Imported operations cannot be deleted. Disable and add a manual operation instead")
 
-        connector = await self.connector_repo.get_by_id_and_tenant(operation.connector_id, self.tenant_id)
-        if not connector:
-            raise ResourceNotFoundError(f"Api operation not found: {operation_id}")
-
-        can_write = await evaluate_resource_action(
-            db_session=self.db_session,
-            tenant_id=self.tenant_id,
-            user_id=actor.user_id,
-            user_role=actor.user_role,
-            resource_type=RESOURCE_TYPE_API_CONNECTOR,
-            resource_id=connector.id,
-            resource_owner_id=connector.owner_id,
-            action=ABAC_ACTION_WRITE,
-        )
-        if not can_write:
-            raise AuthorizationError("Write access denied to API operation")
-
-        await self._safe_remove_operation_index(operation)
-        await self.operation_repo.delete(operation)
+        await self.remove_operation_resource_index(domain)
+        await self.delete_operation_by_id(operation_id)
 
     async def list_operations_for_actor(
         self,
@@ -1044,124 +1064,6 @@ class ApiConnectorService:
         if rate_policy is None:
             return {}
         return rate_policy.to_policy_dict()
-
-    @staticmethod
-    def _build_operation_uid(connector_id: int, seed: str, source: str) -> str:
-        raw = f"{connector_id}:{source}:{seed}".encode()
-        return hashlib.sha256(raw).hexdigest()[:32]
-
-    @staticmethod
-    def _build_upstream_key(method: str, path_template: str) -> str:
-        # Deduplicate imported operations by HTTP method + URI template.
-        seed = f"{method.upper()}|{path_template.strip()}"
-        return hashlib.sha256(seed.encode()).hexdigest()[:32]
-
-    @staticmethod
-    def _build_operation_content_hash(spec: OperationSpec) -> str:
-        return ApiConnectorService._build_operation_content_hash_from_values(
-            method=spec.method,
-            path_template=spec.path_template,
-            operation_id=spec.operation_id,
-            summary=spec.summary,
-            description=spec.description,
-            tags=spec.tags,
-            request_schema=spec.request_schema,
-            response_schema=spec.response_schema,
-            auth_requirement=spec.auth_requirement,
-        )
-
-    @staticmethod
-    def _build_operation_content_hash_from_values(
-        *,
-        method: str,
-        path_template: str,
-        operation_id: str | None,
-        summary: str | None,
-        description: str | None,
-        tags: list[str] | None,
-        request_schema: dict[str, Any] | None,
-        response_schema: dict[str, Any] | None,
-        auth_requirement: str,
-    ) -> str:
-        payload = {
-            "method": method,
-            "path_template": path_template,
-            "operation_id": operation_id,
-            "summary": summary,
-            "description": description,
-            "tags": tags,
-            "request_schema": request_schema,
-            "response_schema": response_schema,
-            "auth_requirement": auth_requirement,
-        }
-        encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
-        return hashlib.sha256(encoded.encode()).hexdigest()[:32]
-
-    @staticmethod
-    def _build_operation_content_hash_for_entity(operation: ApiOperationIndex) -> str:
-        return ApiConnectorService._build_operation_content_hash_from_values(
-            method=operation.method,
-            path_template=operation.path_template,
-            operation_id=operation.operation_id,
-            summary=operation.summary,
-            description=operation.description,
-            tags=operation.tags,
-            request_schema=operation.request_schema,
-            response_schema=operation.response_schema,
-            auth_requirement=operation.auth_requirement,
-        )
-
-    async def _create_api_operation_resource_index(self, operation: ApiOperationIndex) -> None:
-        """Create ResourceIndex record for an API operation.
-
-        Flow 1: Use domain method to get searchable text → save as raw_content.
-        Tokenization and chunking happen in Flow 2 (sync job).
-        """
-        try:
-            async with self.db_session.begin_nested():
-                domain = operation_entity_to_domain(operation)
-                searchable_text = domain.to_searchable_text()
-                resource_index_svc = await self._get_resource_index_service()
-
-                raw_content = {
-                    "text": searchable_text,
-                    "meta": {},
-                }
-
-            await resource_index_svc.create_or_update(
-                ResourceIndexCreateDTO(
-                    tenant_id=self.tenant_id,
-                    resource_type=RESOURCE_TYPE_API_CONNECTOR,
-                    resource_id=operation.id,
-                    owner_id=operation.owner_id,
-                    raw_content=raw_content,
-                    content_updated_at=operation.updated_at,
-                    parent_id=operation.connector_id,
-                )
-            )
-        except Exception as exc:
-            logger.warning("Failed to create resource index for api operation %d: %s", operation.id, exc)
-
-    async def _delete_api_operation_resource_index(self, operation_id: int) -> None:
-        """Delete ResourceIndex record for an API operation."""
-        await self._delete_api_operation_resource_indexes([operation_id])
-
-    async def _delete_api_operation_resource_indexes(self, operation_ids: list[int]) -> None:
-        """Batch-delete ResourceIndex rows and vector chunks for API operations."""
-        if not operation_ids:
-            return
-        try:
-            resource_index_svc = await self._get_resource_index_service()
-            await resource_index_svc.delete_many(RESOURCE_TYPE_API_CONNECTOR, operation_ids)
-        except Exception as exc:
-            logger.warning(
-                "Failed to delete resource indexes for %s api operations: %s",
-                len(operation_ids),
-                exc,
-            )
-
-    async def _safe_remove_operation_index(self, operation: ApiOperationIndex) -> None:
-        await self._delete_api_operation_resource_index(operation.id)
 
     @staticmethod
     def _extract_schema_metadata(

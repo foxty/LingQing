@@ -1496,7 +1496,12 @@ class ApiConnector(Base):
     pack_ref: Mapped[str | None] = mapped_column(
         String(160),
         nullable=True,
-        comment="Optional immutable pack identity, for example slack-user@1",
+        comment="Pack major line (pack_id@major), e.g. slack-user@1 — not full semver",
+    )
+    installed_pack_version: Mapped[str | None] = mapped_column(
+        String(32),
+        nullable=True,
+        comment="Full manifest semver last applied, e.g. 1.2.0 (compare to catalog for updates)",
     )
     agent_instructions: Mapped[str | None] = mapped_column(
         Text,

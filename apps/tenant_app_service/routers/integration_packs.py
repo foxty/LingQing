@@ -5,15 +5,21 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from apps.shared.authz.ta_permissions import TenantAppPermissions as Permissions
 from apps.shared.core.auth import require_permission
+from apps.shared.core.exceptions import ResourceNotFoundError
 from apps.shared.db.session import get_db
 from apps.shared.domain.actor import ActorContext
-from apps.shared.external_systems.api_connector.schemas import ApiConnectorResponse
+from apps.shared.external_systems.api_connector.schemas import InstallPackOAuthInput
+from apps.shared.external_systems.api_connector.service import ApiConnectorService
+from apps.shared.external_systems.packs.loader import ApiConnectorPackCatalog
 from apps.shared.external_systems.packs.schemas import (
     ApiConnectorPackListResponse,
-    InstallApiConnectorPackRequest,
+    ApiConnectorPackSummary,
 )
-from apps.shared.external_systems.packs.service import ApiConnectorPackService
 from apps.shared.schemas.user import UserDTO
+from apps.tenant_app_service.routers.integration_pack_schemas import (
+    InstallApiConnectorPackRequest,
+    InstallApiConnectorPackResponse,
+)
 
 router = APIRouter(prefix="/integration-packs", tags=["integration-packs"])
 
@@ -27,13 +33,24 @@ async def list_api_connector_packs(
     db: AsyncSession = Depends(get_db),
     current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_READ)),
 ):
-    service = ApiConnectorPackService(current_user.tenant_id, db)
-    return ApiConnectorPackListResponse(items=service.list_packs())
+    del db, current_user
+    catalog = ApiConnectorPackCatalog()
+    return ApiConnectorPackListResponse(
+        items=[
+            ApiConnectorPackSummary(
+                pack_id=manifest.pack_id,
+                version=manifest.version,
+                name=manifest.connector.name,
+                description=manifest.connector.description,
+            )
+            for manifest in catalog.list()
+        ]
+    )
 
 
 @router.post(
     "/install",
-    response_model=ApiConnectorResponse,
+    response_model=InstallApiConnectorPackResponse,
     status_code=status.HTTP_201_CREATED,
 )
 async def install_api_connector_pack(
@@ -41,5 +58,19 @@ async def install_api_connector_pack(
     db: AsyncSession = Depends(get_db),
     current_user: UserDTO = Depends(require_permission(Permissions.API_CONNECTORS_CREATE)),
 ):
-    service = ApiConnectorPackService(current_user.tenant_id, db)
-    return await service.install(actor=_actor(current_user), request=body)
+    catalog = ApiConnectorPackCatalog()
+    try:
+        manifest = catalog.get(body.pack_id)
+    except ResourceNotFoundError as exc:
+        raise ResourceNotFoundError(str(exc)) from exc
+    service = ApiConnectorService(tenant_id=current_user.tenant_id, db_session=db)
+    connector, summary = await service.install_integration_pack_for_actor(
+        actor=_actor(current_user),
+        manifest=manifest,
+        oauth=InstallPackOAuthInput(
+            client_id=body.client_id,
+            client_secret=body.client_secret,
+            redirect_uri=body.redirect_uri,
+        ),
+    )
+    return InstallApiConnectorPackResponse(connector=connector, sync_summary=summary)

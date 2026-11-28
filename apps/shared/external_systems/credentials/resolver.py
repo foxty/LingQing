@@ -6,7 +6,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from apps.shared.core.exceptions import IntegrationNotConnectedError
-from apps.shared.db.models import ApiConnector, DataSource, UserIntegrationCredential
+from apps.shared.db.models import DataSource, UserIntegrationCredential
 from apps.shared.domain.actor import ActorContext
 from apps.shared.domain.types import RESOURCE_TYPE_API_CONNECTOR, RESOURCE_TYPE_DATA_SOURCE
 from apps.shared.external_systems.credentials.domain import AUTH_TYPE_OAUTH2, CREDENTIAL_STATUS_ACTIVE
@@ -80,16 +80,21 @@ class IntegrationCredentialResolver:
     async def resolve_api_connector_auth_config(
         self,
         *,
-        connector: ApiConnector,
+        connector,
         actor: ActorContext | None,
         purpose: IntegrationPurpose,
     ) -> dict[str, Any]:
         from apps.shared.external_systems.api_connector.auth_config_secrets_policy import (
             decrypt_auth_config_from_storage,
         )
+        from apps.shared.external_systems.api_connector.domain import ApiConnectorCredentialSubject
 
-        template = decrypt_auth_config_from_storage(connector.auth_config or {}, cipher=self.cipher)
-        mode = getattr(connector, "credential_mode", None) or "shared"
+        subject = connector if isinstance(connector, ApiConnectorCredentialSubject) else None
+        if subject is None:
+            raise TypeError("connector must be ApiConnectorCredentialSubject")
+
+        template = decrypt_auth_config_from_storage(subject.auth_config_encrypted, cipher=self.cipher)
+        mode = subject.credential_mode or "shared"
         if mode != CREDENTIAL_MODE_USER:
             return template
 
@@ -100,12 +105,12 @@ class IntegrationCredentialResolver:
             )
 
         binding, user_secrets = await self._load_active_user_secrets(
-            tenant_id=connector.tenant_id,
+            tenant_id=subject.tenant_id,
             user_id=actor.user_id,
             resource_type=RESOURCE_TYPE_API_CONNECTOR,
-            resource_id=connector.id,
+            resource_id=subject.id,
         )
-        if connector.auth_type == AUTH_TYPE_OAUTH2:
+        if subject.auth_type == AUTH_TYPE_OAUTH2:
             user_secrets = await self._maybe_refresh_oauth2_user_secrets(
                 binding=binding,
                 template=template,
@@ -115,7 +120,7 @@ class IntegrationCredentialResolver:
         return self._merge_user_secrets_into_connector_template(
             template=template,
             user_secrets=user_secrets,
-            auth_type=connector.auth_type,
+            auth_type=subject.auth_type,
         )
 
 

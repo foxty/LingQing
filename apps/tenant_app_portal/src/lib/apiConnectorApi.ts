@@ -26,6 +26,10 @@ export interface ApiConnector {
   rate_policy: Record<string, any>
   execution_rules?: Record<string, any>
   pack_ref?: string | null
+  installed_pack_version?: string | null
+  pack_catalog_version?: string | null
+  pack_update_available?: boolean
+  agent_instructions?: string | null
   schema_source_type: ApiConnectorSchemaSourceType
   schema_source_url: string | null
   schema_metadata: Record<string, any>
@@ -289,13 +293,36 @@ export async function listApiConnectorPacks(): Promise<ApiConnectorPackSummary[]
   return response.data.items
 }
 
+export interface SyncApiConnectorPackSummary {
+  added: number
+  updated: number
+  staled: number
+  unchanged: number
+  installed_pack_version: string
+  catalog_version: string
+  scopes_changed: boolean
+  scopes_expanded: boolean
+}
+
 export async function installApiConnectorPack(body: {
   pack_id: string
-  client_id: string
-  client_secret: string
+  client_id?: string
+  client_secret?: string
   redirect_uri?: string
-}): Promise<ApiConnector> {
-  const response = await api.post<ApiConnector>('/integration-packs/install', body)
+}): Promise<{ connector: ApiConnector; sync_summary: SyncApiConnectorPackSummary | null }> {
+  const response = await api.post<{
+    connector: ApiConnector
+    sync_summary: SyncApiConnectorPackSummary | null
+  }>('/integration-packs/install', body)
+  return response.data
+}
+
+export async function syncApiConnectorPack(
+  connectorId: number
+): Promise<{ connector: ApiConnector; summary: SyncApiConnectorPackSummary }> {
+  const response = await api.post<{ connector: ApiConnector; summary: SyncApiConnectorPackSummary }>(
+    `/api-connectors/${connectorId}/sync-pack`
+  )
   return response.data
 }
 

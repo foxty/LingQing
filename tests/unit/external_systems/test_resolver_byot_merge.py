@@ -7,6 +7,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from apps.shared.domain.actor import ActorContext
+from apps.shared.external_systems.api_connector.domain import ApiConnectorCredentialSubject
 from apps.shared.external_systems.credentials.resolver import IntegrationCredentialResolver
 from apps.shared.external_systems.domain.types import IntegrationPurpose
 from apps.shared.infra.oauth import OAuth2TokenClient, OAuthTokenSet
@@ -51,12 +52,12 @@ async def test_oauth_refresh_persists_binding_with_prepare_user_binding(monkeypa
     cipher = FieldCipher("synthetic-resolver-refresh-persist-key")
     db = SimpleNamespace(flush=AsyncMock())
     resolver = IntegrationCredentialResolver(db, cipher=cipher)
-    connector = SimpleNamespace(
+    connector = ApiConnectorCredentialSubject(
         id=31,
         tenant_id=17,
         credential_mode="user",
         auth_type="oauth2",
-        auth_config=cipher.encrypt_dict(
+        auth_config_encrypted=cipher.encrypt_dict(
             {
                 "token_url": "https://auth.example.test/token",
                 "client_id": "synthetic-client",

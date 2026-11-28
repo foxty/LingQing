@@ -207,7 +207,11 @@ async def test_delete_connector_batches_resource_index_cleanup(async_db_session,
     async def _fake_get_resource_index_service():
         return _FakeIndexService()
 
-    monkeypatch.setattr(service, "_get_resource_index_service", _fake_get_resource_index_service)
+    monkeypatch.setattr(
+        service._operation_index_writer,
+        "_get_resource_index_service",
+        _fake_get_resource_index_service,
+    )
 
     await service.delete_connector_for_actor(connector_id=connector.id, actor=actor)
 

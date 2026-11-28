@@ -2,9 +2,12 @@
 
 from __future__ import annotations
 
-from typing import Any, Protocol
+from typing import TYPE_CHECKING, Any, Protocol
 
 from apps.shared.domain.actor import ActorContext
+
+if TYPE_CHECKING:
+    from apps.shared.external_systems.api_connector.domain import ApiConnectorCredentialSubject
 
 
 class UserIntegrationAuthPort(Protocol):
@@ -26,7 +29,7 @@ class UserIntegrationAuthPort(Protocol):
     async def resolve_api_connector_auth_config(
         self,
         *,
-        connector: Any,
+        connector: ApiConnectorCredentialSubject,
         actor: ActorContext | None,
         purpose: str,
     ) -> dict[str, Any]: ...

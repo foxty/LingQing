@@ -39,12 +39,14 @@ from apps.shared.external_systems.credentials.dtos import (
 )
 from apps.shared.external_systems.credentials.service import UserIntegrationCredentialService
 from apps.shared.external_systems.oauth import IntegrationOAuthFlow
+from apps.shared.external_systems.packs.loader import ApiConnectorPackCatalog
 from apps.shared.schemas.pagination import PaginatedResponse
 from apps.shared.schemas.user import UserDTO
 from apps.shared.tag.adapters import domain_tag_value_to_api
 from apps.shared.tag.schemas import TagBindingCreateRequest, TagValueDTO
 from apps.shared.tag.service import TagService
 from apps.shared.utils.logger import get_logger
+from apps.tenant_app_service.routers.integration_pack_schemas import SyncPackResponse
 
 logger = get_logger(__name__)
 
@@ -339,6 +341,23 @@ async def delete_connector(
 ):
     service = await _service(db, current_user.tenant_id)
     await service.delete_connector_for_actor(connector_id=connector_id, actor=_actor_ctx(current_user))
+
+
+@router.post("/{connector_id}/sync-pack", response_model=SyncPackResponse)
+async def sync_pack_manifest(
+    connector_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: UserDTO = Depends(
+        require_permission([Permissions.API_CONNECTORS_CREATE, Permissions.API_CONNECTORS_MANAGE])
+    ),
+):
+    service = await _service(db, current_user.tenant_id)
+    connector, summary = await service.sync_installed_pack_for_connector_for_actor(
+        actor=_actor_ctx(current_user),
+        connector_id=connector_id,
+        catalog=ApiConnectorPackCatalog(),
+    )
+    return SyncPackResponse(connector=connector, summary=summary)
 
 
 @router.post("/{connector_id}/sync-schema", response_model=SyncSchemaResponse)

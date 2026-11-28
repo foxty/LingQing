@@ -305,7 +305,7 @@ async def test_execute_operation_rejects_disabled_operation(async_db_session):
     )
 
     exec_service = ApiConnectorExecutionService(tenant_id=tenant.id, db_session=async_db_session)
-    with pytest.raises(ResourceNotFoundError, match="Api operation not found"):
+    with pytest.raises(ResourceNotFoundError, match="not runnable"):
         await exec_service.execute_operation_for_actor(
             operation_uid=operation.operation_uid,
             actor=ActorContext(tenant_id=tenant.id, user_id=user.id, user_role=user.role),

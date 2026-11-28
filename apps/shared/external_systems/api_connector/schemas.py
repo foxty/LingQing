@@ -204,6 +204,9 @@ class ApiConnectorResponse(MaskedFieldsMixin):
     rate_policy: ApiRatePolicySchema
     execution_rules: ApiExecutionRulesSchema = Field(default_factory=ApiExecutionRulesSchema)
     pack_ref: str | None = None
+    installed_pack_version: str | None = None
+    pack_catalog_version: str | None = None
+    pack_update_available: bool = False
     agent_instructions: str | None = None
     schema_source_type: SchemaSourceType
     schema_source_url: str | None
@@ -237,6 +240,23 @@ class SyncSchemaSummaryDTO(BaseModel):
     updated: int
     staled: int
     unchanged: int
+
+
+class InstallPackOAuthInput(BaseModel):
+    client_id: str | None = None
+    client_secret: str | None = None
+    redirect_uri: str | None = None
+
+
+class PackSyncSummaryDTO(BaseModel):
+    added: int
+    updated: int
+    staled: int
+    unchanged: int
+    installed_pack_version: str
+    catalog_version: str
+    scopes_changed: bool = False
+    scopes_expanded: bool = False
 
 
 class SyncSchemaResponse(BaseModel):
