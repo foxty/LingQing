@@ -5,6 +5,7 @@ import { Message } from '@/types'
 import { getMessageAttachedArtifacts } from '@/lib/messageAttachedArtifacts'
 import { usePreferredDateTimeFormat, usePreferredTimezone } from '@/hooks/useCurrentUserProfile'
 import { formatChatTimestamp } from '@/lib/dateTime'
+import CollapsibleMessageBody from './CollapsibleMessageBody'
 import ContextChip from './ContextChip'
 import CopyIconButton, { useCopyToClipboard } from '@/components/CopyIconButton'
 
@@ -53,7 +54,14 @@ export default function HumanMessage({ message }: HumanMessageProps) {
               <span className="font-medium">{message.artifact.title}</span>
             </div>
           )}
-          <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          <CollapsibleMessageBody
+            contentLength={(message.content ?? '').length}
+            collapseCharThreshold={600}
+            maxHeightClass="max-h-64"
+            tone="onPrimary"
+          >
+            <p className="text-sm whitespace-pre-wrap">{message.content}</p>
+          </CollapsibleMessageBody>
           {copyStatus === 'error' ? (
             <p className="mt-1 text-right text-[11px] text-primary-foreground/90">{t('workbench.copyFailed')}</p>
           ) : null}

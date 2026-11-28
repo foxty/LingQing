@@ -1,4 +1,5 @@
 import './aiTurnMessageI18n'
+import CollapsibleMessageBody from './CollapsibleMessageBody'
 import { AlertCircle, Bot, CircleStop, Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -153,7 +154,12 @@ export default function AiTurnMessage({
             ) : null}
             {!showCancelledNoticeOnly && hasRealFinalContent ? (
               <div className="min-w-0 text-sm">
-                <MarkdownDocument content={turn.finalMessage.content} density="default" />
+                <CollapsibleMessageBody
+                  contentLength={turn.finalMessage.content.length}
+                  isStreaming={isStreaming}
+                >
+                  <MarkdownDocument content={turn.finalMessage.content} density="default" />
+                </CollapsibleMessageBody>
                 {showCancelledPartial ? (
                   <p className="mt-2 text-xs italic text-muted-foreground">{cancelledNotice}</p>
                 ) : null}
