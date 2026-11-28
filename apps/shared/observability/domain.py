@@ -360,7 +360,10 @@ class AgentSessionMetrics(BaseDomainModel):
         has_session_end = any(e.event_type == EventType.SESSION_END for e in events)
         has_errors = error_count > 0
         if has_session_end:
-            status = "error" if has_errors else "completed"
+            if has_errors:
+                status = "completed_with_tool_errors"
+            else:
+                status = "completed"
         else:
             status = "active"
 

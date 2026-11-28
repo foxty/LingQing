@@ -224,8 +224,10 @@ class MemoryStorage(MetricsStorage):
                             logger.warning(f"Failed to calculate duration: {e}")
                             metrics.duration_ms = 0.0
 
-                    # Update status based on errors (only if not already completed by SESSION_END)
-                    if metrics.error_count > 0 and metrics.status != "completed":
+                    # Align with AgentSessionMetrics.from_events (RFC Phase 1)
+                    if metrics.error_count > 0 and metrics.status == "completed":
+                        metrics.status = "completed_with_tool_errors"
+                    elif metrics.error_count > 0 and metrics.status == "active":
                         metrics.status = "error"
 
                 return metrics

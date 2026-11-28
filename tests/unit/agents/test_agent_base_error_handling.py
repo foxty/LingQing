@@ -165,6 +165,86 @@ class TestToolLimitAndRunLifecycle:
         }
         assert agent._should_continue(state) == "save_messages"
 
+    def test_should_continue_routes_to_tool_node_until_loop_exceeds_max(self, agent):
+        max_loop = agent.agent_config.max_loop_iterations
+        state = {
+            "messages": [AIMessage(id=str(uuid4()), content="", tool_calls=[{"name": "x", "args": {}, "id": "1"}])],
+            "loop_count": max_loop,
+            "tool_call_counts": {},
+        }
+        assert agent._should_continue(state) == "tool_node"
+
+        state_over = {**state, "loop_count": max_loop + 1, "messages": [AIMessage(id=str(uuid4()), content="done")]}
+        assert agent._should_continue(state_over) == "save_messages"
+
+    def test_should_continue_save_when_over_max_with_dangling_tool_calls(self, agent):
+        max_loop = agent.agent_config.max_loop_iterations
+        state = {
+            "loop_count": max_loop + 1,
+            "tool_call_counts": {},
+            "messages": [
+                AIMessage(
+                    id=str(uuid4()),
+                    content="",
+                    tool_calls=[{"name": "run_sql_query_on_datasource", "args": {}, "id": "1"}],
+                )
+            ],
+        }
+        assert agent._should_continue(state) == "save_messages"
+
+
+class TestFinalizeTextOnlyHelpers:
+    def test_is_finalize_when_tool_limit_blocked(self, agent):
+        assert agent._is_finalize_text_only({"tool_limit_blocked": True, "loop_count": 0})
+
+    def test_is_finalize_when_loop_count_at_max(self, agent):
+        cap = agent.agent_config.max_loop_iterations
+        assert agent._is_finalize_text_only({"loop_count": cap}, loop_count=cap)
+        assert not agent._is_finalize_text_only({"loop_count": cap - 1}, loop_count=cap - 1)
+
+    def test_finalize_system_message_tool_limit(self, agent):
+        msg = agent._finalize_system_message({"tool_limit_blocked": True, "loop_count": 0}, 0)
+        assert msg is not None
+        assert "tool" in msg.content.lower()
+        assert "maximum call limit" in msg.content.lower()
+
+    def test_finalize_system_message_max_loop(self, agent):
+        cap = agent.agent_config.max_loop_iterations
+        msg = agent._finalize_system_message({"loop_count": cap}, cap)
+        assert msg is not None
+        assert "Maximum agent iterations" in msg.content
+
+    @pytest.mark.asyncio
+    async def test_max_loop_finalize_pass_uses_no_tools_and_strips_tool_calls(self, agent, config):
+        max_loop = agent.agent_config.max_loop_iterations
+        state = {
+            "messages": [HumanMessage(id=str(uuid4()), content="hello")],
+            "loop_count": max_loop,
+            "tool_call_counts": {},
+        }
+        mock_model = MagicMock()
+        mock_model.ainvoke = AsyncMock(
+            return_value=AIMessage(
+                id=str(uuid4()),
+                content="",
+                tool_calls=[{"name": "run_sql_query_on_datasource", "args": {}, "id": "t1"}],
+            )
+        )
+        captured: dict[str, object] = {}
+
+        async def capture_get_or_create(**kwargs):
+            captured["tools"] = kwargs.get("tools")
+            return mock_model
+
+        with patch.object(agent._model_binding_manager, "get_or_create", side_effect=capture_get_or_create):
+            update = await agent._llm_call(state, config)
+
+        assert captured["tools"] == []
+        final_ai = update["messages"][-1]
+        assert final_ai.content
+        assert not getattr(final_ai, "tool_calls", None)
+        assert agent._should_continue(update) == "save_messages"
+
     @pytest.mark.asyncio
     async def test_persist_run_messages_marks_awaiting_hitl_once(self, agent, runtime_context):
         run_id = str(uuid4())

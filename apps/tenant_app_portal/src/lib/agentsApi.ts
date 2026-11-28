@@ -62,6 +62,53 @@ export interface AgentCapabilityConfig {
   api_connector_ids: number[]
   platform_capabilities: string[]
   model_profile_id?: number | null
+  /** Effective value from GET; omit or null on write to inherit platform default. */
+  max_loop_iterations?: number | null
+}
+
+/** Align with backend ``MAX_LOOP_ITERATIONS_UPPER``. */
+export const AGENT_MAX_LOOP_ITERATIONS_MIN = 1
+export const AGENT_MAX_LOOP_ITERATIONS_MAX = 200
+
+export function formatAgentMaxLoopInputValue(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return ''
+  }
+  return String(value)
+}
+
+/**
+ * Parse max-loop text input. Returns `null` for empty (inherit platform default).
+ * Returns `undefined` when the raw string is not a valid integer in range (caller should ignore).
+ */
+export function parseAgentMaxLoopInputChange(
+  raw: string
+): number | null | undefined {
+  const trimmed = raw.trim()
+  if (!trimmed) {
+    return null
+  }
+  const parsed = Number(trimmed)
+  if (!Number.isInteger(parsed)) {
+    return undefined
+  }
+  if (parsed < AGENT_MAX_LOOP_ITERATIONS_MIN || parsed > AGENT_MAX_LOOP_ITERATIONS_MAX) {
+    return undefined
+  }
+  return parsed
+}
+
+export function validateAgentMaxLoopIterations(
+  value: number | null | undefined,
+  rangeMessage: string
+): string | undefined {
+  if (value === null || value === undefined) {
+    return undefined
+  }
+  if (!Number.isInteger(value) || value < AGENT_MAX_LOOP_ITERATIONS_MIN || value > AGENT_MAX_LOOP_ITERATIONS_MAX) {
+    return rangeMessage
+  }
+  return undefined
 }
 
 export interface AgentAttachmentAccessItem {
@@ -108,17 +155,20 @@ export interface AgentSkillCatalogItem {
 export type AgentFormFieldErrors = {
   name?: string
   systemPrompt?: string
+  maxLoopIterations?: string
 }
 
 const AGENT_WRITE_FIELD_LOC: Record<string, keyof AgentFormFieldErrors> = {
   name: 'name',
   system_prompt: 'systemPrompt',
+  'config.max_loop_iterations': 'maxLoopIterations',
 }
 
 export function validateAgentFormFields(
   name: string,
   systemPrompt: string,
-  messages: { nameRequired: string; promptRequired: string }
+  messages: { nameRequired: string; promptRequired: string; maxLoopIterationsRange?: string },
+  maxLoopIterations?: number | null
 ): AgentFormFieldErrors {
   const errors: AgentFormFieldErrors = {}
   if (!name.trim()) {
@@ -127,11 +177,20 @@ export function validateAgentFormFields(
   if (!systemPrompt.trim()) {
     errors.systemPrompt = messages.promptRequired
   }
+  if (messages.maxLoopIterationsRange) {
+    const maxLoopError = validateAgentMaxLoopIterations(
+      maxLoopIterations,
+      messages.maxLoopIterationsRange
+    )
+    if (maxLoopError) {
+      errors.maxLoopIterations = maxLoopError
+    }
+  }
   return errors
 }
 
 export function hasAgentFormFieldErrors(errors: AgentFormFieldErrors): boolean {
-  return Boolean(errors.name || errors.systemPrompt)
+  return Boolean(errors.name || errors.systemPrompt || errors.maxLoopIterations)
 }
 
 export function getAgentFormFieldErrors(err: unknown): AgentFormFieldErrors {

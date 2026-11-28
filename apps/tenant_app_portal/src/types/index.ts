@@ -99,6 +99,8 @@ export interface SessionMetrics {
   end_time: string
   model_usage?: Record<string, { calls: number; tokens: number }>
   thinking?: SessionThinkingMetrics | null
+  status?: string
+  error_count?: number
 }
 
 export interface ToolCallMetrics {

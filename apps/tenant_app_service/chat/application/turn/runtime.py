@@ -60,14 +60,10 @@ class ChatTurnRuntimeMixin:
         actor = ActorContext(tenant_id=current_user.tenant_id, user_id=current_user.id, user_role=current_user.role)
         domain = await catalog.require_agent_access(agent_id=agent_id, actor=actor, action=ABAC_ACTION_READ)
 
-        from apps.tenant_app_service.agents.custom_agent_loaded_config import (
-            build_custom_agent_loaded_config,
-            runtime_defaults_from_system_agent,
-        )
+        from apps.tenant_app_service.agents.custom_agent_loaded_config import build_custom_agent_loaded_config
         from apps.tenant_app_service.agents.system_agent_config import get_config_loader
 
         loader = get_config_loader()
-        yaml_one = loader.get_system_agent_config(SYSTEM_AGENT_ONE_ID, materialize=False) or {}
         assignable_skills = resolve_assignable_skills(
             tenant_id=current_user.tenant_id, user_id=current_user.id
         )
@@ -79,7 +75,6 @@ class ChatTurnRuntimeMixin:
             domain=domain,
             derived_tool_names=derived_tool_names,
             loader=loader,
-            runtime_defaults=runtime_defaults_from_system_agent(yaml_one),
         )
 
         revision = domain.updated_at.isoformat() if domain.updated_at else "0"

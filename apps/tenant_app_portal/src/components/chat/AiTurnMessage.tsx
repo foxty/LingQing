@@ -3,7 +3,6 @@ import { AlertCircle, Bot, CircleStop, Loader2 } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { AGENT_RUN_STATUS, messageAgentRunStatus } from '@/lib/agentRunStatus'
-import { copyToClipboard } from '@/lib/utils'
 import { AiTurn } from '@/lib/chatTurns'
 import { usePreferredDateTimeFormat, usePreferredTimezone } from '@/hooks/useCurrentUserProfile'
 import MarkdownDocument from '@/components/markdown/MarkdownDocument'
@@ -11,6 +10,7 @@ import type { MessageFeedback } from '@/types'
 import AiTurnExecutionDetails from './AiTurnExecutionDetails'
 import AiTurnMessageFooter from './AiTurnMessageFooter'
 import AiTurnSessionMetricsPanel from './AiTurnSessionMetricsPanel'
+import { useCopyToClipboard } from '@/components/CopyIconButton'
 import {
   AI_TURN_BUBBLE_WIDTH,
   getProcessBadges,
@@ -40,7 +40,10 @@ export default function AiTurnMessage({
   const dateTimeFormat = usePreferredDateTimeFormat()
   const [showProcessDetails, setShowProcessDetails] = useState(defaultProcessOpen)
   const [showSessionMetrics, setShowSessionMetrics] = useState(false)
-  const [copyStatus, setCopyStatus] = useState<'idle' | 'copied' | 'error'>('idle')
+  const { status: copyStatus, copy: handleCopyFinalMessage } = useCopyToClipboard(
+    turn.finalMessage.content ?? '',
+    turn.id
+  )
   const [localFeedback, setLocalFeedback] = useState<MessageFeedback | undefined>(
     turn.finalMessage.feedback
   )
@@ -52,21 +55,6 @@ export default function AiTurnMessage({
   useEffect(() => {
     setShowProcessDetails(defaultProcessOpen)
   }, [defaultProcessOpen, turn.id])
-
-  useEffect(() => {
-    setCopyStatus('idle')
-  }, [turn.id])
-
-  const handleCopyFinalMessage = async () => {
-    const text = turn.finalMessage.content?.trim()
-    if (!text) {
-      setCopyStatus('error')
-      return
-    }
-
-    const success = await copyToClipboard(text)
-    setCopyStatus(success ? 'copied' : 'error')
-  }
 
   const isError = turn.finalMessage.content.startsWith('❌')
   const cancelledNotice = t('workbench.runCancelledInline')

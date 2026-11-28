@@ -17,7 +17,7 @@ from apps.tenant_app_service.agents.domain import RETENTION_LONG_LIVED, PromptCo
 
 logger = get_logger(__name__)
 
-TRANSIENT_COMPRESS_MAX_CHARS = 200
+TRANSIENT_COMPRESS_MAX_CHARS = 2000
 
 
 def _older_tool_message_indexes(messages: List[BaseMessage]) -> set[int]:

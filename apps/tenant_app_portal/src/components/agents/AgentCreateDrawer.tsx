@@ -36,7 +36,7 @@ export default function AgentCreateDrawer({
 }: AgentCreateDrawerProps) {
   const { t } = useTranslation()
   const createMutation = useCreateAgent()
-  const { skills, llmProfiles } = useAgentFormOptions(open)
+  const { skills, llmProfiles, platformMaxLoopIterations } = useAgentFormOptions(open)
 
   const [formName, setFormName] = useState('')
   const [formPrompt, setFormPrompt] = useState('')
@@ -50,16 +50,27 @@ export default function AgentCreateDrawer({
     }
     setFormName('')
     setFormPrompt(defaultPrompt)
-    setFormConfig(emptyAgentConfig())
+    setFormConfig({
+      ...emptyAgentConfig(),
+      ...(platformMaxLoopIterations != null
+        ? { max_loop_iterations: platformMaxLoopIterations }
+        : {}),
+    })
     setFormError(null)
     setFieldErrors({})
-  }, [defaultPrompt, open])
+  }, [defaultPrompt, open, platformMaxLoopIterations])
 
   const saveCreate = async () => {
-    const clientErrors = validateAgentFormFields(formName, formPrompt, {
-      nameRequired: t('agents.validation.nameRequired'),
-      promptRequired: t('agents.validation.promptRequired'),
-    })
+    const clientErrors = validateAgentFormFields(
+      formName,
+      formPrompt,
+      {
+        nameRequired: t('agents.validation.nameRequired'),
+        promptRequired: t('agents.validation.promptRequired'),
+        maxLoopIterationsRange: t('agents.validation.maxLoopIterationsRange'),
+      },
+      formConfig.max_loop_iterations
+    )
     if (hasAgentFormFieldErrors(clientErrors)) {
       setFieldErrors(clientErrors)
       setFormError(null)
@@ -104,6 +115,7 @@ export default function AgentCreateDrawer({
             skills={skills}
             formResourceKey={open ? 'create' : 'closed'}
             llmProfiles={llmProfiles}
+            platformMaxLoopIterations={platformMaxLoopIterations}
             saving={createMutation.isPending}
             showActions={false}
             onNameChange={(value) => {

@@ -34,6 +34,7 @@ import {
   selectedAttachmentOptions,
   type AgentAttachmentPickerKind,
 } from '@/lib/agentAttachmentPicker'
+import { useAgentMaxLoopIterationsField } from '@/hooks/useAgentMaxLoopIterationsField'
 import { usePlatformCapabilities } from '@/hooks/useAgents'
 import type { LLMModelProfile } from '@/lib/llmConfigApi'
 
@@ -79,9 +80,13 @@ const agentFormResources = {
     modelProfile: 'Model',
     modelProfileHint: 'Override the tenant default LLM for this agent.',
     tenantDefaultModel: 'Tenant default',
+    maxLoopIterations: 'Max loop iterations',
+    maxLoopIterationsHint:
+      'LLM↔tool turns before the run stops. Clear the field to use the platform default ({{default}}).',
     validation: {
       nameRequired: 'Name is required.',
       promptRequired: 'System prompt is required.',
+      maxLoopIterationsRange: 'Enter a number from 1 to 200, or clear the field for the platform default.',
     },
   },
   zh: {
@@ -118,9 +123,12 @@ const agentFormResources = {
     modelProfile: '模型',
     modelProfileHint: '覆盖租户默认 LLM，留空则使用租户默认。',
     tenantDefaultModel: '租户默认',
+    maxLoopIterations: '最大循环次数',
+    maxLoopIterationsHint: 'LLM 与工具往返的上限。清空则使用平台默认值（{{default}}）。',
     validation: {
       nameRequired: '请填写名称。',
       promptRequired: '请填写系统提示词。',
+      maxLoopIterationsRange: '请输入 1–200 之间的数字，或清空使用平台默认值。',
     },
   },
 } as const
@@ -150,6 +158,8 @@ type AgentSettingsFormProps = {
   /** Resets picker label cache when switching agents or after save. */
   formResourceKey?: string
   llmProfiles: LLMModelProfile[]
+  /** Platform default for max loop (from Agent One GET; hint when clearing an override). */
+  platformMaxLoopIterations?: number | null
   readOnly?: boolean
   saving?: boolean
   onNameChange: (value: string) => void
@@ -185,6 +195,7 @@ export default function AgentSettingsForm({
   attachmentAccess,
   formResourceKey,
   llmProfiles,
+  platformMaxLoopIterations,
   readOnly = false,
   saving = false,
   onNameChange,
@@ -304,6 +315,14 @@ export default function AgentSettingsForm({
 
   const showFormActions = showActions && !readOnly && onSave
 
+  const onMaxLoopValueChange = useCallback(
+    (max_loop_iterations: number | null) => {
+      onConfigChange({ ...formConfig, max_loop_iterations })
+    },
+    [formConfig, onConfigChange]
+  )
+  const maxLoopField = useAgentMaxLoopIterationsField(formConfig.max_loop_iterations, onMaxLoopValueChange)
+
   return (
     <div className="space-y-4">
       {formError ? (
@@ -323,6 +342,28 @@ export default function AgentSettingsForm({
                 onChange={(event) => onNameChange(event.target.value)}
                 disabled={readOnly}
                 errorMsg={fieldErrors.name}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="agent-max-loop">{t('agents.maxLoopIterations')}</Label>
+              <p className="text-xs text-muted-foreground">
+                {t('agents.maxLoopIterationsHint', {
+                  default: platformMaxLoopIterations ?? '—',
+                })}
+              </p>
+              <Input
+                id="agent-max-loop"
+                type={maxLoopField.type}
+                min={maxLoopField.min}
+                max={maxLoopField.max}
+                inputMode={maxLoopField.inputMode}
+                placeholder={
+                  platformMaxLoopIterations != null ? String(platformMaxLoopIterations) : undefined
+                }
+                value={maxLoopField.inputValue}
+                onChange={(event) => maxLoopField.onInputChange(event.target.value)}
+                disabled={readOnly}
+                errorMsg={fieldErrors.maxLoopIterations}
               />
             </div>
             <div className="space-y-2">

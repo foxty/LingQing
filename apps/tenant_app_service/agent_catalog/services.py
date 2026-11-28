@@ -38,7 +38,12 @@ from apps.shared.llm_providers.service import LLMProviderConfigService
 from apps.shared.observability.dtos import TenantUsageStatsDTO
 from apps.shared.observability.service import ObservabilityService
 from apps.shared.utils.logger import get_logger
-from apps.tenant_app_service.agent_catalog.adapters import db_agent_to_custom
+from apps.tenant_app_service.agent_catalog.adapters import (
+    capability_config_dto_for_response,
+    db_agent_to_custom,
+    effective_max_loop_iterations,
+    normalize_max_loop_for_storage,
+)
 from apps.tenant_app_service.agent_catalog.domain import (
     PERSONAL_SKILL_SCOPE,
     SYSTEM_AGENT_ONE_ID,
@@ -261,6 +266,7 @@ class AgentCatalogService(TenantAwareService):
             raise DuplicateResourceError(f"Agent '{payload.name}' already exists")
 
         profile = AgentCapabilityProfile.from_config(payload.config.model_dump())
+        profile.max_loop_iterations = normalize_max_loop_for_storage(profile.max_loop_iterations)
         await self._validate_profile(profile, actor=actor, assignable_skills=assignable_skills)
         profile.default_tools = self.derived_tool_names(profile, assignable_skills=assignable_skills)
 
@@ -322,6 +328,7 @@ class AgentCatalogService(TenantAwareService):
             record.status = payload.status
         if payload.config is not None:
             profile = AgentCapabilityProfile.from_config(payload.config.model_dump())
+            profile.max_loop_iterations = normalize_max_loop_for_storage(profile.max_loop_iterations)
             await self._validate_profile(profile, actor=actor, assignable_skills=assignable_skills)
             profile.default_tools = self.derived_tool_names(profile, assignable_skills=assignable_skills)
             record.config = profile.to_config()
@@ -563,13 +570,11 @@ class AgentCatalogService(TenantAwareService):
             name=domain.name,
             description=domain.description,
             system_prompt=domain.system_prompt,
-            config=AgentCapabilityConfigDTO(
-                **{
-                    **domain.profile.to_config(),
-                    "default_tools": self.derived_tool_names(
-                        domain.profile, assignable_skills=assignable_skills
-                    ),
-                }
+            config=capability_config_dto_for_response(
+                domain.profile,
+                default_tools=self.derived_tool_names(
+                    domain.profile, assignable_skills=assignable_skills
+                ),
             ),
             tags=domain.tags,
             example_questions=domain.example_questions,
@@ -593,7 +598,10 @@ class AgentCatalogService(TenantAwareService):
             name=yaml_config.get("name") or SYSTEM_AGENT_ONE_NAME,
             description=yaml_config.get("description"),
             system_prompt=yaml_config.get("system_prompt") or "",
-            config=AgentCapabilityConfigDTO(default_tools=tool_names),
+            config=AgentCapabilityConfigDTO(
+                default_tools=tool_names,
+                max_loop_iterations=effective_max_loop_iterations(None),
+            ),
             tags=list(yaml_config.get("tags") or []),
             example_questions=list(yaml_config.get("example_questions") or []),
             status="active",
